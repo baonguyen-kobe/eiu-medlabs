@@ -209,10 +209,7 @@ export async function deleteClassSchedule(
   }
 
   const isManager = roleNames.has("admin") || roleNames.has("staff");
-  if (
-    snapshot?.room?.room_types?.code === "nursing_skills" &&
-    !isManager
-  ) {
+  if (snapshot?.room?.room_types?.code === "nursing_skills" && !isManager) {
     try {
       const dedupeKeys = await enqueueScheduleEventEmails({
         snapshot,

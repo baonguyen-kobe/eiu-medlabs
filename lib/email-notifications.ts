@@ -1,5 +1,6 @@
 import "server-only";
 
+import { createHmac, randomUUID } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { renderEmailV2 } from "@/lib/email-template-v2";
 
@@ -625,10 +626,12 @@ export type EmailDeliveryMode = "off" | "test" | "live";
 const DEFAULT_TEST_RECIPIENT_EMAIL = "bao.nguyen@eiu.edu.vn";
 
 export function getEmailTestRecipient() {
-  return (
-    process.env.EMAIL_TEST_RECIPIENT?.trim().toLowerCase() ||
-    DEFAULT_TEST_RECIPIENT_EMAIL
-  );
+  const configuredRecipient =
+    process.env.EMAIL_TEST_RECIPIENT?.trim().toLowerCase();
+  if (configuredRecipient) return configuredRecipient;
+  if (process.env.NODE_ENV !== "production")
+    return DEFAULT_TEST_RECIPIENT_EMAIL;
+  throw new Error("Thiếu EMAIL_TEST_RECIPIENT trong môi trường production.");
 }
 
 function addTestBanner(html: string, banner: string) {
@@ -674,11 +677,31 @@ async function suppressPendingNotifications(dedupeKeys?: string[]) {
 
 async function deliverNotification(
   notification: EmailNotification,
-  deliveryMode: EmailDeliveryMode,
+  claimedDeliveryMode: EmailDeliveryMode,
 ) {
   const supabase = createAdminClient();
   const appsScriptUrl = process.env.EMAIL_APPS_SCRIPT_URL;
   const appsScriptSecret = process.env.EMAIL_APPS_SCRIPT_SECRET;
+  const currentDeliveryMode = await getEmailDeliveryMode();
+  if (currentDeliveryMode === "off") {
+    const { error } = await supabase
+      .from("email_notifications")
+      .update({
+        status: "suppressed",
+        processing_started_at: null,
+        last_error: "Đã bỏ qua vì hệ thống đang tắt gửi email.",
+      })
+      .eq("id", notification.id)
+      .eq("status", "processing");
+    if (error) {
+      console.error("Không thể dừng email đang xử lý:", error.message);
+    }
+    return;
+  }
+  const deliveryMode =
+    currentDeliveryMode === claimedDeliveryMode
+      ? claimedDeliveryMode
+      : currentDeliveryMode;
   const isTestDelivery = deliveryMode === "test";
   const deliveryRecipient = isTestDelivery
     ? getEmailTestRecipient()
@@ -706,28 +729,45 @@ async function deliverNotification(
         "Thiếu EMAIL_APPS_SCRIPT_URL hoặc EMAIL_APPS_SCRIPT_SECRET.",
       );
     }
+    const senderName = notification.notification_type.startsWith(
+      "equipment_request_",
+    )
+      ? "Đăng ký trang thiết bị"
+      : notification.notification_type.startsWith("basic_medical_registration_")
+        ? "Đăng ký phòng Y cơ sở"
+        : "MedLabs Calendar";
+    const timestamp = Date.now().toString();
+    const nonce = randomUUID();
+    const canonicalPayload = [
+      timestamp,
+      nonce,
+      notification.id,
+      notification.dedupe_key,
+      deliveryRecipient,
+      deliverySubject,
+      deliveryHtml,
+      deliveryText,
+      senderName,
+    ].join("\n");
+    const signature = createHmac("sha256", appsScriptSecret)
+      .update(canonicalPayload)
+      .digest("hex");
     const response = await fetch(appsScriptUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        secret: appsScriptSecret,
+        timestamp,
+        nonce,
+        signature,
         id: notification.id,
         dedupeKey: notification.dedupe_key,
         to: deliveryRecipient,
         subject: deliverySubject,
         html: deliveryHtml,
         text: deliveryText,
-        senderName: notification.notification_type.startsWith(
-          "equipment_request_",
-        )
-          ? "Đăng ký trang thiết bị"
-          : notification.notification_type.startsWith(
-                "basic_medical_registration_",
-              )
-            ? "Đăng ký phòng Y cơ sở"
-            : "MedLabs Calendar",
+        senderName,
       }),
       // Apps Script có thể cần thêm thời gian khởi động nguội khi gửi email HTML.
       // Giữ timeout đủ dài để tránh đánh dấu thất bại rồi gửi trùng khi người dùng thử lại.
@@ -743,7 +783,7 @@ async function deliverNotification(
       throw new Error(result.error ?? `APPS_SCRIPT_EMAIL_${response.status}`);
     }
 
-    await supabase
+    const { error: acknowledgementError } = await supabase
       .from("email_notifications")
       .update({
         status: isTestDelivery ? "simulated" : "sent",
@@ -755,8 +795,11 @@ async function deliverNotification(
           : null,
       })
       .eq("id", notification.id);
+    if (acknowledgementError) {
+      throw new Error(`EMAIL_DB_ACK_FAILED: ${acknowledgementError.message}`);
+    }
   } catch (error) {
-    await supabase
+    const { error: failureUpdateError } = await supabase
       .from("email_notifications")
       .update({
         status: "failed",
@@ -766,6 +809,12 @@ async function deliverNotification(
             : "Không thể gửi email.",
       })
       .eq("id", notification.id);
+    if (failureUpdateError) {
+      console.error(
+        "Không thể ghi nhận lỗi gửi email:",
+        failureUpdateError.message,
+      );
+    }
   }
 }
 

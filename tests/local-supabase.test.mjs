@@ -135,6 +135,28 @@ test("Người xem chỉ đọc lịch và nhận email theo loại phòng đã 
       });
     assert.ifError(scheduleError);
 
+    const forbiddenReschedule = await viewer.supabase.rpc("reschedule_class", {
+      target_schedule_id: scheduleId,
+      target_schedule_date: "2039-08-21",
+    });
+    assert.ok(forbiddenReschedule.error);
+    assert.equal(forbiddenReschedule.error.code, "42501");
+
+    const forbiddenDetailsUpdate = await viewer.supabase.rpc(
+      "update_class_schedule_details",
+      {
+        target_schedule_id: scheduleId,
+        target_schedule_date: "2039-08-20",
+        target_start_time: "07:30",
+        target_end_time: "11:30",
+        target_room_id: "20000000-0000-0000-0000-000000000001",
+        target_student_count: 1,
+        target_lecturer_ids: [],
+      },
+    );
+    assert.ok(forbiddenDetailsUpdate.error);
+    assert.equal(forbiddenDetailsUpdate.error.code, "42501");
+
     const { data: notification, error: notificationError } = await service
       .from("email_notifications")
       .select("id")
@@ -305,6 +327,119 @@ test("staff không thể đăng ký hai ca chồng lấn", async () => {
     target_shift_id: first.data.id,
   });
   assert.ifError(cancelled.error);
+});
+
+test("materialize lịch trực cố định không xóa ca thủ công đang chồng lấn", async () => {
+  const staff = await signIn("staff@campus.local", "LocalStaff123!");
+  const targetDate = "2046-08-06";
+  const weekday =
+    ((new Date(`${targetDate}T00:00:00Z`).getUTCDay() + 6) % 7) + 1;
+
+  const manual = await staff.supabase.rpc("register_own_shift", {
+    target_date: targetDate,
+    target_start: "08:30",
+    target_end: "11:30",
+    target_shift_type: "MORNING",
+    target_template_id: "30000000-0000-0000-0000-000000000001",
+    target_note: "Ca thủ công phải được giữ",
+  });
+  assert.ifError(manual.error);
+
+  try {
+    const pattern = await staff.supabase.rpc("register_own_shift_pattern", {
+      target_weekday: weekday,
+      target_shift_type: "MORNING",
+      target_effective_from: targetDate,
+      target_effective_to: targetDate,
+      target_note: "Pattern xung đột ca thủ công",
+    });
+    assert.ok(pattern.error);
+
+    const { data: preserved, error } = await staff.supabase
+      .from("staff_shifts")
+      .select("id,registration_source,status")
+      .eq("id", manual.data.id)
+      .single();
+    assert.ifError(error);
+    assert.equal(preserved.registration_source, "self_registered");
+    assert.equal(preserved.status, "scheduled");
+  } finally {
+    await staff.supabase.rpc("cancel_own_shift", {
+      target_shift_id: manual.data.id,
+    });
+  }
+});
+
+test("hai batch import đồng thời không tạo cùng normalized hash", async () => {
+  const admin = await signIn("admin@campus.local", "LocalAdmin123!");
+  const batchIds = [crypto.randomUUID(), crypto.randomUUID()];
+  const hash = `concurrent-${crypto.randomUUID()}`;
+  const createdScheduleIds = [];
+
+  try {
+    for (const [index, id] of batchIds.entries()) {
+      const { error } = await admin.supabase.from("import_batches").insert({
+        id,
+        source_type: "import",
+        original_file_name: `concurrent-${index}.csv`,
+        file_hash: crypto.randomUUID(),
+        status: "importing",
+        total_rows: 1,
+        created_by: admin.user.id,
+        room_type_id: "40000000-0000-0000-0000-000000000001",
+      });
+      assert.ifError(error);
+    }
+
+    const createRow = (batchId, rowNumber, scheduleDate) =>
+      admin.supabase.rpc("create_import_schedule_row", {
+        target_batch_id: batchId,
+        target_row_number: rowNumber,
+        target_hash: hash,
+        target_raw: {},
+        target_normalized: { hash },
+        target_status: "imported",
+        target_errors: [],
+        target_warnings: [],
+        target_course_id: "10000000-0000-0000-0000-000000000001",
+        target_course_code: "NUR 101",
+        target_course_name: "Thăm khám thể chất",
+        target_room_id: "20000000-0000-0000-0000-000000000001",
+        target_lecturer_id: null,
+        target_date: scheduleDate,
+        target_start: "07:30",
+        target_end: "09:30",
+        target_note: null,
+        target_student_count: 20,
+      });
+
+    const results = await Promise.all([
+      createRow(batchIds[0], 2, "2046-08-07"),
+      createRow(batchIds[1], 2, "2046-08-08"),
+    ]);
+    createdScheduleIds.push(
+      ...results.filter(({ data }) => data).map(({ data }) => data),
+    );
+    assert.equal(results.filter(({ error }) => !error).length, 1);
+    const rejected = results.find(({ error }) => error);
+    assert.equal(rejected.error.code, "23505");
+
+    const { count, error } = await admin.supabase
+      .from("import_rows")
+      .select("id", { count: "exact", head: true })
+      .eq("normalized_row_hash", hash)
+      .not("class_schedule_id", "is", null);
+    assert.ifError(error);
+    assert.equal(count, 1);
+  } finally {
+    if (createdScheduleIds.length > 0) {
+      await admin.supabase
+        .from("class_schedules")
+        .delete()
+        .in("id", createdScheduleIds);
+    }
+    await admin.supabase.from("import_batches").delete().in("id", batchIds);
+  }
 });
 
 test("staff chỉ đăng ký và xóa lịch trực cố định của chính mình", async () => {
@@ -662,6 +797,7 @@ test("chỉ Admin hoặc Staff được chuyển trạng thái phiếu thiết b
     .insert({
       id: requestId,
       class_schedule_id: scheduleId,
+      semester: "HK1",
       registrant_id: admin.user.id,
       responsible_lecturer_id: lecturer.user.id,
       phone_snapshot: "0901000001",
@@ -682,30 +818,27 @@ test("chỉ Admin hoặc Staff được chuyển trạng thái phiếu thiết b
   assert.ifError(lecturerUpdateError);
   assert.equal(lecturerUpdate.length, 0);
 
-  const { data: staffUpdate, error: staffUpdateError } = await staff.supabase
-    .from("equipment_requests")
-    .update({ status: "preparing" })
-    .eq("id", requestId)
-    .select("id,status")
-    .single();
+  const { data: staffUpdate, error: staffUpdateError } =
+    await staff.supabase.rpc("manager_confirm_equipment_status", {
+      target_request_id: requestId,
+      target_status: "preparing",
+    });
   assert.ifError(staffUpdateError);
   assert.equal(staffUpdate.status, "preparing");
 
   const { error: adminContentEditError } = await admin.supabase
     .from("equipment_requests")
-    .update({ note: "Không được sửa sau trạng thái Mới" })
+    .update({ note: "Vẫn được sửa khi Đã soạn" })
     .eq("id", requestId);
-  assert.ok(adminContentEditError);
-  assert.equal(adminContentEditError.code, "42501");
+  assert.ifError(adminContentEditError);
 
-  const { data: nextStatus, error: nextStatusError } = await admin.supabase
-    .from("equipment_requests")
-    .update({ status: "handed_over" })
-    .eq("id", requestId)
-    .select("status")
-    .single();
+  const { data: nextStatus, error: nextStatusError } = await admin.supabase.rpc(
+    "manager_confirm_equipment_status",
+    { target_request_id: requestId, target_status: "handed_over" },
+  );
   assert.ifError(nextStatusError);
-  assert.equal(nextStatus.status, "handed_over");
+  assert.equal(nextStatus.status, "preparing");
+  assert.equal(nextStatus.handover_staff_confirmed_by, admin.user.id);
 
   const { error: scheduleCleanupError } = await admin.supabase
     .from("class_schedules")
@@ -720,6 +853,7 @@ test("người đăng ký được điều chỉnh nội dung nhưng không đư
   const firstScheduleId = crypto.randomUUID();
   const secondScheduleId = crypto.randomUUID();
   const requestId = crypto.randomUUID();
+  const catalogItemId = crypto.randomUUID();
 
   for (const [id, date] of [
     [firstScheduleId, "2035-09-09"],
@@ -746,9 +880,13 @@ test("người đăng ký được điều chỉnh nội dung nhưng không đư
 
   const { data: catalogItem, error: catalogError } = await admin.supabase
     .from("equipment_catalog")
+    .insert({
+      id: catalogItemId,
+      item_name: `Thiết bị test ${catalogItemId}`,
+      commercial_name: "Thiết bị test",
+      unit: "Cái",
+    })
     .select("id")
-    .eq("is_active", true)
-    .limit(1)
     .single();
   assert.ifError(catalogError);
 
@@ -826,11 +964,27 @@ test("người đăng ký được điều chỉnh nội dung nhưng không đư
     { skill_name: "Kỹ năng mới", quantity: 2, note: "Ghi chú mới" },
   ]);
 
-  const { error: preparingError } = await admin.supabase
-    .from("equipment_requests")
-    .update({ status: "preparing" })
-    .eq("id", requestId);
+  const { error: preparingError } = await admin.supabase.rpc(
+    "manager_confirm_equipment_status",
+    { target_request_id: requestId, target_status: "preparing" },
+  );
   assert.ifError(preparingError);
+
+  const { error: warehouseHandoverError } = await admin.supabase.rpc(
+    "manager_confirm_equipment_status",
+    { target_request_id: requestId, target_status: "handed_over" },
+  );
+  assert.ifError(warehouseHandoverError);
+  const { error: recipientHandoverError } = await lecturer.supabase.rpc(
+    "registrant_confirm_equipment_handoff",
+    {
+      target_request_id: requestId,
+      target_phase: "handover",
+      target_signature:
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+    },
+  );
+  assert.ifError(recipientHandoverError);
 
   const { error: lockedRpcError } = await lecturer.supabase.rpc(
     "update_equipment_request_content",
@@ -873,6 +1027,10 @@ test("người đăng ký được điều chỉnh nội dung nhưng không đư
       .eq("id", id);
     assert.ifError(error);
   }
+  await admin.supabase
+    .from("equipment_catalog")
+    .delete()
+    .eq("id", catalogItemId);
 });
 
 test("mỗi dòng import hợp lệ tạo lịch và bản ghi kiểm tra trong một RPC", async () => {
@@ -961,10 +1119,11 @@ test("mỗi dòng import hợp lệ tạo lịch và bản ghi kiểm tra trong 
     .from("user_roles")
     .select("user_id")
     .in("role", ["staff", "admin"]);
-  assert.equal(
-    batchSummaries.length,
-    new Set((recipientRoles ?? []).map(({ user_id }) => user_id)).size,
-  );
+  const expectedRecipientIds = new Set([
+    ...(recipientRoles ?? []).map(({ user_id }) => user_id),
+    importer.user.id,
+  ]);
+  assert.equal(batchSummaries.length, expectedRecipientIds.size);
   assert.ok(
     batchSummaries.every(({ payload }) => payload.schedules.length === 1),
   );
@@ -1282,11 +1441,46 @@ test("Admin và Staff xóa phiếu, người dùng thường không thể xóa",
   const equipmentScheduleId = crypto.randomUUID();
   const equipmentRequestId = crypto.randomUUID();
   const equipmentItemId = crypto.randomUUID();
+  const equipmentCatalogItemId = crypto.randomUUID();
   const registrationId = crypto.randomUUID();
   const basicScheduleId = crypto.randomUUID();
   const basicSessionId = crypto.randomUUID();
+  const basicRoomId = crypto.randomUUID();
+  let addedBasicMedicalScope = false;
 
   try {
+    const { data: existingBasicMedicalScope, error: scopeReadError } =
+      await admin.supabase
+        .from("profile_room_types")
+        .select("profile_id")
+        .eq("profile_id", admin.user.id)
+        .eq("room_type_id", "40000000-0000-0000-0000-000000000002")
+        .maybeSingle();
+    assert.ifError(scopeReadError);
+    if (!existingBasicMedicalScope) {
+      const { error: scopeInsertError } = await admin.supabase
+        .from("profile_room_types")
+        .insert({
+          profile_id: admin.user.id,
+          room_type_id: "40000000-0000-0000-0000-000000000002",
+          created_by: admin.user.id,
+        });
+      assert.ifError(scopeInsertError);
+      addedBasicMedicalScope = true;
+    }
+
+    const { data: catalogItem, error: catalogError } = await admin.supabase
+      .from("equipment_catalog")
+      .insert({
+        id: equipmentCatalogItemId,
+        item_name: `Thiết bị xóa ${equipmentCatalogItemId}`,
+        commercial_name: "Thiết bị xóa",
+        unit: "Cái",
+      })
+      .select("id")
+      .single();
+    assert.ifError(catalogError);
+
     assert.ifError(
       (
         await admin.supabase.from("class_schedules").insert({
@@ -1330,7 +1524,7 @@ test("Admin và Staff xóa phiếu, người dùng thường không thể xóa",
           id: equipmentItemId,
           request_id: equipmentRequestId,
           skill_name: "Kiểm thử xóa phiếu",
-          catalog_item_id: "60000000-0000-0000-0000-000000000001",
+          catalog_item_id: catalogItem.id,
           quantity: 1,
         })
       ).error,
@@ -1371,6 +1565,16 @@ test("Admin và Staff xóa phiếu, người dùng thường không thể xóa",
 
     assert.ifError(
       (
+        await admin.supabase.from("rooms").insert({
+          id: basicRoomId,
+          room_code: `Y-${basicRoomId.slice(0, 8)}`,
+          building_code: "YT",
+          room_type_id: "40000000-0000-0000-0000-000000000002",
+        })
+      ).error,
+    );
+    assert.ifError(
+      (
         await admin.supabase.from("basic_medical_registrations").insert({
           id: registrationId,
           academic_year: "2043-2044",
@@ -1378,7 +1582,7 @@ test("Admin và Staff xóa phiếu, người dùng thường không thể xóa",
           start_date: "2043-08-21",
           end_date: "2043-08-21",
           course_id: "10000000-0000-0000-0000-000000000001",
-          room_id: "20000000-0000-0000-0000-000000000006",
+          room_id: basicRoomId,
           student_count: 20,
           registrant_id: admin.user.id,
           responsible_lecturer_id: lecturer.user.id,
@@ -1393,8 +1597,8 @@ test("Admin và Staff xóa phiếu, người dùng thường không thể xóa",
           course_id: "10000000-0000-0000-0000-000000000001",
           course_code_snapshot: "NUR 101",
           course_name_snapshot: "Thăm khám thể chất",
-          room_id: "20000000-0000-0000-0000-000000000006",
-          lecturer_id: lecturer.user.id,
+          room_id: basicRoomId,
+          lecturer_id: admin.user.id,
           schedule_date: "2043-08-21",
           start_time: "07:30",
           end_time: "11:30",
@@ -1460,6 +1664,18 @@ test("Admin và Staff xóa phiếu, người dùng thường không thể xóa",
       .from("class_schedules")
       .delete()
       .in("id", [equipmentScheduleId, basicScheduleId]);
+    await admin.supabase
+      .from("equipment_catalog")
+      .delete()
+      .eq("id", equipmentCatalogItemId);
+    await admin.supabase.from("rooms").delete().eq("id", basicRoomId);
+    if (addedBasicMedicalScope) {
+      await admin.supabase
+        .from("profile_room_types")
+        .delete()
+        .eq("profile_id", admin.user.id)
+        .eq("room_type_id", "40000000-0000-0000-0000-000000000002");
+    }
   }
 });
 

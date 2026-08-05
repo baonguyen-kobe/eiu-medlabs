@@ -7,13 +7,14 @@
  *
  * Deploy: Web app / Execute as Me / Who has access: Anyone.
  */
-const MEDLABS_VERSION = "2026.08.04";
+const MEDLABS_VERSION = "2026.08.05-hmac-v2";
 const SECRET_PROPERTY = "WEBHOOK_SECRET";
 const LEGACY_SECRET_PROPERTY = "EMAIL_WEBHOOK_SECRET";
 const SENT_KEYS_PROPERTY = "MEDLABS_SENT_EMAIL_KEYS";
 const LOG_SHEET_NAME = "Email logs";
 const MAX_SENT_KEYS = 1000;
 const MAX_LOG_ROWS = 5000;
+const MAX_REQUEST_AGE_MS = 5 * 60 * 1000;
 
 function jsonResponse_(value) {
   return ContentService.createTextOutput(JSON.stringify(value)).setMimeType(
@@ -30,6 +31,33 @@ function safeEqual_(left, right) {
     result |= a.charCodeAt(index) ^ b.charCodeAt(index);
   }
   return result === 0;
+}
+
+function hmacHex_(value, secret) {
+  return Utilities.computeHmacSha256Signature(value, secret)
+    .map(function (byte) {
+      const normalized = byte < 0 ? byte + 256 : byte;
+      return ("0" + normalized.toString(16)).slice(-2);
+    })
+    .join("");
+}
+
+function canonicalPayload_(body) {
+  return [
+    body.timestamp,
+    body.nonce,
+    body.id,
+    body.dedupeKey,
+    body.to,
+    body.subject,
+    body.html,
+    body.text,
+    body.senderName,
+  ]
+    .map(function (value) {
+      return String(value || "");
+    })
+    .join("\n");
 }
 
 function readSentKeys_(properties) {
@@ -105,7 +133,6 @@ function doGet() {
     ok: true,
     service: "MedLabs Calendar Email Webhook",
     version: MEDLABS_VERSION,
-    remainingDailyQuota: MailApp.getRemainingDailyQuota(),
   });
 }
 
@@ -117,7 +144,18 @@ function doPost(e) {
     body = JSON.parse((e && e.postData && e.postData.contents) || "{}");
     const properties = PropertiesService.getScriptProperties();
     const expectedSecret = getWebhookSecret_(properties);
-    if (!expectedSecret || !safeEqual_(body.secret, expectedSecret)) {
+    const timestamp = Number(body.timestamp);
+    const signatureIsValid =
+      expectedSecret &&
+      body.nonce &&
+      body.signature &&
+      Number.isFinite(timestamp) &&
+      Math.abs(Date.now() - timestamp) <= MAX_REQUEST_AGE_MS &&
+      safeEqual_(
+        body.signature,
+        hmacHex_(canonicalPayload_(body), expectedSecret),
+      );
+    if (!signatureIsValid) {
       writeLog_(body, "failed", "UNAUTHORIZED");
       return jsonResponse_({ ok: false, error: "UNAUTHORIZED" });
     }

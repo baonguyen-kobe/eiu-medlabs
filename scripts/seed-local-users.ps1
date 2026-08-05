@@ -3,6 +3,7 @@
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 $OutputEncoding = $utf8NoBom
 [Console]::OutputEncoding = $utf8NoBom
+$npxCommand = if ($IsWindows -or $env:OS -eq "Windows_NT") { "npx.cmd" } else { "npx" }
 
 function Invoke-LocalSqlFile {
   param([Parameter(Mandatory = $true)][string]$Path)
@@ -15,7 +16,7 @@ function Invoke-LocalSqlFile {
   }
 }
 
-$statusLines = & npx.cmd supabase status -o env
+$statusLines = & $npxCommand supabase status -o env
 $secretLine = $statusLines | Where-Object { $_ -like "SECRET_KEY=*" }
 if (-not $secretLine) {
   throw "Không tìm thấy Supabase local secret key. Hãy chạy Supabase trước."
@@ -34,6 +35,7 @@ $users = @(
     password  = "LocalAdmin123!"
     full_name = "Nguyễn An"
     roles     = @("admin", "staff", "lecturer", "importer")
+    allow_early_equipment_handover = $true
   },
   @{
     email     = "giangvien@campus.local"
@@ -102,9 +104,15 @@ foreach ($entry in $users) {
       ForEach-Object { "('$userId','$_')" }
   ) -join ","
 
-  & npx.cmd supabase db query --local `
+  & $npxCommand supabase db query --local `
     "insert into public.user_roles (user_id, role) values $roleValues on conflict do nothing;" |
     Out-Null
+
+  if ($entry.allow_early_equipment_handover) {
+    & $npxCommand supabase db query --local `
+      "update public.profiles set allow_early_equipment_handover = true where id = '$userId';" |
+      Out-Null
+  }
 
   Write-Output "Đã tạo $($entry.email): $($entry.roles -join ', ')"
 }

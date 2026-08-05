@@ -33,7 +33,9 @@ export async function getViewer() {
   return {
     supabase,
     userId,
-    email: String(claimsData.claims.email ?? "").trim().toLowerCase(),
+    email: String(claimsData.claims.email ?? "")
+      .trim()
+      .toLowerCase(),
     fullName:
       profile?.full_name || String(claimsData.claims.email ?? "Người dùng"),
     title: profile?.title ?? null,

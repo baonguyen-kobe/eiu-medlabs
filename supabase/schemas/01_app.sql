@@ -838,6 +838,32 @@ exception
 end;
 $$;
 
+create or replace function public.find_existing_import_hashes(target_hashes text[])
+returns table(normalized_row_hash text)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  if not (select private.can_create_schedule_entries()) then
+    raise exception 'SCHEDULE_CREATOR_ROLE_REQUIRED' using errcode = '42501';
+  end if;
+  if target_hashes is null or cardinality(target_hashes) > 500 then
+    raise exception 'INVALID_IMPORT_HASHES' using errcode = '22023';
+  end if;
+  return query
+  select distinct rows.normalized_row_hash
+  from public.import_rows as rows
+  where rows.normalized_row_hash = any(target_hashes)
+    and rows.class_schedule_id is not null
+    and rows.validation_status in ('imported', 'warning');
+end;
+$$;
+
+revoke all on function public.find_existing_import_hashes(text[]) from public, anon;
+grant execute on function public.find_existing_import_hashes(text[]) to authenticated;
+
 create or replace function public.withdraw_class(target_schedule_id uuid)
 returns public.class_schedules
 language plpgsql
@@ -980,6 +1006,9 @@ declare
   materialize_to date;
   occurrence_date date;
 begin
+  perform pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended('medlabs:shift-pattern:' || target_pattern_id::text, 0)
+  );
   select * into pattern
   from public.staff_shift_patterns
   where id = target_pattern_id
@@ -1010,16 +1039,6 @@ begin
     where extract(isodow from generated.day_value)::smallint = pattern.weekday
     order by generated.day_value
   loop
-    delete from public.staff_shifts
-    where staff_id = pattern.staff_id
-      and shift_date = occurrence_date
-      and status <> 'cancelled'
-      and time_range && tsrange(
-        occurrence_date + pattern.start_time,
-        occurrence_date + pattern.end_time,
-        '[)'
-      );
-
     insert into public.staff_shifts (
       staff_id, shift_date, start_time, end_time, shift_type,
       shift_template_id, shift_pattern_id, note, status,
@@ -1043,6 +1062,11 @@ declare
   pattern_id uuid;
   business_today date := (now() at time zone 'Asia/Ho_Chi_Minh')::date;
 begin
+  if not pg_catalog.pg_try_advisory_xact_lock(
+    pg_catalog.hashtextextended('medlabs:refresh-open-shift-patterns', 0)
+  ) then
+    return;
+  end if;
   for pattern_id in
     select patterns.id
     from public.staff_shift_patterns as patterns
@@ -1395,9 +1419,12 @@ alter table public.audit_logs enable row level security;
 alter table public.email_notifications enable row level security;
 alter table public.email_delivery_settings enable row level security;
 
-create policy profiles_select_active_users on public.profiles
+create policy profiles_select_self_or_admin on public.profiles
 for select to authenticated
-using ((select private.is_active_user()));
+using (
+  id = (select auth.uid())
+  or (select private.has_role('admin'))
+);
 
 create policy profiles_admin_all on public.profiles
 for all to authenticated

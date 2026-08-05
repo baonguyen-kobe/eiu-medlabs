@@ -74,9 +74,7 @@ test("tắt gửi thật sự và Admin xóa hàng loạt email đã chọn", as
     await expect(page.getByRole("dialog")).toContainText(
       "Xóa vĩnh viễn 2 email thông báo đã chọn?",
     );
-    await page
-      .getByRole("button", { name: "Xác nhận", exact: true })
-      .click();
+    await page.getByRole("button", { name: "Xác nhận", exact: true }).click();
     await expect(page.getByText("Đã xóa 2 email thông báo.")).toBeVisible();
     await expect(page.getByText(subjects[0])).toHaveCount(0);
     await expect(page.getByText(subjects[1])).toHaveCount(0);

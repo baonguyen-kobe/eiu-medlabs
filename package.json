@@ -45,6 +45,7 @@
     "zod": "4.1.11"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.11.1",
     "@fission-ai/openspec": "^1.7.0",
     "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "4.2.1",
@@ -65,7 +66,7 @@
     "@babel/core": "7.29.7",
     "js-yaml": "5.2.2",
     "minimatch@3.1.5": {
-      "brace-expansion": "1.1.16"
+      "brace-expansion": "1.1.18"
     },
     "minimatch@10.2.5": {
       "brace-expansion": "5.0.9"

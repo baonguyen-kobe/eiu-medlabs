@@ -27,7 +27,7 @@ EMAIL_TEST_RECIPIENT=bao.nguyen@eiu.edu.vn
 
 Không dùng `RESEND_API_KEY` nữa. Người gửi hiển thị là tên cấu hình trong payload, còn địa chỉ gửi thực tế là tài khoản Google đã triển khai Apps Script.
 
-Apps Script lưu tối đa 1.000 `dedupeKey` gần nhất trong Script Properties để một lần gọi lại không gửi trùng. Có thể tạo thêm Script Property `TEST_EMAIL`, rồi chạy `sendMedLabsTestEmail()` để kiểm tra quyền gửi. Hạn mức gửi email vẫn phụ thuộc loại tài khoản Google triển khai script.
+Vercel ký từng request bằng HMAC-SHA256 từ `EMAIL_APPS_SCRIPT_SECRET`; Apps Script chỉ nhận request có timestamp tối đa 5 phút, nonce và chữ ký hợp lệ. Secret không còn được gửi trong body. Apps Script đồng thời lưu tối đa 1.000 `dedupeKey` gần nhất trong Script Properties để lần gọi lại trong cửa sổ hợp lệ không gửi trùng. Có thể tạo thêm Script Property `TEST_EMAIL`, rồi chạy `sendMedLabsTestEmail()` để kiểm tra quyền gửi. Hạn mức gửi email vẫn phụ thuộc loại tài khoản Google triển khai script.
 
 ## Chế độ kiểm thử
 
@@ -37,4 +37,4 @@ Trang **Email thông báo** có ba chế độ dành riêng cho Admin:
 - **Kiểm thử**: thông báo vẫn được tạo theo người nhận gốc nhưng email thực tế chỉ được gửi đến `EMAIL_TEST_RECIPIENT`. Tiêu đề có tiền tố **[KIỂM THỬ]** và nội dung ghi rõ người nhận gốc. Sau khi gửi thành công, nhật ký chuyển sang trạng thái `simulated` với nhãn **Đã gửi kiểm thử**.
 - **Gửi thật**: thông báo được chuyển qua Apps Script như luồng bình thường.
 
-Trong chế độ kiểm thử, chỉ Admin được mở trang nhật ký và gửi lại email lỗi; Chuyên viên tạm thời không truy cập trang này. Các thông báo đã phát sinh trong chế độ kiểm thử không được tự động gửi cho người nhận gốc khi bật lại **Gửi thật**. Nếu không đọc được cấu hình, ứng dụng mặc định dùng chế độ kiểm thử để tránh gửi ngoài ý muốn. Nếu chưa khai báo `EMAIL_TEST_RECIPIENT`, hệ thống dùng `bao.nguyen@eiu.edu.vn`.
+Trong chế độ kiểm thử, chỉ Admin được mở trang nhật ký và gửi lại email lỗi; Chuyên viên tạm thời không truy cập trang này. Các thông báo đã phát sinh trong chế độ kiểm thử không được tự động gửi cho người nhận gốc khi bật lại **Gửi thật**. Nếu không đọc được cấu hình, ứng dụng mặc định dùng chế độ kiểm thử để tránh gửi ngoài ý muốn. Production bắt buộc khai báo `EMAIL_TEST_RECIPIENT`; thiếu biến này sẽ dừng gửi thay vì tự chọn một địa chỉ cứng. Local development vẫn dùng địa chỉ test mặc định để thuận tiện kiểm thử.

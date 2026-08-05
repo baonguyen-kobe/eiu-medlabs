@@ -271,20 +271,29 @@ export async function validateScheduleRows(
     return { duplicateWithinFile, errors, index, rowHash, warnings };
   });
 
-  const remoteDuplicates = await mapWithConcurrency(
-    preparedRows,
-    12,
-    async (prepared) => {
-      if (prepared.duplicateWithinFile) return true;
-      const { data, error } = await supabase.rpc("import_hash_exists", {
-        target_hash: prepared.rowHash,
-      });
-      if (error) {
-        prepared.errors.push("Không thể kiểm tra dữ liệu trùng");
-        return false;
-      }
-      return data === true;
-    },
+  const hashesToCheck = [
+    ...new Set(
+      preparedRows
+        .filter(({ duplicateWithinFile }) => !duplicateWithinFile)
+        .map(({ rowHash }) => rowHash),
+    ),
+  ];
+  const { data: existingHashes, error: duplicateCheckError } =
+    await supabase.rpc("find_existing_import_hashes", {
+      target_hashes: hashesToCheck,
+    });
+  const existingHashSet = new Set(
+    ((existingHashes ?? []) as Array<{ normalized_row_hash: string }>).map(
+      ({ normalized_row_hash }) => normalized_row_hash,
+    ),
+  );
+  if (duplicateCheckError) {
+    for (const prepared of preparedRows) {
+      prepared.errors.push("Không thể kiểm tra dữ liệu trùng");
+    }
+  }
+  const remoteDuplicates = preparedRows.map(
+    ({ rowHash }) => !duplicateCheckError && existingHashSet.has(rowHash),
   );
 
   const validationRows = preparedRows.map((prepared, index) => {
@@ -545,20 +554,29 @@ export async function importScheduleRows(
     };
   });
 
-  const remoteDuplicateChecks = await mapWithConcurrency(
-    preparedRows,
-    12,
-    async (prepared) => {
-      if (prepared.duplicateWithinFile) return true;
-      const { data, error } = await supabase.rpc("import_hash_exists", {
-        target_hash: prepared.rowHash,
-      });
-      if (error) {
-        prepared.errors.push("Không thể kiểm tra dữ liệu trùng");
-        return false;
-      }
-      return data === true;
-    },
+  const hashesToCheck = [
+    ...new Set(
+      preparedRows
+        .filter(({ duplicateWithinFile }) => !duplicateWithinFile)
+        .map(({ rowHash }) => rowHash),
+    ),
+  ];
+  const { data: existingHashes, error: duplicateCheckError } =
+    await supabase.rpc("find_existing_import_hashes", {
+      target_hashes: hashesToCheck,
+    });
+  const existingHashSet = new Set(
+    ((existingHashes ?? []) as Array<{ normalized_row_hash: string }>).map(
+      ({ normalized_row_hash }) => normalized_row_hash,
+    ),
+  );
+  if (duplicateCheckError) {
+    for (const prepared of preparedRows) {
+      prepared.errors.push("Không thể kiểm tra dữ liệu trùng");
+    }
+  }
+  const remoteDuplicateChecks = preparedRows.map(
+    ({ rowHash }) => !duplicateCheckError && existingHashSet.has(rowHash),
   );
 
   const outcomes = await mapWithConcurrency(

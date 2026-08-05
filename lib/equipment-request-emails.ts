@@ -134,7 +134,8 @@ export async function enqueueEquipmentRequestEmails({
   actorId?: string;
 }) {
   const supabase = createAdminClient();
-  const request = snapshot ?? (await loadEquipmentRequestEmailSnapshot(requestId));
+  const request =
+    snapshot ?? (await loadEquipmentRequestEmailSnapshot(requestId));
   if (!request) throw new Error("Không tìm thấy phiếu để tạo email.");
   if (!request.registrant || !request.class_schedules) {
     throw new Error("Phiếu thiếu thông tin người đăng ký hoặc lớp học.");

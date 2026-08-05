@@ -23,6 +23,8 @@ on conflict (id) do update set code = excluded.code, name = excluded.name;
 
 alter table public.profiles
   add column if not exists allow_basic_medical_access boolean not null default false;
+alter table public.profiles
+  add column if not exists allow_early_equipment_handover boolean not null default false;
 
 alter table public.rooms
   add column if not exists room_type_id uuid references public.room_types(id) on delete restrict;
@@ -646,15 +648,14 @@ begin
   if not (select private.has_room_type(room_type_value)) then
     raise exception 'ROOM_TYPE_SCOPE_REQUIRED' using errcode = '42501';
   end if;
-  if before_row.lecturer_id is null and before_row.lecturer_2_id is null then
-    if not (select private.is_active_user()) then
-      raise exception 'CLASS_DATE_CHANGE_FORBIDDEN' using errcode = '42501';
-    end if;
-  elsif not (
+  if not (
     (select private.has_role('admin'))
     or (select private.has_role('staff'))
     or (select private.has_role('importer'))
-    or (select auth.uid()) in (before_row.lecturer_id, before_row.lecturer_2_id)
+    or coalesce(
+      (select auth.uid()) in (before_row.lecturer_id, before_row.lecturer_2_id),
+      false
+    )
   ) then
     raise exception 'CLASS_DATE_CHANGE_FORBIDDEN' using errcode = '42501';
   end if;
@@ -775,6 +776,9 @@ begin
   if target_student_count is null or target_student_count < 1 then
     raise exception 'INVALID_STUDENT_COUNT' using errcode = '22023';
   end if;
+  if target_hash is null or btrim(target_hash) = '' then
+    raise exception 'INVALID_IMPORT_HASH' using errcode = '22023';
+  end if;
   select batches.room_type_id into batch_room_type_id
   from public.import_batches as batches
   where batches.id = target_batch_id and batches.created_by = caller_id and batches.status = 'importing';
@@ -791,6 +795,18 @@ begin
     and exists (select 1 from public.user_roles as roles where roles.user_id = target_lecturer_id and roles.role = 'lecturer')
   ) then
     raise exception 'LECTURER_ROOM_TYPE_MISMATCH' using errcode = '42501';
+  end if;
+
+  -- Serialize identical rows so the earlier preview check cannot race another batch.
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(target_hash, 0));
+  if exists (
+    select 1
+    from public.import_rows as existing_rows
+    where existing_rows.normalized_row_hash = target_hash
+      and existing_rows.class_schedule_id is not null
+      and existing_rows.validation_status in ('imported', 'warning')
+  ) then
+    raise exception 'IMPORT_ROW_DUPLICATE' using errcode = '23505';
   end if;
 
   insert into public.class_schedules (
@@ -832,6 +848,80 @@ revoke all on function public.create_import_schedule_row(
   uuid, integer, text, jsonb, jsonb, public.import_row_status, jsonb, jsonb,
   uuid, text, text, uuid, uuid, date, time, time, text
 ) from public, anon, authenticated;
+drop function if exists public.create_import_schedule_row(
+  uuid, integer, text, jsonb, jsonb, public.import_row_status, jsonb, jsonb,
+  uuid, text, text, uuid, uuid, date, time, time, text
+);
+
+-- Keep the details RPC in the declarative schema as well as the migration chain.
+create or replace function public.update_class_schedule_details(
+  target_schedule_id uuid,
+  target_schedule_date date,
+  target_start_time time,
+  target_end_time time,
+  target_room_id uuid,
+  target_student_count integer,
+  target_lecturer_ids uuid[] default '{}'::uuid[]
+)
+returns public.class_schedules
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  before_row public.class_schedules;
+  changed_row public.class_schedules;
+  target_room_type uuid;
+  normalized_ids uuid[] := coalesce(target_lecturer_ids, '{}'::uuid[]);
+  is_manager boolean;
+begin
+  select * into before_row from public.class_schedules
+  where id = target_schedule_id and schedule_status <> 'cancelled' for update;
+  if before_row.id is null then raise exception 'CLASS_NOT_AVAILABLE' using errcode = 'P0001'; end if;
+
+  is_manager := (select private.has_role('admin')) or (select private.has_role('staff')) or (select private.has_role('importer'));
+  if not is_manager then
+    if not coalesce(
+      (select auth.uid()) in (before_row.lecturer_id, before_row.lecturer_2_id),
+      false
+    ) then
+      raise exception 'CLASS_UPDATE_FORBIDDEN' using errcode = '42501';
+    end if;
+    if target_start_time is distinct from before_row.start_time
+      or target_end_time is distinct from before_row.end_time
+      or target_room_id is distinct from before_row.room_id
+      or target_student_count is distinct from before_row.student_count
+      or normalized_ids is distinct from array_remove(array[before_row.lecturer_id, before_row.lecturer_2_id], null)
+    then raise exception 'CLASS_DETAILS_UPDATE_FORBIDDEN' using errcode = '42501'; end if;
+  end if;
+
+  if target_schedule_date is null or target_start_time is null or target_end_time <= target_start_time
+    or target_student_count < 1 or target_room_id is null or cardinality(normalized_ids) > 2
+    or cardinality(normalized_ids) <> cardinality(array(select distinct unnest(normalized_ids)))
+  then raise exception 'INVALID_CLASS_DETAILS' using errcode = '22023'; end if;
+
+  select room_type_id into target_room_type from public.rooms where id = target_room_id and is_active;
+  if target_room_type is null or not (select private.has_room_type(target_room_type)) then
+    raise exception 'ROOM_TYPE_SCOPE_REQUIRED' using errcode = '42501';
+  end if;
+  if exists (
+    select 1 from unnest(normalized_ids) lecturer_id
+    where not exists (select 1 from public.profile_room_types where profile_id = lecturer_id and room_type_id = target_room_type)
+  ) then raise exception 'LECTURER_ROOM_TYPE_MISMATCH' using errcode = '42501'; end if;
+
+  update public.class_schedules set
+    schedule_date = target_schedule_date, start_time = target_start_time, end_time = target_end_time,
+    room_id = target_room_id, student_count = target_student_count,
+    lecturer_id = normalized_ids[1], lecturer_2_id = normalized_ids[2], updated_at = now()
+  where id = target_schedule_id returning * into changed_row;
+  return changed_row;
+exception
+  when exclusion_violation then raise exception 'SCHEDULE_CONFLICT' using errcode = '23P01';
+end;
+$$;
+
+revoke all on function public.update_class_schedule_details(uuid,date,time,time,uuid,integer,uuid[]) from public, anon;
+grant execute on function public.update_class_schedule_details(uuid,date,time,time,uuid,integer,uuid[]) to authenticated;
 
 create or replace function public.claim_class(target_schedule_id uuid)
 returns public.class_schedules

@@ -775,24 +775,25 @@ export async function createEquipmentRequest(
   if ((catalogRows ?? []).length !== catalogIds.length) {
     return { ok: false, message: "Danh sách có thiết bị không còn hoạt động." };
   }
-  const { data: request, error } = await supabase
-    .from("equipment_requests")
-    .insert({
-      class_schedule_id: scheduleId,
-      semester,
-      registrant_id: userId,
-      responsible_lecturer_id: responsibleId,
-      phone_snapshot: profile.phone,
-      email_snapshot: profile.email ?? String(claims.claims.email ?? ""),
-      receive_at: receiveAt.toISOString(),
-      return_at: returnAt.toISOString(),
-      late_registration_reason: lateRegistrationReason || null,
-      note: note || null,
-      created_by: userId,
-    })
-    .select("id")
-    .single();
-  if (error || !request)
+  const { data: requestId, error } = await supabase.rpc(
+    "create_equipment_request_with_items",
+    {
+      target_class_schedule_id: scheduleId,
+      target_semester: semester,
+      target_responsible_lecturer_id: responsibleId,
+      target_receive_at: receiveAt.toISOString(),
+      target_return_at: returnAt.toISOString(),
+      target_late_registration_reason: lateRegistrationReason || null,
+      target_note: note || null,
+      target_items: items.map((item) => ({
+        skill_name: item.skillName.trim(),
+        catalog_item_id: item.catalogItemId,
+        quantity: item.quantity,
+        note: item.note?.trim() || null,
+      })),
+    },
+  );
+  if (error || !requestId)
     return {
       ok: false,
       message:
@@ -800,24 +801,9 @@ export async function createEquipmentRequest(
           ? "Lớp này đã có phiếu đăng ký thiết bị."
           : error?.message || "Không thể tạo phiếu thiết bị.",
     };
-  const { error: itemError } = await supabase
-    .from("equipment_request_items")
-    .insert(
-      items.map((item) => ({
-        request_id: request.id,
-        skill_name: item.skillName.trim(),
-        catalog_item_id: item.catalogItemId,
-        quantity: item.quantity,
-        note: item.note?.trim() || null,
-      })),
-    );
-  if (itemError) {
-    await supabase.from("equipment_requests").delete().eq("id", request.id);
-    return { ok: false, message: "Không thể lưu danh sách thiết bị." };
-  }
   try {
     const dedupeKeys = await enqueueEquipmentRequestEmails({
-      requestId: request.id,
+      requestId: String(requestId),
       event: leadTime.requiresLateApproval
         ? "late_approval_requested"
         : "created",
