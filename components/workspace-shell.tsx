@@ -1,0 +1,626 @@
+"use client";
+
+import {
+  CalendarDays,
+  CalendarDaysSolid,
+  ChevronRight,
+  ClipboardList,
+  ClipboardListSolid,
+  FileClock,
+  FileClockSolid,
+  GraduationCap,
+  GraduationCapSolid,
+  Import,
+  ImportSolid,
+  LayoutDashboard,
+  LayoutDashboardSolid,
+  LogOut,
+  Menu,
+  PackageCheck,
+  PackageCheckSolid,
+  PanelLeftClose,
+  Plus,
+  PlusSolid,
+  Settings,
+  SettingsSolid,
+  Users,
+  UsersSolid,
+  type AppIcon,
+} from "@/components/icons";
+import Image from "next/image";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { AppRole } from "@/lib/viewer";
+import { logout } from "@/app/login/actions";
+import { getNameInitials } from "@/lib/person-name";
+import {
+  canCreateBasicMedicalSchedules,
+  canImportBasicMedicalSchedules,
+  canUseSkillsWorkspace,
+  canViewBasicMedicalRegistrations,
+  canViewBasicMedicalSchedules,
+} from "@/lib/workspace-access";
+
+const roleLabels: Record<AppRole, string> = {
+  admin: "Quản trị viên",
+  lecturer: "Giảng viên",
+  staff: "Chuyên viên",
+  importer: "Trợ giảng",
+  viewer: "Người xem",
+};
+
+const primaryRoleOrder: AppRole[] = [
+  "admin",
+  "staff",
+  "lecturer",
+  "importer",
+  "viewer",
+];
+const sidebarScrollStorageKey = "medlabs-sidebar-scroll:v1";
+
+function getPrimaryRoleLabel(roles: AppRole[]) {
+  const primaryRole = primaryRoleOrder.find((role) => roles.includes(role));
+  return primaryRole ? roleLabels[primaryRole] : "Người dùng";
+}
+
+type NavItem = {
+  label: string;
+  href: string;
+  icon: AppIcon;
+  activeIcon: AppIcon;
+  roles?: AppRole[];
+  activeHrefs?: string[];
+};
+
+function buildNavigation(
+  roles: AppRole[],
+  roomTypeCodes: string[],
+  allowBasicMedicalAccess: boolean,
+): Array<{ label: string; items: NavItem[] }> {
+  const isAdmin = roles.includes("admin");
+  const isStaff = roles.includes("staff") && !isAdmin;
+  const isLecturer = roles.includes("lecturer") && !isAdmin && !isStaff;
+  const hasSkillsScope = roomTypeCodes.includes("nursing_skills");
+  const hasSkillsWorkspace = canUseSkillsWorkspace(roles, roomTypeCodes);
+  const canImport =
+    isAdmin || isStaff || (roles.includes("importer") && hasSkillsScope);
+  const canCreateSkills =
+    isAdmin ||
+    isStaff ||
+    (hasSkillsScope &&
+      roles.some((role) => ["lecturer", "importer"].includes(role)));
+  const isViewer = roles.includes("viewer");
+  const groups: Array<{ label: string; items: NavItem[] }> = [];
+
+  if (hasSkillsWorkspace) {
+    groups.push({
+      label: "Kỹ năng Điều dưỡng",
+      items: [
+        {
+          label: "Tổng quan",
+          href: "/dashboard",
+          icon: LayoutDashboard,
+          activeIcon: LayoutDashboardSolid,
+        },
+        {
+          label: "Lịch Skills lab",
+          href: "/class-schedules",
+          icon: CalendarDays,
+          activeIcon: CalendarDaysSolid,
+        },
+        ...(!isViewer
+          ? [
+              {
+                label: "Đăng ký thiết bị",
+                href: "/equipment/register",
+                icon: ClipboardList,
+                activeIcon: ClipboardListSolid,
+              },
+              {
+                label: "Phiếu thiết bị của tôi",
+                href: "/equipment/mine",
+                icon: FileClock,
+                activeIcon: FileClockSolid,
+              },
+            ]
+          : []),
+      ],
+    });
+  }
+
+  if (hasSkillsWorkspace && isLecturer) {
+    groups.push({
+      label: "Quản lý lớp",
+      items: [
+        {
+          label: "Lớp đang mở",
+          href: "/classes/open",
+          icon: GraduationCap,
+          activeIcon: GraduationCapSolid,
+        },
+        {
+          label: "Lớp của tôi",
+          href: "/classes/mine",
+          icon: ClipboardList,
+          activeIcon: ClipboardListSolid,
+        },
+      ],
+    });
+  } else if (hasSkillsWorkspace && isStaff) {
+    groups.push({
+      label: "Quản lý phòng",
+      items: [
+        {
+          label: "Lớp đang mở",
+          href: "/classes/open",
+          icon: GraduationCap,
+          activeIcon: GraduationCapSolid,
+        },
+        {
+          label: "Lịch trực",
+          href: "/staff-shifts",
+          icon: PackageCheck,
+          activeIcon: PackageCheckSolid,
+        },
+        {
+          label: "Phiếu thiết bị",
+          href: "/equipment/requests",
+          icon: FileClock,
+          activeIcon: FileClockSolid,
+        },
+        {
+          label: "Import Phiếu thiết bị",
+          href: "/equipment/import",
+          icon: Import,
+          activeIcon: ImportSolid,
+        },
+        {
+          label: "Email thông báo",
+          href: "/email-notifications",
+          icon: FileClock,
+          activeIcon: FileClockSolid,
+        },
+      ],
+    });
+  } else if (hasSkillsWorkspace && isAdmin) {
+    groups.push(
+      {
+        label: "Quản lý lớp",
+        items: [
+          {
+            label: "Lớp đang mở",
+            href: "/classes/open",
+            icon: GraduationCap,
+            activeIcon: GraduationCapSolid,
+          },
+        ],
+      },
+      {
+        label: "Quản lý phòng",
+        items: [
+          {
+            label: "Lịch trực",
+            href: "/staff-shifts",
+            icon: PackageCheck,
+            activeIcon: PackageCheckSolid,
+          },
+          {
+            label: "Phiếu thiết bị",
+            href: "/equipment/requests",
+            icon: FileClock,
+            activeIcon: FileClockSolid,
+          },
+          {
+            label: "Import Phiếu thiết bị",
+            href: "/equipment/import",
+            icon: Import,
+            activeIcon: ImportSolid,
+          },
+          {
+            label: "Email thông báo",
+            href: "/email-notifications",
+            icon: FileClock,
+            activeIcon: FileClockSolid,
+          },
+        ],
+      },
+    );
+  }
+
+  if (canCreateSkills) {
+    groups.push({
+      label: "Tạo phiếu",
+      items: [
+        {
+          label: "Tạo lịch Skills lab",
+          href: "/schedule-entry/new",
+          icon: Plus,
+          activeIcon: PlusSolid,
+        },
+        ...(canImport
+          ? [
+              {
+                label: "Import lịch Skills lab",
+                href: "/schedule-entry/import",
+                icon: Import,
+                activeIcon: ImportSolid,
+              },
+            ]
+          : []),
+        ...(isAdmin || isStaff
+          ? [
+              {
+                label: "Lịch sử import",
+                href: "/imports",
+                icon: FileClock,
+                activeIcon: FileClockSolid,
+              },
+            ]
+          : []),
+      ],
+    });
+  }
+
+  const canShowBasicMedical = canViewBasicMedicalSchedules(
+    roles,
+    roomTypeCodes,
+  );
+  if (canShowBasicMedical) {
+    const yItems: NavItem[] = [
+      {
+        label: "Lịch Y cơ sở",
+        href: "/basic-medical/schedules",
+        icon: CalendarDays,
+        activeIcon: CalendarDaysSolid,
+      },
+    ];
+    if (
+      canCreateBasicMedicalSchedules(
+        roles,
+        roomTypeCodes,
+        allowBasicMedicalAccess,
+      )
+    ) {
+      yItems.push({
+        label: "Tạo lịch Y cơ sở",
+        href: "/basic-medical/new",
+        icon: Plus,
+        activeIcon: PlusSolid,
+      });
+    }
+    if (canViewBasicMedicalRegistrations(roles, roomTypeCodes)) {
+      yItems.push({
+        label: "Phiếu Y cơ sở",
+        href: "/basic-medical/registrations",
+        icon: ClipboardList,
+        activeIcon: ClipboardListSolid,
+      });
+    }
+    if (canImportBasicMedicalSchedules(roles)) {
+      yItems.push({
+        label: "Import lịch Y cơ sở",
+        href: "/basic-medical/import",
+        icon: Import,
+        activeIcon: ImportSolid,
+      });
+    }
+    groups.push({ label: "Y cơ sở", items: yItems });
+  }
+
+  if (isAdmin || isStaff) {
+    const adminItems: NavItem[] = [
+      {
+        label: "Danh sách thiết bị Y cơ sở",
+        href: "/basic-medical/equipment",
+        icon: ClipboardList,
+        activeIcon: ClipboardListSolid,
+      },
+    ];
+    if (isAdmin) {
+      adminItems.unshift(
+        {
+          label: "Nhân sự",
+          href: "/admin/personnel",
+          icon: Users,
+          activeIcon: UsersSolid,
+        },
+        {
+          label: "Danh mục thiết bị",
+          href: "/admin/equipment",
+          icon: Settings,
+          activeIcon: SettingsSolid,
+        },
+        {
+          label: "Danh mục khác",
+          href: "/admin/courses",
+          icon: Settings,
+          activeIcon: SettingsSolid,
+          activeHrefs: [
+            "/admin/catalogs",
+            "/admin/courses",
+            "/admin/rooms",
+            "/admin/shift-templates",
+            "/admin/audit",
+          ],
+        },
+      );
+    }
+    groups.push({
+      label: "Quản trị",
+      items: adminItems,
+    });
+  }
+
+  return groups;
+}
+
+export function WorkspaceShell({
+  fullName,
+  roles,
+  title,
+  description,
+  actions,
+  children,
+  roomTypeCodes = [],
+  allowBasicMedicalAccess = false,
+}: {
+  fullName: string;
+  roles: AppRole[];
+  title: string;
+  description?: string;
+  actions?: React.ReactNode;
+  children: React.ReactNode;
+  roomTypeCodes?: string[];
+  allowBasicMedicalAccess?: boolean;
+}) {
+  const pathname = usePathname();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const accountMenuRef = useRef<HTMLDivElement>(null);
+  const accountTriggerRef = useRef<HTMLButtonElement>(null);
+  const logoutButtonRef = useRef<HTMLButtonElement>(null);
+  const navigationRef = useRef<HTMLElement>(null);
+  const navigation = buildNavigation(
+    roles,
+    roomTypeCodes,
+    allowBasicMedicalAccess,
+  );
+  const primaryRoleLabel = getPrimaryRoleLabel(roles);
+  const initials = getNameInitials(fullName);
+
+  useLayoutEffect(() => {
+    try {
+      const stored = Number(
+        sessionStorage.getItem(sidebarScrollStorageKey) ?? "0",
+      );
+      if (navigationRef.current && Number.isFinite(stored)) {
+        navigationRef.current.scrollTop = stored;
+      }
+    } catch {
+      // Storage can be disabled in private browsing; navigation still works normally.
+    }
+  }, [pathname]);
+
+  function rememberSidebarScroll() {
+    try {
+      sessionStorage.setItem(
+        sidebarScrollStorageKey,
+        String(navigationRef.current?.scrollTop ?? 0),
+      );
+    } catch {
+      // Ignore unavailable session storage.
+    }
+  }
+
+  useEffect(() => {
+    if (!sidebarOpen) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    closeButtonRef.current?.focus();
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setSidebarOpen(false);
+      requestAnimationFrame(() => menuButtonRef.current?.focus());
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [sidebarOpen]);
+
+  useEffect(() => {
+    if (!accountMenuOpen) return;
+
+    requestAnimationFrame(() => logoutButtonRef.current?.focus());
+
+    function closeAccountMenu(event: PointerEvent) {
+      if (accountMenuRef.current?.contains(event.target as Node)) return;
+      setAccountMenuOpen(false);
+    }
+
+    function handleAccountMenuKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setAccountMenuOpen(false);
+      requestAnimationFrame(() => accountTriggerRef.current?.focus());
+    }
+
+    document.addEventListener("pointerdown", closeAccountMenu);
+    window.addEventListener("keydown", handleAccountMenuKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", closeAccountMenu);
+      window.removeEventListener("keydown", handleAccountMenuKeyDown);
+    };
+  }, [accountMenuOpen]);
+
+  return (
+    <div className="app-shell">
+      <aside
+        aria-label="Menu chính"
+        aria-modal={sidebarOpen ? "true" : undefined}
+        className={`sidebar workspace-sidebar ${sidebarOpen ? "sidebar-open" : ""}`}
+        id="workspace-navigation"
+        role={sidebarOpen ? "dialog" : undefined}
+      >
+        <div className="brand-lockup">
+          <div className="brand-mark">
+            <Image
+              src="/eiu-full-logo.jpg"
+              alt="Logo Eastern International University"
+              width={2982}
+              height={846}
+              priority
+            />
+          </div>
+          <div className="brand-copy">
+            <strong>MedLabs Calendar</strong>
+          </div>
+          <button
+            className="icon-button sidebar-close"
+            onClick={() => setSidebarOpen(false)}
+            aria-label="Đóng menu"
+            ref={closeButtonRef}
+          >
+            <PanelLeftClose size={19} />
+          </button>
+        </div>
+
+        <nav
+          aria-label="Điều hướng chính"
+          className="workspace-nav"
+          ref={navigationRef}
+          onScroll={rememberSidebarScroll}
+        >
+          {navigation.map((group) => {
+            const items = group.items.filter(
+              (item) =>
+                !item.roles ||
+                item.roles.some((requiredRole) => roles.includes(requiredRole)),
+            );
+            if (!items.length) return null;
+            return (
+              <div className="nav-group" key={group.label}>
+                <p className="nav-heading">{group.label}</p>
+                {items.map(
+                  ({
+                    label,
+                    href,
+                    icon: OutlineIcon,
+                    activeIcon: SolidIcon,
+                    activeHrefs,
+                  }) => {
+                    const active =
+                      pathname === href ||
+                      (href !== "/dashboard" &&
+                        pathname.startsWith(`${href}/`)) ||
+                      Boolean(
+                        activeHrefs?.some(
+                          (activeHref) => pathname === activeHref,
+                        ),
+                      );
+                    return (
+                      <Link
+                        className={`nav-item ${active ? "active" : ""}`}
+                        href={href}
+                        key={href}
+                        onClick={() => {
+                          rememberSidebarScroll();
+                          setAccountMenuOpen(false);
+                          setSidebarOpen(false);
+                        }}
+                      >
+                        {active ? (
+                          <SolidIcon size={19} />
+                        ) : (
+                          <OutlineIcon size={19} />
+                        )}
+                        <span>{label}</span>
+                      </Link>
+                    );
+                  },
+                )}
+              </div>
+            );
+          })}
+        </nav>
+
+        <div className="workspace-account-menu" ref={accountMenuRef}>
+          {accountMenuOpen ? (
+            <div
+              className="workspace-account-popover"
+              id="workspace-account-actions"
+            >
+              <form action={logout}>
+                <button
+                  className="workspace-account-action"
+                  type="submit"
+                  ref={logoutButtonRef}
+                >
+                  <LogOut aria-hidden="true" size={19} />
+                  <span>Đăng xuất</span>
+                </button>
+              </form>
+            </div>
+          ) : null}
+          <button
+            aria-controls="workspace-account-actions"
+            aria-expanded={accountMenuOpen}
+            aria-label={`Tài khoản của ${fullName}`}
+            className="user-card workspace-user workspace-user-trigger"
+            onClick={() => setAccountMenuOpen((open) => !open)}
+            ref={accountTriggerRef}
+            type="button"
+          >
+            <span className="avatar initials-avatar" aria-hidden="true">
+              {initials}
+            </span>
+            <span className="workspace-user-copy">
+              <strong>{fullName}</strong>
+              <span>{primaryRoleLabel}</span>
+            </span>
+            <ChevronRight
+              aria-hidden="true"
+              className="workspace-user-chevron"
+              size={18}
+            />
+          </button>
+        </div>
+      </aside>
+
+      {sidebarOpen ? (
+        <button
+          className="sidebar-scrim"
+          onClick={() => setSidebarOpen(false)}
+          aria-label="Đóng menu"
+        />
+      ) : null}
+
+      <main className="workspace-main">
+        <header className="workspace-topbar">
+          <button
+            aria-controls="workspace-navigation"
+            aria-expanded={sidebarOpen}
+            className="icon-button menu-button"
+            onClick={() => setSidebarOpen(true)}
+            aria-label="Mở menu"
+            ref={menuButtonRef}
+          >
+            <Menu size={21} />
+          </button>
+          <div>
+            <h1>{title}</h1>
+            {description ? <p>{description}</p> : null}
+          </div>
+          {actions ? <div className="workspace-actions">{actions}</div> : null}
+        </header>
+        <div className="workspace-content page-container">{children}</div>
+      </main>
+    </div>
+  );
+}

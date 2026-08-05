@@ -1,0 +1,318 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+
+export type BasicMedicalCatalogInput = {
+  id?: string;
+  item_name: string;
+  commercial_name: string | null;
+  item_type: string | null;
+  country_of_origin: string | null;
+  manufacturer: string | null;
+  model: string | null;
+  unit: string;
+};
+
+export type BasicMedicalEquipmentActionResult = {
+  ok: boolean;
+  message: string;
+};
+
+const uuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function cleanText(value: unknown) {
+  const text = String(value ?? "").trim();
+  return text || null;
+}
+
+function normalizeKey(value: unknown) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("vi")
+    .replace(/đ/g, "d")
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+function fingerprint(
+  item: Pick<
+    BasicMedicalCatalogInput,
+    "item_name" | "commercial_name" | "model"
+  >,
+) {
+  return [item.item_name, item.commercial_name, item.model]
+    .map(normalizeKey)
+    .join("|");
+}
+
+async function requireManager() {
+  const supabase = await createClient();
+  const { data: claims } = await supabase.auth.getClaims();
+  const userId = claims?.claims?.sub;
+  if (!userId) redirect("/login");
+  const { data: roles } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId)
+    .in("role", ["admin", "staff"]);
+  if (!roles?.length) redirect("/dashboard");
+  return supabase;
+}
+
+function parseCatalogRow(
+  raw: Record<string, unknown>,
+): BasicMedicalCatalogInput | null {
+  const normalized = new Map(
+    Object.entries(raw).map(([key, value]) => [normalizeKey(key), value]),
+  );
+  const pick = (...keys: string[]) => {
+    for (const key of keys) {
+      const value = cleanText(normalized.get(key));
+      if (value) return value;
+    }
+    return null;
+  };
+  if (Object.values(raw).every((value) => !cleanText(value))) return null;
+  const itemName = pick("tenthietbivavattu", "tenthietbi");
+  const unit = pick("dvt", "donvitinh");
+  if (!itemName || !unit)
+    throw new Error("Mỗi dòng phải có Tên thiết bị và vật tư cùng ĐVT.");
+  return {
+    item_name: itemName,
+    commercial_name: pick("tenthuongmai"),
+    item_type: pick("loai"),
+    country_of_origin: pick("nuocsx", "nuocsanxuat"),
+    manufacturer: pick("hang", "hangsanxuat"),
+    model: pick("model"),
+    unit,
+  };
+}
+
+export async function createBasicMedicalCatalogItem(formData: FormData) {
+  const supabase = await requireManager();
+  const itemName = cleanText(formData.get("item_name"));
+  const unit = cleanText(formData.get("unit"));
+  if (!itemName || !unit)
+    redirect(
+      "/basic-medical/equipment?error=" +
+        encodeURIComponent("Vui lòng nhập tên thiết bị và ĐVT."),
+    );
+  const { error } = await supabase
+    .from("basic_medical_equipment_catalog")
+    .insert({
+      item_name: itemName,
+      commercial_name: cleanText(formData.get("commercial_name")),
+      item_type: cleanText(formData.get("item_type")),
+      country_of_origin: cleanText(formData.get("country_of_origin")),
+      manufacturer: cleanText(formData.get("manufacturer")),
+      model: cleanText(formData.get("model")),
+      unit,
+    });
+  revalidatePath("/basic-medical/equipment");
+  redirect(
+    `/basic-medical/equipment?${error ? `error=${encodeURIComponent(error.code === "23505" ? "Thiết bị đã có trong danh mục." : "Không thể thêm thiết bị.")}` : "notice=" + encodeURIComponent("Đã thêm thiết bị Y cơ sở.")}`,
+  );
+}
+
+export async function updateBasicMedicalCatalogItems(
+  rows: BasicMedicalCatalogInput[],
+): Promise<BasicMedicalEquipmentActionResult> {
+  const supabase = await requireManager();
+  const payload = rows.map((row) => ({
+    id: String(row.id ?? ""),
+    item_name: cleanText(row.item_name),
+    commercial_name: cleanText(row.commercial_name),
+    item_type: cleanText(row.item_type),
+    country_of_origin: cleanText(row.country_of_origin),
+    manufacturer: cleanText(row.manufacturer),
+    model: cleanText(row.model),
+    unit: cleanText(row.unit),
+  }));
+  if (
+    !payload.length ||
+    payload.length > 1000 ||
+    payload.some(
+      (row) => !uuidPattern.test(row.id) || !row.item_name || !row.unit,
+    )
+  ) {
+    return { ok: false, message: "Danh sách chỉnh sửa không hợp lệ." };
+  }
+  const { error } = await supabase
+    .from("basic_medical_equipment_catalog")
+    .upsert(payload, { onConflict: "id" });
+  if (error)
+    return {
+      ok: false,
+      message:
+        error.code === "23505"
+          ? "Thiết bị bị trùng với dòng khác."
+          : "Không thể lưu chỉnh sửa.",
+    };
+  revalidatePath("/basic-medical/equipment");
+  return { ok: true, message: `Đã lưu ${payload.length} thiết bị.` };
+}
+
+export async function setBasicMedicalCatalogActive(
+  ids: string[],
+  active: boolean,
+): Promise<BasicMedicalEquipmentActionResult> {
+  const supabase = await requireManager();
+  const validIds = [...new Set(ids)].filter((id) => uuidPattern.test(id));
+  if (!validIds.length)
+    return { ok: false, message: "Vui lòng chọn thiết bị." };
+  const { error } = await supabase
+    .from("basic_medical_equipment_catalog")
+    .update({ is_active: active })
+    .in("id", validIds);
+  if (error)
+    return { ok: false, message: "Không thể cập nhật trạng thái thiết bị." };
+  revalidatePath("/basic-medical/equipment");
+  return {
+    ok: true,
+    message: active ? "Đã kích hoạt thiết bị." : "Đã ngừng sử dụng thiết bị.",
+  };
+}
+
+export async function deleteBasicMedicalCatalogItems(
+  ids: string[],
+): Promise<BasicMedicalEquipmentActionResult> {
+  const supabase = await requireManager();
+  const validIds = [...new Set(ids)].filter((id) => uuidPattern.test(id));
+  if (!validIds.length)
+    return { ok: false, message: "Vui lòng chọn thiết bị cần xóa." };
+  const { error } = await supabase
+    .from("basic_medical_equipment_catalog")
+    .delete()
+    .in("id", validIds);
+  if (error)
+    return {
+      ok: false,
+      message:
+        error.code === "23503"
+          ? "Thiết bị đã được phân bổ vào phòng; hãy ngừng sử dụng thay vì xóa."
+          : "Không thể xóa thiết bị.",
+    };
+  revalidatePath("/basic-medical/equipment");
+  return { ok: true, message: `Đã xóa ${validIds.length} thiết bị.` };
+}
+
+export async function saveBasicMedicalRoomInventory(input: {
+  inventoryId?: string;
+  roomId: string;
+  catalogItemId: string;
+  totalQuantity: number;
+  damagedQuantity: number;
+  note?: string;
+}): Promise<BasicMedicalEquipmentActionResult> {
+  const supabase = await requireManager();
+  const { error } = await supabase.rpc("set_basic_medical_room_inventory", {
+    target_inventory_id: input.inventoryId ?? null,
+    target_room_id: input.roomId,
+    target_catalog_item_id: input.catalogItemId,
+    target_total_quantity: input.totalQuantity,
+    target_damaged_quantity: input.damagedQuantity,
+    target_is_active: true,
+    target_note: cleanText(input.note),
+  });
+  if (error) return { ok: false, message: error.message };
+  revalidatePath("/basic-medical/equipment");
+  revalidatePath("/basic-medical/registrations");
+  return { ok: true, message: "Đã cập nhật thiết bị trong phòng." };
+}
+
+export async function adjustBasicMedicalInventoryCondition(input: {
+  inventoryId: string;
+  goodQuantity: number;
+  damagedQuantity: number;
+  note: string;
+}): Promise<BasicMedicalEquipmentActionResult> {
+  const supabase = await requireManager();
+  if (!input.note.trim())
+    return { ok: false, message: "Vui lòng nhập ghi chú điều chỉnh." };
+  const { error } = await supabase.rpc(
+    "adjust_basic_medical_inventory_condition",
+    {
+      target_inventory_id: input.inventoryId,
+      target_good_quantity: input.goodQuantity,
+      target_damaged_quantity: input.damagedQuantity,
+      target_note: input.note.trim(),
+    },
+  );
+  if (error) return { ok: false, message: error.message };
+  revalidatePath("/basic-medical/equipment");
+  revalidatePath("/basic-medical/registrations");
+  return { ok: true, message: "Đã điều chỉnh số lượng Tốt/Hư." };
+}
+
+export async function importBasicMedicalEquipment(formData: FormData) {
+  const supabase = await requireManager();
+  const file = formData.get("file");
+  const mode = String(formData.get("mode") ?? "new");
+  if (
+    !(file instanceof File) ||
+    !file.size ||
+    !/\.(csv|xlsx)$/i.test(file.name)
+  )
+    redirect(
+      "/basic-medical/equipment?error=" +
+        encodeURIComponent("Vui lòng chọn file CSV hoặc XLSX."),
+    );
+  try {
+    const XLSX = await import("@e965/xlsx");
+    const buffer = await file.arrayBuffer();
+    const workbook = /\.csv$/i.test(file.name)
+      ? XLSX.read(new TextDecoder("utf-8").decode(buffer), { type: "string" })
+      : XLSX.read(buffer, { type: "array" });
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(
+      workbook.Sheets[workbook.SheetNames[0]],
+      { defval: "", raw: false },
+    );
+    if (!rows.length || rows.length > 5000)
+      throw new Error("File phải có từ 1 đến 5.000 dòng.");
+    const parsed = rows
+      .map(parseCatalogRow)
+      .filter((row): row is BasicMedicalCatalogInput => Boolean(row));
+    const unique = new Map(parsed.map((row) => [fingerprint(row), row]));
+    const { data: existing, error: readError } = await supabase
+      .from("basic_medical_equipment_catalog")
+      .select("id,item_name,commercial_name,model,is_active");
+    if (readError) throw readError;
+    const existingMap = new Map(
+      (existing ?? []).map((row) => [fingerprint(row), row]),
+    );
+    const inserts: BasicMedicalCatalogInput[] = [];
+    const updates: Array<
+      BasicMedicalCatalogInput & { id: string; is_active: boolean }
+    > = [];
+    for (const [key, row] of unique) {
+      const current = existingMap.get(key);
+      if (current && mode === "all")
+        updates.push({ ...row, id: current.id, is_active: true });
+      else if (!current) inserts.push(row);
+    }
+    if (updates.length) {
+      const { error } = await supabase
+        .from("basic_medical_equipment_catalog")
+        .upsert(updates, { onConflict: "id" });
+      if (error) throw error;
+    }
+    if (inserts.length) {
+      const { error } = await supabase
+        .from("basic_medical_equipment_catalog")
+        .insert(inserts);
+      if (error) throw error;
+    }
+    revalidatePath("/basic-medical/equipment");
+    redirect(
+      `/basic-medical/equipment?notice=${encodeURIComponent(`Đã import ${updates.length + inserts.length} thiết bị.`)}`,
+    );
+  } catch (error) {
+    if (error && typeof error === "object" && "digest" in error) throw error;
+    redirect(
+      `/basic-medical/equipment?error=${encodeURIComponent(error instanceof Error ? error.message : "Không thể đọc file import.")}`,
+    );
+  }
+}

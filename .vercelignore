@@ -1,0 +1,11 @@
+# Local database and Supabase development assets are not required at runtime.
+/backups/
+/supabase/
+
+# Internal analysis, review notes, and test artifacts.
+/graphify-out/
+/docs/
+/tests/
+/.claude/
+/playwright-report/
+/test-results/

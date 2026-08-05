@@ -1,0 +1,28 @@
+schema: spec-driven
+
+context: |
+  Product: MedLabs Calendar, an internal EIU scheduling system.
+  Stack: Next.js 16 App Router, React 19, TypeScript, Supabase, Tailwind CSS.
+  Roles: Admin, Staff, Importer, Lecturer; authorization and room-type scope must be enforced server-side and through RLS where applicable.
+  Code navigation: Graphify is the primary knowledge graph. Read NEXTJS_AGENTS.md for version-matched Next.js behavior.
+  Delivery: Keep changes surgical, preserve desktop behavior when adding responsive layouts, and verify role-specific user paths.
+
+rules:
+  proposal:
+    - State the user-visible outcome, non-goals, affected roles, data migration impact, and rollback considerations.
+    - Identify authorization, RLS, email-notification, import/export, and responsive-layout impacts when relevant.
+  specs:
+    - Write testable requirements with explicit role and room-type scope.
+    - Include conflict and failure behavior for scheduling mutations.
+  tasks:
+    - Order tasks by schema and authorization, server behavior, UI, then verification.
+    - Include focused automated tests and a role-based manual verification checklist.
+
+operations:
+  apply:
+    guidance:
+      - Query Graphify before editing related code and update the graph after changes.
+      - Preserve unrelated work and avoid speculative refactors.
+  archive:
+    guidance:
+      - Record migrations, production configuration, verification results, and known limitations.

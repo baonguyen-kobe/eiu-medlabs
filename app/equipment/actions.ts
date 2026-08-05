@@ -1,0 +1,840 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { after } from "next/server";
+import { processEmailNotificationsByDedupeKeys } from "@/lib/email-notifications";
+import {
+  enqueueEquipmentRequestEmails,
+  loadEquipmentRequestEmailSnapshot,
+} from "@/lib/equipment-request-emails";
+import { businessTodayString } from "@/lib/business-time";
+import {
+  equipmentLeadTime,
+  equipmentReceiveAt,
+} from "@/lib/equipment-lead-time";
+import {
+  equipmentRequestStatuses,
+  type EquipmentConfirmationState,
+  type EquipmentRequestListItem,
+  type EquipmentRequestStatus,
+} from "@/lib/equipment-requests";
+import { NURSING_SKILLS_ROOM_TYPE_ID } from "@/lib/room-types";
+import { createClient } from "@/lib/supabase/server";
+
+export type EquipmentActionState = {
+  ok: boolean;
+  message: string;
+  data?: EquipmentConfirmationState;
+};
+
+export type EquipmentItemActionState = {
+  ok: boolean;
+  message: string;
+  item?: EquipmentRequestListItem["equipment_request_items"][number];
+};
+
+const equipmentHandoffTimes = new Set(["09:00", "11:00", "14:00", "16:00"]);
+
+function toEquipmentConfirmationState(
+  row: Record<string, unknown>,
+): EquipmentConfirmationState {
+  return {
+    status: row.status as EquipmentRequestStatus,
+    late_approval_status:
+      row.late_approval_status as EquipmentConfirmationState["late_approval_status"],
+    late_registration_reason: (row.late_registration_reason as string) ?? null,
+    late_requested_at: (row.late_requested_at as string) ?? null,
+    late_reviewed_at: (row.late_reviewed_at as string) ?? null,
+    late_review_note: (row.late_review_note as string) ?? null,
+    handover_staff_confirmed_at:
+      (row.handover_staff_confirmed_at as string) ?? null,
+    handover_recipient_signed_at:
+      (row.handover_recipient_signed_at as string) ?? null,
+    handover_effective_at: (row.handover_effective_at as string) ?? null,
+    return_staff_confirmed_at:
+      (row.return_staff_confirmed_at as string) ?? null,
+    return_recipient_signed_at:
+      (row.return_recipient_signed_at as string) ?? null,
+    return_effective_at: (row.return_effective_at as string) ?? null,
+  };
+}
+
+export async function addEquipmentRequestItem({
+  requestId,
+  skillName,
+  catalogItemId,
+  quantity,
+  note,
+}: {
+  requestId: string;
+  skillName: string;
+  catalogItemId: string;
+  quantity: number;
+  note?: string;
+}): Promise<EquipmentItemActionState> {
+  const supabase = await createClient();
+  const { data: claims } = await supabase.auth.getClaims();
+  const userId = claims?.claims?.sub;
+  const uuidPattern = /^[0-9a-f-]{36}$/i;
+  const normalizedSkillName = skillName.trim();
+  const normalizedNote = note?.trim() || null;
+
+  if (!userId) return { ok: false, message: "Phiên đăng nhập đã hết hạn." };
+  if (
+    !uuidPattern.test(requestId) ||
+    !uuidPattern.test(catalogItemId) ||
+    !normalizedSkillName ||
+    !Number.isInteger(quantity) ||
+    quantity < 1
+  ) {
+    return { ok: false, message: "Dòng thiết bị bổ sung không hợp lệ." };
+  }
+
+  const [
+    { data: roleRows },
+    { data: request },
+    { data: skill },
+    { data: catalog },
+  ] = await Promise.all([
+    supabase.from("user_roles").select("role").eq("user_id", userId),
+    supabase
+      .from("equipment_requests")
+      .select("id,status")
+      .eq("id", requestId)
+      .maybeSingle(),
+    supabase
+      .from("equipment_request_items")
+      .select("id")
+      .eq("request_id", requestId)
+      .eq("skill_name", normalizedSkillName)
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("equipment_catalog")
+      .select("id")
+      .eq("id", catalogItemId)
+      .eq("is_active", true)
+      .maybeSingle(),
+  ]);
+
+  if (!(roleRows ?? []).some(({ role }) => ["admin", "staff"].includes(role))) {
+    return {
+      ok: false,
+      message: "Chỉ Admin hoặc Chuyên viên được bổ sung thiết bị.",
+    };
+  }
+  if (!request || !["new", "preparing"].includes(request.status)) {
+    return {
+      ok: false,
+      message:
+        "Chỉ được bổ sung thiết bị khi phiếu ở trạng thái Mới hoặc Đã soạn.",
+    };
+  }
+  if (!skill) {
+    return { ok: false, message: "Kỹ năng/bài thực hành không còn tồn tại." };
+  }
+  if (!catalog) {
+    return {
+      ok: false,
+      message: "Thiết bị không còn hoạt động trong Danh mục.",
+    };
+  }
+
+  const { data: inserted, error } = await supabase
+    .from("equipment_request_items")
+    .insert({
+      request_id: requestId,
+      skill_name: normalizedSkillName,
+      catalog_item_id: catalogItemId,
+      quantity,
+      note: normalizedNote,
+    })
+    .select(
+      "id,quantity,skill_name,note,equipment_catalog(id,item_name,commercial_name,item_type,country_of_origin,manufacturer,model,unit)",
+    )
+    .single();
+  if (error || !inserted) {
+    return {
+      ok: false,
+      message: error?.message || "Không thể bổ sung thiết bị vào phiếu.",
+    };
+  }
+
+  try {
+    const dedupeKeys = await enqueueEquipmentRequestEmails({
+      requestId,
+      event: "updated",
+      operationId: crypto.randomUUID(),
+      actorId: userId,
+    });
+    after(() => processEmailNotificationsByDedupeKeys(dedupeKeys));
+  } catch (emailError) {
+    console.error("Không thể xếp email bổ sung thiết bị:", emailError);
+  }
+
+  revalidatePath("/equipment/requests");
+  revalidatePath("/equipment/mine");
+  revalidatePath("/equipment/register");
+  return {
+    ok: true,
+    message: "Đã bổ sung thiết bị vào phiếu.",
+    item: inserted as unknown as EquipmentRequestListItem["equipment_request_items"][number],
+  };
+}
+
+export async function deleteEquipmentRequest(
+  requestId: string,
+): Promise<EquipmentActionState> {
+  const supabase = await createClient();
+  const { data: claims } = await supabase.auth.getClaims();
+  const userId = claims?.claims?.sub;
+  if (!userId) {
+    return { ok: false, message: "Phiên đăng nhập đã hết hạn." };
+  }
+  if (!/^[0-9a-f-]{36}$/i.test(requestId)) {
+    return { ok: false, message: "Phiếu thiết bị không hợp lệ." };
+  }
+
+  const { data: roleRows } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId);
+  if (!(roleRows ?? []).some(({ role }) => ["admin", "staff"].includes(role))) {
+    return {
+      ok: false,
+      message: "Chỉ Admin hoặc Chuyên viên được xóa phiếu thiết bị.",
+    };
+  }
+
+  let emailSnapshot = null;
+  try {
+    emailSnapshot = await loadEquipmentRequestEmailSnapshot(requestId);
+  } catch (emailError) {
+    console.error("Không thể đọc phiếu thiết bị trước khi xóa:", emailError);
+  }
+
+  const { data, error } = await supabase
+    .from("equipment_requests")
+    .delete()
+    .eq("id", requestId)
+    .select("id")
+    .maybeSingle();
+  if (error || !data) {
+    return {
+      ok: false,
+      message: "Không thể xóa phiếu thiết bị. Phiếu có thể đã bị xóa.",
+    };
+  }
+
+  if (emailSnapshot) {
+    try {
+      const dedupeKeys = await enqueueEquipmentRequestEmails({
+        requestId,
+        event: "deleted",
+        operationId: crypto.randomUUID(),
+        snapshot: emailSnapshot,
+        actorId: userId,
+      });
+      after(() => processEmailNotificationsByDedupeKeys(dedupeKeys));
+    } catch (emailError) {
+      console.error("Không thể xếp email xóa phiếu thiết bị:", emailError);
+    }
+  }
+
+  revalidatePath("/equipment/requests");
+  revalidatePath("/equipment/mine");
+  revalidatePath("/equipment/register");
+  revalidatePath("/class-schedules");
+  return { ok: true, message: "Đã xóa phiếu thiết bị." };
+}
+
+export async function updateEquipmentRequestStatus(
+  requestId: string,
+  status: EquipmentRequestStatus,
+): Promise<EquipmentActionState> {
+  const supabase = await createClient();
+  const { data: claims } = await supabase.auth.getClaims();
+  const userId = claims?.claims?.sub;
+  if (!userId) return { ok: false, message: "Phiên đăng nhập đã hết hạn." };
+
+  const allowedStatuses = new Set(
+    equipmentRequestStatuses.map((item) => item.value),
+  );
+  if (!/^[0-9a-f-]{36}$/i.test(requestId) || !allowedStatuses.has(status)) {
+    return { ok: false, message: "Phiếu hoặc trạng thái không hợp lệ." };
+  }
+
+  const { data, error } = await supabase.rpc(
+    "manager_confirm_equipment_status",
+    {
+      target_request_id: requestId,
+      target_status: status,
+    },
+  );
+  if (error || !data) {
+    return {
+      ok: false,
+      message: error?.message || "Không thể cập nhật trạng thái phiếu.",
+    };
+  }
+
+  const row = toEquipmentConfirmationState(data as Record<string, unknown>);
+  const waitingMessage =
+    status === "handed_over" && !row.handover_recipient_signed_at
+      ? "Kho đã xác nhận giao; đang chờ Người đăng ký hoặc Giảng viên phụ trách ký xác nhận."
+      : status === "returned" && !row.return_recipient_signed_at
+        ? "Kho đã xác nhận trả; đang chờ Người đăng ký hoặc Giảng viên phụ trách ký xác nhận."
+        : "Đã cập nhật trạng thái phiếu.";
+  return { ok: true, message: waitingMessage, data: row };
+}
+
+export async function reviewLateEquipmentRequest(
+  requestId: string,
+  decision: "approved" | "rejected",
+  note = "",
+): Promise<EquipmentActionState> {
+  if (
+    !/^[0-9a-f-]{36}$/i.test(requestId) ||
+    !["approved", "rejected"].includes(decision)
+  ) {
+    return { ok: false, message: "Phiếu hoặc kết quả duyệt không hợp lệ." };
+  }
+
+  const supabase = await createClient();
+  const { data: claims } = await supabase.auth.getClaims();
+  if (!claims?.claims?.sub) {
+    return { ok: false, message: "Phiên đăng nhập đã hết hạn." };
+  }
+
+  const { data, error } = await supabase.rpc(
+    "manager_review_late_equipment_request",
+    {
+      target_request_id: requestId,
+      target_decision: decision,
+      target_note: note.trim() || null,
+    },
+  );
+  if (error || !data) {
+    return {
+      ok: false,
+      message:
+        error?.message || "Không thể cập nhật kết quả duyệt đăng ký trễ.",
+    };
+  }
+
+  try {
+    const dedupeKeys = await enqueueEquipmentRequestEmails({
+      requestId,
+      event:
+        decision === "approved"
+          ? "late_approval_approved"
+          : "late_approval_rejected",
+      operationId: crypto.randomUUID(),
+      actorId: claims.claims.sub,
+    });
+    after(() => processEmailNotificationsByDedupeKeys(dedupeKeys));
+  } catch (emailError) {
+    console.error("Không thể xếp email duyệt đăng ký trễ:", emailError);
+  }
+
+  return {
+    ok: true,
+    message:
+      decision === "approved"
+        ? "Đã duyệt đăng ký trễ."
+        : "Đã từ chối đăng ký trễ.",
+    data: toEquipmentConfirmationState(data as Record<string, unknown>),
+  };
+}
+
+export async function confirmEquipmentRequestHandoff(
+  requestId: string,
+  phase: "handover" | "return",
+  signature: string,
+): Promise<EquipmentActionState> {
+  if (
+    !/^[0-9a-f-]{36}$/i.test(requestId) ||
+    !["handover", "return"].includes(phase)
+  ) {
+    return { ok: false, message: "Phiếu hoặc bước xác nhận không hợp lệ." };
+  }
+  if (
+    !signature.startsWith("data:image/png;base64,") ||
+    signature.length < 100 ||
+    signature.length > 400000
+  ) {
+    return { ok: false, message: "Chữ ký điện tử không hợp lệ." };
+  }
+
+  const supabase = await createClient();
+  const { data: claims } = await supabase.auth.getClaims();
+  if (!claims?.claims?.sub) {
+    return { ok: false, message: "Phiên đăng nhập đã hết hạn." };
+  }
+
+  const { data, error } = await supabase.rpc(
+    "registrant_confirm_equipment_handoff",
+    {
+      target_request_id: requestId,
+      target_phase: phase,
+      target_signature: signature,
+    },
+  );
+  if (error || !data) {
+    return {
+      ok: false,
+      message: error?.message || "Không thể lưu chữ ký xác nhận.",
+    };
+  }
+
+  const row = toEquipmentConfirmationState(data as Record<string, unknown>);
+  const message =
+    phase === "handover"
+      ? row.status === "handed_over"
+        ? "Đã đủ hai xác nhận và chuyển sang Xác nhận đã giao."
+        : "Đã lưu chữ ký giao; đang chờ xác nhận của kho."
+      : row.status === "completed"
+        ? "Đã đủ hai xác nhận trả và hoàn thành phiếu."
+        : "Đã lưu chữ ký trả; đang chờ xác nhận của kho.";
+  return { ok: true, message, data: row };
+}
+
+export async function updateEquipmentRequest(
+  _state: EquipmentActionState,
+  formData: FormData,
+): Promise<EquipmentActionState> {
+  const supabase = await createClient();
+  const { data: claims } = await supabase.auth.getClaims();
+  const userId = claims?.claims?.sub;
+  if (!userId) return { ok: false, message: "Phiên đăng nhập đã hết hạn." };
+
+  const requestId = String(formData.get("request_id") ?? "");
+  const scheduleId = String(formData.get("class_schedule_id") ?? "");
+  const semester = String(formData.get("semester") ?? "");
+  const responsibleId = String(formData.get("responsible_lecturer_id") ?? "");
+  const receiveDate = String(formData.get("receive_date") ?? "");
+  const receiveTime = String(formData.get("receive_time") ?? "");
+  const returnDate = String(formData.get("return_date") ?? "");
+  const returnTime = String(formData.get("return_time") ?? "");
+  const note = String(formData.get("note") ?? "").trim();
+  const lateRegistrationReason = String(
+    formData.get("late_registration_reason") ?? "",
+  ).trim();
+  let items: Array<{
+    skillName: string;
+    catalogItemId: string;
+    quantity: number;
+    note?: string;
+  }> = [];
+  try {
+    items = JSON.parse(String(formData.get("items") ?? "[]"));
+  } catch {
+    return { ok: false, message: "Danh sách thiết bị không hợp lệ." };
+  }
+
+  const uuidPattern = /^[0-9a-f-]{36}$/i;
+  if (
+    !uuidPattern.test(requestId) ||
+    !uuidPattern.test(scheduleId) ||
+    !["HK1", "HK2", "HK3", "HK4"].includes(semester) ||
+    !uuidPattern.test(responsibleId) ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(receiveDate) ||
+    !/^\d{2}:\d{2}$/.test(receiveTime) ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(returnDate) ||
+    !/^\d{2}:\d{2}$/.test(returnTime)
+  ) {
+    return {
+      ok: false,
+      message:
+        "Vui lòng kiểm tra lớp, học kỳ, giảng viên và thời gian nhận/trả.",
+    };
+  }
+  if (
+    !items.length ||
+    items.some(
+      (item) =>
+        !item.skillName.trim() ||
+        !uuidPattern.test(item.catalogItemId) ||
+        !Number.isInteger(item.quantity) ||
+        item.quantity < 1,
+    )
+  ) {
+    return {
+      ok: false,
+      message: "Mỗi dòng phải có kỹ năng, thiết bị và số lượng hợp lệ.",
+    };
+  }
+
+  const [
+    { data: request },
+    { data: schedule },
+    { data: roleRows },
+    { data: eligibleLecturers },
+  ] = await Promise.all([
+    supabase
+      .from("equipment_requests")
+      .select(
+        "id,registrant_id,status,receive_at,late_approval_status,late_registration_reason",
+      )
+      .eq("id", requestId)
+      .maybeSingle(),
+    supabase
+      .from("class_schedules")
+      .select("id,schedule_date,rooms!inner(room_type_id)")
+      .eq("id", scheduleId)
+      .eq("rooms.room_type_id", NURSING_SKILLS_ROOM_TYPE_ID)
+      .neq("schedule_status", "cancelled")
+      .maybeSingle(),
+    supabase.from("user_roles").select("role").eq("user_id", userId),
+    supabase.rpc("list_scoped_lecturers", {
+      target_room_type_id: NURSING_SKILLS_ROOM_TYPE_ID,
+    }),
+  ]);
+
+  const roles = (roleRows ?? []).map(({ role }) => role);
+  const canManageAll = roles.some((role) => ["admin", "staff"].includes(role));
+  if (!request || (request.registrant_id !== userId && !canManageAll)) {
+    return { ok: false, message: "Bạn không có quyền điều chỉnh phiếu này." };
+  }
+  if (!["new", "preparing"].includes(request.status)) {
+    return {
+      ok: false,
+      message: "Chỉ có thể điều chỉnh phiếu trạng thái Mới hoặc Đã soạn.",
+    };
+  }
+  if (!schedule) {
+    return {
+      ok: false,
+      message: "Lớp Skills lab không hợp lệ hoặc đã bị hủy.",
+    };
+  }
+
+  const eligibleLecturerIds = new Set(
+    ((eligibleLecturers ?? []) as Array<{ id: string }>).map(({ id }) => id),
+  );
+  if (
+    responsibleId !== request.registrant_id &&
+    !eligibleLecturerIds.has(responsibleId)
+  ) {
+    return { ok: false, message: "Giảng viên phụ trách không hợp lệ." };
+  }
+
+  const receiveAt = equipmentReceiveAt(receiveDate, receiveTime);
+  const returnAt = new Date(`${returnDate}T${returnTime}:00+07:00`);
+  if (
+    !equipmentHandoffTimes.has(receiveTime) ||
+    !equipmentHandoffTimes.has(returnTime)
+  ) {
+    return { ok: false, message: "Giờ nhận và giờ trả không hợp lệ." };
+  }
+  if (!receiveAt || Number.isNaN(returnAt.getTime()) || returnAt < receiveAt) {
+    return {
+      ok: false,
+      message: "Ngày trả phải sau hoặc bằng thời điểm nhận.",
+    };
+  }
+  if (receiveDate > schedule.schedule_date) {
+    return { ok: false, message: "Ngày nhận phải bằng hoặc trước ngày học." };
+  }
+  if (returnDate < schedule.schedule_date) {
+    return { ok: false, message: "Ngày trả phải bằng hoặc sau ngày học." };
+  }
+  if (receiveDate < businessTodayString()) {
+    return { ok: false, message: "Ngày nhận không được trước ngày hiện tại." };
+  }
+  const leadTime = equipmentLeadTime(receiveAt);
+  if (leadTime.isExpired) {
+    return {
+      ok: false,
+      message: "Thời gian nhận thiết bị phải sau thời điểm đăng ký.",
+    };
+  }
+  if (leadTime.requiresLateApproval && !lateRegistrationReason) {
+    return { ok: false, message: "Vui lòng nhập Lý do đăng ký trễ." };
+  }
+  const preservesApprovedLateDecision =
+    request.late_approval_status === "approved" &&
+    new Date(request.receive_at).getTime() === receiveAt.getTime() &&
+    (request.late_registration_reason?.trim() ?? "") === lateRegistrationReason;
+  const requiresLateReview =
+    leadTime.requiresLateApproval && !preservesApprovedLateDecision;
+
+  const catalogIds = [...new Set(items.map((item) => item.catalogItemId))];
+  const { data: catalogRows } = await supabase
+    .from("equipment_catalog")
+    .select("id")
+    .in("id", catalogIds)
+    .eq("is_active", true);
+  if ((catalogRows ?? []).length !== catalogIds.length) {
+    return { ok: false, message: "Danh sách có thiết bị không còn hoạt động." };
+  }
+
+  const { data: updatedId, error } = await supabase.rpc(
+    "update_equipment_request_content",
+    {
+      target_request_id: requestId,
+      target_class_schedule_id: scheduleId,
+      target_semester: semester,
+      target_responsible_lecturer_id: responsibleId,
+      target_receive_at: receiveAt.toISOString(),
+      target_return_at: returnAt.toISOString(),
+      target_note: note,
+      target_late_registration_reason: lateRegistrationReason,
+      target_items: items.map((item) => ({
+        skill_name: item.skillName.trim(),
+        catalog_item_id: item.catalogItemId,
+        quantity: item.quantity,
+        note: item.note?.trim() || null,
+      })),
+    },
+  );
+  if (error || !updatedId) {
+    return {
+      ok: false,
+      message:
+        error?.code === "23505"
+          ? "Lớp này đã có một phiếu đăng ký thiết bị khác."
+          : error?.message || "Không thể lưu nội dung điều chỉnh.",
+    };
+  }
+
+  const emailOperationId = crypto.randomUUID();
+  try {
+    const dedupeKeys = await enqueueEquipmentRequestEmails({
+      requestId,
+      event: requiresLateReview ? "late_approval_requested" : "updated",
+      operationId: emailOperationId,
+      actorId: userId,
+    });
+    after(() => processEmailNotificationsByDedupeKeys(dedupeKeys));
+  } catch (emailError) {
+    console.error("Không thể xếp email điều chỉnh phiếu thiết bị:", emailError);
+  }
+
+  revalidatePath("/equipment/requests");
+  revalidatePath("/equipment/mine");
+  revalidatePath("/equipment/register");
+  revalidatePath("/class-schedules");
+  return {
+    ok: true,
+    message: requiresLateReview
+      ? "Đã gửi yêu cầu duyệt đăng ký trễ. ID phiếu được giữ nguyên."
+      : "Đã lưu điều chỉnh. ID và trạng thái hiện tại của phiếu được giữ nguyên.",
+  };
+}
+
+export async function createEquipmentRequest(
+  _state: EquipmentActionState,
+  formData: FormData,
+): Promise<EquipmentActionState> {
+  const supabase = await createClient();
+  const { data: claims } = await supabase.auth.getClaims();
+  const userId = claims?.claims?.sub;
+  if (!userId) return { ok: false, message: "Phiên đăng nhập đã hết hạn." };
+
+  const scheduleId = String(formData.get("class_schedule_id") ?? "");
+  const semester = String(formData.get("semester") ?? "");
+  const responsibleId = String(formData.get("responsible_lecturer_id") ?? "");
+  const receiveDate = String(formData.get("receive_date") ?? "");
+  const receiveTime = String(formData.get("receive_time") ?? "");
+  const returnDate = String(formData.get("return_date") ?? "");
+  const returnTime = String(formData.get("return_time") ?? "");
+  const note = String(formData.get("note") ?? "").trim();
+  const lateRegistrationReason = String(
+    formData.get("late_registration_reason") ?? "",
+  ).trim();
+  let items: Array<{
+    skillName: string;
+    catalogItemId: string;
+    quantity: number;
+    note?: string;
+  }> = [];
+  try {
+    items = JSON.parse(String(formData.get("items") ?? "[]"));
+  } catch {
+    return { ok: false, message: "Danh sách thiết bị không hợp lệ." };
+  }
+  if (
+    !scheduleId ||
+    !["HK1", "HK2", "HK3", "HK4"].includes(semester) ||
+    !responsibleId ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(receiveDate) ||
+    !/^\d{2}:\d{2}$/.test(receiveTime) ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(returnDate) ||
+    !/^\d{2}:\d{2}$/.test(returnTime)
+  ) {
+    return {
+      ok: false,
+      message:
+        "Vui lòng kiểm tra lớp, học kỳ, giảng viên và thời gian nhận/trả.",
+    };
+  }
+  if (
+    !items.length ||
+    items.some(
+      (item) =>
+        !item.skillName.trim() ||
+        !item.catalogItemId ||
+        !Number.isInteger(item.quantity) ||
+        item.quantity < 1,
+    )
+  ) {
+    return {
+      ok: false,
+      message: "Mỗi dòng phải có kỹ năng, thiết bị và số lượng hợp lệ.",
+    };
+  }
+  const [
+    { data: profile },
+    { data: schedule },
+    { data: roleRows },
+    { data: eligibleLecturers },
+  ] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("email,phone,is_active")
+      .eq("id", userId)
+      .single(),
+    supabase
+      .from("class_schedules")
+      .select("id,schedule_date,rooms!inner(room_type_id)")
+      .eq("id", scheduleId)
+      .eq("rooms.room_type_id", NURSING_SKILLS_ROOM_TYPE_ID)
+      .neq("schedule_status", "cancelled")
+      .maybeSingle(),
+    supabase.from("user_roles").select("role").eq("user_id", userId),
+    supabase.rpc("list_scoped_lecturers", {
+      target_room_type_id: NURSING_SKILLS_ROOM_TYPE_ID,
+    }),
+  ]);
+  if (
+    !profile?.is_active ||
+    !(roleRows ?? []).some(({ role }) =>
+      ["admin", "staff", "importer", "lecturer"].includes(role),
+    )
+  ) {
+    return { ok: false, message: "Bạn không có quyền tạo phiếu thiết bị." };
+  }
+  if (!/^\d{10}$/.test(profile.phone ?? "")) {
+    return {
+      ok: false,
+      message: "Hồ sơ Nhân sự chưa có số điện thoại 10 chữ số.",
+    };
+  }
+  const eligibleLecturerIds = new Set(
+    ((eligibleLecturers ?? []) as Array<{ id: string }>).map(({ id }) => id),
+  );
+  if (
+    !schedule ||
+    (responsibleId !== userId && !eligibleLecturerIds.has(responsibleId))
+  ) {
+    return {
+      ok: false,
+      message: "Lớp hoặc giảng viên phụ trách không hợp lệ.",
+    };
+  }
+  const receiveAt = equipmentReceiveAt(receiveDate, receiveTime);
+  const returnAt = new Date(`${returnDate}T${returnTime}:00+07:00`);
+  if (
+    !equipmentHandoffTimes.has(receiveTime) ||
+    !equipmentHandoffTimes.has(returnTime)
+  ) {
+    return { ok: false, message: "Giờ nhận và giờ trả không hợp lệ." };
+  }
+  if (!receiveAt || Number.isNaN(returnAt.getTime()) || returnAt < receiveAt) {
+    return {
+      ok: false,
+      message: "Ngày trả phải sau hoặc bằng thời điểm nhận.",
+    };
+  }
+  if (receiveDate > schedule.schedule_date) {
+    return { ok: false, message: "Ngày nhận phải bằng hoặc trước ngày học." };
+  }
+  if (returnDate < schedule.schedule_date) {
+    return { ok: false, message: "Ngày trả phải bằng hoặc sau ngày học." };
+  }
+  if (receiveDate < businessTodayString()) {
+    return { ok: false, message: "Ngày nhận không được trước ngày hiện tại." };
+  }
+  const leadTime = equipmentLeadTime(receiveAt);
+  if (leadTime.isExpired) {
+    return {
+      ok: false,
+      message: "Thời gian nhận thiết bị phải sau thời điểm đăng ký.",
+    };
+  }
+  if (leadTime.requiresLateApproval && !lateRegistrationReason) {
+    return { ok: false, message: "Vui lòng nhập Lý do đăng ký trễ." };
+  }
+  const catalogIds = [...new Set(items.map((item) => item.catalogItemId))];
+  const { data: catalogRows } = await supabase
+    .from("equipment_catalog")
+    .select("id")
+    .in("id", catalogIds)
+    .eq("is_active", true);
+  if ((catalogRows ?? []).length !== catalogIds.length) {
+    return { ok: false, message: "Danh sách có thiết bị không còn hoạt động." };
+  }
+  const { data: request, error } = await supabase
+    .from("equipment_requests")
+    .insert({
+      class_schedule_id: scheduleId,
+      semester,
+      registrant_id: userId,
+      responsible_lecturer_id: responsibleId,
+      phone_snapshot: profile.phone,
+      email_snapshot: profile.email ?? String(claims.claims.email ?? ""),
+      receive_at: receiveAt.toISOString(),
+      return_at: returnAt.toISOString(),
+      late_registration_reason: lateRegistrationReason || null,
+      note: note || null,
+      created_by: userId,
+    })
+    .select("id")
+    .single();
+  if (error || !request)
+    return {
+      ok: false,
+      message:
+        error?.code === "23505"
+          ? "Lớp này đã có phiếu đăng ký thiết bị."
+          : error?.message || "Không thể tạo phiếu thiết bị.",
+    };
+  const { error: itemError } = await supabase
+    .from("equipment_request_items")
+    .insert(
+      items.map((item) => ({
+        request_id: request.id,
+        skill_name: item.skillName.trim(),
+        catalog_item_id: item.catalogItemId,
+        quantity: item.quantity,
+        note: item.note?.trim() || null,
+      })),
+    );
+  if (itemError) {
+    await supabase.from("equipment_requests").delete().eq("id", request.id);
+    return { ok: false, message: "Không thể lưu danh sách thiết bị." };
+  }
+  try {
+    const dedupeKeys = await enqueueEquipmentRequestEmails({
+      requestId: request.id,
+      event: leadTime.requiresLateApproval
+        ? "late_approval_requested"
+        : "created",
+      actorId: userId,
+    });
+    after(() => processEmailNotificationsByDedupeKeys(dedupeKeys));
+  } catch (emailError) {
+    console.error("Không thể xếp email xác nhận phiếu thiết bị:", emailError);
+  }
+  revalidatePath("/equipment/requests");
+  revalidatePath("/equipment/mine");
+  revalidatePath("/equipment/register");
+  revalidatePath("/class-schedules");
+  return {
+    ok: true,
+    message: leadTime.requiresLateApproval
+      ? "Đã gửi yêu cầu duyệt đăng ký trễ."
+      : "Đã tạo phiếu đăng ký thiết bị.",
+  };
+}

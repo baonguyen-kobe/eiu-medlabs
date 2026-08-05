@@ -1,0 +1,1186 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { personnelRoleDisplayNames } from "@/lib/admin-catalog-template";
+import {
+  assertUniquePersonnelImportIdentities,
+  normalizePersonnelPhone,
+} from "@/lib/personnel-import";
+
+async function adminContext() {
+  const supabase = await createClient();
+  const { data: claimsData } = await supabase.auth.getClaims();
+  const userId = claimsData?.claims?.sub;
+  if (!userId) throw new Error("AUTH_REQUIRED");
+
+  const { data: role } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId)
+    .eq("role", "admin")
+    .maybeSingle();
+  if (!role) throw new Error("ADMIN_REQUIRED");
+  return { supabase, userId };
+}
+
+export async function createCourse(formData: FormData) {
+  const { supabase } = await adminContext();
+  const courseCode = String(formData.get("course_code") ?? "").trim();
+  const courseName = String(formData.get("course_name") ?? "").trim();
+  const roomTypeId = String(formData.get("room_type_id") ?? "").trim();
+  if (!courseCode || !courseName || !roomTypeId) {
+    catalogRedirect(
+      "/admin/courses",
+      "error",
+      "Vui lòng nhập mã môn học, tên môn học và Loại.",
+    );
+  }
+  const { data: roomType } = await supabase
+    .from("room_types")
+    .select("id")
+    .eq("id", roomTypeId)
+    .eq("is_active", true)
+    .maybeSingle();
+  if (!roomType) {
+    catalogRedirect("/admin/courses", "error", "Loại đã chọn không hợp lệ.");
+  }
+  const { error } = await supabase.from("courses").insert({
+    course_code: courseCode,
+    course_name: courseName,
+    room_type_id: roomTypeId,
+  });
+  if (error) {
+    catalogRedirect(
+      "/admin/courses",
+      "error",
+      "Mã môn học đã tồn tại hoặc thông tin không hợp lệ.",
+    );
+  }
+  revalidatePath("/admin/courses");
+  catalogRedirect("/admin/courses", "notice", "Đã thêm môn học.");
+}
+
+export async function toggleCourse(formData: FormData) {
+  const { supabase } = await adminContext();
+  await supabase
+    .from("courses")
+    .update({ is_active: String(formData.get("active")) === "true" })
+    .eq("id", String(formData.get("id") ?? ""));
+  revalidatePath("/admin/courses");
+}
+
+function catalogRedirect(
+  path:
+    | "/admin/courses"
+    | "/admin/rooms"
+    | "/admin/shift-templates"
+    | "/admin/personnel",
+  kind: "notice" | "error",
+  message: string,
+): never {
+  redirect(`${path}?${kind}=${encodeURIComponent(message)}`);
+}
+
+function normalizeImportKey(value: unknown) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/gi, "d")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+function importValue(row: Record<string, unknown>, ...keys: string[]) {
+  const normalized = new Map(
+    Object.entries(row).map(([key, value]) => [normalizeImportKey(key), value]),
+  );
+  for (const key of keys) {
+    const value = String(normalized.get(normalizeImportKey(key)) ?? "").trim();
+    if (value) return value;
+  }
+  return "";
+}
+
+async function readAdminCatalogFile(
+  formData: FormData,
+  path: "/admin/courses" | "/admin/rooms" | "/admin/personnel",
+) {
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    catalogRedirect(path, "error", "Vui lòng chọn file import.");
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    catalogRedirect(path, "error", "File import không được vượt quá 10 MB.");
+  }
+  if (!/\.(csv|xlsx)$/i.test(file.name)) {
+    catalogRedirect(path, "error", "Chỉ hỗ trợ file CSV hoặc XLSX.");
+  }
+  const XLSX = await import("@e965/xlsx");
+  const fileBuffer = await file.arrayBuffer();
+  const workbook = /\.csv$/i.test(file.name)
+    ? XLSX.read(new TextDecoder("utf-8").decode(fileBuffer), {
+        type: "string",
+        codepage: 65001,
+      })
+    : XLSX.read(fileBuffer, { type: "array" });
+  const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(firstSheet, {
+    defval: "",
+    raw: false,
+  });
+  if (!rows.length || rows.length > 5000) {
+    catalogRedirect(path, "error", "File phải có từ 1 đến 5.000 dòng dữ liệu.");
+  }
+  return { file, rows };
+}
+
+export async function importCourses(formData: FormData) {
+  const { supabase } = await adminContext();
+  try {
+    const { file, rows } = await readAdminCatalogFile(
+      formData,
+      "/admin/courses",
+    );
+    const { data: roomTypes, error: typeError } = await supabase
+      .from("room_types")
+      .select("id,code,name")
+      .eq("is_active", true);
+    if (typeError) throw typeError;
+    const roomTypeByKey = new Map<string, string>();
+    (roomTypes ?? []).forEach((roomType) => {
+      roomTypeByKey.set(normalizeImportKey(roomType.code), roomType.id);
+      roomTypeByKey.set(normalizeImportKey(roomType.name), roomType.id);
+    });
+    const allowedRoomTypeNames = (roomTypes ?? [])
+      .map(({ name }) => name)
+      .join(", ");
+    const imported = new Map<
+      string,
+      { course_code: string; course_name: string; room_type_id: string }
+    >();
+    rows.forEach((row, index) => {
+      const courseCode = importValue(row, "Mã môn học", "course_code");
+      const courseName = importValue(row, "Tên môn học", "course_name");
+      const roomTypeKey = importValue(
+        row,
+        "Loại",
+        "Loại phòng",
+        "Mã loại phòng",
+        "room_type_code",
+      );
+      const roomTypeId = roomTypeByKey.get(normalizeImportKey(roomTypeKey));
+      if (!courseCode || !courseName || !roomTypeId) {
+        throw new Error(
+          `Dòng ${index + 2} phải có Mã môn học, Tên môn học và Loại hợp lệ. Chỉ dùng: ${allowedRoomTypeNames}.`,
+        );
+      }
+      imported.set(courseCode.toLocaleUpperCase("vi"), {
+        course_code: courseCode,
+        course_name: courseName,
+        room_type_id: roomTypeId,
+      });
+    });
+
+    const { data: existing, error: readError } = await supabase
+      .from("courses")
+      .select("id,course_code");
+    if (readError) throw readError;
+    const existingByCode = new Map(
+      (existing ?? []).map((course) => [
+        course.course_code.trim().toLocaleUpperCase("vi"),
+        course.id,
+      ]),
+    );
+    const payload = [...imported.entries()].map(([key, course]) => ({
+      id: existingByCode.get(key) ?? crypto.randomUUID(),
+      ...course,
+    }));
+    const { error } = await supabase.from("courses").upsert(payload, {
+      onConflict: "id",
+    });
+    if (error) throw error;
+    revalidatePath("/admin/courses");
+    catalogRedirect(
+      "/admin/courses",
+      "notice",
+      `Đã import ${payload.length} môn học từ ${file.name}.`,
+    );
+  } catch (error) {
+    if (error && typeof error === "object" && "digest" in error) throw error;
+    catalogRedirect(
+      "/admin/courses",
+      "error",
+      error instanceof Error ? error.message : "Không thể đọc file import.",
+    );
+  }
+}
+
+export async function importRooms(formData: FormData) {
+  const { supabase } = await adminContext();
+  try {
+    const { file, rows } = await readAdminCatalogFile(formData, "/admin/rooms");
+    const { data: roomTypes, error: typeError } = await supabase
+      .from("room_types")
+      .select("id,code,name")
+      .eq("is_active", true);
+    if (typeError) throw typeError;
+    const roomTypeByKey = new Map<string, string>();
+    (roomTypes ?? []).forEach((roomType) => {
+      roomTypeByKey.set(normalizeImportKey(roomType.code), roomType.id);
+      roomTypeByKey.set(normalizeImportKey(roomType.name), roomType.id);
+    });
+
+    const imported = new Map<
+      string,
+      {
+        room_code: string;
+        building_code: string;
+        room_name: string | null;
+        room_type_id: string;
+        capacity: number | null;
+      }
+    >();
+    rows.forEach((row, index) => {
+      const roomCode = importValue(row, "Mã phòng", "room_code");
+      const buildingCode = importValue(row, "Tòa nhà", "building_code");
+      const roomName = importValue(row, "Tên phòng", "room_name");
+      const roomTypeKey = importValue(
+        row,
+        "Loại phòng",
+        "Mã loại phòng",
+        "room_type_code",
+      );
+      const capacityText = importValue(row, "Sức chứa", "capacity");
+      const capacity = capacityText ? Number(capacityText) : null;
+      const roomTypeId = roomTypeByKey.get(normalizeImportKey(roomTypeKey));
+      if (!roomCode || !buildingCode || !roomTypeId) {
+        throw new Error(
+          `Dòng ${index + 2} phải có Mã phòng, Tòa nhà và Loại phòng hợp lệ.`,
+        );
+      }
+      if (capacity !== null && (!Number.isInteger(capacity) || capacity <= 0)) {
+        throw new Error(
+          `Sức chứa tại dòng ${index + 2} phải là số nguyên dương.`,
+        );
+      }
+      const key = `${roomCode.toLocaleUpperCase("vi")}|${buildingCode.toLocaleUpperCase("vi")}`;
+      imported.set(key, {
+        room_code: roomCode,
+        building_code: buildingCode,
+        room_name: roomName || null,
+        room_type_id: roomTypeId,
+        capacity,
+      });
+    });
+
+    const { data: existing, error: readError } = await supabase
+      .from("rooms")
+      .select("id,room_code,building_code");
+    if (readError) throw readError;
+    const existingByCode = new Map(
+      (existing ?? []).map((room) => [
+        `${room.room_code.trim().toLocaleUpperCase("vi")}|${room.building_code.trim().toLocaleUpperCase("vi")}`,
+        room.id,
+      ]),
+    );
+    const payload = [...imported.entries()].map(([key, room]) => ({
+      id: existingByCode.get(key) ?? crypto.randomUUID(),
+      ...room,
+    }));
+    const { error } = await supabase.from("rooms").upsert(payload, {
+      onConflict: "id",
+    });
+    if (error) throw error;
+    revalidatePath("/admin/rooms");
+    catalogRedirect(
+      "/admin/rooms",
+      "notice",
+      `Đã import ${payload.length} phòng từ ${file.name}.`,
+    );
+  } catch (error) {
+    if (error && typeof error === "object" && "digest" in error) throw error;
+    catalogRedirect(
+      "/admin/rooms",
+      "error",
+      error instanceof Error ? error.message : "Không thể đọc file import.",
+    );
+  }
+}
+
+export async function deleteCourse(formData: FormData) {
+  const { supabase } = await adminContext();
+  const { error } = await supabase.rpc("delete_catalog_course", {
+    target_course_id: String(formData.get("id") ?? ""),
+  });
+  if (error) {
+    catalogRedirect(
+      "/admin/courses",
+      "error",
+      error.message.includes("CATALOG_HAS_RELATED_REQUESTS")
+        ? "Môn học còn phiếu thiết bị hoặc buổi Y cơ sở liên quan nên chưa thể xóa."
+        : error.message.includes("CATALOG_HAS_BASIC_MEDICAL_REGISTRATIONS")
+          ? "Môn học còn đăng ký Y cơ sở nên chưa thể xóa."
+          : "Môn học còn lớp đang sử dụng nên chưa thể xóa.",
+    );
+  }
+  revalidatePath("/admin/courses");
+  catalogRedirect("/admin/courses", "notice", "Đã xóa môn học.");
+}
+
+export async function createRoom(formData: FormData) {
+  const { supabase } = await adminContext();
+  const roomCode = String(formData.get("room_code") ?? "").trim();
+  const buildingCode = String(formData.get("building_code") ?? "").trim();
+  if (!roomCode || !buildingCode) return;
+  const capacityValue = String(formData.get("capacity") ?? "").trim();
+  await supabase.from("rooms").insert({
+    room_code: roomCode,
+    building_code: buildingCode,
+    room_name: String(formData.get("room_name") ?? "").trim() || null,
+    room_type_id: String(formData.get("room_type_id") ?? ""),
+    capacity: capacityValue ? Number(capacityValue) : null,
+  });
+  revalidatePath("/admin/rooms");
+}
+
+export async function createRoomType(formData: FormData) {
+  const { supabase } = await adminContext();
+  const name = String(formData.get("name") ?? "").trim();
+  const code = String(formData.get("code") ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  if (!name || !code)
+    catalogRedirect(
+      "/admin/rooms",
+      "error",
+      "Tên và mã Loại phòng không hợp lệ.",
+    );
+  const { error } = await supabase.from("room_types").insert({ name, code });
+  if (error)
+    catalogRedirect(
+      "/admin/rooms",
+      "error",
+      "Loại phòng đã tồn tại hoặc không hợp lệ.",
+    );
+  revalidatePath("/admin/rooms");
+  catalogRedirect("/admin/rooms", "notice", "Đã thêm Loại phòng.");
+}
+
+export async function toggleRoomType(formData: FormData) {
+  const { supabase } = await adminContext();
+  const { error } = await supabase
+    .from("room_types")
+    .update({ is_active: String(formData.get("active")) === "true" })
+    .eq("id", String(formData.get("id") ?? ""));
+  if (error)
+    catalogRedirect("/admin/rooms", "error", "Không thể cập nhật Loại phòng.");
+  revalidatePath("/admin/rooms");
+  catalogRedirect("/admin/rooms", "notice", "Đã cập nhật Loại phòng.");
+}
+
+export async function toggleRoom(formData: FormData) {
+  const { supabase } = await adminContext();
+  await supabase
+    .from("rooms")
+    .update({ is_active: String(formData.get("active")) === "true" })
+    .eq("id", String(formData.get("id") ?? ""));
+  revalidatePath("/admin/rooms");
+}
+
+export async function deleteRoom(formData: FormData) {
+  const { supabase } = await adminContext();
+  const { error } = await supabase.rpc("delete_catalog_room", {
+    target_room_id: String(formData.get("id") ?? ""),
+  });
+  if (error) {
+    catalogRedirect(
+      "/admin/rooms",
+      "error",
+      error.message.includes("CATALOG_HAS_RELATED_REQUESTS")
+        ? "Phòng còn phiếu thiết bị hoặc buổi Y cơ sở liên quan nên chưa thể xóa."
+        : error.message.includes("CATALOG_HAS_BASIC_MEDICAL_REGISTRATIONS")
+          ? "Phòng còn đăng ký Y cơ sở nên chưa thể xóa."
+          : "Phòng còn lớp đang sử dụng nên chưa thể xóa.",
+    );
+  }
+  revalidatePath("/admin/rooms");
+  catalogRedirect("/admin/rooms", "notice", "Đã xóa phòng.");
+}
+
+export async function createShiftTemplate(formData: FormData) {
+  const { supabase } = await adminContext();
+  const code = String(formData.get("shift_code") ?? "").trim();
+  const name = String(formData.get("shift_name") ?? "").trim();
+  const start = String(formData.get("start_time") ?? "");
+  const end = String(formData.get("end_time") ?? "");
+  if (!code || !name || !start || !end || end <= start) return;
+  await supabase.from("shift_templates").insert({
+    shift_code: code,
+    shift_name: name,
+    start_time: start,
+    end_time: end,
+  });
+  revalidatePath("/admin/shift-templates");
+}
+
+export async function toggleShiftTemplate(formData: FormData) {
+  const { supabase } = await adminContext();
+  await supabase
+    .from("shift_templates")
+    .update({ is_active: String(formData.get("active")) === "true" })
+    .eq("id", String(formData.get("id") ?? ""));
+  revalidatePath("/admin/shift-templates");
+}
+
+export async function deleteShiftTemplate(formData: FormData) {
+  const { supabase } = await adminContext();
+  const { error } = await supabase.rpc("delete_catalog_shift_template", {
+    target_shift_template_id: String(formData.get("id") ?? ""),
+  });
+  if (error) {
+    catalogRedirect(
+      "/admin/shift-templates",
+      "error",
+      "Mẫu ca đang được sử dụng nên chưa thể xóa.",
+    );
+  }
+  revalidatePath("/admin/shift-templates");
+  catalogRedirect("/admin/shift-templates", "notice", "Đã xóa mẫu ca trực.");
+}
+
+export async function toggleProfile(formData: FormData) {
+  const { supabase, userId } = await adminContext();
+  const targetId = String(formData.get("id") ?? "");
+  const active = String(formData.get("active")) === "true";
+  if (targetId === userId && !active) return;
+  await supabase
+    .from("profiles")
+    .update({ is_active: active })
+    .eq("id", targetId);
+  revalidatePath("/admin/personnel");
+}
+
+export async function updateUserRole(formData: FormData) {
+  const { supabase, userId } = await adminContext();
+  const targetId = String(formData.get("user_id") ?? "");
+  const role = String(formData.get("role") ?? "") as
+    "admin" | "lecturer" | "staff" | "importer" | "viewer";
+  const enabled = String(formData.get("enabled")) === "true";
+  if (!["admin", "lecturer", "staff", "importer", "viewer"].includes(role))
+    return;
+  if (targetId === userId && role === "admin" && !enabled) return;
+  if (targetId === userId && role === "viewer" && enabled) return;
+
+  if (enabled) {
+    if (role === "viewer") {
+      await supabase
+        .from("user_roles")
+        .delete()
+        .eq("user_id", targetId)
+        .neq("role", "viewer");
+    } else {
+      await supabase
+        .from("user_roles")
+        .delete()
+        .eq("user_id", targetId)
+        .eq("role", "viewer");
+    }
+    await supabase.from("user_roles").upsert({
+      user_id: targetId,
+      role,
+      created_by: userId,
+    });
+  } else {
+    await supabase
+      .from("user_roles")
+      .delete()
+      .eq("user_id", targetId)
+      .eq("role", role);
+  }
+  revalidatePath("/admin/personnel");
+}
+
+function personnelRedirect(kind: "notice" | "error", message: string): never {
+  redirect(`/admin/personnel?${kind}=${encodeURIComponent(message)}`);
+}
+
+type PersonnelRole = "admin" | "lecturer" | "staff" | "importer" | "viewer";
+
+const personnelRoleAliases = new Map<string, PersonnelRole>([
+  ["admin", "admin"],
+  ["quantrivien", "admin"],
+  ["lecturer", "lecturer"],
+  ["giangvien", "lecturer"],
+  ["staff", "staff"],
+  ["nhanvien", "staff"],
+  ["chuyenvien", "staff"],
+  ["importer", "importer"],
+  ["nguoitaophieu", "importer"],
+  ["trogiang", "importer"],
+  ["viewer", "viewer"],
+  ["nguoixem", "viewer"],
+]);
+
+function splitPersonnelImportValues(value: string) {
+  return value
+    .split(/[,;|\n]+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function parsePersonnelImportBoolean(value: string, rowNumber: number) {
+  if (!value) return null;
+  const normalized = normalizeImportKey(value);
+  if (["co", "true", "1", "yes", "x"].includes(normalized)) return true;
+  if (["khong", "false", "0", "no"].includes(normalized)) return false;
+  throw new Error(
+    `Quyền Y cơ sở tại dòng ${rowNumber} chỉ nhận Có hoặc Không.`,
+  );
+}
+
+export async function createPersonnel(formData: FormData) {
+  const { supabase, userId } = await adminContext();
+  const email = String(formData.get("email") ?? "")
+    .trim()
+    .toLowerCase();
+  const password = String(formData.get("password") ?? "");
+  const fullName = String(formData.get("full_name") ?? "").trim();
+  const phone = String(formData.get("phone") ?? "").trim() || null;
+  const title = String(formData.get("title") ?? "").trim() || null;
+  const roles = formData
+    .getAll("roles")
+    .map(String)
+    .filter((role) =>
+      ["admin", "lecturer", "staff", "importer", "viewer"].includes(role),
+    ) as PersonnelRole[];
+  const roomTypeIds = [
+    ...new Set(formData.getAll("room_type_ids").map(String).filter(Boolean)),
+  ];
+  const requestedEmailRoomTypeIds = new Set(
+    formData.getAll("email_room_type_ids").map(String).filter(Boolean),
+  );
+  const emailRoomTypeIds = new Set(
+    roomTypeIds.filter((roomTypeId) =>
+      requestedEmailRoomTypeIds.has(roomTypeId),
+    ),
+  );
+  const allowBasicMedicalAccess =
+    String(formData.get("allow_basic_medical_access")) === "true";
+
+  if (!email || !fullName || password.length < 8 || roles.length === 0) {
+    personnelRedirect(
+      "error",
+      "Cần đủ họ tên, email, mật khẩu tạm từ 8 ký tự và ít nhất một vai trò.",
+    );
+  }
+  if (roles.includes("viewer") && roles.length > 1) {
+    personnelRedirect(
+      "error",
+      "Vai trò Người xem là quyền chỉ đọc và không thể kết hợp với vai trò khác.",
+    );
+  }
+
+  let adminClient;
+  try {
+    adminClient = createAdminClient();
+  } catch {
+    personnelRedirect(
+      "error",
+      "Chưa cấu hình SUPABASE_SECRET_KEY cho chức năng tạo tài khoản.",
+    );
+  }
+
+  const { data, error } = await adminClient.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: { full_name: fullName },
+    app_metadata: { preapproved: true },
+  });
+  if (error || !data.user) {
+    personnelRedirect(
+      "error",
+      error?.message ?? "Không thể tạo tài khoản nhân sự.",
+    );
+  }
+
+  const targetId = data.user.id;
+  const { error: profileError } = await supabase
+    .from("profiles")
+    .update({
+      email,
+      full_name: fullName,
+      phone,
+      title,
+      is_active: true,
+      allow_basic_medical_access: allowBasicMedicalAccess,
+    })
+    .eq("id", targetId);
+  const { error: roleError } = await supabase.from("user_roles").insert(
+    roles.map((role) => ({
+      user_id: targetId,
+      role,
+      created_by: userId,
+    })),
+  );
+  const { error: scopeError } = roomTypeIds.length
+    ? await supabase.from("profile_room_types").upsert(
+        roomTypeIds.map((roomTypeId) => ({
+          profile_id: targetId,
+          room_type_id: roomTypeId,
+          created_by: userId,
+          receive_schedule_emails: emailRoomTypeIds.has(roomTypeId),
+        })),
+      )
+    : { error: null };
+
+  if (profileError || roleError || scopeError) {
+    await adminClient.auth.admin.deleteUser(targetId);
+    personnelRedirect(
+      "error",
+      profileError?.message ??
+        roleError?.message ??
+        scopeError?.message ??
+        "Không thể hoàn tất hồ sơ nhân sự.",
+    );
+  }
+
+  revalidatePath("/admin/personnel");
+  personnelRedirect("notice", `Đã tạo tài khoản ${email}.`);
+}
+
+export async function importPersonnel(formData: FormData) {
+  const { supabase, userId } = await adminContext();
+  const mode = String(formData.get("mode") ?? "");
+  if (!(["new", "all"] as const).includes(mode as "new" | "all")) {
+    personnelRedirect("error", "Chế độ import nhân sự không hợp lệ.");
+  }
+
+  try {
+    const { file, rows } = await readAdminCatalogFile(
+      formData,
+      "/admin/personnel",
+    );
+    if (rows.length > 500) {
+      throw new Error("Mỗi lần chỉ import tối đa 500 nhân sự.");
+    }
+
+    const [
+      { data: roomTypes, error: roomTypeError },
+      { data: profiles, error: profileReadError },
+      { data: currentRoleRows, error: roleReadError },
+    ] = await Promise.all([
+      supabase.from("room_types").select("id,code,name").eq("is_active", true),
+      supabase
+        .from("profiles")
+        .select(
+          "id,email,full_name,phone,is_active,allow_basic_medical_access",
+        ),
+      supabase.from("user_roles").select("user_id,role"),
+    ]);
+    if (roomTypeError || profileReadError || roleReadError) {
+      throw roomTypeError ?? profileReadError ?? roleReadError;
+    }
+
+    const roomTypeByKey = new Map<string, string>();
+    (roomTypes ?? []).forEach((roomType) => {
+      roomTypeByKey.set(normalizeImportKey(roomType.code), roomType.id);
+      roomTypeByKey.set(normalizeImportKey(roomType.name), roomType.id);
+    });
+    const existingByEmail = new Map(
+      (profiles ?? []).map((profile) => [
+        profile.email.trim().toLowerCase(),
+        profile,
+      ]),
+    );
+    const existingByPhone = new Map(
+      (profiles ?? [])
+        .map(
+          (profile) =>
+            [normalizePersonnelPhone(profile.phone), profile] as const,
+        )
+        .filter(([phone]) => Boolean(phone)),
+    );
+    const administratorIds = new Set(
+      (currentRoleRows ?? [])
+        .filter(({ role }) => role === "admin")
+        .map(({ user_id }) => user_id),
+    );
+
+    const importedRows: Array<{
+      email: string;
+      fullName: string;
+      password: string;
+      phone: string | null;
+      title: string | null;
+      roles: PersonnelRole[];
+      roomTypeIds: string[];
+      emailRoomTypeIds: string[];
+      allowBasicMedicalAccess: boolean | null;
+      rowNumber: number;
+    }> = [];
+
+    rows.forEach((row, index) => {
+      const rowNumber = index + 2;
+      const fullName = importValue(row, "Họ và tên", "Họ tên", "full_name");
+      const email = importValue(row, "Email đăng nhập", "Email")
+        .trim()
+        .toLowerCase();
+      const password = importValue(row, "Mật khẩu tạm", "Mật khẩu", "password");
+      const phone = importValue(row, "Số điện thoại", "phone") || null;
+      const title = importValue(row, "Chức danh", "title") || null;
+      const roleText = importValue(row, "Vai trò", "roles", "role");
+      const roomTypeText = importValue(
+        row,
+        "Loại phòng",
+        "Mã loại phòng",
+        "room_type_codes",
+      );
+      const basicMedicalText = importValue(
+        row,
+        "Quyền Y cơ sở",
+        "allow_basic_medical_access",
+      );
+      const emailRoomTypeText = importValue(
+        row,
+        "Loại phòng nhận email",
+        "Nhận email loại phòng",
+        "email_room_types",
+      );
+
+      if (!fullName || !email || !/^\S+@\S+\.\S+$/.test(email)) {
+        throw new Error(
+          `Dòng ${rowNumber} phải có Họ và tên và Email đăng nhập hợp lệ.`,
+        );
+      }
+
+      const roleValues = splitPersonnelImportValues(roleText);
+      const invalidRoleValues = roleValues.filter(
+        (role) => !personnelRoleAliases.has(normalizeImportKey(role)),
+      );
+      const roles = [
+        ...new Set(
+          roleValues.map((role) =>
+            personnelRoleAliases.get(normalizeImportKey(role)),
+          ),
+        ),
+      ];
+      if (!roles.length || invalidRoleValues.length > 0) {
+        const received = invalidRoleValues.length
+          ? ` Giá trị chưa đúng: "${invalidRoleValues.join(", ")}".`
+          : "";
+        throw new Error(
+          `Vai trò tại dòng ${rowNumber} không hợp lệ.${received} Chỉ dùng: ${personnelRoleDisplayNames.join(", ")}.`,
+        );
+      }
+      if (roles.includes("viewer") && roles.length > 1) {
+        throw new Error(
+          "Vai trò Người xem tại dòng " +
+            rowNumber +
+            " không thể kết hợp với vai trò khác.",
+        );
+      }
+
+      const roomTypeValues = splitPersonnelImportValues(roomTypeText);
+      const invalidRoomTypeValues = roomTypeValues.filter(
+        (roomType) => !roomTypeByKey.has(normalizeImportKey(roomType)),
+      );
+      const roomTypeIds = [
+        ...new Set(
+          roomTypeValues.map((roomType) =>
+            roomTypeByKey.get(normalizeImportKey(roomType)),
+          ),
+        ),
+      ];
+      if (!roomTypeIds.length || invalidRoomTypeValues.length > 0) {
+        const received = invalidRoomTypeValues.length
+          ? ` Giá trị chưa đúng: "${invalidRoomTypeValues.join(", ")}".`
+          : "";
+        const allowedRoomTypes = (roomTypes ?? [])
+          .map(({ name }) => name)
+          .join(", ");
+        throw new Error(
+          `Loại phòng tại dòng ${rowNumber} không hợp lệ.${received} Chỉ dùng: ${allowedRoomTypes || "chưa có Loại phòng đang hoạt động"}. Nhiều Loại phòng ngăn cách bằng dấu phẩy.`,
+        );
+      }
+      const emailRoomTypeValues = splitPersonnelImportValues(emailRoomTypeText);
+      const invalidEmailRoomTypeValues = emailRoomTypeValues.filter(
+        (roomType) => !roomTypeByKey.has(normalizeImportKey(roomType)),
+      );
+      const emailRoomTypeIds = [
+        ...new Set(
+          emailRoomTypeValues.map((roomType) =>
+            roomTypeByKey.get(normalizeImportKey(roomType)),
+          ),
+        ),
+      ];
+      if (invalidEmailRoomTypeValues.length > 0) {
+        throw new Error(
+          `Loại phòng nhận email tại dòng ${rowNumber} không hợp lệ. Giá trị chưa đúng: "${invalidEmailRoomTypeValues.join(", ")}". Chỉ dùng tên Loại phòng đang hoạt động và đã nhập trong cột Loại phòng.`,
+        );
+      }
+      if (
+        emailRoomTypeIds.some((roomTypeId) => !roomTypeIds.includes(roomTypeId))
+      ) {
+        throw new Error(
+          "Loại phòng nhận email tại dòng " +
+            rowNumber +
+            " phải nằm trong Loại phòng được phân công.",
+        );
+      }
+
+      importedRows.push({
+        email,
+        fullName,
+        password,
+        phone,
+        title,
+        roles: roles as PersonnelRole[],
+        roomTypeIds: roomTypeIds as string[],
+        emailRoomTypeIds: emailRoomTypeIds as string[],
+        allowBasicMedicalAccess: parsePersonnelImportBoolean(
+          basicMedicalText,
+          rowNumber,
+        ),
+        rowNumber,
+      });
+    });
+
+    assertUniquePersonnelImportIdentities(importedRows);
+    if (mode === "new") {
+      for (const row of importedRows) {
+        const existingEmail = existingByEmail.get(row.email);
+        if (existingEmail) {
+          throw new Error(
+            `Email "${row.email}" tại dòng ${row.rowNumber} đã thuộc về ${existingEmail.full_name}. Import mới chỉ nhận email và số điện thoại chưa tồn tại.`,
+          );
+        }
+        const normalizedPhone = normalizePersonnelPhone(row.phone);
+        const existingPhone = normalizedPhone
+          ? existingByPhone.get(normalizedPhone)
+          : undefined;
+        if (existingPhone) {
+          throw new Error(
+            `Số điện thoại "${row.phone}" tại dòng ${row.rowNumber} đã thuộc về ${existingPhone.full_name} (${existingPhone.email}). Import mới không thay đổi dữ liệu hiện có.`,
+          );
+        }
+      }
+    }
+
+    const preservedAdministratorRows = importedRows.filter((row) => {
+      const existing = existingByEmail.get(row.email);
+      return Boolean(existing && administratorIds.has(existing.id));
+    });
+    if (mode === "all") {
+      for (const row of importedRows) {
+        const normalizedPhone = normalizePersonnelPhone(row.phone);
+        const existingPhone = normalizedPhone
+          ? existingByPhone.get(normalizedPhone)
+          : undefined;
+        if (
+          existingPhone &&
+          administratorIds.has(existingPhone.id) &&
+          existingPhone.email.trim().toLowerCase() !== row.email
+        ) {
+          throw new Error(
+            `Số điện thoại "${row.phone}" tại dòng ${row.rowNumber} đang thuộc tài khoản Quản trị viên ${existingPhone.full_name} (${existingPhone.email}) và không thể thay thế.`,
+          );
+        }
+      }
+    }
+
+    const selectedRows = importedRows.filter(
+      (row) =>
+        mode === "new" ||
+        !preservedAdministratorRows.some(
+          (administrator) => administrator.email === row.email,
+        ),
+    );
+    for (const row of selectedRows) {
+      if (!existingByEmail.has(row.email) && row.password.length < 8) {
+        throw new Error(
+          `Mật khẩu tạm tại dòng ${row.rowNumber} phải có ít nhất 8 ký tự để tạo tài khoản mới.`,
+        );
+      }
+    }
+
+    let adminClient;
+    try {
+      adminClient = createAdminClient();
+    } catch {
+      throw new Error(
+        "Chưa cấu hình SUPABASE_SECRET_KEY cho chức năng import nhân sự.",
+      );
+    }
+
+    const createdUserIds: string[] = [];
+    const resolvedRows: Array<
+      (typeof selectedRows)[number] & {
+        id: string;
+        isNew: boolean;
+      }
+    > = [];
+
+    for (const row of selectedRows) {
+      const existing = existingByEmail.get(row.email);
+      if (existing) {
+        resolvedRows.push({
+          ...row,
+          id: existing.id,
+          isNew: false,
+        });
+        continue;
+      }
+
+      const { data, error } = await adminClient.auth.admin.createUser({
+        email: row.email,
+        password: row.password,
+        email_confirm: true,
+        user_metadata: { full_name: row.fullName },
+        app_metadata: { preapproved: true },
+      });
+      if (error || !data.user) {
+        await Promise.all(
+          createdUserIds.map((id) => adminClient.auth.admin.deleteUser(id)),
+        );
+        throw new Error(
+          `Không thể tạo ${row.email}: ${error?.message ?? "Lỗi không xác định"}`,
+        );
+      }
+      createdUserIds.push(data.user.id);
+      resolvedRows.push({
+        ...row,
+        id: data.user.id,
+        isNew: true,
+      });
+    }
+
+    const importedIds = new Set(resolvedRows.map(({ id }) => id));
+    const obsoleteProfiles =
+      mode === "all"
+        ? (profiles ?? []).filter(
+            (profile) =>
+              !administratorIds.has(profile.id) && !importedIds.has(profile.id),
+          )
+        : [];
+    const idsToReplace = [
+      ...new Set([
+        ...resolvedRows.map(({ id }) => id),
+        ...obsoleteProfiles.map(({ id }) => id),
+      ]),
+    ];
+
+    const { error: profileError } = resolvedRows.length
+      ? await supabase.from("profiles").upsert(
+          resolvedRows.map((row) => ({
+            id: row.id,
+            email: row.email,
+            full_name: row.fullName,
+            phone: row.phone,
+            title: row.title,
+            is_active: true,
+            allow_basic_medical_access: row.allowBasicMedicalAccess ?? false,
+          })),
+          { onConflict: "id" },
+        )
+      : { error: null };
+    const { error: roleCleanupError } = idsToReplace.length
+      ? await supabase.from("user_roles").delete().in("user_id", idsToReplace)
+      : { error: null };
+    const { error: scopeCleanupError } = idsToReplace.length
+      ? await supabase
+          .from("profile_room_types")
+          .delete()
+          .in("profile_id", idsToReplace)
+      : { error: null };
+    const roleValues = resolvedRows.flatMap((row) =>
+      row.roles.map((role) => ({
+        user_id: row.id,
+        role,
+        created_by: userId,
+      })),
+    );
+    const { error: roleError } = roleValues.length
+      ? await supabase.from("user_roles").insert(roleValues)
+      : { error: null };
+    const scopeValues = resolvedRows.flatMap((row) =>
+      row.roomTypeIds.map((roomTypeId) => ({
+        profile_id: row.id,
+        room_type_id: roomTypeId,
+        created_by: userId,
+        receive_schedule_emails: row.emailRoomTypeIds.includes(roomTypeId),
+      })),
+    );
+    const { error: scopeError } = scopeValues.length
+      ? await supabase.from("profile_room_types").insert(scopeValues)
+      : { error: null };
+    const { error: deactivateError } = obsoleteProfiles.length
+      ? await supabase
+          .from("profiles")
+          .update({ is_active: false })
+          .in(
+            "id",
+            obsoleteProfiles.map(({ id }) => id),
+          )
+      : { error: null };
+
+    if (
+      profileError ||
+      roleCleanupError ||
+      scopeCleanupError ||
+      roleError ||
+      scopeError ||
+      deactivateError
+    ) {
+      await Promise.all(
+        createdUserIds.map((id) => adminClient.auth.admin.deleteUser(id)),
+      );
+      throw new Error(
+        profileError?.message ??
+          roleCleanupError?.message ??
+          scopeCleanupError?.message ??
+          roleError?.message ??
+          scopeError?.message ??
+          deactivateError?.message ??
+          "Không thể hoàn tất import nhân sự.",
+      );
+    }
+
+    const createdCount = resolvedRows.filter((row) => row.isNew).length;
+    const updatedCount = resolvedRows.length - createdCount;
+    revalidatePath("/admin/personnel");
+    personnelRedirect(
+      "notice",
+      mode === "new"
+        ? `Đã thêm ${createdCount} nhân sự mới từ ${file.name}. Dữ liệu hiện có được giữ nguyên.`
+        : `Đã thay danh sách nhân sự theo ${file.name}: ${createdCount} tạo mới, ${updatedCount} cập nhật, ${obsoleteProfiles.length} nhân sự cũ đã khóa; giữ nguyên ${administratorIds.size} tài khoản Quản trị viên${preservedAdministratorRows.length ? ` (${preservedAdministratorRows.length} dòng quản trị trong file được bỏ qua)` : ""}.`,
+    );
+  } catch (error) {
+    if (error && typeof error === "object" && "digest" in error) throw error;
+    personnelRedirect(
+      "error",
+      error instanceof Error ? error.message : "Không thể đọc file import.",
+    );
+  }
+}
+
+export async function updatePersonnelScope(formData: FormData) {
+  const { supabase, userId } = await adminContext();
+  const targetId = String(formData.get("profile_id") ?? "");
+  const roomTypeIds = [
+    ...new Set(formData.getAll("room_type_ids").map(String).filter(Boolean)),
+  ];
+  const requestedEmailRoomTypeIds = new Set(
+    formData.getAll("email_room_type_ids").map(String).filter(Boolean),
+  );
+  const emailRoomTypeIds = new Set(
+    roomTypeIds.filter((roomTypeId) =>
+      requestedEmailRoomTypeIds.has(roomTypeId),
+    ),
+  );
+  const allowBasicMedicalAccess =
+    String(formData.get("allow_basic_medical_access")) === "true";
+  if (!targetId || roomTypeIds.length === 0) {
+    personnelRedirect(
+      "error",
+      "Mỗi nhân sự phải được gán ít nhất một Loại phòng.",
+    );
+  }
+
+  const { data: validTypes } = await supabase
+    .from("room_types")
+    .select("id")
+    .in("id", roomTypeIds)
+    .eq("is_active", true);
+  if ((validTypes ?? []).length !== roomTypeIds.length) {
+    personnelRedirect("error", "Loại phòng được chọn không hợp lệ.");
+  }
+
+  const { error: deleteError } = await supabase
+    .from("profile_room_types")
+    .delete()
+    .eq("profile_id", targetId);
+  const { error: insertError } = await supabase
+    .from("profile_room_types")
+    .insert(
+      roomTypeIds.map((roomTypeId) => ({
+        profile_id: targetId,
+        room_type_id: roomTypeId,
+        created_by: userId,
+        receive_schedule_emails: emailRoomTypeIds.has(roomTypeId),
+      })),
+    );
+  const { error: profileError } = await supabase
+    .from("profiles")
+    .update({ allow_basic_medical_access: allowBasicMedicalAccess })
+    .eq("id", targetId);
+  if (deleteError || insertError || profileError) {
+    personnelRedirect(
+      "error",
+      deleteError?.message ??
+        insertError?.message ??
+        profileError?.message ??
+        "Không thể cập nhật phạm vi.",
+    );
+  }
+  revalidatePath("/admin/personnel");
+  personnelRedirect(
+    "notice",
+    "Đã cập nhật Loại phòng và quyền truy cập Y cơ sở.",
+  );
+}
+
+export async function updatePersonnel(formData: FormData) {
+  const { supabase } = await adminContext();
+  const targetId = String(formData.get("id") ?? "");
+  const email = String(formData.get("email") ?? "")
+    .trim()
+    .toLowerCase();
+  const fullName = String(formData.get("full_name") ?? "").trim();
+  if (!targetId || !email || !fullName) {
+    personnelRedirect("error", "Họ tên và email không được để trống.");
+  }
+
+  const { data: current } = await supabase
+    .from("profiles")
+    .select("email")
+    .eq("id", targetId)
+    .maybeSingle();
+  if (!current) personnelRedirect("error", "Không tìm thấy nhân sự.");
+
+  if (current.email !== email) {
+    let adminClient;
+    try {
+      adminClient = createAdminClient();
+    } catch {
+      personnelRedirect(
+        "error",
+        "Chưa cấu hình SUPABASE_SECRET_KEY để thay đổi email đăng nhập.",
+      );
+    }
+    const { error: authError } = await adminClient.auth.admin.updateUserById(
+      targetId,
+      { email, email_confirm: true },
+    );
+    if (authError) personnelRedirect("error", authError.message);
+  }
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({
+      email,
+      full_name: fullName,
+      phone: String(formData.get("phone") ?? "").trim() || null,
+      title: String(formData.get("title") ?? "").trim() || null,
+    })
+    .eq("id", targetId);
+  if (error) personnelRedirect("error", error.message);
+
+  revalidatePath("/admin/personnel");
+  personnelRedirect("notice", "Đã cập nhật hồ sơ nhân sự.");
+}

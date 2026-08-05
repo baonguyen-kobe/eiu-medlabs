@@ -1,0 +1,1263 @@
+-- Room-type authorization, Y co so access and student counts.
+create table if not exists public.room_types (
+  id uuid primary key default gen_random_uuid(),
+  code text not null,
+  name text not null,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint room_types_code_not_blank check (btrim(code) <> ''),
+  constraint room_types_name_not_blank check (btrim(name) <> '')
+);
+
+create unique index if not exists room_types_code_unique_idx
+  on public.room_types (lower(btrim(code)));
+create unique index if not exists room_types_name_unique_idx
+  on public.room_types (lower(btrim(name)));
+
+insert into public.room_types (id, code, name)
+values
+  ('40000000-0000-0000-0000-000000000001', 'nursing_skills', 'Kỹ năng Điều dưỡng'),
+  ('40000000-0000-0000-0000-000000000002', 'basic_medical', 'Y cơ sở')
+on conflict (id) do update set code = excluded.code, name = excluded.name;
+
+alter table public.profiles
+  add column if not exists allow_basic_medical_access boolean not null default false;
+
+alter table public.rooms
+  add column if not exists room_type_id uuid references public.room_types(id) on delete restrict;
+
+update public.rooms
+set room_type_id = case
+  when lower(btrim(coalesce(room_type, ''))) in ('y cơ sở', 'y co so', 'basic_medical')
+    then '40000000-0000-0000-0000-000000000002'::uuid
+  else '40000000-0000-0000-0000-000000000001'::uuid
+end
+where room_type_id is null;
+
+alter table public.rooms
+  alter column room_type_id set default '40000000-0000-0000-0000-000000000001'::uuid,
+  alter column room_type_id set not null;
+
+create index if not exists rooms_room_type_id_idx
+  on public.rooms (room_type_id, is_active, building_code, room_code);
+
+create table if not exists public.profile_room_types (
+  profile_id uuid not null references public.profiles(id) on delete cascade,
+  room_type_id uuid not null references public.room_types(id) on delete cascade,
+  receive_schedule_emails boolean not null default false,
+  created_at timestamptz not null default now(),
+  created_by uuid references public.profiles(id) on delete set null,
+  primary key (profile_id, room_type_id)
+);
+
+alter table public.profile_room_types
+  add column if not exists receive_schedule_emails boolean not null default false;
+
+create index if not exists profile_room_types_room_type_idx
+  on public.profile_room_types (room_type_id, profile_id);
+
+insert into public.profile_room_types (profile_id, room_type_id)
+select profiles.id, '40000000-0000-0000-0000-000000000001'::uuid
+from public.profiles as profiles
+on conflict do nothing;
+
+create or replace function private.assign_default_room_type()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  insert into public.profile_room_types (profile_id, room_type_id)
+  values (new.id, '40000000-0000-0000-0000-000000000001'::uuid)
+  on conflict do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_assign_default_room_type on public.profiles;
+create trigger profiles_assign_default_room_type
+after insert on public.profiles
+for each row execute function private.assign_default_room_type();
+
+alter table public.import_batches
+  add column if not exists room_type_id uuid references public.room_types(id) on delete restrict;
+
+update public.import_batches as batches
+set room_type_id = coalesce(
+  (
+    select rooms.room_type_id
+    from public.class_schedules as schedules
+    join public.rooms as rooms on rooms.id = schedules.room_id
+    where schedules.import_batch_id = batches.id
+    order by schedules.created_at
+    limit 1
+  ),
+  '40000000-0000-0000-0000-000000000001'::uuid
+)
+where batches.room_type_id is null;
+
+alter table public.import_batches
+  alter column room_type_id set default '40000000-0000-0000-0000-000000000001'::uuid,
+  alter column room_type_id set not null;
+
+create index if not exists import_batches_room_type_idx
+  on public.import_batches (room_type_id, created_at desc);
+
+alter table public.class_schedules
+  add column if not exists student_count integer;
+
+update public.class_schedules set student_count = 1 where student_count is null;
+alter table public.class_schedules
+  alter column student_count set default 1,
+  alter column student_count set not null;
+alter table public.class_schedules
+  drop constraint if exists class_schedules_student_count_positive;
+alter table public.class_schedules
+  add constraint class_schedules_student_count_positive check (student_count >= 1);
+
+create or replace function private.is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select (select private.has_role('admin'));
+$$;
+
+create or replace function private.has_room_type(target_room_type_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select (select private.is_active_user()) and (
+    (select private.has_role('admin'))
+    or exists (
+      select 1
+      from public.profile_room_types as assignments
+      where assignments.profile_id = (select auth.uid())
+        and assignments.room_type_id = target_room_type_id
+    )
+  );
+$$;
+
+create or replace function private.can_access_room(target_room_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1
+    from public.rooms as rooms
+    where rooms.id = target_room_id
+      and (select private.has_room_type(rooms.room_type_id))
+  );
+$$;
+
+create or replace function private.can_manage_class_room(target_room_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select (select private.can_access_room(target_room_id)) and exists (
+    select 1
+    from public.user_roles as roles
+    where roles.user_id = (select auth.uid())
+      and roles.role in ('admin', 'staff', 'importer')
+  );
+$$;
+
+create or replace function private.profile_has_room_type(
+  target_profile_id uuid,
+  target_room_type_id uuid
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1 from public.profiles as profiles
+    where profiles.id = target_profile_id and profiles.is_active
+      and exists (
+        select 1 from public.profile_room_types as assignments
+        where assignments.profile_id = target_profile_id
+          and assignments.room_type_id = target_room_type_id
+      )
+  );
+$$;
+
+revoke execute on function private.assign_default_room_type() from public, anon, authenticated;
+revoke execute on function private.is_admin() from public, anon;
+revoke execute on function private.has_room_type(uuid) from public, anon;
+revoke execute on function private.can_access_room(uuid) from public, anon;
+revoke execute on function private.can_manage_class_room(uuid) from public, anon;
+revoke execute on function private.profile_has_room_type(uuid, uuid) from public, anon;
+grant execute on function private.is_admin() to authenticated;
+grant execute on function private.has_room_type(uuid) to authenticated;
+grant execute on function private.can_access_room(uuid) to authenticated;
+grant execute on function private.can_manage_class_room(uuid) to authenticated;
+grant execute on function private.profile_has_room_type(uuid, uuid) to authenticated;
+
+alter table public.room_types enable row level security;
+alter table public.profile_room_types enable row level security;
+
+create policy room_types_scoped_select on public.room_types
+for select to authenticated
+using (
+  (select private.has_role('admin'))
+  or exists (
+    select 1 from public.profile_room_types as assignments
+    where assignments.profile_id = (select auth.uid())
+      and assignments.room_type_id = id
+  )
+);
+
+create policy room_types_admin_all on public.room_types
+for all to authenticated
+using ((select private.has_role('admin')))
+with check ((select private.has_role('admin')));
+
+create policy profile_room_types_own_select on public.profile_room_types
+for select to authenticated
+using (profile_id = (select auth.uid()) or (select private.has_role('admin')));
+
+create policy profile_room_types_admin_all on public.profile_room_types
+for all to authenticated
+using ((select private.has_role('admin')))
+with check ((select private.has_role('admin')));
+
+drop policy if exists rooms_select_active_users on public.rooms;
+create policy rooms_scoped_select on public.rooms
+for select to authenticated
+using ((select private.has_room_type(room_type_id)));
+
+drop policy if exists class_schedules_select on public.class_schedules;
+create policy class_schedules_scoped_select on public.class_schedules
+for select to authenticated
+using (
+  (select private.can_access_room(room_id))
+  and (
+    schedule_status <> 'cancelled'
+    or (select private.has_role('admin'))
+    or created_by = (select auth.uid())
+  )
+);
+
+drop policy if exists class_schedules_creator_insert on public.class_schedules;
+create policy class_schedules_scoped_insert on public.class_schedules
+for insert to authenticated
+with check (
+  (
+    (select private.can_manage_class_room(room_id))
+    or (
+      (select private.has_role('lecturer'))
+      and (select private.can_access_room(room_id))
+      and exists (
+        select 1 from public.rooms as lecturer_room
+        where lecturer_room.id = room_id
+          and lecturer_room.room_type_id = '40000000-0000-0000-0000-000000000001'::uuid
+      )
+    )
+  )
+  and created_by = (select auth.uid())
+  and schedule_status = 'published'
+  and published_by = (select auth.uid())
+  and published_at is not null
+  and cancelled_at is null
+  and cancelled_by is null
+  and student_count >= 1
+  and (
+    basic_medical_registration_id is null
+    or exists (
+      select 1
+      from public.basic_medical_registrations as registration
+      where registration.id = basic_medical_registration_id
+        and registration.created_by = (select auth.uid())
+    )
+  )
+  and (
+    lecturer_id is null
+    or exists (
+      select 1 from public.rooms as selected_room
+      where selected_room.id = room_id
+        and (select private.profile_has_room_type(lecturer_id, selected_room.room_type_id))
+        and (
+          exists (
+            select 1 from public.user_roles as lecturer_role
+            where lecturer_role.user_id = lecturer_id and lecturer_role.role = 'lecturer'
+          )
+          or (
+            basic_medical_registration_id is not null
+            and exists (
+              select 1 from public.profiles as lecturer_profile
+              where lecturer_profile.id = lecturer_id
+                and lecturer_profile.is_active
+                and lower(btrim(coalesce(lecturer_profile.title, ''))) = 'giảng viên'
+            )
+          )
+        )
+    )
+  )
+  and (
+    lecturer_2_id is null
+    or exists (
+      select 1 from public.rooms as selected_room
+      where selected_room.id = room_id
+        and (select private.profile_has_room_type(lecturer_2_id, selected_room.room_type_id))
+        and (
+          exists (
+            select 1 from public.user_roles as lecturer_role
+            where lecturer_role.user_id = lecturer_2_id and lecturer_role.role = 'lecturer'
+          )
+          or (
+            basic_medical_registration_id is not null
+            and exists (
+              select 1 from public.profiles as lecturer_profile
+              where lecturer_profile.id = lecturer_2_id
+                and lecturer_profile.is_active
+                and lower(btrim(coalesce(lecturer_profile.title, ''))) = 'giảng viên'
+            )
+          )
+        )
+    )
+  )
+);
+
+drop policy if exists class_schedules_authorized_delete on public.class_schedules;
+create policy class_schedules_scoped_delete on public.class_schedules
+for delete to authenticated
+using (
+  (select private.can_manage_class_room(room_id))
+  or (
+    (select private.has_role('lecturer'))
+    and created_by = (select auth.uid())
+    and schedule_status <> 'cancelled'
+    and (select private.can_access_room(room_id))
+    and exists (
+      select 1
+      from public.rooms as lecturer_room
+      where lecturer_room.id = room_id
+        and lecturer_room.room_type_id = '40000000-0000-0000-0000-000000000001'::uuid
+    )
+  )
+);
+
+drop policy if exists import_batches_select on public.import_batches;
+create policy import_batches_scoped_select on public.import_batches
+for select to authenticated
+using (
+  (select private.has_room_type(room_type_id))
+  and (
+    created_by = (select auth.uid())
+    or (select private.has_role('admin'))
+    or (select private.has_role('staff'))
+  )
+);
+
+drop policy if exists import_batches_insert on public.import_batches;
+create policy import_batches_scoped_insert on public.import_batches
+for insert to authenticated
+with check (
+  (select private.can_create_schedule_entries())
+  and (select private.has_room_type(room_type_id))
+  and created_by = (select auth.uid())
+);
+
+drop policy if exists import_batches_owner_update on public.import_batches;
+create policy import_batches_scoped_update on public.import_batches
+for update to authenticated
+using (
+  (select private.has_room_type(room_type_id))
+  and (
+    (select private.has_role('admin'))
+    or (created_by = (select auth.uid()) and status not in ('completed', 'failed'))
+  )
+)
+with check (
+  (select private.has_room_type(room_type_id))
+  and ((select private.has_role('admin')) or created_by = (select auth.uid()))
+);
+
+grant select on public.room_types, public.profile_room_types to authenticated;
+grant all on public.room_types, public.profile_room_types to authenticated;
+grant select, insert, update on public.room_types, public.profile_room_types to service_role;
+
+create or replace function public.list_scoped_lecturers(target_room_type_id uuid)
+returns table (id uuid, full_name text, title text)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  if not (select private.has_room_type(target_room_type_id)) then
+    raise exception 'ROOM_TYPE_SCOPE_REQUIRED' using errcode = '42501';
+  end if;
+
+  return query
+  select profiles.id, profiles.full_name, profiles.title
+  from public.profiles as profiles
+  where profiles.is_active
+    and exists (
+      select 1 from public.user_roles as roles
+      where roles.user_id = profiles.id and roles.role = 'lecturer'
+    )
+    and exists (
+      select 1 from public.profile_room_types as assignments
+      where assignments.profile_id = profiles.id
+        and assignments.room_type_id = target_room_type_id
+    )
+  order by profiles.full_name;
+end;
+$$;
+
+revoke all on function public.list_scoped_lecturers(uuid) from public, anon;
+grant execute on function public.list_scoped_lecturers(uuid) to authenticated;
+
+create or replace function public.list_basic_medical_instructors()
+returns table (id uuid, full_name text, title text)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  basic_medical_room_type_id constant uuid := '40000000-0000-0000-0000-000000000002'::uuid;
+begin
+  if not (select private.has_room_type(basic_medical_room_type_id)) then
+    raise exception 'ROOM_TYPE_SCOPE_REQUIRED' using errcode = '42501';
+  end if;
+
+  return query
+  select profiles.id, profiles.full_name, profiles.title
+  from public.profiles as profiles
+  where profiles.is_active
+    and lower(btrim(coalesce(profiles.title, ''))) = 'giảng viên'
+    and exists (
+      select 1 from public.profile_room_types as assignments
+      where assignments.profile_id = profiles.id
+        and assignments.room_type_id = basic_medical_room_type_id
+    )
+  order by profiles.full_name;
+end;
+$$;
+
+revoke all on function public.list_basic_medical_instructors() from public, anon;
+grant execute on function public.list_basic_medical_instructors() to authenticated;
+
+create or replace function public.list_scoped_import_lecturers(target_room_type_id uuid)
+returns table (id uuid, full_name text, email text)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  if not (select private.can_create_schedule_entries())
+     or not (select private.has_room_type(target_room_type_id)) then
+    raise exception 'ROOM_TYPE_SCOPE_REQUIRED' using errcode = '42501';
+  end if;
+  return query
+  select profiles.id, profiles.full_name, profiles.email
+  from public.profiles as profiles
+  where profiles.is_active
+    and exists (select 1 from public.user_roles as roles where roles.user_id = profiles.id and roles.role = 'lecturer')
+    and exists (select 1 from public.profile_room_types as assignments where assignments.profile_id = profiles.id and assignments.room_type_id = target_room_type_id)
+  order by profiles.full_name;
+end;
+$$;
+
+revoke all on function public.list_scoped_import_lecturers(uuid) from public, anon;
+grant execute on function public.list_scoped_import_lecturers(uuid) to authenticated;
+
+create or replace function public.list_active_people()
+returns table (id uuid, full_name text, title text)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  if not (select private.is_active_user()) then
+    raise exception 'Tài khoản không hoạt động hoặc không có quyền truy cập.'
+      using errcode = '42501';
+  end if;
+
+  return query
+  select profiles.id, profiles.full_name, profiles.title
+  from public.profiles as profiles
+  where profiles.is_active
+    and (
+      (select private.is_admin())
+      or exists (
+        select 1
+        from public.profile_room_types as viewer_scope
+        join public.profile_room_types as person_scope
+          on person_scope.room_type_id = viewer_scope.room_type_id
+        where viewer_scope.profile_id = (select auth.uid())
+          and person_scope.profile_id = profiles.id
+      )
+    )
+  order by profiles.full_name;
+end;
+$$;
+
+revoke all on function public.list_active_people() from public, anon;
+grant execute on function public.list_active_people() to authenticated;
+
+create or replace function public.assign_class_lecturers(
+  target_schedule_id uuid,
+  target_lecturer_ids uuid[]
+)
+returns public.class_schedules
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  target_row public.class_schedules;
+  room_type_value uuid;
+  normalized_ids uuid[];
+begin
+  select schedules.*
+  into target_row
+  from public.class_schedules as schedules
+  where schedules.id = target_schedule_id
+  for update;
+
+  if target_row.id is null then
+    raise exception 'CLASS_NOT_AVAILABLE' using errcode = 'P0001';
+  end if;
+  select rooms.room_type_id into room_type_value
+  from public.rooms as rooms where rooms.id = target_row.room_id;
+  if not (select private.can_manage_class_room(target_row.room_id)) then
+    raise exception 'CLASS_MANAGEMENT_SCOPE_REQUIRED' using errcode = '42501';
+  end if;
+
+  select coalesce(array_agg(distinct id_value order by id_value), '{}'::uuid[])
+  into normalized_ids
+  from unnest(coalesce(target_lecturer_ids, '{}'::uuid[])) as values_list(id_value)
+  where id_value is not null;
+
+  if cardinality(normalized_ids) > 2 then
+    raise exception 'TOO_MANY_CLASS_LECTURERS' using errcode = '22023';
+  end if;
+  if cardinality(normalized_ids) <> cardinality(array_remove(coalesce(target_lecturer_ids, '{}'::uuid[]), null)) then
+    raise exception 'DUPLICATE_CLASS_LECTURER' using errcode = '22023';
+  end if;
+  if exists (
+    select 1
+    from unnest(normalized_ids) as requested(id)
+    where not exists (
+      select 1
+      from public.profiles as profiles
+      where profiles.id = requested.id
+        and profiles.is_active
+        and exists (
+          select 1 from public.user_roles as roles
+          where roles.user_id = profiles.id and roles.role = 'lecturer'
+        )
+        and exists (
+          select 1 from public.profile_room_types as assignments
+          where assignments.profile_id = profiles.id
+            and assignments.room_type_id = room_type_value
+        )
+    )
+  ) then
+    raise exception 'LECTURER_ROOM_TYPE_MISMATCH' using errcode = '42501';
+  end if;
+
+  update public.class_schedules
+  set lecturer_id = normalized_ids[1],
+      lecturer_2_id = normalized_ids[2],
+      updated_at = now()
+  where id = target_schedule_id
+  returning * into target_row;
+  return target_row;
+exception
+  when exclusion_violation then
+    raise exception 'LECTURER_SCHEDULE_CONFLICT' using errcode = '23P01';
+end;
+$$;
+
+revoke all on function public.assign_class_lecturers(uuid, uuid[]) from public, anon;
+grant execute on function public.assign_class_lecturers(uuid, uuid[]) to authenticated;
+
+create or replace function public.reschedule_class(
+  target_schedule_id uuid,
+  target_schedule_date date
+)
+returns public.class_schedules
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  before_row public.class_schedules;
+  changed_row public.class_schedules;
+  room_type_value uuid;
+  room_type_code_value text;
+  change_id uuid := gen_random_uuid();
+  room_label text;
+  actor_name text;
+  lecturer_name text;
+  schedule_code text;
+begin
+  if target_schedule_date is null then
+    raise exception 'INVALID_SCHEDULE_DATE' using errcode = '22023';
+  end if;
+
+  select schedules.*
+  into before_row
+  from public.class_schedules as schedules
+  where schedules.id = target_schedule_id
+    and schedules.schedule_status <> 'cancelled'
+  for update;
+
+  if before_row.id is null then
+    raise exception 'CLASS_NOT_AVAILABLE' using errcode = 'P0001';
+  end if;
+  select rooms.room_type_id, room_types.code,
+         concat_ws(' · ', rooms.room_code, rooms.building_code)
+  into room_type_value, room_type_code_value, room_label
+  from public.rooms as rooms
+  join public.room_types as room_types on room_types.id = rooms.room_type_id
+  where rooms.id = before_row.room_id;
+  select profiles.full_name into actor_name
+  from public.profiles as profiles where profiles.id = (select auth.uid());
+  select pg_catalog.string_agg(profiles.full_name, ' · ' order by profiles.full_name)
+  into lecturer_name
+  from public.profiles as profiles
+  where profiles.id in (before_row.lecturer_id, before_row.lecturer_2_id);
+  schedule_code := to_char(
+    before_row.created_at at time zone 'Asia/Ho_Chi_Minh',
+    'YYMMDDHH24MISS'
+  );
+  if not (select private.has_room_type(room_type_value)) then
+    raise exception 'ROOM_TYPE_SCOPE_REQUIRED' using errcode = '42501';
+  end if;
+  if before_row.lecturer_id is null and before_row.lecturer_2_id is null then
+    if not (select private.is_active_user()) then
+      raise exception 'CLASS_DATE_CHANGE_FORBIDDEN' using errcode = '42501';
+    end if;
+  elsif not (
+    (select private.has_role('admin'))
+    or (select private.has_role('staff'))
+    or (select private.has_role('importer'))
+    or (select auth.uid()) in (before_row.lecturer_id, before_row.lecturer_2_id)
+  ) then
+    raise exception 'CLASS_DATE_CHANGE_FORBIDDEN' using errcode = '42501';
+  end if;
+
+  update public.class_schedules
+  set schedule_date = target_schedule_date,
+      updated_at = now()
+  where id = target_schedule_id
+  returning * into changed_row;
+
+  if target_schedule_date is distinct from before_row.schedule_date then
+    insert into public.email_notifications (
+      notification_type, recipient_id, recipient_email, dedupe_key, subject, payload
+    )
+    select
+      case when room_type_code_value = 'basic_medical'
+        then 'class_schedule_basic_medical_updated'
+        else 'class_schedule_rescheduled' end,
+      recipients.id, recipients.email,
+      concat(
+        case when room_type_code_value = 'basic_medical'
+          then 'class_schedule_basic_medical_updated:'
+          else 'class_schedule_rescheduled:' end,
+        change_id, ':', recipients.id
+      ),
+      case when room_type_code_value = 'basic_medical'
+        then concat(
+          '[MedLabs Calendar] Đổi ngày học Y cơ sở · ',
+          before_row.course_code_snapshot
+        )
+        else concat(
+          '[MedLabs Calendar] Đổi ngày học của ',
+          coalesce(lecturer_name, 'Chưa có giảng viên'),
+          ' - ', before_row.course_code_snapshot,
+          ' - ', to_char(changed_row.schedule_date, 'DD/MM/YYYY'),
+          ' - ', schedule_code
+        )
+      end,
+      jsonb_build_object(
+        'schedule_id', before_row.id,
+        'course_code', before_row.course_code_snapshot,
+        'course_name', before_row.course_name_snapshot,
+        'old_schedule_date', before_row.schedule_date,
+        'schedule_date', changed_row.schedule_date,
+        'start_time', before_row.start_time,
+        'end_time', before_row.end_time,
+        'room', room_label,
+        'student_count', before_row.student_count,
+        'lecturer', coalesce(lecturer_name, 'Chưa có giảng viên'),
+        'request_code', schedule_code,
+        'actor', coalesce(actor_name, 'Người dùng hệ thống'),
+        'room_type_code', room_type_code_value
+      )
+    from public.profiles as recipients
+    where recipients.is_active
+      and (
+        recipients.id in (before_row.lecturer_id, before_row.lecturer_2_id)
+        or (
+          room_type_code_value <> 'basic_medical'
+          and recipients.id = before_row.created_by
+        )
+        or exists (
+          select 1 from public.user_roles as roles
+          where roles.user_id = recipients.id
+            and roles.role in ('admin', 'staff', 'viewer')
+            and (
+              roles.role = 'admin'
+              or exists (
+                select 1 from public.profile_room_types as assignments
+                where assignments.profile_id = recipients.id
+                  and assignments.room_type_id = room_type_value
+                  and (
+                    roles.role <> 'viewer'
+                    or assignments.receive_schedule_emails
+                  )
+              )
+            )
+        )
+      )
+    on conflict (dedupe_key) do nothing;
+  end if;
+
+  return changed_row;
+exception
+  when exclusion_violation then
+    raise exception 'ROOM_OR_LECTURER_SCHEDULE_CONFLICT' using errcode = '23P01';
+end;
+$$;
+
+revoke all on function public.reschedule_class(uuid, date) from public, anon;
+grant execute on function public.reschedule_class(uuid, date) to authenticated;
+
+create or replace function public.create_import_schedule_row(
+  target_batch_id uuid, target_row_number integer, target_hash text,
+  target_raw jsonb, target_normalized jsonb, target_status public.import_row_status,
+  target_errors jsonb, target_warnings jsonb, target_course_id uuid,
+  target_course_code text, target_course_name text, target_room_id uuid,
+  target_lecturer_id uuid, target_date date, target_start time, target_end time,
+  target_note text, target_student_count integer
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  caller_id uuid := (select auth.uid());
+  schedule_id uuid;
+  batch_room_type_id uuid;
+  selected_room_type_id uuid;
+begin
+  if not (select private.can_create_schedule_entries()) then
+    raise exception 'SCHEDULE_CREATOR_ROLE_REQUIRED' using errcode = '42501';
+  end if;
+  if target_status not in ('imported', 'warning') then
+    raise exception 'INVALID_IMPORT_ROW_STATUS' using errcode = '22023';
+  end if;
+  if target_student_count is null or target_student_count < 1 then
+    raise exception 'INVALID_STUDENT_COUNT' using errcode = '22023';
+  end if;
+  select batches.room_type_id into batch_room_type_id
+  from public.import_batches as batches
+  where batches.id = target_batch_id and batches.created_by = caller_id and batches.status = 'importing';
+  if batch_room_type_id is null then
+    raise exception 'IMPORT_BATCH_NOT_WRITABLE' using errcode = '42501';
+  end if;
+  select rooms.room_type_id into selected_room_type_id from public.rooms as rooms where rooms.id = target_room_id;
+  if selected_room_type_id is null or selected_room_type_id <> batch_room_type_id
+     or not (select private.has_room_type(selected_room_type_id)) then
+    raise exception 'ROOM_TYPE_SCOPE_REQUIRED' using errcode = '42501';
+  end if;
+  if target_lecturer_id is not null and not (
+    (select private.profile_has_room_type(target_lecturer_id, selected_room_type_id))
+    and exists (select 1 from public.user_roles as roles where roles.user_id = target_lecturer_id and roles.role = 'lecturer')
+  ) then
+    raise exception 'LECTURER_ROOM_TYPE_MISMATCH' using errcode = '42501';
+  end if;
+
+  insert into public.class_schedules (
+    course_id, course_code_snapshot, course_name_snapshot, room_id,
+    lecturer_id, class_code, schedule_date, start_time, end_time,
+    source, source_row_id, import_batch_id, schedule_status, note, student_count,
+    created_by, published_by, published_at
+  ) values (
+    target_course_id, target_course_code, target_course_name, target_room_id,
+    target_lecturer_id, null, target_date, target_start, target_end,
+    'import', null, target_batch_id, 'published', target_note, target_student_count,
+    caller_id, caller_id, now()
+  ) returning id into schedule_id;
+
+  insert into public.import_rows (
+    import_batch_id, row_number, source_row_id, normalized_row_hash,
+    raw_data, normalized_data, validation_status, errors, warnings, class_schedule_id
+  ) values (
+    target_batch_id, target_row_number, null, target_hash,
+    coalesce(target_raw, '{}'::jsonb), coalesce(target_normalized, '{}'::jsonb),
+    target_status, coalesce(target_errors, '[]'::jsonb),
+    coalesce(target_warnings, '[]'::jsonb), schedule_id
+  );
+  return schedule_id;
+end;
+$$;
+
+revoke all on function public.create_import_schedule_row(
+  uuid, integer, text, jsonb, jsonb, public.import_row_status, jsonb, jsonb,
+  uuid, text, text, uuid, uuid, date, time, time, text, integer
+) from public, anon;
+grant execute on function public.create_import_schedule_row(
+  uuid, integer, text, jsonb, jsonb, public.import_row_status, jsonb, jsonb,
+  uuid, text, text, uuid, uuid, date, time, time, text, integer
+) to authenticated;
+
+-- The legacy overload does not carry student_count or room-type scope checks.
+revoke all on function public.create_import_schedule_row(
+  uuid, integer, text, jsonb, jsonb, public.import_row_status, jsonb, jsonb,
+  uuid, text, text, uuid, uuid, date, time, time, text
+) from public, anon, authenticated;
+
+create or replace function public.claim_class(target_schedule_id uuid)
+returns public.class_schedules
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  before_row public.class_schedules;
+  claimed public.class_schedules;
+begin
+  if not ((select private.has_role('lecturer')) or (select private.has_role('admin'))) then
+    raise exception 'LECTURER_ROLE_REQUIRED' using errcode = '42501';
+  end if;
+
+  select * into before_row
+  from public.class_schedules
+  where id = target_schedule_id
+    and schedule_status <> 'cancelled'
+    and (schedule_date + start_time) > (now() at time zone 'Asia/Ho_Chi_Minh')
+  for update;
+
+  if before_row.id is null then
+    raise exception 'CLASS_NOT_AVAILABLE' using errcode = 'P0001';
+  end if;
+  if not (select private.can_access_room(before_row.room_id)) then
+    raise exception 'ROOM_TYPE_SCOPE_REQUIRED' using errcode = '42501';
+  end if;
+  if (select auth.uid()) in (before_row.lecturer_id, before_row.lecturer_2_id) then
+    raise exception 'CLASS_ALREADY_CLAIMED' using errcode = 'P0001';
+  end if;
+
+  if before_row.lecturer_id is null then
+    update public.class_schedules set lecturer_id = (select auth.uid()), updated_at = now()
+    where id = target_schedule_id returning * into claimed;
+  elsif before_row.lecturer_2_id is null then
+    update public.class_schedules set lecturer_2_id = (select auth.uid()), updated_at = now()
+    where id = target_schedule_id returning * into claimed;
+  else
+    raise exception 'CLASS_NOT_AVAILABLE' using errcode = 'P0001';
+  end if;
+  return claimed;
+exception
+  when exclusion_violation then
+    raise exception 'LECTURER_SCHEDULE_CONFLICT' using errcode = '23P01';
+end;
+$$;
+
+create or replace function public.withdraw_class(target_schedule_id uuid)
+returns public.class_schedules
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  before_row public.class_schedules;
+  withdrawn public.class_schedules;
+begin
+  if not ((select private.has_role('lecturer')) or (select private.has_role('admin'))) then
+    raise exception 'LECTURER_ROLE_REQUIRED' using errcode = '42501';
+  end if;
+
+  select * into before_row
+  from public.class_schedules
+  where id = target_schedule_id
+    and (select auth.uid()) in (lecturer_id, lecturer_2_id)
+  for update;
+
+  if before_row.id is null then
+    raise exception 'NOT_CLASS_OWNER' using errcode = '42501';
+  end if;
+  if not (select private.can_access_room(before_row.room_id)) then
+    raise exception 'ROOM_TYPE_SCOPE_REQUIRED' using errcode = '42501';
+  end if;
+  if before_row.schedule_status = 'cancelled'
+     or (before_row.schedule_date + before_row.start_time) <=
+        (now() at time zone 'Asia/Ho_Chi_Minh') then
+    raise exception 'CLASS_WITHDRAWAL_CLOSED' using errcode = 'P0001';
+  end if;
+
+  update public.class_schedules
+  set lecturer_id = case
+        when lecturer_id = (select auth.uid()) then lecturer_2_id
+        else lecturer_id
+      end,
+      lecturer_2_id = null,
+      updated_at = now()
+  where id = target_schedule_id
+  returning * into withdrawn;
+
+  return withdrawn;
+end;
+$$;
+
+-- Notify Admins/Staff and opted-in read-only viewers assigned to the room type.
+create or replace function private.enqueue_manual_schedule_email()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  room_label text;
+  room_type_value uuid;
+  room_type_code_value text;
+  lecturer_name text;
+  creator_name text;
+  schedule_code text;
+begin
+  if new.source <> 'manual' then return new; end if;
+
+  select concat_ws(' · ', rooms.room_code, rooms.building_code),
+         rooms.room_type_id, room_types.code
+  into room_label, room_type_value, room_type_code_value
+  from public.rooms as rooms
+  join public.room_types as room_types on room_types.id = rooms.room_type_id
+  where rooms.id = new.room_id;
+
+  -- Phiếu Y cơ sở chỉ gửi email tổng hợp YC-P01/YC-P02.
+  if room_type_code_value = 'basic_medical' then return new; end if;
+
+  select pg_catalog.string_agg(profiles.full_name, ' · ' order by profiles.full_name)
+  into lecturer_name from public.profiles as profiles
+  where profiles.id in (new.lecturer_id, new.lecturer_2_id);
+
+  select profiles.full_name into creator_name
+  from public.profiles as profiles where profiles.id = new.created_by;
+  schedule_code := to_char(
+    new.created_at at time zone 'Asia/Ho_Chi_Minh',
+    'YYMMDDHH24MISS'
+  );
+
+  insert into public.email_notifications (
+    notification_type, recipient_id, recipient_email, dedupe_key, subject, payload
+  )
+  select
+    'class_schedule_created',
+    recipient.id, recipient.email,
+    concat('class_schedule_created:', new.id, ':', recipient.id),
+    concat(
+      '[MedLabs Calendar] Lịch phòng Skills Lab mới của ',
+      coalesce(lecturer_name, 'Chưa có giảng viên'),
+      ' - ', to_char(new.schedule_date, 'DD/MM/YYYY'),
+      ' - ', new.course_code_snapshot,
+      ' - ', schedule_code
+    ),
+    jsonb_build_object(
+      'schedule_id', new.id, 'source', 'manual',
+      'course_code', new.course_code_snapshot, 'course_name', new.course_name_snapshot,
+      'schedule_date', new.schedule_date, 'start_time', new.start_time,
+      'end_time', new.end_time, 'room', coalesce(room_label, 'Chưa có phòng'),
+      'lecturer', coalesce(lecturer_name, 'Chưa có giảng viên'),
+      'student_count', new.student_count,
+      'creator', coalesce(creator_name, 'Người tạo phiếu'),
+      'request_code', schedule_code,
+      'room_type_code', room_type_code_value
+    )
+  from public.profiles as recipient
+  where recipient.is_active
+    and (
+      recipient.id in (new.created_by, new.lecturer_id, new.lecturer_2_id)
+      or exists (
+        select 1 from public.user_roles as roles
+        where roles.user_id = recipient.id and roles.role in ('staff', 'admin', 'viewer')
+          and (
+            roles.role = 'admin'
+            or exists (
+              select 1 from public.profile_room_types as assignments
+              where assignments.profile_id = recipient.id
+                and assignments.room_type_id = room_type_value
+                and (
+                  roles.role <> 'viewer'
+                  or assignments.receive_schedule_emails
+                )
+            )
+          )
+      )
+    )
+  on conflict (dedupe_key) do nothing;
+  return new;
+end;
+$$;
+
+-- Keep import summary scope-aware.
+create or replace function private.enqueue_import_summary_email()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  creator_name text;
+  schedule_rows jsonb;
+  room_type_code_value text;
+begin
+  if new.status <> 'completed' or old.status = 'completed' or new.imported_rows <= 0 then
+    return new;
+  end if;
+  select profiles.full_name into creator_name from public.profiles as profiles where profiles.id = new.created_by;
+  select room_types.code into room_type_code_value
+  from public.room_types as room_types where room_types.id = new.room_type_id;
+  -- Import lịch Y cơ sở không phát sinh email (YC-L02 đã bỏ).
+  if room_type_code_value = 'basic_medical' then return new; end if;
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'schedule_id', schedules.id, 'course_code', schedules.course_code_snapshot,
+    'course_name', schedules.course_name_snapshot, 'schedule_date', schedules.schedule_date,
+    'start_time', schedules.start_time, 'end_time', schedules.end_time,
+    'room', concat_ws(' · ', rooms.room_code, rooms.building_code),
+    'lecturer', coalesce(nullif(concat_ws(' · ', lecturers.full_name, lecturers_2.full_name), ''), 'Chưa có giảng viên'),
+    'student_count', schedules.student_count
+  ) order by schedules.schedule_date, schedules.start_time, schedules.id), '[]'::jsonb)
+  into schedule_rows
+  from public.class_schedules as schedules
+  join public.rooms as rooms on rooms.id = schedules.room_id
+  left join public.profiles as lecturers on lecturers.id = schedules.lecturer_id
+  left join public.profiles as lecturers_2 on lecturers_2.id = schedules.lecturer_2_id
+  where schedules.import_batch_id = new.id and schedules.schedule_status <> 'cancelled';
+
+  insert into public.email_notifications (
+    notification_type, recipient_id, recipient_email, dedupe_key, subject, payload
+  )
+  select 'class_schedule_import_summary',
+    recipient.id, recipient.email,
+    concat('class_schedule_import_summary:', new.id, ':', recipient.id),
+    concat(
+      '[MedLabs Calendar] Cập nhật Lịch sử dụng phòng Skills Lab mới · ',
+      new.imported_rows, ' lịch mới'
+    ),
+    jsonb_build_object(
+      'batch_id', new.id, 'source', 'import', 'file_name', new.original_file_name,
+      'creator', coalesce(creator_name, 'Người import'), 'completed_at', new.completed_at,
+      'total_rows', new.total_rows, 'imported_rows', new.imported_rows,
+      'warning_rows', new.warning_rows, 'error_rows', new.error_rows,
+      'duplicate_rows', new.duplicate_rows, 'schedules', schedule_rows,
+      'room_type_code', room_type_code_value
+    )
+  from public.profiles as recipient
+  where recipient.is_active
+    and (
+      recipient.id = new.created_by
+      or exists (
+        select 1
+        from public.class_schedules as related_schedules
+        where related_schedules.import_batch_id = new.id
+          and related_schedules.schedule_status <> 'cancelled'
+          and recipient.id in (
+            related_schedules.lecturer_id,
+            related_schedules.lecturer_2_id
+          )
+      )
+      or exists (
+        select 1 from public.user_roles as roles
+        where roles.user_id = recipient.id and roles.role in ('staff', 'admin', 'viewer')
+          and (
+            roles.role = 'admin'
+            or exists (
+              select 1 from public.profile_room_types as assignments
+              where assignments.profile_id = recipient.id
+                and assignments.room_type_id = new.room_type_id
+                and (
+                  roles.role <> 'viewer'
+                  or assignments.receive_schedule_emails
+                )
+            )
+          )
+      )
+    )
+  on conflict (dedupe_key) do nothing;
+  return new;
+end;
+$$;
+
+-- Catalog entries may be removed once only cancelled schedule history remains.
+-- Import rows retain their raw snapshots because their schedule FK uses ON DELETE SET NULL.
+create or replace function public.delete_catalog_room(target_room_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if not (select private.is_admin()) then
+    raise exception 'ADMIN_REQUIRED' using errcode = '42501';
+  end if;
+
+  perform 1 from public.rooms where id = target_room_id for update;
+  if not found then
+    raise exception 'CATALOG_NOT_FOUND' using errcode = 'P0002';
+  end if;
+
+  if exists (
+    select 1 from public.basic_medical_registrations
+    where room_id = target_room_id
+  ) then
+    raise exception 'CATALOG_HAS_BASIC_MEDICAL_REGISTRATIONS' using errcode = '23503';
+  end if;
+
+  if exists (
+    select 1 from public.class_schedules
+    where room_id = target_room_id and schedule_status <> 'cancelled'
+  ) then
+    raise exception 'CATALOG_HAS_ACTIVE_SCHEDULES' using errcode = '23503';
+  end if;
+
+  if exists (
+    select 1
+    from public.class_schedules as schedules
+    where schedules.room_id = target_room_id
+      and schedules.schedule_status = 'cancelled'
+      and (
+        exists (
+          select 1 from public.equipment_requests as requests
+          where requests.class_schedule_id = schedules.id
+        )
+        or exists (
+          select 1 from public.basic_medical_registration_sessions as sessions
+          where sessions.class_schedule_id = schedules.id
+        )
+      )
+  ) then
+    raise exception 'CATALOG_HAS_RELATED_REQUESTS' using errcode = '23503';
+  end if;
+
+  delete from public.class_schedules
+  where room_id = target_room_id and schedule_status = 'cancelled';
+
+  delete from public.rooms where id = target_room_id;
+end;
+$$;
+
+revoke all on function public.delete_catalog_room(uuid) from public, anon;
+grant execute on function public.delete_catalog_room(uuid) to authenticated;
+
+create or replace function public.delete_catalog_course(target_course_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if not (select private.is_admin()) then
+    raise exception 'ADMIN_REQUIRED' using errcode = '42501';
+  end if;
+
+  perform 1 from public.courses where id = target_course_id for update;
+  if not found then
+    raise exception 'CATALOG_NOT_FOUND' using errcode = 'P0002';
+  end if;
+
+  if exists (
+    select 1 from public.basic_medical_registrations
+    where course_id = target_course_id
+  ) then
+    raise exception 'CATALOG_HAS_BASIC_MEDICAL_REGISTRATIONS' using errcode = '23503';
+  end if;
+
+  if exists (
+    select 1 from public.class_schedules
+    where course_id = target_course_id and schedule_status <> 'cancelled'
+  ) then
+    raise exception 'CATALOG_HAS_ACTIVE_SCHEDULES' using errcode = '23503';
+  end if;
+
+  if exists (
+    select 1
+    from public.class_schedules as schedules
+    where schedules.course_id = target_course_id
+      and schedules.schedule_status = 'cancelled'
+      and (
+        exists (
+          select 1 from public.equipment_requests as requests
+          where requests.class_schedule_id = schedules.id
+        )
+        or exists (
+          select 1 from public.basic_medical_registration_sessions as sessions
+          where sessions.class_schedule_id = schedules.id
+        )
+      )
+  ) then
+    raise exception 'CATALOG_HAS_RELATED_REQUESTS' using errcode = '23503';
+  end if;
+
+  delete from public.class_schedules
+  where course_id = target_course_id and schedule_status = 'cancelled';
+
+  delete from public.courses where id = target_course_id;
+end;
+$$;
+
+revoke all on function public.delete_catalog_course(uuid) from public, anon;
+grant execute on function public.delete_catalog_course(uuid) to authenticated;
+
+create or replace function public.delete_catalog_shift_template(
+  target_shift_template_id uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if not (select private.is_admin()) then
+    raise exception 'ADMIN_REQUIRED' using errcode = '42501';
+  end if;
+
+  perform 1
+  from public.shift_templates
+  where id = target_shift_template_id
+  for update;
+  if not found then
+    raise exception 'CATALOG_NOT_FOUND' using errcode = 'P0002';
+  end if;
+
+  if exists (
+    select 1 from public.staff_shifts
+    where shift_template_id = target_shift_template_id and status <> 'cancelled'
+  ) then
+    raise exception 'CATALOG_HAS_ACTIVE_SHIFTS' using errcode = '23503';
+  end if;
+
+  delete from public.staff_shifts
+  where shift_template_id = target_shift_template_id and status = 'cancelled';
+
+  delete from public.shift_templates where id = target_shift_template_id;
+end;
+$$;
+
+revoke all on function public.delete_catalog_shift_template(uuid) from public, anon;
+grant execute on function public.delete_catalog_shift_template(uuid) to authenticated;

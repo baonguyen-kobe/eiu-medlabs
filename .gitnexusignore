@@ -1,0 +1,15 @@
+# Generated and temporary application artifacts.
+graphify-out/
+backups/
+tmp/
+.next/
+.vercel/
+coverage/
+playwright-report/
+test-results/
+supabase/.temp/
+
+# Tool indexes and reusable agent instruction bundles.
+.gitnexus/
+.codex/
+.claude/skills/
