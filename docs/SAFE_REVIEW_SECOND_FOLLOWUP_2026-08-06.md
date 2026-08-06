@@ -4,11 +4,11 @@ Ngày review: 06/08/2026
 Repository: `baonguyen-kobe/eiu-medlabs`
 Pull Request: `#1`
 Branch: `review/hardening-20260805`
-HEAD được review: `8cc57a926023de7faux49c11d5203784a802547d`
+HEAD được review: `8cc57a926023de7feba49c11d5203784a802547d`
 GitHub Actions run: `31069936547`
 GitHub Actions job: `92515562568`
 
-> Lưu ý: trước khi thực hiện, AI phải xác minh lại HEAD chính xác trên GitHub. HEAD được người dùng cung cấp là `8cc57a926023de7faux49c11d5203784a802547d`; nếu chuỗi này không phải SHA hợp lệ hoặc khác HEAD thực tế thì phải dùng HEAD thực tế của branch và ghi rõ trong báo cáo.
+> Lưu ý: trước khi thực hiện, AI phải xác minh lại HEAD chính xác trên GitHub. HEAD được người dùng cung cấp là `8cc57a926023de7feba49c11d5203784a802547d`; nếu chuỗi này không phải SHA hợp lệ hoặc khác HEAD thực tế thì phải dùng HEAD thực tế của branch và ghi rõ trong báo cáo.
 
 ## 1. Phạm vi review
 

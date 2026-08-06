@@ -176,6 +176,7 @@ test("Importer chỉ sửa, phân công và xóa lịch do mình tạo hoặc ba
             ...base,
             id: otherIdSchedule,
             schedule_date: "2039-09-02",
+            lecturer_id: importer.user.id,
             created_by: otherId,
             published_by: otherId,
           },
@@ -200,11 +201,11 @@ test("Importer chỉ sửa, phân công và xóa lịch do mình tạo hoặc ba
       ).error,
     );
 
-    const deniedReschedule = await importer.supabase.rpc("reschedule_class", {
+    const lecturerReschedule = await importer.supabase.rpc("reschedule_class", {
       target_schedule_id: otherIdSchedule,
       target_schedule_date: "2039-09-12",
     });
-    assert.equal(deniedReschedule.error?.code, "42501");
+    assert.ifError(lecturerReschedule.error);
     const deniedAssign = await importer.supabase.rpc("assign_class_lecturers", {
       target_schedule_id: otherIdSchedule,
       target_lecturer_ids: [],
@@ -217,6 +218,29 @@ test("Importer chỉ sửa, phân công và xóa lịch do mình tạo hoặc ba
       .select("id");
     assert.ifError(deniedDelete.error);
     assert.equal(deniedDelete.data.length, 0);
+
+    const lecturerDetails = await importer.supabase.rpc(
+      "update_class_schedule_details",
+      {
+        target_schedule_id: otherIdSchedule,
+        target_schedule_date: "2039-09-15",
+        target_start_time: "07:30",
+        target_end_time: "09:30",
+        target_room_id: "20000000-0000-0000-0000-000000000001",
+        target_student_count: 20,
+        target_lecturer_ids: [importer.user.id],
+      },
+    );
+    assert.ifError(lecturerDetails.error);
+
+    const unrelatedReschedule = await importer.supabase.rpc(
+      "reschedule_class",
+      {
+        target_schedule_id: otherBatchScheduleId,
+        target_schedule_date: "2039-09-14",
+      },
+    );
+    assert.equal(unrelatedReschedule.error?.code, "42501");
 
     assert.ifError(
       (
@@ -251,6 +275,60 @@ test("Importer chỉ sửa, phân công và xóa lịch do mình tạo hoặc ba
       ).error?.code,
       "42501",
     );
+
+    assert.ifError(
+      (
+        await otherImporter.supabase.rpc("reschedule_class", {
+          target_schedule_id: otherBatchScheduleId,
+          target_schedule_date: "2039-09-17",
+        })
+      ).error,
+    );
+    assert.ifError(
+      (
+        await otherImporter.supabase.rpc("assign_class_lecturers", {
+          target_schedule_id: otherBatchScheduleId,
+          target_lecturer_ids: [lecturer.user.id],
+        })
+      ).error,
+    );
+
+    assert.ifError(
+      (
+        await admin.supabase
+          .from("user_roles")
+          .delete()
+          .eq("user_id", importer.user.id)
+          .eq("role", "importer")
+      ).error,
+    );
+    assert.ifError(
+      (
+        await importer.supabase.rpc("reschedule_class", {
+          target_schedule_id: otherIdSchedule,
+          target_schedule_date: "2039-09-16",
+        })
+      ).error,
+    );
+    assert.equal(
+      (
+        await importer.supabase.rpc("assign_class_lecturers", {
+          target_schedule_id: otherIdSchedule,
+          target_lecturer_ids: [lecturer.user.id],
+        })
+      ).error?.code,
+      "42501",
+    );
+    assert.ifError(
+      (
+        await admin.supabase.from("user_roles").insert({
+          user_id: importer.user.id,
+          role: "importer",
+          created_by: admin.user.id,
+        })
+      ).error,
+    );
+
     const ownDelete = await importer.supabase
       .from("class_schedules")
       .delete()
@@ -259,6 +337,14 @@ test("Importer chỉ sửa, phân công và xóa lịch do mình tạo hoặc ba
       .single();
     assert.ifError(ownDelete.error);
   } finally {
+    await admin.supabase.from("user_roles").upsert(
+      {
+        user_id: importer.user.id,
+        role: "importer",
+        created_by: admin.user.id,
+      },
+      { onConflict: "user_id,role" },
+    );
     await admin.supabase
       .from("class_schedules")
       .delete()
@@ -1970,6 +2056,102 @@ test("direct import RPC từ chối hash giả do caller gửi", async () => {
     assert.match(result.error.message, /INVALID_IMPORT_HASH/);
   } finally {
     await importer.supabase.from("import_batches").delete().eq("id", batchId);
+  }
+});
+
+test("hash của lịch import đã hủy không chặn lần import sau", async () => {
+  const service = serviceClient();
+  const admin = await signIn("admin@campus.local", "LocalAdmin123!");
+  const importer = await signIn("importer@campus.local", "LocalImporter123!");
+  const batchId = crypto.randomUUID();
+  const target = {
+    courseCode: "NUR 101",
+    roomId: "20000000-0000-0000-0000-000000000001",
+    date: "2049-09-02",
+    start: "07:30",
+    end: "09:30",
+  };
+  const hash = importScheduleHash(target);
+  let scheduleId = null;
+  try {
+    assert.ifError(
+      (
+        await importer.supabase.from("import_batches").insert({
+          id: batchId,
+          source_type: "import",
+          original_file_name: "cancelled-row.csv",
+          file_hash: crypto.randomUUID(),
+          status: "importing",
+          total_rows: 1,
+          created_by: importer.user.id,
+          room_type_id: "40000000-0000-0000-0000-000000000001",
+        })
+      ).error,
+    );
+    const created = await importer.supabase.rpc("create_import_schedule_row", {
+      target_batch_id: batchId,
+      target_row_number: 1,
+      target_hash: hash,
+      target_raw: {},
+      target_normalized: {},
+      target_status: "imported",
+      target_errors: [],
+      target_warnings: [],
+      target_course_id: "10000000-0000-0000-0000-000000000001",
+      target_course_code: target.courseCode,
+      target_course_name: "Thăm khám thể chất",
+      target_room_id: target.roomId,
+      target_lecturer_id: null,
+      target_date: target.date,
+      target_start: target.start,
+      target_end: target.end,
+      target_note: null,
+      target_student_count: 20,
+    });
+    assert.ifError(created.error);
+    scheduleId = created.data;
+
+    const active = await importer.supabase.rpc("find_existing_import_hashes", {
+      target_hashes: [hash],
+    });
+    assert.ifError(active.error);
+    assert.equal(active.data.length, 1);
+
+    assert.ifError(
+      (
+        await admin.supabase
+          .from("class_schedules")
+          .update({
+            schedule_status: "cancelled",
+            cancelled_by: admin.user.id,
+            cancelled_at: new Date().toISOString(),
+          })
+          .eq("id", scheduleId)
+      ).error,
+    );
+    const cancelled = await importer.supabase.rpc(
+      "find_existing_import_hashes",
+      { target_hashes: [hash] },
+    );
+    assert.ifError(cancelled.error);
+    assert.equal(cancelled.data.length, 0);
+  } finally {
+    if (scheduleId) {
+      await service
+        .from("import_rows")
+        .delete()
+        .eq("class_schedule_id", scheduleId);
+      await service
+        .from("class_schedules")
+        .update({
+          schedule_status: "published",
+          cancelled_by: null,
+          cancelled_at: null,
+        })
+        .eq("id", scheduleId);
+      await service.from("class_schedules").delete().eq("id", scheduleId);
+    }
+    await service.from("import_batches").delete().eq("id", batchId);
   }
 });
 

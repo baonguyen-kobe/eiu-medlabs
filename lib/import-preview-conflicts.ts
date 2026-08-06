@@ -66,3 +66,36 @@ export function classifyImportPreviewCandidate(
   }
   return { conflict, duplicate: false };
 }
+
+export function classifyImportPreviewCandidatesInOrder(
+  candidates: Array<ImportPreviewCandidate & { eligible?: boolean }>,
+): Array<{ conflict: boolean; duplicate: boolean }> {
+  const accepted: ExistingScheduleForPreview[] = [];
+
+  return candidates.map((candidate) => {
+    if (candidate.eligible === false) {
+      return { conflict: false, duplicate: false };
+    }
+
+    const result = classifyImportPreviewCandidate(candidate, accepted);
+    if (
+      !result.conflict &&
+      !result.duplicate &&
+      candidate.roomId &&
+      candidate.scheduleDate &&
+      candidate.startTime &&
+      candidate.endTime
+    ) {
+      accepted.push({
+        course_code_snapshot: candidate.courseCode,
+        end_time: candidate.endTime,
+        lecturer_2_id: null,
+        lecturer_id: candidate.lecturerId,
+        room_id: candidate.roomId,
+        schedule_date: candidate.scheduleDate,
+        start_time: candidate.startTime,
+      });
+    }
+    return result;
+  });
+}

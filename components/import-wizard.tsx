@@ -60,6 +60,7 @@ function validationMessage(review: ValidationRow) {
 
 function statusLabel(status: ValidationRow["status"]) {
   if (status === "duplicate") return "Trùng";
+  if (status === "conflict") return "Xung đột";
   if (status === "error") return "Cần sửa";
   if (status === "warning") return "Hợp lệ, có lưu ý";
   return "Hợp lệ";
@@ -110,7 +111,9 @@ function ImportRowsTable({
               const rowNumber = index + 2;
               const review = validationByRow?.get(rowNumber);
               const rowInvalid =
-                review?.status === "error" || review?.status === "duplicate";
+                review?.status === "error" ||
+                review?.status === "duplicate" ||
+                review?.status === "conflict";
               return (
                 <tr className={rowInvalid ? "row-error" : ""} key={index}>
                   <td>{rowNumber}</td>
@@ -575,7 +578,8 @@ export function ImportWizard({
               </div>
               <p className="import-step-note">
                 Kiểm tra từng dòng trong cột <b>Kiểm tra</b>. Bạn vẫn có thể
-                tiếp tục; các dòng lỗi và trùng sẽ bị loại ở bước xác nhận.
+                tiếp tục; các dòng lỗi, trùng và xung đột sẽ bị loại ở bước xác
+                nhận.
               </p>
               <ImportRowsTable
                 key="validation-table"

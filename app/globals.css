@@ -2534,6 +2534,11 @@ span.filter-control {
   background: #fde9e9;
 }
 
+.preview-status-conflict {
+  color: #8f2d20;
+  background: #ffe4dc;
+}
+
 .preview-status-cell small {
   display: block;
   color: var(--ink-600);

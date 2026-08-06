@@ -191,6 +191,13 @@ declare
   actor_id uuid := (select auth.uid());
   schedule_row public.class_schedules;
   room_type_value uuid;
+  in_scope boolean := false;
+  importer_owns boolean := false;
+  lecturer_is_related boolean := false;
+  can_admin boolean := false;
+  can_staff boolean := false;
+  can_importer boolean := false;
+  can_lecturer boolean := false;
 begin
   if actor_id is null or not (select private.is_active_user())
     or target_action not in ('assign_lecturers', 'reschedule', 'details', 'delete') then
@@ -201,30 +208,32 @@ begin
   if schedule_row.id is null then return false; end if;
   select rooms.room_type_id into room_type_value from public.rooms rooms
   where rooms.id = schedule_row.room_id;
-  if (select private.has_role('admin')) then return true; end if;
-  if (select private.has_role('staff')) then
-    return (select private.has_room_type(room_type_value));
-  end if;
-  if (select private.has_role('importer')) then
-    return (select private.has_room_type(room_type_value)) and (
-      schedule_row.created_by = actor_id or exists (
-        select 1 from public.import_batches batches
-        where batches.id = schedule_row.import_batch_id and batches.created_by = actor_id
-      )
-    );
-  end if;
+  in_scope := room_type_value is not null
+    and (select private.has_room_type(room_type_value));
+  importer_owns := schedule_row.created_by = actor_id or exists (
+    select 1 from public.import_batches batches
+    where batches.id = schedule_row.import_batch_id
+      and batches.created_by = actor_id
+  );
+  lecturer_is_related := schedule_row.created_by = actor_id
+    or coalesce(actor_id in (schedule_row.lecturer_id, schedule_row.lecturer_2_id), false);
+  can_admin := (select private.has_role('admin'));
+  can_staff := (select private.has_role('staff')) and in_scope;
+  can_importer := (select private.has_role('importer'))
+    and in_scope
+    and importer_owns;
   if (select private.has_role('lecturer')) and target_action in ('reschedule', 'details') then
-    return (select private.has_room_type(room_type_value)) and (
-      schedule_row.created_by = actor_id
-      or actor_id in (schedule_row.lecturer_id, schedule_row.lecturer_2_id)
-    );
+    can_lecturer := in_scope and lecturer_is_related;
   end if;
   if (select private.has_role('lecturer')) and target_action = 'delete' then
-    return schedule_row.created_by = actor_id
-      and (select private.has_room_type(room_type_value))
+    can_lecturer := in_scope
+      and schedule_row.created_by = actor_id
       and room_type_value = '40000000-0000-0000-0000-000000000001'::uuid;
   end if;
-  return false;
+  return coalesce(can_admin, false)
+    or coalesce(can_staff, false)
+    or coalesce(can_importer, false)
+    or coalesce(can_lecturer, false);
 end;
 $$;
 

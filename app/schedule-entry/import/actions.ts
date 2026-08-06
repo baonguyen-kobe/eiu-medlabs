@@ -17,6 +17,7 @@ import { roomTypeIdForScope, type ScheduleScope } from "@/lib/room-types";
 import { createImportScheduleHash } from "@/lib/import-schedule-hash";
 import {
   classifyImportPreviewCandidate,
+  classifyImportPreviewCandidatesInOrder,
   type ExistingScheduleForPreview,
 } from "@/lib/import-preview-conflicts";
 
@@ -196,7 +197,6 @@ export async function validateScheduleRows(
     lecturerNames.set(key, [...(lecturerNames.get(key) ?? []), profile]);
   }
 
-  const seenHashes = new Set<string>();
   const preparedRows = inputRows.map((row, index) => {
     const errors: string[] = [];
     const warnings: string[] = [];
@@ -282,11 +282,9 @@ export async function validateScheduleRows(
       : createHash("sha256")
           .update(JSON.stringify(normalizedData))
           .digest("hex");
-    const duplicateWithinFile = seenHashes.has(rowHash);
-    seenHashes.add(rowHash);
     return {
       courseCode,
-      duplicateWithinFile,
+      duplicateWithinFile: false,
       endTime,
       errors,
       index,
@@ -385,21 +383,36 @@ export async function validateScheduleRows(
     }
   }
 
+  const intraFileChecks = classifyImportPreviewCandidatesInOrder(
+    preparedRows.map((prepared, index) => ({
+      ...prepared,
+      eligible:
+        prepared.errors.length === 0 &&
+        !remoteDuplicates[index] &&
+        !scheduleChecks[index].duplicate &&
+        !scheduleChecks[index].conflict,
+    })),
+  );
+
   const validationRows = preparedRows.map((prepared, index) => {
     const duplicate =
-      prepared.duplicateWithinFile ||
+      intraFileChecks[index].duplicate ||
       remoteDuplicates[index] ||
       scheduleChecks[index].duplicate;
-    const conflict = !duplicate && scheduleChecks[index].conflict;
+    const conflict =
+      !duplicate &&
+      (scheduleChecks[index].conflict || intraFileChecks[index].conflict);
     if (duplicate) {
       prepared.errors.push(
-        prepared.duplicateWithinFile
+        intraFileChecks[index].duplicate
           ? "Dòng trùng với một dòng khác trong cùng file"
           : "Lịch trùng với lịch đã có (tạo tay hoặc import)",
       );
     } else if (conflict) {
       prepared.errors.push(
-        "Lịch xung đột phòng hoặc giảng viên với lịch đã có",
+        intraFileChecks[index].conflict
+          ? "Lịch xung đột phòng hoặc giảng viên với dòng trước trong cùng file"
+          : "Lịch xung đột phòng hoặc giảng viên với lịch đã có",
       );
     }
     const status: ImportValidationStatus = duplicate

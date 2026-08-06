@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { classifyImportPreviewCandidate } from "../lib/import-preview-conflicts.ts";
+import {
+  classifyImportPreviewCandidate,
+  classifyImportPreviewCandidatesInOrder,
+} from "../lib/import-preview-conflicts.ts";
 
 const existing = {
   course_code_snapshot: "NUR 207",
@@ -54,4 +57,51 @@ test("preview phân biệt overlap phòng và overlap giảng viên là conflict
   );
   assert.deepEqual(roomConflict, { duplicate: false, conflict: true });
   assert.deepEqual(lecturerConflict, { duplicate: false, conflict: true });
+});
+
+test("preview trong file giữ dòng hợp lệ đầu tiên và phân loại các dòng sau theo thứ tự", () => {
+  const base = {
+    courseCode: "NUR 207",
+    roomId: "room-a",
+    scheduleDate: "2039-08-13",
+    startTime: "07:30",
+    endTime: "09:30",
+    lecturerId: "lecturer-a",
+  };
+  const results = classifyImportPreviewCandidatesInOrder([
+    base,
+    { ...base },
+    { ...base, courseCode: "NUR 101", startTime: "08:30", endTime: "10:30" },
+    { ...base, roomId: "room-b", startTime: "09:30", endTime: "10:30" },
+    { ...base, roomId: "room-b", scheduleDate: "2039-08-14" },
+  ]);
+
+  assert.deepEqual(results, [
+    { duplicate: false, conflict: false },
+    { duplicate: true, conflict: false },
+    { duplicate: false, conflict: true },
+    { duplicate: false, conflict: false },
+    { duplicate: false, conflict: false },
+  ]);
+});
+
+test("preview trong file không cho dòng invalid chặn dòng hợp lệ phía sau", () => {
+  const candidate = {
+    courseCode: "NUR 207",
+    roomId: "room-a",
+    scheduleDate: "2039-08-13",
+    startTime: "07:30",
+    endTime: "09:30",
+    lecturerId: "lecturer-a",
+  };
+  assert.deepEqual(
+    classifyImportPreviewCandidatesInOrder([
+      { ...candidate, eligible: false },
+      candidate,
+    ]),
+    [
+      { duplicate: false, conflict: false },
+      { duplicate: false, conflict: false },
+    ],
+  );
 });

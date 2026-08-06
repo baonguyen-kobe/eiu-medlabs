@@ -910,9 +910,10 @@ begin
   return query
   select distinct rows.normalized_row_hash
   from public.import_rows as rows
+  join public.class_schedules schedules on schedules.id = rows.class_schedule_id
   where rows.normalized_row_hash = any(target_hashes)
-    and rows.class_schedule_id is not null
-    and rows.validation_status in ('imported', 'warning');
+    and rows.validation_status in ('imported', 'warning')
+    and schedules.schedule_status <> 'cancelled';
 end;
 $$;
 
@@ -1061,6 +1062,7 @@ declare
   materialize_from date;
   materialize_to date;
   occurrence_date date;
+  business_now timestamp := now() at time zone 'Asia/Ho_Chi_Minh';
 begin
   perform pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended('medlabs:shift-pattern:' || target_pattern_id::text, 0)
@@ -1083,7 +1085,7 @@ begin
   );
   materialize_from := greatest(
     pattern.effective_from,
-    (now() at time zone 'Asia/Ho_Chi_Minh')::date
+    business_now::date
   );
   if materialize_from > materialize_to then return; end if;
 
@@ -1095,6 +1097,7 @@ begin
       interval '1 day'
     ) as generated(day_value)
     where extract(isodow from generated.day_value)::smallint = pattern.weekday
+      and generated.day_value::date + pattern.start_time > business_now
     order by generated.day_value
   loop
     begin
@@ -1158,7 +1161,8 @@ returns trigger language plpgsql security definer set search_path = '' as $$
 begin
   if old.registration_source <> 'generated'
     or old.status in ('completed', 'cancelled')
-    or old.shift_date < (now() at time zone 'Asia/Ho_Chi_Minh')::date then
+    or (old.shift_date + old.start_time)
+      <= (now() at time zone 'Asia/Ho_Chi_Minh') then
     return null;
   end if;
   return old;

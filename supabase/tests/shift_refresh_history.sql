@@ -1,5 +1,5 @@
 begin;
-select plan(9);
+select plan(16);
 
 insert into public.staff_shift_patterns (
   id, staff_id, weekday, start_time, end_time, shift_type,
@@ -95,6 +95,119 @@ select is(
   (select count(*)::integer from public.staff_shifts where shift_pattern_id = '90000000-0000-0000-0000-000000000001'::uuid),
   2,
   'cancelling the replacement cannot delete old completed/cancelled history'
+);
+
+create temporary table third_followup_clock as
+select now() at time zone 'Asia/Ho_Chi_Minh' as business_now;
+
+insert into public.staff_shift_patterns (
+  id, staff_id, weekday, start_time, end_time, shift_type,
+  effective_from, effective_to, note, created_by
+)
+select
+  '90000000-0000-0000-0000-000000000010'::uuid,
+  profiles.id,
+  extract(isodow from clock.business_now)::smallint,
+  (clock.business_now - interval '2 hours')::time,
+  (clock.business_now - interval '1 hour')::time,
+  'MORNING', clock.business_now::date, clock.business_now::date,
+  'pgtap-today-started', profiles.id
+from public.profiles profiles cross join third_followup_clock clock
+where profiles.email = 'admin@campus.local';
+
+insert into public.staff_shift_patterns (
+  id, staff_id, weekday, start_time, end_time, shift_type,
+  effective_from, effective_to, note, created_by
+)
+select
+  '90000000-0000-0000-0000-000000000011'::uuid,
+  profiles.id,
+  extract(isodow from clock.business_now)::smallint,
+  (clock.business_now + interval '1 hour')::time,
+  (clock.business_now + interval '2 hours')::time,
+  'AFTERNOON', clock.business_now::date, clock.business_now::date,
+  'pgtap-today-future', profiles.id
+from public.profiles profiles cross join third_followup_clock clock
+where profiles.email = 'giangvien@campus.local';
+
+select private.materialize_shift_pattern('90000000-0000-0000-0000-000000000010'::uuid);
+select private.materialize_shift_pattern('90000000-0000-0000-0000-000000000011'::uuid);
+
+select is(
+  (select count(*)::integer from public.staff_shifts where shift_pattern_id = '90000000-0000-0000-0000-000000000010'::uuid),
+  0,
+  'materializer does not create a same-day occurrence after its start time'
+);
+select is(
+  (select count(*)::integer from public.staff_shifts where shift_pattern_id = '90000000-0000-0000-0000-000000000011'::uuid),
+  1,
+  'materializer creates a same-day occurrence whose start time is still future'
+);
+
+insert into public.staff_shifts (
+  staff_id, shift_date, start_time, end_time, shift_type,
+  shift_pattern_id, note, status, registration_source, created_by
+)
+select profiles.id, clock.business_now::date,
+  (clock.business_now - interval '2 hours')::time,
+  (clock.business_now - interval '1 hour')::time,
+  'MORNING', '90000000-0000-0000-0000-000000000010'::uuid,
+  'started occurrence', 'scheduled', 'generated', profiles.id
+from public.profiles profiles cross join third_followup_clock clock
+where profiles.email = 'admin@campus.local';
+
+select private.materialize_shift_pattern('90000000-0000-0000-0000-000000000010'::uuid);
+select is(
+  (select note from public.staff_shifts where shift_pattern_id = '90000000-0000-0000-0000-000000000010'::uuid),
+  'started occurrence',
+  'refresh does not recreate or update a same-day occurrence that already started'
+);
+
+select set_config(
+  'request.jwt.claims',
+  json_build_object(
+    'sub', (select id from public.profiles where email = 'admin@campus.local'),
+    'role', 'authenticated'
+  )::text,
+  true
+);
+select * from public.register_own_shift_pattern(
+  extract(isodow from (select business_now from third_followup_clock))::smallint,
+  'MORNING',
+  (select business_now::date from third_followup_clock),
+  (select business_now::date from third_followup_clock),
+  'pgtap-today-replacement'
+);
+select is(
+  (select count(*)::integer from public.staff_shifts where shift_pattern_id = '90000000-0000-0000-0000-000000000010'::uuid),
+  1,
+  'pattern replacement preserves a same-day occurrence that already started'
+);
+
+select public.cancel_own_shift_pattern(id)
+from public.staff_shift_patterns
+where note = 'pgtap-today-replacement' and is_active;
+select is(
+  (select count(*)::integer from public.staff_shifts where shift_pattern_id = '90000000-0000-0000-0000-000000000010'::uuid),
+  1,
+  'pattern cancellation preserves a same-day occurrence that already started'
+);
+
+delete from public.staff_shifts
+where shift_pattern_id in (
+  '90000000-0000-0000-0000-000000000010'::uuid,
+  '90000000-0000-0000-0000-000000000011'::uuid
+);
+
+select is(
+  (select count(*)::integer from public.staff_shifts where shift_pattern_id = '90000000-0000-0000-0000-000000000010'::uuid),
+  1,
+  'delete guard preserves a same-day generated occurrence that already started'
+);
+select is(
+  (select count(*)::integer from public.staff_shifts where shift_pattern_id = '90000000-0000-0000-0000-000000000011'::uuid),
+  0,
+  'delete guard permits removal of a same-day generated occurrence still in the future'
 );
 
 select * from finish();
