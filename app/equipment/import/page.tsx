@@ -14,6 +14,7 @@ export default async function EquipmentImportPage() {
     roomTypes,
     allowBasicMedicalAccess,
     canImportSchedules,
+    canManagePersonnel,
   } = await getViewer();
   if (!roles.some((role) => ["admin", "staff"].includes(role))) {
     redirect("/equipment/mine");
@@ -26,6 +27,7 @@ export default async function EquipmentImportPage() {
       roomTypeCodes={roomTypes.map(({ code }) => code)}
       allowBasicMedicalAccess={allowBasicMedicalAccess}
       canImportSchedules={canImportSchedules}
+      canManagePersonnel={canManagePersonnel}
       title="Import Phiếu thiết bị"
       description="Tải template chuẩn, kiểm tra từng dòng và đưa các phiếu thiết bị cũ lên hệ thống."
       actions={

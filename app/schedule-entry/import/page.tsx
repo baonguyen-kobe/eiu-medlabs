@@ -18,6 +18,7 @@ export default async function ImportPage() {
     roomTypes,
     allowBasicMedicalAccess,
     canImportSchedules,
+    canManagePersonnel,
   } = await getViewer();
   const roomTypeCodes = roomTypes.map(({ code }) => code);
   if (!canUseSkillsWorkspace(roles, roomTypeCodes)) {
@@ -38,6 +39,7 @@ export default async function ImportPage() {
       roomTypeCodes={roomTypeCodes}
       allowBasicMedicalAccess={allowBasicMedicalAccess}
       canImportSchedules={canImportSchedules}
+      canManagePersonnel={canManagePersonnel}
       title="Import lịch Skills lab"
       description="Tải template chuẩn, kiểm tra từng dòng và tạo lịch hợp lệ."
       actions={

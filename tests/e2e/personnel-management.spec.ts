@@ -23,6 +23,14 @@ async function loginAsAdmin(page: Page) {
   await expect(page).toHaveURL(/\/dashboard$/);
 }
 
+async function login(page: Page, email: string, password: string) {
+  await page.goto("/login");
+  await page.locator('input[name="email"]').fill(email);
+  await page.locator('input[name="password"]').fill(password);
+  await page.locator('button[type="submit"]').click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+}
+
 async function deletePersonnel(email: string) {
   await adminDb.auth.signInWithPassword({
     email: "admin@campus.local",
@@ -76,4 +84,29 @@ test("personnel drawer saves role, import capability and lock atomically", async
   } finally {
     await deletePersonnel(email);
   }
+});
+
+test("Root và Bảo thấy Personnel, Admin thường bị ẩn menu và redirect", async ({
+  page,
+}) => {
+  await login(page, "bao.nguyen@eiu.edu.vn", "LocalPersonnelManager123!");
+  await expect(page.getByRole("link", { name: "Nhân sự" })).toBeVisible();
+  await page.goto("/admin/personnel");
+  await expect(page).toHaveURL(/\/admin\/personnel/);
+  const rootRow = page
+    .locator(".personnel-table tbody tr")
+    .filter({ hasText: "admin@campus.local" });
+  await expect(rootRow).toContainText("Root Administrator");
+  await expect(rootRow.getByRole("button", { name: "Xem" })).toBeVisible();
+  const managerRow = page
+    .locator(".personnel-table tbody tr")
+    .filter({ hasText: "bao.nguyen@eiu.edu.vn" });
+  await expect(managerRow).toContainText("Quản lý nhân sự");
+  await expect(managerRow.getByRole("button", { name: "Xem" })).toBeVisible();
+
+  await page.context().clearCookies();
+  await login(page, "admin.other@campus.local", "LocalOtherAdmin123!");
+  await expect(page.getByRole("link", { name: "Nhân sự" })).toHaveCount(0);
+  await page.goto("/admin/personnel");
+  await expect(page).toHaveURL(/\/dashboard$/);
 });

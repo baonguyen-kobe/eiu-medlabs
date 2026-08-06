@@ -10,22 +10,27 @@ export async function getViewer() {
   const userId = claimsData?.claims?.sub;
   if (!userId) redirect("/login");
 
-  const [{ data: profile }, { data: roleRows }, { data: roomTypeRows }] =
-    await Promise.all([
-      supabase
-        .from("profiles")
-        .select(
-          "full_name, title, allow_basic_medical_access, can_import_schedules",
-        )
-        .eq("id", userId)
-        .single(),
-      supabase.from("user_roles").select("role").eq("user_id", userId),
-      supabase
-        .from("room_types")
-        .select("id, code, name")
-        .eq("is_active", true)
-        .order("name"),
-    ]);
+  const [
+    { data: profile },
+    { data: roleRows },
+    { data: roomTypeRows },
+    { data: personnelAuthority },
+  ] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select(
+        "full_name, title, allow_basic_medical_access, can_import_schedules",
+      )
+      .eq("id", userId)
+      .single(),
+    supabase.from("user_roles").select("role").eq("user_id", userId),
+    supabase
+      .from("room_types")
+      .select("id, code, name")
+      .eq("is_active", true)
+      .order("name"),
+    supabase.rpc("get_personnel_authority_context"),
+  ]);
 
   const roomTypes = (roomTypeRows ?? []) as Array<{
     id: string;
@@ -46,5 +51,9 @@ export async function getViewer() {
     roomTypes,
     allowBasicMedicalAccess: profile?.allow_basic_medical_access ?? false,
     canImportSchedules: profile?.can_import_schedules ?? false,
+    canManagePersonnel: Boolean(
+      (personnelAuthority as { can_manage_personnel?: boolean } | null)
+        ?.can_manage_personnel,
+    ),
   };
 }

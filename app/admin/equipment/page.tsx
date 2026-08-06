@@ -19,6 +19,7 @@ export default async function EquipmentCatalogPage({
     roomTypes,
     allowBasicMedicalAccess,
     canImportSchedules,
+    canManagePersonnel,
   } = await getViewer();
   if (!roles.some((role) => ["admin", "staff"].includes(role))) {
     redirect("/dashboard");
@@ -49,6 +50,7 @@ export default async function EquipmentCatalogPage({
       roomTypeCodes={roomTypes.map(({ code }) => code)}
       allowBasicMedicalAccess={allowBasicMedicalAccess}
       canImportSchedules={canImportSchedules}
+      canManagePersonnel={canManagePersonnel}
       title="Danh mục thiết bị"
       description="Thiết bị và vật tư dùng cho phiếu đăng ký Skills lab."
     >

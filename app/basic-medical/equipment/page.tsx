@@ -31,6 +31,7 @@ export default async function BasicMedicalEquipmentPage({
     roomTypes,
     allowBasicMedicalAccess,
     canImportSchedules,
+    canManagePersonnel,
   } = await getViewer();
   const roomTypeCodes = roomTypes.map(({ code }) => code);
   if (!isWorkspaceManager(roles)) redirect("/dashboard");
@@ -87,6 +88,7 @@ export default async function BasicMedicalEquipmentPage({
       roomTypeCodes={roomTypeCodes}
       allowBasicMedicalAccess={allowBasicMedicalAccess}
       canImportSchedules={canImportSchedules}
+      canManagePersonnel={canManagePersonnel}
       title="Danh sách thiết bị Y cơ sở"
       description="Quản lý thiết bị riêng theo từng phòng, tình trạng Tốt/Hư và lịch sử thay đổi."
     >

@@ -40,6 +40,20 @@ $users = @(
     allow_early_equipment_handover = $false
   },
   @{
+    email     = "bao.nguyen@eiu.edu.vn"
+    password  = "LocalPersonnelManager123!"
+    full_name = "Nguyễn Bảo"
+    phone     = "0901000008"
+    roles     = @("admin")
+  },
+  @{
+    email     = "admin.other@campus.local"
+    password  = "LocalOtherAdmin123!"
+    full_name = "Quản trị viên khác"
+    phone     = "0901000009"
+    roles     = @("admin")
+  },
+  @{
     email     = "giangvien@campus.local"
     password  = "LocalLecturer123!"
     full_name = "Nguyễn Ngọc Diễm"
@@ -150,6 +164,22 @@ foreach ($entry in $users) {
 
   Write-Output "Đã tạo $($entry.email): $($entry.roles -join ', ')"
 }
+
+$rootId = $userIds["admin@campus.local"]
+$personnelManagerId = $userIds["bao.nguyen@eiu.edu.vn"]
+& $npxCommand supabase db query --local `
+  "insert into public.system_security_principals (singleton, root_admin_id, personnel_manager_id, configured_by) values (true, '$rootId', '$personnelManagerId', '$rootId') on conflict (singleton) do update set root_admin_id = excluded.root_admin_id, personnel_manager_id = excluded.personnel_manager_id, configured_by = excluded.configured_by, configured_at = clock_timestamp()" |
+  Out-Null
+if ($LASTEXITCODE -ne 0) {
+  throw "Không thể cấu hình Root Administrator và Personnel Manager local."
+}
+& $npxCommand supabase db query --local `
+  "insert into public.audit_logs (actor_id, action, entity_type, entity_id, metadata) values ('$rootId', 'personnel.security_bootstrapped', 'system_security_principals', null, jsonb_build_object('source','local_seed'))" |
+  Out-Null
+if ($LASTEXITCODE -ne 0) {
+  throw "Không thể ghi audit bootstrap nhân sự local."
+}
+Write-Output "Đã cấu hình Root Administrator và Personnel Manager local."
 
 Invoke-LocalSqlFile "supabase/demo-schedules.sql"
 Invoke-LocalSqlFile "supabase/demo-shifts.sql"

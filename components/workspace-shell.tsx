@@ -78,6 +78,7 @@ function buildNavigation(
   roomTypeCodes: string[],
   allowBasicMedicalAccess: boolean,
   canImportSchedules: boolean,
+  canManagePersonnel: boolean,
 ): Array<{ label: string; items: NavItem[] }> {
   const isAdmin = roles.includes("admin");
   const isStaff = roles.includes("staff") && !isAdmin;
@@ -327,12 +328,16 @@ function buildNavigation(
     ];
     if (isAdmin) {
       adminItems.unshift(
-        {
-          label: "Nhân sự",
-          href: "/admin/personnel",
-          icon: Users,
-          activeIcon: UsersSolid,
-        },
+        ...(canManagePersonnel
+          ? [
+              {
+                label: "Nhân sự",
+                href: "/admin/personnel",
+                icon: Users,
+                activeIcon: UsersSolid,
+              },
+            ]
+          : []),
         {
           label: "Danh mục thiết bị",
           href: "/admin/equipment",
@@ -373,6 +378,7 @@ export function WorkspaceShell({
   roomTypeCodes = [],
   allowBasicMedicalAccess = false,
   canImportSchedules = false,
+  canManagePersonnel = false,
 }: {
   fullName: string;
   roles: AppRole[];
@@ -383,6 +389,7 @@ export function WorkspaceShell({
   roomTypeCodes?: string[];
   allowBasicMedicalAccess?: boolean;
   canImportSchedules?: boolean;
+  canManagePersonnel?: boolean;
 }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -398,6 +405,7 @@ export function WorkspaceShell({
     roomTypeCodes,
     allowBasicMedicalAccess,
     canImportSchedules,
+    canManagePersonnel,
   );
   const primaryRoleLabel = getPrimaryRoleLabel(roles);
   const initials = getNameInitials(fullName);

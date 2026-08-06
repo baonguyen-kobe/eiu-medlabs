@@ -16,6 +16,7 @@ export default async function BasicMedicalImportPage() {
     roomTypes,
     allowBasicMedicalAccess,
     canImportSchedules,
+    canManagePersonnel,
   } = await getViewer();
   const roomTypeCodes = roomTypes.map(({ code }) => code);
   if (
@@ -34,6 +35,7 @@ export default async function BasicMedicalImportPage() {
       roomTypeCodes={roomTypeCodes}
       allowBasicMedicalAccess={allowBasicMedicalAccess}
       canImportSchedules={canImportSchedules}
+      canManagePersonnel={canManagePersonnel}
       title="Import lịch Y cơ sở"
       description="Kiểm tra dữ liệu theo phạm vi phòng và giảng viên Y cơ sở trước khi tạo lịch."
       actions={

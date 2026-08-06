@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { AdminShell } from "@/components/admin-shell";
 import { createPersonnel, importPersonnel } from "@/app/admin/actions";
-import { requireAdmin } from "@/lib/admin";
+import { requirePersonnelManager } from "@/lib/admin";
 import { NURSING_SKILLS_ROOM_TYPE_ID } from "@/lib/room-types";
 import { Download, UploadCloud } from "@/components/icons";
 import { PersonnelImportButtons } from "@/components/personnel-import-buttons";
@@ -33,7 +33,7 @@ export default async function PersonnelPage({
     page?: string;
   }>;
 }) {
-  const { supabase, userId } = await requireAdmin();
+  const { supabase, userId, authority } = await requirePersonnelManager();
   const query = await searchParams;
   const currentPage = normalizePage(query.page);
   const [{ data: roomTypes }, { data: personnelRows, error: personnelError }] =
@@ -229,6 +229,7 @@ export default async function PersonnelPage({
         })}
         roomTypes={roomTypes ?? []}
         viewerId={userId}
+        viewerIsRoot={authority.is_root_administrator}
       />
       {!rows.length ? (
         <p className="panel-empty">Không tìm thấy nhân sự phù hợp.</p>

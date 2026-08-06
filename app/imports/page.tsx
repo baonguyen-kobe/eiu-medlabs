@@ -29,6 +29,7 @@ export default async function ImportsPage({
     roomTypes,
     allowBasicMedicalAccess,
     canImportSchedules,
+    canManagePersonnel,
   } = await getViewer();
   if (
     !roles.includes("admin") &&
@@ -65,6 +66,7 @@ export default async function ImportsPage({
       roomTypeCodes={roomTypes.map(({ code }) => code)}
       allowBasicMedicalAccess={allowBasicMedicalAccess}
       canImportSchedules={canImportSchedules}
+      canManagePersonnel={canManagePersonnel}
       title="Lịch sử import"
       description="Theo dõi số dòng đã tạo, cảnh báo, lỗi và dữ liệu trùng."
       actions={

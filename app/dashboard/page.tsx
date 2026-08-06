@@ -29,6 +29,7 @@ export default async function DashboardPage() {
     roomTypes,
     allowBasicMedicalAccess,
     canImportSchedules,
+    canManagePersonnel,
   } = await getViewer();
   const roomTypeCodes = roomTypes.map(({ code }) => code);
   if (
@@ -129,6 +130,7 @@ export default async function DashboardPage() {
       roomTypeCodes={roomTypeCodes}
       allowBasicMedicalAccess={allowBasicMedicalAccess}
       canImportSchedules={canImportSchedules}
+      canManagePersonnel={canManagePersonnel}
       title="Tổng quan"
       description={`Hôm nay ${formatBusinessDate(todayText)} · Xin chào ${fullName}`}
       actions={

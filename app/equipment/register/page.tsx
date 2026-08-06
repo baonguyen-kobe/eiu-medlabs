@@ -241,6 +241,7 @@ export default async function EquipmentRegisterPage({
     roomTypes,
     allowBasicMedicalAccess,
     canImportSchedules,
+    canManagePersonnel,
   } = viewer;
   const roomTypeCodes = roomTypes.map(({ code }) => code);
   if (!canUseSkillsWorkspace(roles, roomTypeCodes)) {
@@ -426,6 +427,7 @@ export default async function EquipmentRegisterPage({
       roomTypeCodes={roomTypeCodes}
       allowBasicMedicalAccess={allowBasicMedicalAccess}
       canImportSchedules={canImportSchedules}
+      canManagePersonnel={canManagePersonnel}
       title="Đăng ký thiết bị"
       description="Phiếu trang thiết bị thực hành cho lớp Skills lab."
     >

@@ -235,6 +235,455 @@ test("personnel update is atomic, versioned, and separates import capability", a
   }
 });
 
+function personnelUpdateInput(profile, overrides = {}) {
+  return {
+    target_profile_id: profile.id,
+    target_email: profile.email,
+    target_full_name: profile.full_name,
+    target_phone: profile.phone,
+    target_title: profile.title,
+    target_roles: ["lecturer"],
+    target_can_import_schedules: false,
+    target_room_type_ids: ["40000000-0000-0000-0000-000000000001"],
+    target_email_room_type_ids: [],
+    target_allow_basic_medical_access: false,
+    target_is_active: true,
+    target_expected_version: profile.access_version,
+    ...overrides,
+  };
+}
+
+async function createPersonnelFixture(service, label) {
+  const safeLabel = label.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  const email = `${safeLabel}-${crypto.randomUUID()}@campus.local`;
+  const { data, error } = await service.auth.admin.createUser({
+    email,
+    password: "PersonnelAuthority123!",
+    email_confirm: true,
+    app_metadata: { preapproved: true },
+    user_metadata: { full_name: label },
+  });
+  assert.ifError(error);
+  const { data: profile, error: profileError } = await service
+    .from("profiles")
+    .select("id,email,full_name,phone,title,is_active,access_version")
+    .eq("id", data.user.id)
+    .single();
+  assert.ifError(profileError);
+  return profile;
+}
+
+async function configurePersonnelFixture(
+  actor,
+  service,
+  profileId,
+  roles,
+  roomTypeIds,
+) {
+  const { data: profile, error: profileError } = await service
+    .from("profiles")
+    .select("id,email,full_name,phone,title,is_active,access_version")
+    .eq("id", profileId)
+    .single();
+  assert.ifError(profileError);
+  const changed = await actor.supabase.rpc(
+    "admin_update_personnel",
+    personnelUpdateInput(profile, {
+      target_roles: roles,
+      target_room_type_ids: roomTypeIds,
+    }),
+  );
+  assert.ifError(changed.error);
+  return changed.data;
+}
+
+test("personnel authority chỉ cho Root và Bảo; Root/Admin hiện hữu được bảo vệ", async () => {
+  const service = serviceClient();
+  const root = await signIn("admin@campus.local", "LocalAdmin123!");
+  const manager = await signIn(
+    "bao.nguyen@eiu.edu.vn",
+    "LocalPersonnelManager123!",
+  );
+  const ordinaryAdmin = await signIn(
+    "admin.other@campus.local",
+    "LocalOtherAdmin123!",
+  );
+  const staff = await signIn("staff@campus.local", "LocalStaff123!");
+  const target = await createPersonnelFixture(service, "Authority target");
+  const raceTarget = await createPersonnelFixture(service, "Authority race");
+  try {
+    const contexts = await Promise.all(
+      [root, manager, ordinaryAdmin, staff].map(({ supabase }) =>
+        supabase.rpc("get_personnel_authority_context"),
+      ),
+    );
+    contexts.forEach(({ error }) => assert.ifError(error));
+    assert.equal(contexts[0].data.is_root_administrator, true);
+    assert.equal(contexts[0].data.can_manage_personnel, true);
+    assert.equal(contexts[1].data.is_secondary_personnel_manager, true);
+    assert.equal(contexts[1].data.can_manage_personnel, true);
+    assert.equal(contexts[2].data.can_manage_personnel, false);
+    assert.equal(contexts[3].data.can_manage_personnel, false);
+
+    for (const actor of [ordinaryAdmin, staff]) {
+      const listed = await actor.supabase.rpc("admin_list_personnel", {
+        target_page: 1,
+        target_page_size: 50,
+      });
+      assert.equal(listed.error?.code, "42501");
+      assert.equal(listed.error?.message, "PERSONNEL_MANAGER_REQUIRED");
+      const changed = await actor.supabase.rpc(
+        "admin_update_personnel",
+        personnelUpdateInput(target),
+      );
+      assert.equal(changed.error?.code, "42501");
+      assert.equal(changed.error?.message, "PERSONNEL_MANAGER_REQUIRED");
+    }
+
+    const directProfileWrite = await manager.supabase
+      .from("profiles")
+      .update({ can_import_schedules: true })
+      .eq("id", target.id)
+      .select("id");
+    assert.ok(
+      directProfileWrite.error || directProfileWrite.data?.length === 0,
+      "Personnel mutations must go through the atomic RPC",
+    );
+    const directRoleWrite = await manager.supabase.from("user_roles").insert({
+      user_id: target.id,
+      role: "admin",
+      created_by: manager.user.id,
+    });
+    assert.ok(directRoleWrite.error);
+
+    const rootManagerRace = await Promise.all([
+      root.supabase.rpc(
+        "admin_update_personnel",
+        personnelUpdateInput(raceTarget, { target_title: "Root writer" }),
+      ),
+      manager.supabase.rpc(
+        "admin_update_personnel",
+        personnelUpdateInput(raceTarget, { target_title: "Manager writer" }),
+      ),
+    ]);
+    assert.equal(
+      rootManagerRace.filter(({ error }) => !error).length,
+      1,
+      "exactly one concurrent writer succeeds",
+    );
+    assert.equal(
+      rootManagerRace.filter(
+        ({ error }) => error?.message === "PERSONNEL_CHANGED_RELOAD_REQUIRED",
+      ).length,
+      1,
+      "the other concurrent writer receives the stale-version error",
+    );
+
+    for (const [field, value] of [
+      ["target_expected_version", null],
+      ["target_is_active", null],
+      ["target_can_import_schedules", null],
+      ["target_allow_basic_medical_access", null],
+    ]) {
+      const result = await root.supabase.rpc("admin_update_personnel", {
+        ...personnelUpdateInput(target),
+        [field]: value,
+      });
+      assert.equal(result.error?.code, "22023");
+    }
+
+    const { data: rootProfile } = await service
+      .from("profiles")
+      .select("id,email,full_name,phone,title,is_active,access_version")
+      .eq("id", root.user.id)
+      .single();
+    const rootSelf = await root.supabase.rpc(
+      "admin_update_personnel",
+      personnelUpdateInput(rootProfile, { target_roles: ["admin"] }),
+    );
+    assert.equal(rootSelf.error?.message, "CANNOT_MANAGE_OWN_SECURITY");
+    const managerSelf = await manager.supabase.rpc(
+      "admin_update_personnel",
+      personnelUpdateInput(
+        {
+          ...(
+            await service
+              .from("profiles")
+              .select("id,email,full_name,phone,title,is_active,access_version")
+              .eq("id", manager.user.id)
+              .single()
+          ).data,
+        },
+        { target_roles: ["admin"] },
+      ),
+    );
+    assert.equal(managerSelf.error?.message, "CANNOT_MANAGE_OWN_SECURITY");
+
+    const protectedProfile = await service
+      .from("profiles")
+      .update({ is_active: false })
+      .eq("id", root.user.id);
+    assert.equal(
+      protectedProfile.error?.message,
+      "ROOT_ADMIN_SECURITY_IMMUTABLE",
+    );
+    const protectedRole = await service
+      .from("user_roles")
+      .delete()
+      .eq("user_id", root.user.id)
+      .eq("role", "admin");
+    assert.ok(protectedRole.error);
+
+    const promoted = await manager.supabase.rpc(
+      "admin_update_personnel",
+      personnelUpdateInput(target, { target_roles: ["admin"] }),
+    );
+    assert.ifError(promoted.error);
+    assert.deepEqual(promoted.data.roles, ["admin"]);
+    const managerSecondEdit = await manager.supabase.rpc(
+      "admin_update_personnel",
+      personnelUpdateInput(
+        { ...target, access_version: promoted.data.access_version },
+        { target_roles: ["admin"], target_full_name: "Denied" },
+      ),
+    );
+    assert.equal(
+      managerSecondEdit.error?.message,
+      "ROOT_ADMIN_REQUIRED_FOR_ADMIN_ACCOUNT",
+    );
+    const rootEdit = await root.supabase.rpc(
+      "admin_update_personnel",
+      personnelUpdateInput(
+        { ...target, access_version: promoted.data.access_version },
+        { target_roles: ["admin"], target_full_name: "Root managed admin" },
+      ),
+    );
+    assert.ifError(rootEdit.error);
+
+    const staleVersion = rootEdit.data.access_version;
+    const rootRace = await Promise.all([
+      root.supabase.rpc(
+        "admin_update_personnel",
+        personnelUpdateInput(
+          { ...target, access_version: staleVersion },
+          { target_roles: ["admin"], target_title: "Root session A" },
+        ),
+      ),
+      root.supabase.rpc(
+        "admin_update_personnel",
+        personnelUpdateInput(
+          { ...target, access_version: staleVersion },
+          { target_roles: ["admin"], target_title: "Root session B" },
+        ),
+      ),
+    ]);
+    assert.equal(rootRace.filter(({ error }) => !error).length, 1);
+    assert.equal(
+      rootRace.filter(
+        ({ error }) => error?.message === "PERSONNEL_CHANGED_RELOAD_REQUIRED",
+      ).length,
+      1,
+    );
+  } finally {
+    await Promise.all([
+      service.auth.admin.deleteUser(target.id),
+      service.auth.admin.deleteUser(raceTarget.id),
+    ]);
+  }
+});
+
+test("bulk personnel import rollback atomic, tăng version và bỏ qua tài khoản bảo vệ", async () => {
+  const service = serviceClient();
+  const root = await signIn("admin@campus.local", "LocalAdmin123!");
+  const first = await createPersonnelFixture(service, "Import first");
+  const second = await createPersonnelFixture(service, "Import second");
+  const roomType = "40000000-0000-0000-0000-000000000001";
+  const row = (profile, overrides = {}) => ({
+    id: profile.id,
+    email: profile.email,
+    full_name: profile.full_name,
+    phone: profile.phone,
+    title: profile.title,
+    roles: ["lecturer"],
+    room_type_ids: [roomType],
+    email_room_type_ids: [],
+    can_import_schedules: false,
+    allow_basic_medical_access: false,
+    is_active: true,
+    is_new: false,
+    access_version: profile.access_version,
+    ...overrides,
+  });
+  try {
+    const failed = await root.supabase.rpc("admin_apply_personnel_import", {
+      target_mode: "new",
+      target_file_name: "failure-injection.xlsx",
+      target_rows: [
+        row(first, { full_name: "Must rollback" }),
+        row(second, { roles: ["viewer", "staff"] }),
+      ],
+    });
+    assert.equal(failed.error?.code, "22023");
+    const { data: unchanged } = await service
+      .from("profiles")
+      .select("id,full_name,access_version")
+      .in("id", [first.id, second.id])
+      .order("id");
+    const originalById = new Map([
+      [first.id, first],
+      [second.id, second],
+    ]);
+    for (const profile of unchanged) {
+      assert.equal(profile.full_name, originalById.get(profile.id)?.full_name);
+      assert.equal(
+        profile.access_version,
+        originalById.get(profile.id)?.access_version,
+      );
+    }
+
+    const applied = await root.supabase.rpc("admin_apply_personnel_import", {
+      target_mode: "new",
+      target_file_name: "success.xlsx",
+      target_rows: [row(first, { full_name: "Imported atomically" })],
+    });
+    assert.ifError(applied.error);
+    assert.equal(applied.data.updated, 1);
+    const { data: afterImport } = await service
+      .from("profiles")
+      .select("full_name,access_version")
+      .eq("id", first.id)
+      .single();
+    assert.equal(afterImport.full_name, "Imported atomically");
+    assert.equal(afterImport.access_version, first.access_version + 1);
+
+    const staleDrawer = await root.supabase.rpc(
+      "admin_update_personnel",
+      personnelUpdateInput(first),
+    );
+    assert.equal(
+      staleDrawer.error?.message,
+      "PERSONNEL_CHANGED_RELOAD_REQUIRED",
+    );
+
+    const { data: principals } = await service
+      .from("system_security_principals")
+      .select("root_admin_id,personnel_manager_id")
+      .single();
+    const { data: protectedProfiles } = await service
+      .from("profiles")
+      .select("id,email,full_name,phone,title,is_active,access_version")
+      .in("id", [principals.root_admin_id, principals.personnel_manager_id]);
+    const protectedRows = protectedProfiles.map((profile) =>
+      row(profile, { roles: [], room_type_ids: [], is_active: false }),
+    );
+    const protectedImport = await root.supabase.rpc(
+      "admin_apply_personnel_import",
+      {
+        target_mode: "new",
+        target_file_name: "protected.xlsx",
+        target_rows: protectedRows,
+      },
+    );
+    assert.ifError(protectedImport.error);
+    assert.equal(protectedImport.data.skipped_protected, 2);
+    const { data: protectedAfter } = await service
+      .from("profiles")
+      .select("id,is_active,access_version")
+      .in("id", [principals.root_admin_id, principals.personnel_manager_id]);
+    for (const profile of protectedAfter) {
+      const before = protectedProfiles.find(({ id }) => id === profile.id);
+      assert.equal(profile.is_active, true);
+      assert.equal(profile.access_version, before.access_version);
+    }
+  } finally {
+    await Promise.all([
+      service.auth.admin.deleteUser(first.id),
+      service.auth.admin.deleteUser(second.id),
+    ]);
+  }
+});
+
+test("import validation statuses và hash RPC áp dụng giới hạn an toàn", async () => {
+  const service = serviceClient();
+  const importer = await signIn("importer@campus.local", "LocalImporter123!");
+  const staff = await signIn("staff@campus.local", "LocalStaff123!");
+  const batchId = crypto.randomUUID();
+  const roomTypeId = "40000000-0000-0000-0000-000000000001";
+  try {
+    assert.ifError(
+      (
+        await importer.supabase.from("import_batches").insert({
+          id: batchId,
+          original_file_name: "status-test.xlsx",
+          file_hash: crypto.randomUUID(),
+          status: "importing",
+          created_by: importer.user.id,
+          room_type_id: roomTypeId,
+        })
+      ).error,
+    );
+    for (const [index, status] of ["conflict", "system_error"].entries()) {
+      const recorded = await importer.supabase.rpc(
+        "record_import_validation_row",
+        {
+          target_batch_id: batchId,
+          target_row_number: index + 1,
+          target_hash: crypto.randomUUID(),
+          target_raw: {},
+          target_normalized: {},
+          target_status: status,
+          target_errors: [{ message: status }],
+          target_warnings: [],
+        },
+      );
+      assert.ifError(recorded.error);
+    }
+    const { data: statuses, error: statusesError } = await importer.supabase
+      .from("import_rows")
+      .select("validation_status")
+      .eq("import_batch_id", batchId)
+      .order("row_number");
+    assert.ifError(statusesError);
+    assert.deepEqual(
+      statuses.map(({ validation_status }) => validation_status),
+      ["conflict", "system_error"],
+    );
+
+    const nullHashes = await importer.supabase.rpc(
+      "find_existing_import_hashes",
+      { target_hashes: null, target_room_type_id: roomTypeId },
+    );
+    assert.equal(nullHashes.error?.code, "22023");
+    const empty = await importer.supabase.rpc("find_existing_import_hashes", {
+      target_hashes: [],
+      target_room_type_id: roomTypeId,
+    });
+    assert.ifError(empty.error);
+    assert.deepEqual(empty.data, []);
+    const max = await importer.supabase.rpc("find_existing_import_hashes", {
+      target_hashes: Array.from({ length: 500 }, (_, index) =>
+        String(index).padStart(64, "0"),
+      ),
+      target_room_type_id: roomTypeId,
+    });
+    assert.ifError(max.error);
+    const tooMany = await importer.supabase.rpc("find_existing_import_hashes", {
+      target_hashes: Array.from({ length: 501 }, (_, index) =>
+        String(index).padStart(64, "0"),
+      ),
+      target_room_type_id: roomTypeId,
+    });
+    assert.equal(tooMany.error?.code, "22023");
+    const noCapability = await staff.supabase.rpc(
+      "find_existing_import_hashes",
+      { target_hashes: [], target_room_type_id: roomTypeId },
+    );
+    assert.equal(noCapability.error?.code, "42501");
+  } finally {
+    await service.from("import_batches").delete().eq("id", batchId);
+  }
+});
+
 test("chỉ tài khoản nhân sự được duyệt trước mới có thể được tạo", async () => {
   const supabase = client();
   const email = `auth-whitelist-${crypto.randomUUID()}@eiu.edu.vn`;
@@ -601,30 +1050,21 @@ test("Staff ngoài room-type scope không quản lý được phiếu thiết b�
   const requestId = crypto.randomUUID();
   const catalogId = crypto.randomUUID();
   try {
+    const { data: scopedProfile, error: scopedProfileError } = await service
+      .from("profiles")
+      .select("id,email,full_name,phone,title,is_active,access_version")
+      .eq("id", staffId)
+      .single();
+    assert.ifError(scopedProfileError);
     assert.ifError(
       (
-        await service.from("user_roles").insert({
-          user_id: staffId,
-          role: "staff",
-          created_by: admin.user.id,
-        })
-      ).error,
-    );
-    assert.ifError(
-      (
-        await admin.supabase
-          .from("profile_room_types")
-          .delete()
-          .eq("profile_id", staffId)
-      ).error,
-    );
-    assert.ifError(
-      (
-        await service.from("profile_room_types").insert({
-          profile_id: staffId,
-          room_type_id: "40000000-0000-0000-0000-000000000002",
-          created_by: admin.user.id,
-        })
+        await admin.supabase.rpc(
+          "admin_update_personnel",
+          personnelUpdateInput(scopedProfile, {
+            target_roles: ["staff"],
+            target_room_type_ids: ["40000000-0000-0000-0000-000000000002"],
+          }),
+        )
       ).error,
     );
     assert.ifError(
@@ -1894,6 +2334,13 @@ test("direct RPC không cho Staff đổi lớp từ loại phòng ngoài scope s
   const roomId = crypto.randomUUID();
   const scheduleId = crypto.randomUUID();
   try {
+    await configurePersonnelFixture(
+      admin,
+      service,
+      staff.user.id,
+      ["staff"],
+      ["40000000-0000-0000-0000-000000000001"],
+    );
     const { error: roomError } = await admin.supabase.from("rooms").insert({
       id: roomId,
       room_code: `YC-${roomId.slice(0, 6)}`,
@@ -2383,18 +2830,28 @@ test("hash của lịch import đã hủy không chặn lần import sau", async
 });
 
 test("RLS giới hạn Y cơ sở, số sinh viên bắt buộc và đổi ngày chặn trùng phòng", async () => {
+  const service = serviceClient();
   const admin = await signIn("admin@campus.local", "LocalAdmin123!");
   const staff = await signIn("staff@campus.local", "LocalStaff123!");
   const roomId = crypto.randomUUID();
+  const roomCode = `YT${roomId.slice(0, 6)}`;
   const firstId = crypto.randomUUID();
   const secondId = crypto.randomUUID();
   const yScope = "40000000-0000-0000-0000-000000000002";
+
+  await configurePersonnelFixture(
+    admin,
+    service,
+    staff.user.id,
+    ["staff"],
+    ["40000000-0000-0000-0000-000000000001"],
+  );
 
   assert.ifError(
     (
       await admin.supabase.from("rooms").insert({
         id: roomId,
-        room_code: "YTEST",
+        room_code: roomCode,
         building_code: "YC",
         room_type_id: yScope,
       })
@@ -2439,14 +2896,12 @@ test("RLS giới hạn Y cơ sở, số sinh viên bắt buộc và đổi ngày
     .in("id", [firstId, secondId]);
   assert.equal(hidden.length, 0);
 
-  assert.ifError(
-    (
-      await admin.supabase.from("profile_room_types").insert({
-        profile_id: staff.user.id,
-        room_type_id: yScope,
-        created_by: admin.user.id,
-      })
-    ).error,
+  await configurePersonnelFixture(
+    admin,
+    service,
+    staff.user.id,
+    ["staff"],
+    ["40000000-0000-0000-0000-000000000001", yScope],
   );
   const { data: visible } = await staff.supabase
     .from("class_schedules")
@@ -2469,11 +2924,13 @@ test("RLS giới hạn Y cơ sở, số sinh viên bắt buộc và đổi ngày
     .delete()
     .in("id", [firstId, secondId]);
   await admin.supabase.from("rooms").delete().eq("id", roomId);
-  await admin.supabase
-    .from("profile_room_types")
-    .delete()
-    .eq("profile_id", staff.user.id)
-    .eq("room_type_id", yScope);
+  await configurePersonnelFixture(
+    admin,
+    service,
+    staff.user.id,
+    ["staff"],
+    ["40000000-0000-0000-0000-000000000001"],
+  );
 });
 
 test("Admin xóa được danh mục khi chỉ còn lịch hoặc ca đã hủy", async () => {
@@ -2685,6 +3142,7 @@ test("Admin xóa được danh mục khi chỉ còn lịch hoặc ca đã hủy"
 });
 
 test("Admin và Staff xóa phiếu, người dùng thường không thể xóa", async () => {
+  const service = serviceClient();
   const admin = await signIn("admin@campus.local", "LocalAdmin123!");
   const staff = await signIn("staff@campus.local", "LocalStaff123!");
   const lecturer = await signIn("giangvien@campus.local", "LocalLecturer123!");
@@ -2708,7 +3166,7 @@ test("Admin và Staff xóa phiếu, người dùng thường không thể xóa",
         .maybeSingle();
     assert.ifError(scopeReadError);
     if (!existingBasicMedicalScope) {
-      const { error: scopeInsertError } = await admin.supabase
+      const { error: scopeInsertError } = await service
         .from("profile_room_types")
         .insert({
           profile_id: admin.user.id,
@@ -2920,7 +3378,7 @@ test("Admin và Staff xóa phiếu, người dùng thường không thể xóa",
       .eq("id", equipmentCatalogItemId);
     await admin.supabase.from("rooms").delete().eq("id", basicRoomId);
     if (addedBasicMedicalScope) {
-      await admin.supabase
+      await service
         .from("profile_room_types")
         .delete()
         .eq("profile_id", admin.user.id)

@@ -32,6 +32,7 @@ export default async function OpenClassesPage({
     roomTypes,
     allowBasicMedicalAccess,
     canImportSchedules,
+    canManagePersonnel,
   } = await getViewer();
   const roomTypeCodes = roomTypes.map(({ code }) => code);
   if (!canUseSkillsWorkspace(roles, roomTypeCodes)) {
@@ -125,6 +126,7 @@ export default async function OpenClassesPage({
       roomTypeCodes={roomTypeCodes}
       allowBasicMedicalAccess={allowBasicMedicalAccess}
       canImportSchedules={canImportSchedules}
+      canManagePersonnel={canManagePersonnel}
       title="Lớp đang mở"
       description={`Toàn bộ lớp từ ${range.from.split("-").reverse().join("/")} đến ${range.to.split("-").reverse().join("/")}.`}
       actions={

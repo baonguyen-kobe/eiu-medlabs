@@ -20,6 +20,7 @@ export async function AdminShell({
     roomTypes,
     allowBasicMedicalAccess,
     canImportSchedules,
+    canManagePersonnel,
   } = await getViewer();
   return (
     <WorkspaceShell
@@ -28,6 +29,7 @@ export async function AdminShell({
       roomTypeCodes={roomTypes.map(({ code }) => code)}
       allowBasicMedicalAccess={allowBasicMedicalAccess}
       canImportSchedules={canImportSchedules}
+      canManagePersonnel={canManagePersonnel}
       title={title}
       description={description}
       actions={actions}

@@ -21,6 +21,10 @@ export type PersonnelListItem = {
   roles: AppRole[];
   room_type_ids: string[];
   email_room_type_ids: string[];
+  is_root_administrator: boolean;
+  is_security_principal: boolean;
+  is_current_admin: boolean;
+  can_edit_security: boolean;
 };
 
 type RoomType = { id: string; name: string; code: string };
@@ -46,10 +50,12 @@ export function PersonnelManagementList({
   initialItems,
   roomTypes,
   viewerId,
+  viewerIsRoot,
 }: {
   initialItems: PersonnelListItem[];
   roomTypes: RoomType[];
   viewerId: string;
+  viewerIsRoot: boolean;
 }) {
   const [items, setItems] = useState(initialItems);
   const [original, setOriginal] = useState<PersonnelListItem | null>(null);
@@ -111,7 +117,16 @@ export function PersonnelManagementList({
   }
 
   function submit() {
-    if (!draft || pending) return;
+    if (!draft || pending || !draft.can_edit_security) return;
+    if (
+      !viewerIsRoot &&
+      !original?.is_current_admin &&
+      draft.roles.includes("admin") &&
+      !window.confirm(
+        `Cấp quyền Quản trị viên cho ${draft.full_name}?\n\nSau khi lưu, chỉ Root Administrator mới có thể thay đổi quyền hoặc khóa tài khoản này.`,
+      )
+    )
+      return;
     if (!draft.is_active && original?.is_active) {
       if (
         !window.confirm(
@@ -178,6 +193,19 @@ export function PersonnelManagementList({
                     </span>
                     <span>
                       <strong>{item.full_name}</strong>
+                      <span className="personnel-badges">
+                        {item.is_root_administrator ? (
+                          <span className="permission-badge">
+                            Root Administrator
+                          </span>
+                        ) : null}
+                        {item.is_security_principal &&
+                        !item.is_root_administrator ? (
+                          <span className="permission-badge">
+                            Quản lý nhân sự
+                          </span>
+                        ) : null}
+                      </span>
                       <small>{item.email}</small>
                       {item.title ? <small>{item.title}</small> : null}
                     </span>
@@ -225,7 +253,7 @@ export function PersonnelManagementList({
                     type="button"
                     onClick={() => open(item)}
                   >
-                    Sửa
+                    {item.can_edit_security ? "Sửa" : "Xem"}
                   </button>
                 </td>
               </tr>
@@ -272,7 +300,14 @@ export function PersonnelManagementList({
                   {result.message}
                 </p>
               ) : null}
-              <fieldset disabled={pending}>
+              {!draft.can_edit_security ? (
+                <p className="action-feedback">
+                  {draft.is_root_administrator
+                    ? "Đây là tài khoản Root Administrator của hệ thống. Tài khoản này không thể bị khóa hoặc gỡ quyền Admin."
+                    : "Chỉ Root Administrator được thay đổi tài khoản đang có quyền Admin."}
+                </p>
+              ) : null}
+              <fieldset disabled={pending || !draft.can_edit_security}>
                 <legend>Thông tin cơ bản</legend>
                 <label>
                   Họ và tên
@@ -316,7 +351,7 @@ export function PersonnelManagementList({
                 </label>
               </fieldset>
 
-              <fieldset disabled={pending}>
+              <fieldset disabled={pending || !draft.can_edit_security}>
                 <legend>Vai trò chính</legend>
                 {(Object.keys(roleLabels) as AppRole[]).map((role) => (
                   <label className="check-label" key={role}>
@@ -337,7 +372,7 @@ export function PersonnelManagementList({
                 ) : null}
               </fieldset>
 
-              <fieldset disabled={pending}>
+              <fieldset disabled={pending || !draft.can_edit_security}>
                 <legend>Quyền bổ sung</legend>
                 <label className="check-label">
                   <input
@@ -382,7 +417,7 @@ export function PersonnelManagementList({
                 </label>
               </fieldset>
 
-              <fieldset disabled={pending}>
+              <fieldset disabled={pending || !draft.can_edit_security}>
                 <legend>Phạm vi phụ trách</legend>
                 {roomTypes.map((roomType) => {
                   const assigned = draft.room_type_ids.includes(roomType.id);
@@ -436,7 +471,7 @@ export function PersonnelManagementList({
                 })}
               </fieldset>
 
-              <fieldset disabled={pending}>
+              <fieldset disabled={pending || !draft.can_edit_security}>
                 <legend>Trạng thái</legend>
                 <label className="check-label">
                   <input
@@ -469,6 +504,7 @@ export function PersonnelManagementList({
                 onClick={submit}
                 disabled={
                   pending ||
+                  !draft.can_edit_security ||
                   !dirty ||
                   draft.roles.length === 0 ||
                   draft.room_type_ids.length === 0
