@@ -69,6 +69,13 @@
 | `npm run typecheck`                          | PASS                                      |
 | `npm run build`                              | PASS — 34 routes generated/built          |
 
+## GitHub Actions
+
+- Commit đã kiểm chứng: `cc95e3e62859ce86119ff990dbe1cbe39b8fb1d8`.
+- Workflow/job: [`verify` — run 31068901213](https://github.com/baonguyen-kobe/eiu-medlabs/actions/runs/31068901213/job/92512505700).
+- Kết quả: `completed/success`.
+- Tất cả bước đều xanh, gồm `npm ci`, format, audit, Supabase start/reset, seed, DB lint, ESLint, TypeScript, unit/integration, pgTAP, critical E2E và production build.
+
 ## Migration và rollback
 
 - Migration follow-up chỉ được tạo mới; không sửa migration lịch sử.
@@ -84,9 +91,9 @@
 1. Hard-delete/retention: cần một PR dữ liệu riêng, quyết định thời hạn và backfill audit.
 2. Chữ ký base64: cần thiết kế Supabase Storage, RLS bucket, backfill và kiểm tra PDF.
 3. Blocker triển khai rolling: tài liệu đã chốt nhưng chưa rehearsal do không được phép deploy/redeploy trong lượt này.
-4. Coverage: local critical suite xanh, nhưng GitHub Actions của commit mới phải xanh trước khi đổi PR sang Ready for review.
+4. Coverage ngoài critical suite: tiếp tục mở rộng ma trận vai trò đầy đủ trong PR sau; critical suite của PR hiện đã xanh cả local và GitHub Actions.
 
 ## Trạng thái PR
 
-- Commit follow-up sẽ được push trực tiếp vào `review/hardening-20260805`, vì vậy PR #1 tự cập nhật.
-- Không đề xuất chuyển PR sang **Ready for review** tại thời điểm viết tài liệu này. Chỉ thực hiện sau khi toàn bộ GitHub Actions của commit đã push hiển thị xanh.
+- Commit follow-up `cc95e3e` đã được push trực tiếp vào `review/hardening-20260805`, vì vậy PR #1 đã tự cập nhật.
+- Đề xuất chuyển PR #1 sang **Ready for review**: toàn bộ GitHub Actions của commit thay đổi code đã xanh. Các finding còn mở ở trên là phạm vi/decision đã ghi rõ, không bị che giấu hoặc tuyên bố đã xử lý.
