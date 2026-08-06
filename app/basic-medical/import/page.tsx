@@ -10,10 +10,17 @@ import {
 } from "@/lib/workspace-access";
 
 export default async function BasicMedicalImportPage() {
-  const { fullName, roles, roomTypes, allowBasicMedicalAccess } =
-    await getViewer();
+  const {
+    fullName,
+    roles,
+    roomTypes,
+    allowBasicMedicalAccess,
+    canImportSchedules,
+  } = await getViewer();
   const roomTypeCodes = roomTypes.map(({ code }) => code);
-  if (!canImportBasicMedicalSchedules(roles)) {
+  if (
+    !canImportBasicMedicalSchedules(roles, roomTypeCodes, canImportSchedules)
+  ) {
     redirect(
       canViewBasicMedicalSchedules(roles, roomTypeCodes)
         ? "/basic-medical/schedules"
@@ -26,6 +33,7 @@ export default async function BasicMedicalImportPage() {
       roles={roles}
       roomTypeCodes={roomTypeCodes}
       allowBasicMedicalAccess={allowBasicMedicalAccess}
+      canImportSchedules={canImportSchedules}
       title="Import lịch Y cơ sở"
       description="Kiểm tra dữ liệu theo phạm vi phòng và giảng viên Y cơ sở trước khi tạo lịch."
       actions={

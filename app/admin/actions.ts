@@ -468,10 +468,13 @@ export async function toggleProfile(formData: FormData) {
 export async function updateUserRole(formData: FormData) {
   const { supabase, userId } = await adminContext();
   const targetId = String(formData.get("user_id") ?? "");
-  const role = String(formData.get("role") ?? "") as
-    "admin" | "lecturer" | "staff" | "importer" | "viewer";
+  const role = String(formData.get("role") ?? "") as PersonnelRole;
   const enabled = String(formData.get("enabled")) === "true";
-  if (!["admin", "lecturer", "staff", "importer", "viewer"].includes(role))
+  if (
+    !["admin", "lecturer", "staff", "teaching_assistant", "viewer"].includes(
+      role,
+    )
+  )
     return;
   if (targetId === userId && role === "admin" && !enabled) return;
   if (targetId === userId && role === "viewer" && enabled) return;
@@ -509,7 +512,8 @@ function personnelRedirect(kind: "notice" | "error", message: string): never {
   redirect(`/admin/personnel?${kind}=${encodeURIComponent(message)}`);
 }
 
-type PersonnelRole = "admin" | "lecturer" | "staff" | "importer" | "viewer";
+type PersonnelRole =
+  "admin" | "lecturer" | "staff" | "teaching_assistant" | "viewer";
 
 const personnelRoleAliases = new Map<string, PersonnelRole>([
   ["admin", "admin"],
@@ -519,11 +523,17 @@ const personnelRoleAliases = new Map<string, PersonnelRole>([
   ["staff", "staff"],
   ["nhanvien", "staff"],
   ["chuyenvien", "staff"],
-  ["importer", "importer"],
-  ["nguoitaophieu", "importer"],
-  ["trogiang", "importer"],
+  ["teachingassistant", "teaching_assistant"],
+  ["trogiang", "teaching_assistant"],
   ["viewer", "viewer"],
   ["nguoixem", "viewer"],
+]);
+
+const legacyImportRoleAliases = new Set([
+  "importer",
+  "nguoitaophieu",
+  "nguoinhaplich",
+  "quyennhaplich",
 ]);
 
 function splitPersonnelImportValues(value: string) {
@@ -533,18 +543,20 @@ function splitPersonnelImportValues(value: string) {
     .filter(Boolean);
 }
 
-function parsePersonnelImportBoolean(value: string, rowNumber: number) {
+function parsePersonnelImportBoolean(
+  value: string,
+  rowNumber: number,
+  label = "Quyền Y cơ sở",
+) {
   if (!value) return null;
   const normalized = normalizeImportKey(value);
   if (["co", "true", "1", "yes", "x"].includes(normalized)) return true;
   if (["khong", "false", "0", "no"].includes(normalized)) return false;
-  throw new Error(
-    `Quyền Y cơ sở tại dòng ${rowNumber} chỉ nhận Có hoặc Không.`,
-  );
+  throw new Error(`${label} tại dòng ${rowNumber} chỉ nhận Có hoặc Không.`);
 }
 
 export async function createPersonnel(formData: FormData) {
-  const { supabase, userId } = await adminContext();
+  const { supabase } = await adminContext();
   const email = String(formData.get("email") ?? "")
     .trim()
     .toLowerCase();
@@ -556,7 +568,9 @@ export async function createPersonnel(formData: FormData) {
     .getAll("roles")
     .map(String)
     .filter((role) =>
-      ["admin", "lecturer", "staff", "importer", "viewer"].includes(role),
+      ["admin", "lecturer", "staff", "teaching_assistant", "viewer"].includes(
+        role,
+      ),
     ) as PersonnelRole[];
   const roomTypeIds = [
     ...new Set(formData.getAll("room_type_ids").map(String).filter(Boolean)),
@@ -571,6 +585,8 @@ export async function createPersonnel(formData: FormData) {
   );
   const allowBasicMedicalAccess =
     String(formData.get("allow_basic_medical_access")) === "true";
+  const canImportSchedules =
+    String(formData.get("can_import_schedules")) === "true";
 
   if (!email || !fullName || password.length < 8 || roles.length === 0) {
     personnelRedirect(
@@ -582,6 +598,17 @@ export async function createPersonnel(formData: FormData) {
     personnelRedirect(
       "error",
       "Vai trò Người xem là quyền chỉ đọc và không thể kết hợp với vai trò khác.",
+    );
+  }
+  if (
+    canImportSchedules &&
+    !roles.some((role) =>
+      ["staff", "lecturer", "teaching_assistant"].includes(role),
+    )
+  ) {
+    personnelRedirect(
+      "error",
+      "Quyền nhập lịch chỉ áp dụng cho Chuyên viên, Giảng viên hoặc Trợ giảng.",
     );
   }
 
@@ -610,42 +637,33 @@ export async function createPersonnel(formData: FormData) {
   }
 
   const targetId = data.user.id;
-  const { error: profileError } = await supabase
+  const { data: createdProfile } = await supabase
     .from("profiles")
-    .update({
-      email,
-      full_name: fullName,
-      phone,
-      title,
-      is_active: true,
-      allow_basic_medical_access: allowBasicMedicalAccess,
-    })
-    .eq("id", targetId);
-  const { error: roleError } = await supabase.from("user_roles").insert(
-    roles.map((role) => ({
-      user_id: targetId,
-      role,
-      created_by: userId,
-    })),
-  );
-  const { error: scopeError } = roomTypeIds.length
-    ? await supabase.from("profile_room_types").upsert(
-        roomTypeIds.map((roomTypeId) => ({
-          profile_id: targetId,
-          room_type_id: roomTypeId,
-          created_by: userId,
-          receive_schedule_emails: emailRoomTypeIds.has(roomTypeId),
-        })),
-      )
-    : { error: null };
+    .select("access_version")
+    .eq("id", targetId)
+    .single();
+  const { error: profileError } = await supabase.rpc("admin_update_personnel", {
+    target_profile_id: targetId,
+    target_email: email,
+    target_full_name: fullName,
+    target_phone: phone,
+    target_title: title,
+    target_roles: roles,
+    target_can_import_schedules: canImportSchedules,
+    target_room_type_ids: roomTypeIds,
+    target_email_room_type_ids: roles.includes("viewer")
+      ? [...emailRoomTypeIds]
+      : [],
+    target_allow_basic_medical_access: allowBasicMedicalAccess,
+    target_is_active: true,
+    target_expected_version: createdProfile?.access_version ?? 1,
+  });
 
-  if (profileError || roleError || scopeError) {
+  if (profileError) {
     await adminClient.auth.admin.deleteUser(targetId);
     personnelRedirect(
       "error",
-      profileError?.message ??
-        roleError?.message ??
-        scopeError?.message ??
+      personnelRpcMessage(profileError.message) ||
         "Không thể hoàn tất hồ sơ nhân sự.",
     );
   }
@@ -679,7 +697,7 @@ export async function importPersonnel(formData: FormData) {
       supabase
         .from("profiles")
         .select(
-          "id,email,full_name,phone,is_active,allow_basic_medical_access",
+          "id,email,full_name,phone,is_active,allow_basic_medical_access,can_import_schedules,access_version",
         ),
       supabase.from("user_roles").select("user_id,role"),
     ]);
@@ -722,9 +740,11 @@ export async function importPersonnel(formData: FormData) {
       roomTypeIds: string[];
       emailRoomTypeIds: string[];
       allowBasicMedicalAccess: boolean | null;
+      canImportSchedules: boolean;
       rowNumber: number;
     }> = [];
 
+    let compatibilityWarningCount = 0;
     rows.forEach((row, index) => {
       const rowNumber = index + 2;
       const fullName = importValue(row, "Họ và tên", "Họ tên", "full_name");
@@ -735,6 +755,11 @@ export async function importPersonnel(formData: FormData) {
       const phone = importValue(row, "Số điện thoại", "phone") || null;
       const title = importValue(row, "Chức danh", "title") || null;
       const roleText = importValue(row, "Vai trò", "roles", "role");
+      const importPermissionText = importValue(
+        row,
+        "Quyền nhập lịch",
+        "can_import_schedules",
+      );
       const roomTypeText = importValue(
         row,
         "Loại phòng",
@@ -760,16 +785,26 @@ export async function importPersonnel(formData: FormData) {
       }
 
       const roleValues = splitPersonnelImportValues(roleText);
-      const invalidRoleValues = roleValues.filter(
+      const legacyImportValues = roleValues.filter((role) =>
+        legacyImportRoleAliases.has(normalizeImportKey(role)),
+      );
+      const mainRoleValues = roleValues.filter(
+        (role) => !legacyImportRoleAliases.has(normalizeImportKey(role)),
+      );
+      const invalidRoleValues = mainRoleValues.filter(
         (role) => !personnelRoleAliases.has(normalizeImportKey(role)),
       );
-      const roles = [
+      let roles = [
         ...new Set(
-          roleValues.map((role) =>
+          mainRoleValues.map((role) =>
             personnelRoleAliases.get(normalizeImportKey(role)),
           ),
         ),
-      ];
+      ].filter(Boolean) as PersonnelRole[];
+      if (!roles.length && legacyImportValues.length > 0) {
+        roles = ["teaching_assistant"];
+        compatibilityWarningCount += 1;
+      }
       if (!roles.length || invalidRoleValues.length > 0) {
         const received = invalidRoleValues.length
           ? ` Giá trị chưa đúng: "${invalidRoleValues.join(", ")}".`
@@ -783,6 +818,18 @@ export async function importPersonnel(formData: FormData) {
           "Vai trò Người xem tại dòng " +
             rowNumber +
             " không thể kết hợp với vai trò khác.",
+        );
+      }
+      const parsedImportPermission = parsePersonnelImportBoolean(
+        importPermissionText,
+        rowNumber,
+        "Quyền nhập lịch",
+      );
+      const canImportSchedules =
+        parsedImportPermission ?? legacyImportValues.length > 0;
+      if (canImportSchedules && roles.includes("viewer")) {
+        throw new Error(
+          `Quyền nhập lịch tại dòng ${rowNumber} không áp dụng cho Người xem.`,
         );
       }
 
@@ -847,6 +894,7 @@ export async function importPersonnel(formData: FormData) {
           basicMedicalText,
           rowNumber,
         ),
+        canImportSchedules,
         rowNumber,
       });
     });
@@ -985,6 +1033,7 @@ export async function importPersonnel(formData: FormData) {
             title: row.title,
             is_active: true,
             allow_basic_medical_access: row.allowBasicMedicalAccess ?? false,
+            can_import_schedules: row.canImportSchedules,
           })),
           { onConflict: "id" },
         )
@@ -1022,7 +1071,11 @@ export async function importPersonnel(formData: FormData) {
     const { error: deactivateError } = obsoleteProfiles.length
       ? await supabase
           .from("profiles")
-          .update({ is_active: false })
+          .update({
+            is_active: false,
+            can_import_schedules: false,
+            allow_basic_medical_access: false,
+          })
           .in(
             "id",
             obsoleteProfiles.map(({ id }) => id),
@@ -1057,8 +1110,8 @@ export async function importPersonnel(formData: FormData) {
     personnelRedirect(
       "notice",
       mode === "new"
-        ? `Đã thêm ${createdCount} nhân sự mới từ ${file.name}. Dữ liệu hiện có được giữ nguyên.`
-        : `Đã thay danh sách nhân sự theo ${file.name}: ${createdCount} tạo mới, ${updatedCount} cập nhật, ${obsoleteProfiles.length} nhân sự cũ đã khóa; giữ nguyên ${administratorIds.size} tài khoản Quản trị viên${preservedAdministratorRows.length ? ` (${preservedAdministratorRows.length} dòng quản trị trong file được bỏ qua)` : ""}.`,
+        ? `Đã thêm ${createdCount} nhân sự mới từ ${file.name}. Dữ liệu hiện có được giữ nguyên.${compatibilityWarningCount ? ` ${compatibilityWarningCount} dòng Importer cũ đã được chuyển thành Trợ giảng + quyền nhập lịch.` : ""}`
+        : `Đã thay danh sách nhân sự theo ${file.name}: ${createdCount} tạo mới, ${updatedCount} cập nhật, ${obsoleteProfiles.length} nhân sự cũ đã khóa; giữ nguyên ${administratorIds.size} tài khoản Quản trị viên${preservedAdministratorRows.length ? ` (${preservedAdministratorRows.length} dòng quản trị trong file được bỏ qua)` : ""}.${compatibilityWarningCount ? ` ${compatibilityWarningCount} dòng Importer cũ đã được chuyển thành Trợ giảng + quyền nhập lịch.` : ""}`,
     );
   } catch (error) {
     if (error && typeof error === "object" && "digest" in error) throw error;
@@ -1183,4 +1236,193 @@ export async function updatePersonnel(formData: FormData) {
 
   revalidatePath("/admin/personnel");
   personnelRedirect("notice", "Đã cập nhật hồ sơ nhân sự.");
+}
+
+export type SavePersonnelResult = {
+  ok: boolean;
+  message: string;
+  personnel?: Record<string, unknown>;
+  code?: string;
+};
+
+function personnelRpcMessage(message: string) {
+  const mappings: Array<[string, string]> = [
+    [
+      "PERSONNEL_CHANGED_RELOAD_REQUIRED",
+      "Nhân sự đã được một quản trị viên khác cập nhật. Vui lòng tải lại dữ liệu trước khi lưu.",
+    ],
+    [
+      "VIEWER_ROLE_MUST_BE_EXCLUSIVE",
+      "Người xem không thể kết hợp với vai trò khác.",
+    ],
+    [
+      "IMPORT_PERMISSION_ROLE_REQUIRED",
+      "Quyền nhập lịch chỉ áp dụng cho Chuyên viên, Giảng viên hoặc Trợ giảng.",
+    ],
+    [
+      "EMAIL_SCOPE_VIEWER_ONLY",
+      "Chỉ Người xem mới cấu hình nhận email theo loại phòng.",
+    ],
+    [
+      "EMAIL_SCOPE_MUST_BE_ASSIGNED",
+      "Loại phòng nhận email phải nằm trong phạm vi được phân công.",
+    ],
+    [
+      "CANNOT_LOCK_CURRENT_ADMIN",
+      "Bạn không thể tự khóa tài khoản đang đăng nhập.",
+    ],
+    ["CANNOT_REMOVE_CURRENT_ADMIN", "Bạn không thể tự gỡ quyền Quản trị viên."],
+    [
+      "LAST_ACTIVE_ADMIN_REQUIRED",
+      "Hệ thống phải còn ít nhất một Quản trị viên đang hoạt động.",
+    ],
+    ["PERSONNEL_EMAIL_EXISTS", "Email đăng nhập đã được sử dụng."],
+    ["PERSONNEL_PHONE_EXISTS", "Số điện thoại đã được sử dụng."],
+    [
+      "BASIC_MEDICAL_PERMISSION_INVALID",
+      "Quyền tạo lịch Y cơ sở không phù hợp với vai trò hoặc phạm vi.",
+    ],
+  ];
+  return mappings.find(([code]) => message.includes(code))?.[1] ?? message;
+}
+
+export async function savePersonnelChanges(
+  formData: FormData,
+): Promise<SavePersonnelResult> {
+  const startedAt = performance.now();
+  const { supabase, userId } = await adminContext();
+  const targetId = String(formData.get("id") ?? "");
+  const email = String(formData.get("email") ?? "")
+    .trim()
+    .toLowerCase();
+  const fullName = String(formData.get("full_name") ?? "").trim();
+  const roles = [...new Set(formData.getAll("roles").map(String))].filter(
+    (role): role is PersonnelRole =>
+      ["admin", "staff", "lecturer", "teaching_assistant", "viewer"].includes(
+        role,
+      ),
+  );
+  const roomTypeIds = [
+    ...new Set(formData.getAll("room_type_ids").map(String).filter(Boolean)),
+  ];
+  const emailRoomTypeIds = [
+    ...new Set(
+      formData.getAll("email_room_type_ids").map(String).filter(Boolean),
+    ),
+  ];
+  const expectedVersion = Number(formData.get("access_version"));
+  const canImportSchedules = formData.get("can_import_schedules") === "true";
+  const allowBasicMedicalAccess =
+    formData.get("allow_basic_medical_access") === "true";
+  const isActive = formData.get("is_active") === "true";
+
+  if (
+    !targetId ||
+    !email ||
+    !/^\S+@\S+\.\S+$/.test(email) ||
+    !fullName ||
+    !Number.isInteger(expectedVersion) ||
+    roles.length === 0 ||
+    roomTypeIds.length === 0
+  ) {
+    return {
+      ok: false,
+      message: "Vui lòng nhập đủ thông tin, vai trò và phạm vi phụ trách.",
+    };
+  }
+
+  const { data: current, error: currentError } = await supabase
+    .from("profiles")
+    .select("email")
+    .eq("id", targetId)
+    .maybeSingle();
+  if (currentError || !current) {
+    return { ok: false, message: "Không tìm thấy nhân sự cần cập nhật." };
+  }
+
+  let adminClient;
+  try {
+    adminClient = createAdminClient();
+  } catch {
+    return {
+      ok: false,
+      message:
+        "Chưa cấu hình SUPABASE_SECRET_KEY cho thao tác quản trị tài khoản.",
+    };
+  }
+
+  const authStartedAt = performance.now();
+  const emailChanged = current.email.trim().toLowerCase() !== email;
+  if (emailChanged) {
+    const { error: authError } = await adminClient.auth.admin.updateUserById(
+      targetId,
+      { email, email_confirm: true },
+    );
+    if (authError) return { ok: false, message: authError.message };
+  }
+  const authMs = Math.round(performance.now() - authStartedAt);
+
+  const rpcStartedAt = performance.now();
+  const { data, error } = await supabase.rpc("admin_update_personnel", {
+    target_profile_id: targetId,
+    target_email: email,
+    target_full_name: fullName,
+    target_phone: String(formData.get("phone") ?? "").trim() || null,
+    target_title: String(formData.get("title") ?? "").trim() || null,
+    target_roles: roles,
+    target_can_import_schedules: canImportSchedules,
+    target_room_type_ids: roomTypeIds,
+    target_email_room_type_ids: roles.includes("viewer")
+      ? emailRoomTypeIds
+      : [],
+    target_allow_basic_medical_access: allowBasicMedicalAccess,
+    target_is_active: isActive,
+    target_expected_version: expectedVersion,
+  });
+  const rpcMs = Math.round(performance.now() - rpcStartedAt);
+
+  if (error) {
+    if (emailChanged) {
+      const { error: rollbackError } =
+        await adminClient.auth.admin.updateUserById(targetId, {
+          email: current.email,
+          email_confirm: true,
+        });
+      if (rollbackError) {
+        await adminClient.from("personnel_auth_reconciliation_logs").insert({
+          profile_id: targetId,
+          previous_email: current.email,
+          requested_email: email,
+          failure_stage: "database_rpc_and_auth_rollback",
+          error_message: `${error.message}; rollback: ${rollbackError.message}`,
+          created_by: userId,
+        });
+        return {
+          ok: false,
+          code: "AUTH_PROFILE_RECONCILIATION_REQUIRED",
+          message:
+            "Lưu dữ liệu thất bại và không thể hoàn tác email đăng nhập. Hệ thống đã ghi nhận để quản trị viên đối soát.",
+        };
+      }
+    }
+    return {
+      ok: false,
+      code: error.code,
+      message: personnelRpcMessage(error.message),
+    };
+  }
+
+  if (process.env.VERCEL_ENV !== "production") {
+    console.info("personnel.save.timing", {
+      auth_ms: authMs,
+      rpc_ms: rpcMs,
+      total_ms: Math.round(performance.now() - startedAt),
+    });
+  }
+  revalidatePath("/admin/personnel");
+  return {
+    ok: true,
+    message: "Đã cập nhật nhân sự.",
+    personnel: (data ?? {}) as Record<string, unknown>,
+  };
 }

@@ -22,9 +22,23 @@ export default async function ImportsPage({
 }: {
   searchParams: Promise<{ page?: string }>;
 }) {
-  const { supabase, fullName, roles, roomTypes, allowBasicMedicalAccess } =
-    await getViewer();
-  if (!roles.some((role) => ["admin", "staff"].includes(role))) {
+  const {
+    supabase,
+    fullName,
+    roles,
+    roomTypes,
+    allowBasicMedicalAccess,
+    canImportSchedules,
+  } = await getViewer();
+  if (
+    !roles.includes("admin") &&
+    !(
+      canImportSchedules &&
+      roles.some((role) =>
+        ["staff", "lecturer", "teaching_assistant"].includes(role),
+      )
+    )
+  ) {
     redirect("/dashboard");
   }
 
@@ -50,6 +64,7 @@ export default async function ImportsPage({
       roles={roles}
       roomTypeCodes={roomTypes.map(({ code }) => code)}
       allowBasicMedicalAccess={allowBasicMedicalAccess}
+      canImportSchedules={canImportSchedules}
       title="Lịch sử import"
       description="Theo dõi số dòng đã tạo, cảnh báo, lỗi và dữ liệu trùng."
       actions={

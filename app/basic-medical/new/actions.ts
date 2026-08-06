@@ -151,7 +151,7 @@ async function saveBasicMedicalRegistration(
       supabase.from("user_roles").select("role").eq("user_id", userId),
     ]);
   const hasRole = (rolesResult.data ?? []).some(({ role }) =>
-    ["admin", "staff", "importer"].includes(role),
+    ["admin", "staff", "teaching_assistant", "lecturer"].includes(role),
   );
   const allowedLecturerIds = new Set(
     ((lecturersResult.data ?? []) as Array<{ id: string }>).map(({ id }) => id),

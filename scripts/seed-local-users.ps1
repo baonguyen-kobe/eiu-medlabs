@@ -35,7 +35,8 @@ $users = @(
     password  = "LocalAdmin123!"
     full_name = "Nguyễn An"
     phone     = "0901000001"
-    roles     = @("admin", "staff", "lecturer", "importer")
+    roles     = @("admin", "staff", "lecturer")
+    can_import_schedules = $true
     allow_early_equipment_handover = $false
   },
   @{
@@ -57,14 +58,32 @@ $users = @(
     password  = "LocalImporter123!"
     full_name = "Trần Minh Anh"
     phone     = "0901000004"
-    roles     = @("lecturer", "importer")
+    roles     = @("lecturer")
+    can_import_schedules = $true
   },
   @{
     email     = "dieuphoi@eiu.edu.vn"
     password  = "LocalCoordinator123!"
     full_name = "Lê Hoàng Minh"
     phone     = "0901000005"
-    roles     = @("staff", "importer")
+    roles     = @("staff")
+    can_import_schedules = $true
+  },
+  @{
+    email     = "trogiang@campus.local"
+    password  = "LocalAssistant123!"
+    full_name = "Phạm Ngọc D"
+    phone     = "0901000006"
+    roles     = @("teaching_assistant")
+    can_import_schedules = $false
+  },
+  @{
+    email     = "trogiang.import@campus.local"
+    password  = "LocalAssistantImport123!"
+    full_name = "Võ Thùy E"
+    phone     = "0901000007"
+    roles     = @("teaching_assistant")
+    can_import_schedules = $true
   }
 )
 
@@ -116,6 +135,12 @@ foreach ($entry in $users) {
   & $npxCommand supabase db query --local `
     "update public.profiles set phone = '$($entry.phone)' where id = '$userId';" |
     Out-Null
+
+  if ($entry.can_import_schedules) {
+    & $npxCommand supabase db query --local `
+      "update public.profiles set can_import_schedules = true where id = '$userId';" |
+      Out-Null
+  }
 
   if ($entry.allow_early_equipment_handover) {
     & $npxCommand supabase db query --local `

@@ -17,6 +17,7 @@ export default async function MyEquipmentRequestsPage() {
     roles,
     roomTypes,
     allowBasicMedicalAccess,
+    canImportSchedules,
   } = await getViewer();
   const roomTypeCodes = roomTypes.map(({ code }) => code);
   if (!canUseSkillsWorkspace(roles, roomTypeCodes)) {
@@ -35,6 +36,7 @@ export default async function MyEquipmentRequestsPage() {
       roles={roles}
       roomTypeCodes={roomTypeCodes}
       allowBasicMedicalAccess={allowBasicMedicalAccess}
+      canImportSchedules={canImportSchedules}
       title="Phiếu thiết bị của tôi"
       description="Các phiếu mà bạn là người đăng ký hoặc giảng viên phụ trách."
     >

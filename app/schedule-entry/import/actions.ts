@@ -147,11 +147,17 @@ export async function validateScheduleRows(
 
   const [
     { data: roleRows },
+    { data: importerProfile },
     { data: courses },
     { data: rooms },
     { data: lecturers },
   ] = await Promise.all([
     supabase.from("user_roles").select("role").eq("user_id", userId),
+    supabase
+      .from("profiles")
+      .select("can_import_schedules")
+      .eq("id", userId)
+      .single(),
     supabase
       .from("courses")
       .select("id, course_code, course_name")
@@ -168,7 +174,15 @@ export async function validateScheduleRows(
   ]);
 
   const roles = (roleRows ?? []).map(({ role }) => role);
-  if (!roles.some((role) => ["admin", "staff", "importer"].includes(role))) {
+  if (
+    !roles.includes("admin") &&
+    !(
+      importerProfile?.can_import_schedules &&
+      roles.some((role) =>
+        ["staff", "lecturer", "teaching_assistant"].includes(role),
+      )
+    )
+  ) {
     return invalidValidation("Bạn không có quyền import lịch.");
   }
 
@@ -307,6 +321,7 @@ export async function validateScheduleRows(
   const { data: existingHashes, error: duplicateCheckError } =
     await supabase.rpc("find_existing_import_hashes", {
       target_hashes: hashesToCheck,
+      target_room_type_id: roomTypeId,
     });
   const existingHashSet = new Set(
     ((existingHashes ?? []) as Array<{ normalized_row_hash: string }>).map(
@@ -501,11 +516,17 @@ export async function importScheduleRows(
 
   const [
     { data: roleRows },
+    { data: importerProfile },
     { data: courses },
     { data: rooms },
     { data: lecturers },
   ] = await Promise.all([
     supabase.from("user_roles").select("role").eq("user_id", userId),
+    supabase
+      .from("profiles")
+      .select("can_import_schedules")
+      .eq("id", userId)
+      .single(),
     supabase
       .from("courses")
       .select("id, course_code, course_name")
@@ -522,7 +543,15 @@ export async function importScheduleRows(
   ]);
 
   const roles = (roleRows ?? []).map(({ role }) => role);
-  if (!roles.some((role) => ["admin", "staff", "importer"].includes(role))) {
+  if (
+    !roles.includes("admin") &&
+    !(
+      importerProfile?.can_import_schedules &&
+      roles.some((role) =>
+        ["staff", "lecturer", "teaching_assistant"].includes(role),
+      )
+    )
+  ) {
     return { ok: false, message: "Bạn không có quyền import lịch." };
   }
 
@@ -688,6 +717,7 @@ export async function importScheduleRows(
   const { data: existingHashes, error: duplicateCheckError } =
     await supabase.rpc("find_existing_import_hashes", {
       target_hashes: hashesToCheck,
+      target_room_type_id: roomTypeId,
     });
   const existingHashSet = new Set(
     ((existingHashes ?? []) as Array<{ normalized_row_hash: string }>).map(

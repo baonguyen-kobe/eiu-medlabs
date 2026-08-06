@@ -36,7 +36,7 @@ import { WorkspaceShell } from "@/components/workspace-shell";
 import { type ScheduleEvent } from "@/lib/demo-data";
 import { useScheduleRealtime } from "@/lib/use-schedule-realtime";
 
-type Role = "admin" | "lecturer" | "staff" | "importer" | "viewer";
+type Role = "admin" | "lecturer" | "staff" | "teaching_assistant" | "viewer";
 type View = "Tuần" | "Tháng" | "Danh sách";
 type ViewMode = "month" | "week" | "list";
 type PersonOption = { id: string; fullName: string };
@@ -75,7 +75,7 @@ const roleLabels: Record<Role, string> = {
   admin: "Quản trị viên",
   lecturer: "Giảng viên",
   staff: "Chuyên viên",
-  importer: "Trợ giảng",
+  teaching_assistant: "Trợ giảng",
   viewer: "Người xem",
 };
 
@@ -315,8 +315,8 @@ export function Dashboard({
       ? "staff"
       : roles.includes("lecturer")
         ? "lecturer"
-        : roles.includes("importer")
-          ? "importer"
+        : roles.includes("teaching_assistant")
+          ? "teaching_assistant"
           : "viewer";
   const selectableRoles: Role[] = roles;
   const [role, setRole] = useState<Role>(initialRole);
@@ -473,7 +473,7 @@ export function Dashboard({
   );
   const lecturerView = role === "lecturer";
   const classManager = roles.some((item) =>
-    ["admin", "staff", "importer"].includes(item),
+    ["admin", "staff", "teaching_assistant"].includes(item),
   );
 
   return (

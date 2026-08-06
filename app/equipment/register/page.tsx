@@ -240,6 +240,7 @@ export default async function EquipmentRegisterPage({
     roles,
     roomTypes,
     allowBasicMedicalAccess,
+    canImportSchedules,
   } = viewer;
   const roomTypeCodes = roomTypes.map(({ code }) => code);
   if (!canUseSkillsWorkspace(roles, roomTypeCodes)) {
@@ -247,7 +248,7 @@ export default async function EquipmentRegisterPage({
   }
   if (
     !roles.some((role) =>
-      ["lecturer", "staff", "admin", "importer"].includes(role),
+      ["lecturer", "staff", "admin", "teaching_assistant"].includes(role),
     )
   ) {
     redirect("/dashboard");
@@ -424,6 +425,7 @@ export default async function EquipmentRegisterPage({
       roles={roles}
       roomTypeCodes={roomTypeCodes}
       allowBasicMedicalAccess={allowBasicMedicalAccess}
+      canImportSchedules={canImportSchedules}
       title="Đăng ký thiết bị"
       description="Phiếu trang thiết bị thực hành cho lớp Skills lab."
     >

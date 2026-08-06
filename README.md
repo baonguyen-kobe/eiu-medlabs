@@ -30,7 +30,7 @@ Mở:
 | Admin + mọi vai trò          | admin@campus.local     | LocalAdmin123!       |
 | Giảng viên                   | giangvien@campus.local | LocalLecturer123!    |
 | Staff                        | staff@campus.local     | LocalStaff123!       |
-| Giảng viên + Người tạo phiếu | importer@campus.local  | LocalImporter123!    |
+| Giảng viên + quyền nhập lịch | importer@campus.local  | LocalImporter123!    |
 | Nhân viên + Người tạo phiếu  | dieuphoi@eiu.edu.vn    | LocalCoordinator123! |
 
 Các mật khẩu trên chỉ dùng cho local development.
@@ -114,7 +114,7 @@ miền để bảo vệ dữ liệu ngay cả khi callback bị bỏ qua.
 
 ## Template import
 
-Sau khi đăng nhập bằng admin, staff hoặc importer:
+Sau khi đăng nhập bằng admin hoặc tài khoản có quyền nhập lịch:
 
 - `/schedule-entry/import`
 - Template CSV: `/api/import-template/csv`

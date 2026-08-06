@@ -210,6 +210,7 @@ export default async function NewBasicMedicalSchedulePage({
     roles,
     roomTypes,
     allowBasicMedicalAccess,
+    canImportSchedules,
   } = viewer;
   const roomTypeCodes = roomTypes.map(({ code }) => code);
   if (
@@ -324,6 +325,7 @@ export default async function NewBasicMedicalSchedulePage({
       roles={roles}
       roomTypeCodes={roomTypeCodes}
       allowBasicMedicalAccess={allowBasicMedicalAccess}
+      canImportSchedules={canImportSchedules}
       title="Tạo lịch Y cơ sở"
       description="Phiếu đăng ký nhiều buổi thực hành Y cơ sở."
     >

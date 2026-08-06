@@ -18,7 +18,7 @@ export function canUseSkillsWorkspace(
   return (
     isWorkspaceManager(roles) ||
     (roomTypeCodes.includes(nursingSkillsRoomTypeCode) &&
-      hasAnyRole(roles, ["lecturer", "importer", "viewer"]))
+      hasAnyRole(roles, ["lecturer", "teaching_assistant", "viewer"]))
   );
 }
 
@@ -29,7 +29,7 @@ export function canViewBasicMedicalSchedules(
   return (
     isWorkspaceManager(roles) ||
     (roomTypeCodes.includes(basicMedicalRoomTypeCode) &&
-      hasAnyRole(roles, ["lecturer", "importer", "viewer"]))
+      hasAnyRole(roles, ["lecturer", "teaching_assistant", "viewer"]))
   );
 }
 
@@ -40,7 +40,7 @@ export function canViewBasicMedicalRegistrations(
   return (
     isWorkspaceManager(roles) ||
     (roomTypeCodes.includes(basicMedicalRoomTypeCode) &&
-      hasAnyRole(roles, ["lecturer", "importer", "viewer"]))
+      hasAnyRole(roles, ["lecturer", "teaching_assistant", "viewer"]))
   );
 }
 
@@ -53,12 +53,21 @@ export function canCreateBasicMedicalSchedules(
     isWorkspaceManager(roles) ||
     (allowBasicMedicalAccess &&
       roomTypeCodes.includes(basicMedicalRoomTypeCode) &&
-      hasAnyRole(roles, ["lecturer", "importer"]))
+      hasAnyRole(roles, ["lecturer", "teaching_assistant"]))
   );
 }
 
-export function canImportBasicMedicalSchedules(roles: AppRole[]) {
-  return isWorkspaceManager(roles);
+export function canImportBasicMedicalSchedules(
+  roles: AppRole[],
+  roomTypeCodes: string[],
+  canImportSchedules: boolean,
+) {
+  return (
+    roles.includes("admin") ||
+    (canImportSchedules &&
+      roomTypeCodes.includes(basicMedicalRoomTypeCode) &&
+      hasAnyRole(roles, ["staff", "lecturer", "teaching_assistant"]))
+  );
 }
 
 export function defaultWorkspacePath(

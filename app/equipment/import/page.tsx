@@ -8,8 +8,13 @@ import { getViewer } from "@/lib/viewer";
 export const metadata = { title: "Import Phiếu thiết bị" };
 
 export default async function EquipmentImportPage() {
-  const { fullName, roles, roomTypes, allowBasicMedicalAccess } =
-    await getViewer();
+  const {
+    fullName,
+    roles,
+    roomTypes,
+    allowBasicMedicalAccess,
+    canImportSchedules,
+  } = await getViewer();
   if (!roles.some((role) => ["admin", "staff"].includes(role))) {
     redirect("/equipment/mine");
   }
@@ -20,6 +25,7 @@ export default async function EquipmentImportPage() {
       roles={roles}
       roomTypeCodes={roomTypes.map(({ code }) => code)}
       allowBasicMedicalAccess={allowBasicMedicalAccess}
+      canImportSchedules={canImportSchedules}
       title="Import Phiếu thiết bị"
       description="Tải template chuẩn, kiểm tra từng dòng và đưa các phiếu thiết bị cũ lên hệ thống."
       actions={

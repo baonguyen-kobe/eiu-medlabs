@@ -5,7 +5,10 @@ create extension if not exists pgcrypto with schema extensions;
 
 create schema if not exists private;
 
-create type public.app_role as enum ('admin', 'lecturer', 'staff', 'importer', 'viewer');
+-- `importer` is retained only as a deprecated enum value so existing migration
+-- history can be replayed. Runtime code and new writes use the separate
+-- profiles.can_import_schedules permission instead.
+create type public.app_role as enum ('admin', 'lecturer', 'staff', 'teaching_assistant', 'importer', 'viewer');
 create type public.schedule_source as enum ('manual', 'import', 'google_sheet');
 create type public.schedule_status as enum ('draft', 'published', 'cancelled', 'completed');
 create type public.shift_status as enum ('scheduled', 'cancelled', 'completed');
@@ -21,11 +24,32 @@ create table public.profiles (
   title text,
   employee_code text,
   is_active boolean not null default true,
+  can_import_schedules boolean not null default false,
+  allow_basic_medical_access boolean not null default false,
+  access_version integer not null default 1,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint profiles_email_not_blank check (btrim(email) <> ''),
-  constraint profiles_name_not_blank check (btrim(full_name) <> '')
+  constraint profiles_name_not_blank check (btrim(full_name) <> ''),
+  constraint profiles_access_version_positive check (access_version >= 1)
 );
+
+create table public.personnel_auth_reconciliation_logs (
+  id uuid primary key default gen_random_uuid(),
+  profile_id uuid references public.profiles(id) on delete set null,
+  previous_email text not null,
+  requested_email text not null,
+  failure_stage text not null,
+  error_message text,
+  created_by uuid references public.profiles(id) on delete set null,
+  created_at timestamptz not null default now(),
+  resolved_at timestamptz,
+  constraint personnel_auth_reconciliation_stage_not_blank check (btrim(failure_stage) <> '')
+);
+
+create index personnel_auth_reconciliation_open_idx
+  on public.personnel_auth_reconciliation_logs (created_at desc)
+  where resolved_at is null;
 
 create unique index profiles_email_unique_idx on public.profiles (lower(email));
 create unique index profiles_employee_code_unique_idx
@@ -531,7 +555,7 @@ as $$
       select 1
       from public.user_roles
       where user_id = (select auth.uid())
-        and role in ('admin', 'staff', 'importer')
+        and role in ('admin', 'staff', 'lecturer', 'teaching_assistant')
     );
 $$;
 
@@ -1507,6 +1531,7 @@ alter table public.staff_shifts enable row level security;
 alter table public.audit_logs enable row level security;
 alter table public.email_notifications enable row level security;
 alter table public.email_delivery_settings enable row level security;
+alter table public.personnel_auth_reconciliation_logs enable row level security;
 
 create policy profiles_select_self_or_admin on public.profiles
 for select to authenticated
@@ -1528,6 +1553,14 @@ create policy user_roles_admin_all on public.user_roles
 for all to authenticated
 using ((select private.has_role('admin')))
 with check ((select private.has_role('admin')));
+
+create policy personnel_auth_reconciliation_admin_select
+on public.personnel_auth_reconciliation_logs
+for select to authenticated
+using ((select private.has_role('admin')));
+
+grant select on public.personnel_auth_reconciliation_logs to authenticated;
+grant all on public.personnel_auth_reconciliation_logs to service_role;
 
 create policy courses_select_active_users on public.courses
 for select to authenticated

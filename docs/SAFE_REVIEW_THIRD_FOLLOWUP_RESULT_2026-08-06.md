@@ -7,6 +7,10 @@
 - Branch: `review/hardening-20260805`
 - HEAD đã xác minh trước khi sửa: `feac6116523d2c95d45daaa82db7c419cac5a939`
 - Commit code third follow-up: `f12c73151f991052d2c679b766367fc09f9f6f21`
+- Final HEAD third follow-up: `51586a733c710fb1675fe457983049dd4bd98ac5`
+- GitHub Actions run: `31090172455`
+- Verify job: `92579014468`
+- Kết quả CI: `completed / success`
 - Không merge `main`.
 - Không deploy production.
 - Không redeploy Apps Script production.
@@ -65,7 +69,7 @@ Lần chạy `npm ci` đầu tiên trên Windows bị `EPERM` do ba worker Next.
 
 ## GitHub Actions
 
-CI phải được đánh giá trên commit cuối có chính báo cáo này. Run/job chính xác được ghi trong PR #1 và bàn giao cuối sau khi workflow `verify` kết thúc; không dùng CI của HEAD cũ để kết luận.
+CI third follow-up đã hoàn tất xanh trên HEAD `51586a733c710fb1675fe457983049dd4bd98ac5`: run `31090172455`, job `92579014468`, kết quả `completed / success`.
 
 ## Finding còn mở
 

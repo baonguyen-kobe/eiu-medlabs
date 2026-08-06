@@ -92,6 +92,14 @@ test("Người xem Y cơ sở chỉ xem lịch; admin và staff không phụ thu
       access.canCreateBasicMedicalSchedules([role], [], false),
       true,
     );
-    assert.equal(access.canImportBasicMedicalSchedules([role]), true);
+    assert.equal(
+      access.canImportBasicMedicalSchedules([role], [], false),
+      role === "admin",
+    );
   }
+
+  assert.equal(
+    access.canImportBasicMedicalSchedules(["staff"], ["basic_medical"], true),
+    true,
+  );
 });

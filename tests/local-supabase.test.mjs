@@ -54,6 +54,186 @@ function importScheduleHash({ courseCode, roomId, date, start, end }) {
   const key = parts.map((value) => `${[...value].length}:${value}`).join("");
   return createHash("sha256").update(key, "utf8").digest("hex");
 }
+test("teaching assistant manages only own manual schedules and needs import capability", async () => {
+  const assistant = await signIn("trogiang@campus.local", "LocalAssistant123!");
+  const assistantImporter = await signIn(
+    "trogiang.import@campus.local",
+    "LocalAssistantImport123!",
+  );
+  const lecturer = await signIn("giangvien@campus.local", "LocalLecturer123!");
+  const admin = await signIn("admin@campus.local", "LocalAdmin123!");
+  const scheduleId = crypto.randomUUID();
+  const foreignScheduleId = crypto.randomUUID();
+  const ownBatchId = crypto.randomUUID();
+  const deniedBatchId = crypto.randomUUID();
+  const row = {
+    course_id: "10000000-0000-0000-0000-000000000001",
+    course_code_snapshot: "NUR 101",
+    course_name_snapshot: "Physical assessment",
+    room_id: "20000000-0000-0000-0000-000000000001",
+    start_time: "07:30",
+    end_time: "09:30",
+    source: "manual",
+    schedule_status: "published",
+    student_count: 20,
+    published_at: new Date().toISOString(),
+    lecturer_id: lecturer.user.id,
+  };
+  try {
+    const ownInsert = await assistant.supabase.from("class_schedules").insert({
+      ...row,
+      id: scheduleId,
+      schedule_date: "2047-10-01",
+      created_by: assistant.user.id,
+      published_by: assistant.user.id,
+    });
+    assert.ifError(ownInsert.error);
+    assert.ifError(
+      (
+        await assistant.supabase.rpc("reschedule_class", {
+          target_schedule_id: scheduleId,
+          target_schedule_date: "2047-10-02",
+        })
+      ).error,
+    );
+
+    assert.ifError(
+      (
+        await admin.supabase.from("class_schedules").insert({
+          ...row,
+          id: foreignScheduleId,
+          schedule_date: "2047-10-03",
+          created_by: admin.user.id,
+          published_by: admin.user.id,
+        })
+      ).error,
+    );
+    assert.equal(
+      (
+        await assistant.supabase.rpc("reschedule_class", {
+          target_schedule_id: foreignScheduleId,
+          target_schedule_date: "2047-10-04",
+        })
+      ).error?.code,
+      "42501",
+    );
+
+    const deniedBatch = await assistant.supabase.from("import_batches").insert({
+      id: deniedBatchId,
+      original_file_name: "denied.xlsx",
+      file_hash: crypto.randomUUID(),
+      status: "importing",
+      created_by: assistant.user.id,
+      room_type_id: "40000000-0000-0000-0000-000000000001",
+    });
+    assert.equal(deniedBatch.error?.code, "42501");
+
+    const allowedBatch = await assistantImporter.supabase
+      .from("import_batches")
+      .insert({
+        id: ownBatchId,
+        original_file_name: "allowed.xlsx",
+        file_hash: crypto.randomUUID(),
+        status: "importing",
+        created_by: assistantImporter.user.id,
+        room_type_id: "40000000-0000-0000-0000-000000000001",
+      });
+    assert.ifError(allowedBatch.error);
+  } finally {
+    await admin.supabase
+      .from("class_schedules")
+      .delete()
+      .in("id", [scheduleId, foreignScheduleId]);
+    await admin.supabase.from("import_batches").delete().eq("id", ownBatchId);
+  }
+});
+
+test("personnel update is atomic, versioned, and separates import capability", async () => {
+  const service = serviceClient();
+  const admin = await signIn("admin@campus.local", "LocalAdmin123!");
+  const email = `personnel-${crypto.randomUUID()}@campus.local`;
+  const { data: created, error: createError } =
+    await service.auth.admin.createUser({
+      email,
+      password: "PersonnelAtomic123!",
+      email_confirm: true,
+      app_metadata: { preapproved: true },
+      user_metadata: { full_name: "Nhan su kiem thu" },
+    });
+  assert.ifError(createError);
+  const profileId = created.user.id;
+  try {
+    const { data: before, error: beforeError } = await admin.supabase
+      .from("profiles")
+      .select("access_version")
+      .eq("id", profileId)
+      .single();
+    assert.ifError(beforeError);
+    const input = {
+      target_profile_id: profileId,
+      target_email: email,
+      target_full_name: "Tro giang kiem thu",
+      target_phone: "0912345678",
+      target_title: "Tro giang",
+      target_roles: ["teaching_assistant"],
+      target_can_import_schedules: true,
+      target_room_type_ids: ["40000000-0000-0000-0000-000000000001"],
+      target_email_room_type_ids: [],
+      target_allow_basic_medical_access: false,
+      target_is_active: true,
+      target_expected_version: before.access_version,
+    };
+    const saved = await admin.supabase.rpc("admin_update_personnel", input);
+    assert.ifError(saved.error);
+    assert.equal(saved.data.can_import_schedules, true);
+    assert.deepEqual(saved.data.roles, ["teaching_assistant"]);
+
+    const stale = await admin.supabase.rpc("admin_update_personnel", {
+      ...input,
+      target_full_name: "Stale overwrite",
+    });
+    assert.equal(stale.error?.code, "P0001");
+    assert.equal(stale.error?.message, "PERSONNEL_CHANGED_RELOAD_REQUIRED");
+
+    const invalid = await admin.supabase.rpc("admin_update_personnel", {
+      ...input,
+      target_roles: ["viewer", "staff"],
+      target_expected_version: saved.data.access_version,
+    });
+    assert.equal(invalid.error?.code, "22023");
+
+    const { data: after, error: afterError } = await admin.supabase
+      .from("profiles")
+      .select("full_name, can_import_schedules, access_version")
+      .eq("id", profileId)
+      .single();
+    assert.ifError(afterError);
+    assert.equal(after.full_name, "Tro giang kiem thu");
+    assert.equal(after.can_import_schedules, true);
+    assert.equal(after.access_version, saved.data.access_version);
+
+    const listed = await admin.supabase.rpc("admin_list_personnel", {
+      target_query: email,
+      target_role: "teaching_assistant",
+      target_import_permission: "enabled",
+      target_status: "active",
+      target_page: 1,
+      target_page_size: 50,
+    });
+    assert.ifError(listed.error);
+    assert.equal(listed.data.length, 1);
+    assert.equal(listed.data[0].id, profileId);
+
+    const deprecatedRole = await service.from("user_roles").insert({
+      user_id: profileId,
+      role: "importer",
+      created_by: admin.user.id,
+    });
+    assert.equal(deprecatedRole.error?.code, "22023");
+  } finally {
+    await service.auth.admin.deleteUser(profileId);
+  }
+});
 
 test("chỉ tài khoản nhân sự được duyệt trước mới có thể được tạo", async () => {
   const supabase = client();
@@ -69,7 +249,7 @@ test("chỉ tài khoản nhân sự được duyệt trước mới có thể đ
   assert.equal(data.user, null);
 });
 
-test("Importer chỉ sửa, phân công và xóa lịch do mình tạo hoặc batch của mình", async () => {
+test("quyền nhập lịch chỉ quản lý batch của mình và Trợ giảng chỉ quản lý lịch mình tạo", async () => {
   const service = serviceClient();
   const admin = await signIn("admin@campus.local", "LocalAdmin123!");
   const importer = await signIn("importer@campus.local", "LocalImporter123!");
@@ -90,16 +270,24 @@ test("Importer chỉ sửa, phân công và xóa lịch do mình tạo hoặc ba
   const otherIdSchedule = crypto.randomUUID();
   const ownBatchId = crypto.randomUUID();
   const otherBatchId = crypto.randomUUID();
-  const ownBatchScheduleId = crypto.randomUUID();
-  const otherBatchScheduleId = crypto.randomUUID();
+  let ownBatchScheduleId = null;
+  let otherBatchScheduleId = null;
   try {
     assert.ifError(
       (
         await service.from("user_roles").insert({
           user_id: otherId,
-          role: "importer",
+          role: "teaching_assistant",
           created_by: admin.user.id,
         })
+      ).error,
+    );
+    assert.ifError(
+      (
+        await service
+          .from("profiles")
+          .update({ can_import_schedules: true })
+          .eq("id", otherId)
       ).error,
     );
     assert.ifError(
@@ -117,6 +305,7 @@ test("Importer chỉ sửa, phân công và xóa lịch do mình tạo hoặc ba
         id: ownBatchId,
         original_file_name: "own.xlsx",
         file_hash: crypto.randomUUID(),
+        status: "importing",
         created_by: importer.user.id,
         room_type_id: "40000000-0000-0000-0000-000000000001",
       },
@@ -124,6 +313,7 @@ test("Importer chỉ sửa, phân công và xóa lịch do mình tạo hoặc ba
         id: otherBatchId,
         original_file_name: "other.xlsx",
         file_hash: crypto.randomUUID(),
+        status: "importing",
         created_by: otherId,
         room_type_id: "40000000-0000-0000-0000-000000000001",
       },
@@ -149,57 +339,89 @@ test("Importer chỉ sửa, phân công và xóa lịch do mình tạo hoặc ba
     };
     assert.ifError(
       (
-        await importer.supabase.from("class_schedules").insert([
-          {
-            ...base,
-            id: ownId,
-            schedule_date: "2039-09-01",
-            created_by: importer.user.id,
-            published_by: importer.user.id,
-          },
-          {
-            ...base,
-            id: ownBatchScheduleId,
-            schedule_date: "2039-09-03",
-            source: "import",
-            import_batch_id: ownBatchId,
-            created_by: importer.user.id,
-            published_by: importer.user.id,
-          },
-        ])
+        await service.from("class_schedules").insert({
+          ...base,
+          id: ownId,
+          schedule_date: "2039-09-01",
+          lecturer_id: importer.user.id,
+          created_by: importer.user.id,
+          published_by: importer.user.id,
+        })
       ).error,
     );
     assert.ifError(
       (
-        await otherImporter.supabase.from("class_schedules").insert([
-          {
-            ...base,
-            id: otherIdSchedule,
-            schedule_date: "2039-09-02",
-            lecturer_id: importer.user.id,
-            created_by: otherId,
-            published_by: otherId,
-          },
-          {
-            ...base,
-            id: otherBatchScheduleId,
-            schedule_date: "2039-09-04",
-            source: "import",
-            import_batch_id: otherBatchId,
-            created_by: otherId,
-            published_by: otherId,
-          },
-        ])
+        await service.from("class_schedules").insert({
+          ...base,
+          id: otherIdSchedule,
+          schedule_date: "2039-09-02",
+          lecturer_id: importer.user.id,
+          created_by: otherId,
+          published_by: otherId,
+        })
       ).error,
     );
-    assert.ifError(
-      (
-        await admin.supabase
-          .from("class_schedules")
-          .update({ created_by: otherId, published_by: otherId })
-          .eq("id", ownBatchScheduleId)
-      ).error,
+    const createImported = async (actor, batchId, date, lecturerId) =>
+      actor.supabase.rpc("create_import_schedule_row", {
+        target_batch_id: batchId,
+        target_row_number: 1,
+        target_hash: importScheduleHash({
+          courseCode: "NUR 101",
+          roomId: base.room_id,
+          date,
+          start: base.start_time,
+          end: base.end_time,
+        }),
+        target_raw: {},
+        target_normalized: {},
+        target_status: "imported",
+        target_errors: [],
+        target_warnings: [],
+        target_course_id: base.course_id,
+        target_course_code: base.course_code_snapshot,
+        target_course_name: base.course_name_snapshot,
+        target_room_id: base.room_id,
+        target_lecturer_id: lecturerId,
+        target_date: date,
+        target_start: base.start_time,
+        target_end: base.end_time,
+        target_note: null,
+        target_student_count: base.student_count,
+      });
+    const ownImported = await createImported(
+      importer,
+      ownBatchId,
+      "2039-09-03",
+      lecturer.user.id,
     );
+    assert.ifError(ownImported.error);
+    ownBatchScheduleId = ownImported.data;
+    const otherImported = await createImported(
+      otherImporter,
+      otherBatchId,
+      "2039-09-04",
+      lecturer.user.id,
+    );
+    assert.ifError(otherImported.error);
+    otherBatchScheduleId = otherImported.data;
+    const { data: ownBatchState, error: ownBatchStateError } =
+      await importer.supabase
+        .from("class_schedules")
+        .select("id, source, import_batch_id, created_by")
+        .eq("id", ownBatchScheduleId)
+        .single();
+    assert.ifError(ownBatchStateError);
+    assert.equal(ownBatchState.source, "import");
+    assert.equal(ownBatchState.import_batch_id, ownBatchId);
+    assert.equal(ownBatchState.created_by, importer.user.id);
+    const { data: ownBatchStateRow, error: ownBatchError } =
+      await importer.supabase
+        .from("import_batches")
+        .select("id, created_by, room_type_id")
+        .eq("id", ownBatchId)
+        .single();
+    assert.ifError(ownBatchError);
+    assert.equal(ownBatchStateRow.created_by, importer.user.id);
 
     const lecturerReschedule = await importer.supabase.rpc("reschedule_class", {
       target_schedule_id: otherIdSchedule,
@@ -254,7 +476,7 @@ test("Importer chỉ sửa, phân công và xóa lịch do mình tạo hoặc ba
       (
         await importer.supabase.rpc("assign_class_lecturers", {
           target_schedule_id: ownId,
-          target_lecturer_ids: [lecturer.user.id],
+          target_lecturer_ids: [importer.user.id, lecturer.user.id],
         })
       ).error,
     );
@@ -296,10 +518,9 @@ test("Importer chỉ sửa, phân công và xóa lịch do mình tạo hoặc ba
     assert.ifError(
       (
         await admin.supabase
-          .from("user_roles")
-          .delete()
-          .eq("user_id", importer.user.id)
-          .eq("role", "importer")
+          .from("profiles")
+          .update({ can_import_schedules: false })
+          .eq("id", importer.user.id)
       ).error,
     );
     assert.ifError(
@@ -321,11 +542,10 @@ test("Importer chỉ sửa, phân công và xóa lịch do mình tạo hoặc ba
     );
     assert.ifError(
       (
-        await admin.supabase.from("user_roles").insert({
-          user_id: importer.user.id,
-          role: "importer",
-          created_by: admin.user.id,
-        })
+        await admin.supabase
+          .from("profiles")
+          .update({ can_import_schedules: true })
+          .eq("id", importer.user.id)
       ).error,
     );
 
@@ -337,23 +557,22 @@ test("Importer chỉ sửa, phân công và xóa lịch do mình tạo hoặc ba
       .single();
     assert.ifError(ownDelete.error);
   } finally {
-    await admin.supabase.from("user_roles").upsert(
-      {
-        user_id: importer.user.id,
-        role: "importer",
-        created_by: admin.user.id,
-      },
-      { onConflict: "user_id,role" },
-    );
+    await admin.supabase
+      .from("profiles")
+      .update({ can_import_schedules: true })
+      .eq("id", importer.user.id);
     await admin.supabase
       .from("class_schedules")
       .delete()
-      .in("id", [
-        ownId,
-        otherIdSchedule,
-        ownBatchScheduleId,
-        otherBatchScheduleId,
-      ]);
+      .in(
+        "id",
+        [
+          ownId,
+          otherIdSchedule,
+          ownBatchScheduleId,
+          otherBatchScheduleId,
+        ].filter(Boolean),
+      );
     await admin.supabase
       .from("import_batches")
       .delete()
@@ -748,7 +967,7 @@ test("tối đa hai giảng viên nhận được lớp khi đăng ký đồng t
   await admin.supabase.from("class_schedules").delete().eq("id", scheduleId);
 });
 
-test("importer tạo lịch, phân công giảng viên đúng phạm vi và được xóa", async () => {
+test("giảng viên có quyền import vẫn chỉ tạo lịch manual khi tự phân công", async () => {
   const admin = await signIn("admin@campus.local", "LocalAdmin123!");
   const importer = await signIn("importer@campus.local", "LocalImporter123!");
   const scheduleId = crypto.randomUUID();
@@ -767,6 +986,7 @@ test("importer tạo lịch, phân công giảng viên đúng phạm vi và đư
     start_time: "13:30",
     end_time: "16:30",
     source: "manual",
+    lecturer_id: importer.user.id,
     created_by: importer.user.id,
   };
 
@@ -790,7 +1010,7 @@ test("importer tạo lịch, phân công giảng viên đúng phạm vi và đư
       schedule_status: "published",
       published_by: importer.user.id,
       published_at: new Date().toISOString(),
-      lecturer_id: admin.user.id,
+      lecturer_id: importer.user.id,
     });
   assert.ifError(assignmentError);
 
@@ -1225,6 +1445,7 @@ test("giảng viên được tạo lớp Skills lab mới trong loại phòng c�
     created_by: lecturer.user.id,
     published_by: lecturer.user.id,
     published_at: new Date().toISOString(),
+    lecturer_id: lecturer.user.id,
   });
   assert.ifError(error);
 
@@ -1259,6 +1480,7 @@ test("chỉ Admin hoặc Staff được chuyển trạng thái phiếu thiết b
       created_by: admin.user.id,
       published_by: admin.user.id,
       published_at: new Date().toISOString(),
+      lecturer_id: lecturer.user.id,
     });
   assert.ifError(scheduleError);
 
@@ -1398,6 +1620,7 @@ test("người đăng ký được điều chỉnh nội dung nhưng không đư
       created_by: lecturer.user.id,
       published_by: lecturer.user.id,
       published_at: new Date().toISOString(),
+      lecturer_id: lecturer.user.id,
     });
     assert.ifError(error);
   }
@@ -2113,6 +2336,7 @@ test("hash của lịch import đã hủy không chặn lần import sau", async
 
     const active = await importer.supabase.rpc("find_existing_import_hashes", {
       target_hashes: [hash],
+      target_room_type_id: "40000000-0000-0000-0000-000000000001",
     });
     assert.ifError(active.error);
     assert.equal(active.data.length, 1);
@@ -2131,7 +2355,10 @@ test("hash của lịch import đã hủy không chặn lần import sau", async
     );
     const cancelled = await importer.supabase.rpc(
       "find_existing_import_hashes",
-      { target_hashes: [hash] },
+      {
+        target_hashes: [hash],
+        target_room_type_id: "40000000-0000-0000-0000-000000000001",
+      },
     );
     assert.ifError(cancelled.error);
     assert.equal(cancelled.data.length, 0);

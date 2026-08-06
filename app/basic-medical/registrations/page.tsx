@@ -37,6 +37,7 @@ export default async function BasicMedicalRegistrationsPage({
     roles,
     roomTypes,
     allowBasicMedicalAccess,
+    canImportSchedules,
   } = await getViewer();
   const roomTypeCodes = roomTypes.map(({ code }) => code);
   if (!canViewBasicMedicalRegistrations(roles, roomTypeCodes)) {
@@ -109,6 +110,7 @@ export default async function BasicMedicalRegistrationsPage({
       roles={roles}
       roomTypeCodes={roomTypeCodes}
       allowBasicMedicalAccess={allowBasicMedicalAccess}
+      canImportSchedules={canImportSchedules}
       title="Phiếu Y cơ sở"
       description="Theo dõi xác nhận từng buổi học và tình trạng thiết bị trong phòng."
     >

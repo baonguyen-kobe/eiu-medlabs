@@ -25,6 +25,10 @@ alter table public.profiles
   add column if not exists allow_basic_medical_access boolean not null default false;
 alter table public.profiles
   add column if not exists allow_early_equipment_handover boolean not null default false;
+alter table public.profiles
+  add column if not exists can_import_schedules boolean not null default false;
+alter table public.profiles
+  add column if not exists access_version integer not null default 1;
 
 alter table public.rooms
   add column if not exists room_type_id uuid references public.room_types(id) on delete restrict;
@@ -173,8 +177,85 @@ as $$
     select 1
     from public.user_roles as roles
     where roles.user_id = (select auth.uid())
-      and roles.role in ('admin', 'staff', 'importer')
+      and roles.role in ('admin', 'staff')
   );
+$$;
+
+create or replace function private.can_import_schedules(target_room_type_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select (select private.is_active_user()) and (
+    (select private.has_role('admin'))
+    or (
+      exists (
+        select 1 from public.profiles profiles
+        where profiles.id = (select auth.uid())
+          and profiles.can_import_schedules
+      )
+      and exists (
+        select 1 from public.user_roles roles
+        where roles.user_id = (select auth.uid())
+          and roles.role in ('staff', 'lecturer', 'teaching_assistant')
+      )
+      and exists (
+        select 1 from public.profile_room_types scopes
+        where scopes.profile_id = (select auth.uid())
+          and scopes.room_type_id = target_room_type_id
+      )
+    )
+  );
+$$;
+
+create or replace function private.can_create_manual_schedule_for(
+  target_room_id uuid,
+  target_lecturer_ids uuid[]
+)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  actor_id uuid := (select auth.uid());
+  target_room_type_id uuid;
+  lecturer_ids uuid[] := array_remove(coalesce(target_lecturer_ids, '{}'::uuid[]), null);
+  valid_lecturers boolean := false;
+begin
+  if actor_id is null or not (select private.is_active_user()) then return false; end if;
+  select rooms.room_type_id into target_room_type_id
+  from public.rooms rooms where rooms.id = target_room_id and rooms.is_active;
+  if target_room_type_id is null or not (select private.has_room_type(target_room_type_id)) then
+    return false;
+  end if;
+  if cardinality(lecturer_ids) > 2
+    or cardinality(lecturer_ids) <> cardinality(array(select distinct unnest(lecturer_ids))) then
+    return false;
+  end if;
+  valid_lecturers := not exists (
+    select 1 from unnest(lecturer_ids) requested(id)
+    where not exists (
+      select 1 from public.profiles profiles
+      where profiles.id = requested.id and profiles.is_active
+        and exists (select 1 from public.user_roles roles where roles.user_id = profiles.id and roles.role = 'lecturer')
+        and exists (select 1 from public.profile_room_types scopes where scopes.profile_id = profiles.id and scopes.room_type_id = target_room_type_id)
+    )
+  );
+  if not valid_lecturers then return false; end if;
+  if (select private.has_role('admin')) then return true; end if;
+  if (select private.has_role('staff')) then return true; end if;
+  if (select private.has_role('teaching_assistant')) then
+    return cardinality(lecturer_ids) > 0;
+  end if;
+  if (select private.has_role('lecturer')) then
+    return cardinality(lecturer_ids) > 0 and actor_id = any(lecturer_ids);
+  end if;
+  return false;
+end;
 $$;
 
 create or replace function private.can_modify_class_schedule(
@@ -192,11 +273,12 @@ declare
   schedule_row public.class_schedules;
   room_type_value uuid;
   in_scope boolean := false;
-  importer_owns boolean := false;
+  import_batch_owns boolean := false;
   lecturer_is_related boolean := false;
   can_admin boolean := false;
   can_staff boolean := false;
-  can_importer boolean := false;
+  can_import_owner boolean := false;
+  can_teaching_assistant boolean := false;
   can_lecturer boolean := false;
 begin
   if actor_id is null or not (select private.is_active_user())
@@ -210,7 +292,7 @@ begin
   where rooms.id = schedule_row.room_id;
   in_scope := room_type_value is not null
     and (select private.has_room_type(room_type_value));
-  importer_owns := schedule_row.created_by = actor_id or exists (
+  import_batch_owns := schedule_row.source = 'import' and exists (
     select 1 from public.import_batches batches
     where batches.id = schedule_row.import_batch_id
       and batches.created_by = actor_id
@@ -219,9 +301,12 @@ begin
     or coalesce(actor_id in (schedule_row.lecturer_id, schedule_row.lecturer_2_id), false);
   can_admin := (select private.has_role('admin'));
   can_staff := (select private.has_role('staff')) and in_scope;
-  can_importer := (select private.has_role('importer'))
+  can_import_owner := in_scope and import_batch_owns
+    and exists (select 1 from public.profiles profiles where profiles.id=actor_id and profiles.is_active and profiles.can_import_schedules)
+    and exists (select 1 from public.user_roles roles where roles.user_id=actor_id and roles.role in ('staff','lecturer','teaching_assistant'));
+  can_teaching_assistant := (select private.has_role('teaching_assistant'))
     and in_scope
-    and importer_owns;
+    and schedule_row.created_by = actor_id;
   if (select private.has_role('lecturer')) and target_action in ('reschedule', 'details') then
     can_lecturer := in_scope and lecturer_is_related;
   end if;
@@ -230,9 +315,13 @@ begin
       and schedule_row.created_by = actor_id
       and room_type_value = '40000000-0000-0000-0000-000000000001'::uuid;
   end if;
+  if (select private.has_role('lecturer')) and target_action = 'assign_lecturers' then
+    can_lecturer := in_scope and schedule_row.created_by = actor_id;
+  end if;
   return coalesce(can_admin, false)
     or coalesce(can_staff, false)
-    or coalesce(can_importer, false)
+    or coalesce(can_import_owner, false)
+    or coalesce(can_teaching_assistant, false)
     or coalesce(can_lecturer, false);
 end;
 $$;
@@ -263,12 +352,16 @@ revoke execute on function private.is_admin() from public, anon;
 revoke execute on function private.has_room_type(uuid) from public, anon;
 revoke execute on function private.can_access_room(uuid) from public, anon;
 revoke execute on function private.can_manage_class_room(uuid) from public, anon;
+revoke all on function private.can_import_schedules(uuid) from public, anon;
+revoke all on function private.can_create_manual_schedule_for(uuid, uuid[]) from public, anon;
 revoke all on function private.can_modify_class_schedule(uuid, text) from public, anon;
 revoke execute on function private.profile_has_room_type(uuid, uuid) from public, anon;
 grant execute on function private.is_admin() to authenticated;
 grant execute on function private.has_room_type(uuid) to authenticated;
 grant execute on function private.can_access_room(uuid) to authenticated;
 grant execute on function private.can_manage_class_room(uuid) to authenticated;
+grant execute on function private.can_import_schedules(uuid) to authenticated;
+grant execute on function private.can_create_manual_schedule_for(uuid, uuid[]) to authenticated;
 grant execute on function private.can_modify_class_schedule(uuid, text) to authenticated;
 grant execute on function private.profile_has_room_type(uuid, uuid) to authenticated;
 
@@ -322,18 +415,13 @@ create policy class_schedules_scoped_insert on public.class_schedules
 for insert to authenticated
 with check (
   (
-    (select private.can_manage_class_room(room_id))
-    or (
-      (select private.has_role('lecturer'))
-      and (select private.can_access_room(room_id))
-      and exists (
-        select 1 from public.rooms as lecturer_room
-        where lecturer_room.id = room_id
-          and lecturer_room.room_type_id = '40000000-0000-0000-0000-000000000001'::uuid
-      )
-    )
+    (select private.can_create_manual_schedule_for(
+      room_id,
+      array_remove(array[lecturer_id, lecturer_2_id]::uuid[], null)
+    ))
   )
   and created_by = (select auth.uid())
+  and source = 'manual'
   and schedule_status = 'published'
   and published_by = (select auth.uid())
   and published_at is not null
@@ -410,7 +498,7 @@ for select to authenticated
 using (
   (select private.has_room_type(room_type_id))
   and (
-    created_by = (select auth.uid())
+    (created_by = (select auth.uid()) and (select private.can_import_schedules(room_type_id)))
     or (select private.has_role('admin'))
     or (select private.has_role('staff'))
   )
@@ -420,8 +508,7 @@ drop policy if exists import_batches_insert on public.import_batches;
 create policy import_batches_scoped_insert on public.import_batches
 for insert to authenticated
 with check (
-  (select private.can_create_schedule_entries())
-  and (select private.has_room_type(room_type_id))
+  (select private.can_import_schedules(room_type_id))
   and created_by = (select auth.uid())
 );
 
@@ -432,12 +519,12 @@ using (
   (select private.has_room_type(room_type_id))
   and (
     (select private.has_role('admin'))
-    or (created_by = (select auth.uid()) and status not in ('completed', 'failed'))
+    or ((select private.can_import_schedules(room_type_id)) and created_by = (select auth.uid()) and status not in ('completed', 'failed'))
   )
 )
 with check (
   (select private.has_room_type(room_type_id))
-  and ((select private.has_role('admin')) or created_by = (select auth.uid()))
+  and ((select private.has_role('admin')) or ((select private.can_import_schedules(room_type_id)) and created_by = (select auth.uid())))
 );
 
 grant select on public.room_types, public.profile_room_types to authenticated;
@@ -515,8 +602,7 @@ security definer
 set search_path = ''
 as $$
 begin
-  if not (select private.can_create_schedule_entries())
-     or not (select private.has_room_type(target_room_type_id)) then
+  if not (select private.can_import_schedules(target_room_type_id)) then
     raise exception 'ROOM_TYPE_SCOPE_REQUIRED' using errcode = '42501';
   end if;
   return query
@@ -627,6 +713,11 @@ begin
     )
   ) then
     raise exception 'LECTURER_ROOM_TYPE_MISMATCH' using errcode = '42501';
+  end if;
+  if (select private.has_role('lecturer'))
+    and not ((select private.has_role('admin')) or (select private.has_role('staff')) or (select private.has_role('teaching_assistant')))
+    and (select auth.uid()) <> all(normalized_ids) then
+    raise exception 'LECTURER_MUST_REMAIN_ASSIGNED' using errcode = '42501';
   end if;
 
   update public.class_schedules
@@ -831,9 +922,6 @@ declare
   selected_room_type_id uuid;
   canonical_hash text;
 begin
-  if not (select private.can_create_schedule_entries()) then
-    raise exception 'SCHEDULE_CREATOR_ROLE_REQUIRED' using errcode = '42501';
-  end if;
   if target_status not in ('imported', 'warning') then
     raise exception 'INVALID_IMPORT_ROW_STATUS' using errcode = '22023';
   end if;
@@ -848,6 +936,9 @@ begin
   where batches.id = target_batch_id and batches.created_by = caller_id and batches.status = 'importing';
   if batch_room_type_id is null then
     raise exception 'IMPORT_BATCH_NOT_WRITABLE' using errcode = '42501';
+  end if;
+  if not (select private.can_import_schedules(batch_room_type_id)) then
+    raise exception 'IMPORT_PERMISSION_REQUIRED' using errcode = '42501';
   end if;
   select rooms.room_type_id into selected_room_type_id from public.rooms as rooms where rooms.id = target_room_id;
   if selected_room_type_id is null or selected_room_type_id <> batch_room_type_id
@@ -949,7 +1040,8 @@ declare
   normalized_ids uuid[] := coalesce(target_lecturer_ids, '{}'::uuid[]);
   is_admin boolean := (select private.has_role('admin'));
   is_staff boolean := (select private.has_role('staff'));
-  is_importer boolean := (select private.has_role('importer'));
+  can_import_owner boolean := false;
+  is_teaching_assistant boolean := (select private.has_role('teaching_assistant'));
   can_manage_details boolean := false;
 begin
   if not (select private.can_modify_class_schedule(target_schedule_id, 'details')) then
@@ -960,6 +1052,13 @@ begin
   for update;
   if before_row.id is null then raise exception 'CLASS_NOT_AVAILABLE' using errcode = 'P0001'; end if;
   select rooms.room_type_id into source_room_type from public.rooms rooms where rooms.id = before_row.room_id;
+  can_import_owner := before_row.source = 'import'
+    and (select private.can_import_schedules(source_room_type))
+    and exists (
+      select 1 from public.import_batches batches
+      where batches.id = before_row.import_batch_id
+        and batches.created_by = actor_id
+    );
 
   select room_type_id into target_room_type from public.rooms where id = target_room_id and is_active;
   if target_room_type is null then raise exception 'ROOM_TYPE_SCOPE_REQUIRED' using errcode = '42501'; end if;
@@ -967,13 +1066,13 @@ begin
     can_manage_details := true;
   elsif is_staff then
     can_manage_details := (select private.has_room_type(source_room_type)) and (select private.has_room_type(target_room_type));
-  elsif is_importer then
+  elsif is_teaching_assistant then
     can_manage_details := (select private.has_room_type(source_room_type))
       and (select private.has_room_type(target_room_type))
-      and (before_row.created_by = actor_id or exists (
-        select 1 from public.import_batches batches
-        where batches.id = before_row.import_batch_id and batches.created_by = actor_id
-      ));
+      and before_row.created_by = actor_id;
+  elsif can_import_owner then
+    can_manage_details := (select private.has_room_type(source_room_type))
+      and (select private.has_room_type(target_room_type));
   end if;
 
   if not can_manage_details then
@@ -1006,6 +1105,11 @@ begin
         and exists (select 1 from public.profile_room_types scopes where scopes.profile_id = lecturer_id and scopes.room_type_id = target_room_type)
     )
   ) then raise exception 'LECTURER_ROOM_TYPE_MISMATCH' using errcode = '42501'; end if;
+  if (select private.has_role('lecturer'))
+    and not (is_admin or is_staff or is_teaching_assistant or can_import_owner)
+    and actor_id <> all(normalized_ids) then
+    raise exception 'LECTURER_MUST_REMAIN_ASSIGNED' using errcode = '42501';
+  end if;
 
   update public.class_schedules set
     schedule_date = target_schedule_date, start_time = target_start_time, end_time = target_end_time,
@@ -1449,3 +1553,117 @@ $$;
 
 revoke all on function public.delete_catalog_shift_template(uuid) from public, anon;
 grant execute on function public.delete_catalog_shift_template(uuid) to authenticated;
+
+-- Fourth follow-up: import RPCs require the capability in the requested scope.
+grant insert, update, delete on public.class_schedules to service_role;
+grant insert, update, delete on public.import_batches to service_role;
+grant insert, update, delete on public.import_rows to service_role;
+
+-- Scope every import-only RPC and direct row insert to the explicit capability.
+drop function if exists public.find_existing_import_hashes(text[]);
+
+create or replace function public.find_existing_import_hashes(
+  target_hashes text[],
+  target_room_type_id uuid
+)
+returns table(normalized_row_hash text)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  if not (select private.can_import_schedules(target_room_type_id)) then
+    raise exception 'IMPORT_PERMISSION_REQUIRED' using errcode = '42501';
+  end if;
+
+  return query
+  select distinct rows.normalized_row_hash
+  from public.import_rows rows
+  join public.class_schedules schedules on schedules.id = rows.class_schedule_id
+  join public.rooms rooms on rooms.id = schedules.room_id
+  where rows.normalized_row_hash = any(coalesce(target_hashes, array[]::text[]))
+    and rows.validation_status in ('imported', 'warning')
+    and schedules.schedule_status <> 'cancelled'
+    and rooms.room_type_id = target_room_type_id;
+end;
+$$;
+
+revoke all on function public.find_existing_import_hashes(text[], uuid) from public, anon;
+grant execute on function public.find_existing_import_hashes(text[], uuid) to authenticated;
+
+revoke all on function public.import_hash_exists(text) from authenticated;
+
+create or replace function public.record_import_validation_row(
+  target_batch_id uuid,
+  target_row_number integer,
+  target_hash text,
+  target_raw jsonb,
+  target_normalized jsonb,
+  target_status public.import_row_status,
+  target_errors jsonb,
+  target_warnings jsonb
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  caller_id uuid := (select auth.uid());
+  row_id uuid;
+  batch_room_type_id uuid;
+begin
+  if target_status not in ('error', 'duplicate') then
+    raise exception 'INVALID_IMPORT_ROW_STATUS' using errcode = '22023';
+  end if;
+
+  select batches.room_type_id
+  into batch_room_type_id
+  from public.import_batches batches
+  where batches.id = target_batch_id
+    and batches.created_by = caller_id
+    and batches.status = 'importing';
+
+  if batch_room_type_id is null then
+    raise exception 'IMPORT_BATCH_NOT_WRITABLE' using errcode = '42501';
+  end if;
+  if not (select private.can_import_schedules(batch_room_type_id)) then
+    raise exception 'IMPORT_PERMISSION_REQUIRED' using errcode = '42501';
+  end if;
+
+  insert into public.import_rows (
+    import_batch_id, row_number, source_row_id, normalized_row_hash,
+    raw_data, normalized_data, validation_status, errors, warnings
+  ) values (
+    target_batch_id, target_row_number, null, target_hash,
+    coalesce(target_raw, '{}'::jsonb), coalesce(target_normalized, '{}'::jsonb),
+    target_status, coalesce(target_errors, '[]'::jsonb),
+    coalesce(target_warnings, '[]'::jsonb)
+  )
+  returning id into row_id;
+
+  return row_id;
+end;
+$$;
+
+revoke all on function public.record_import_validation_row(
+  uuid, integer, text, jsonb, jsonb, public.import_row_status, jsonb, jsonb
+) from public, anon;
+grant execute on function public.record_import_validation_row(
+  uuid, integer, text, jsonb, jsonb, public.import_row_status, jsonb, jsonb
+) to authenticated;
+
+drop policy if exists import_rows_insert on public.import_rows;
+create policy import_rows_insert on public.import_rows
+for insert to authenticated
+with check (
+  exists (
+    select 1
+    from public.import_batches batches
+    where batches.id = import_rows.import_batch_id
+      and batches.created_by = (select auth.uid())
+      and batches.status = 'importing'
+      and (select private.can_import_schedules(batches.room_type_id))
+  )
+);

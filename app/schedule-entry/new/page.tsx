@@ -23,8 +23,15 @@ export default async function NewSchedulePage({
 }: {
   searchParams: Promise<{ returnTo?: string }>;
 }) {
-  const { supabase, fullName, roles, roomTypes, allowBasicMedicalAccess } =
-    await getViewer();
+  const {
+    supabase,
+    userId,
+    fullName,
+    roles,
+    roomTypes,
+    allowBasicMedicalAccess,
+    canImportSchedules,
+  } = await getViewer();
   const roomTypeCodes = roomTypes.map(({ code }) => code);
   if (!canUseSkillsWorkspace(roles, roomTypeCodes)) {
     redirect(defaultWorkspacePath(roles, roomTypeCodes));
@@ -52,7 +59,7 @@ export default async function NewSchedulePage({
 
   if (
     !roles.some((role) =>
-      ["admin", "staff", "importer", "lecturer"].includes(role),
+      ["admin", "staff", "teaching_assistant", "lecturer"].includes(role),
     )
   ) {
     redirect("/dashboard");
@@ -81,6 +88,7 @@ export default async function NewSchedulePage({
       roles={roles}
       roomTypeCodes={roomTypeCodes}
       allowBasicMedicalAccess={allowBasicMedicalAccess}
+      canImportSchedules={canImportSchedules}
       title="Tạo lịch Skills lab"
       description="Lịch hợp lệ được tạo và hiển thị ngay trong hệ thống."
     >
@@ -89,8 +97,14 @@ export default async function NewSchedulePage({
         rooms={rooms ?? []}
         lecturers={lecturers ?? []}
         canAssignLecturer={roles.some((role) =>
-          ["admin", "staff", "importer"].includes(role),
+          ["admin", "staff", "teaching_assistant", "lecturer"].includes(role),
         )}
+        defaultLecturerId={
+          roles.includes("lecturer") &&
+          !roles.some((role) => ["admin", "staff"].includes(role))
+            ? userId
+            : undefined
+        }
         scope="skills_lab"
         returnTo={returnTo}
       />

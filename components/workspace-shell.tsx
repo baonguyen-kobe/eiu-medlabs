@@ -46,15 +46,15 @@ const roleLabels: Record<AppRole, string> = {
   admin: "Quản trị viên",
   lecturer: "Giảng viên",
   staff: "Chuyên viên",
-  importer: "Trợ giảng",
+  teaching_assistant: "Trợ giảng",
   viewer: "Người xem",
 };
 
 const primaryRoleOrder: AppRole[] = [
   "admin",
   "staff",
+  "teaching_assistant",
   "lecturer",
-  "importer",
   "viewer",
 ];
 const sidebarScrollStorageKey = "medlabs-sidebar-scroll:v1";
@@ -77,6 +77,7 @@ function buildNavigation(
   roles: AppRole[],
   roomTypeCodes: string[],
   allowBasicMedicalAccess: boolean,
+  canImportSchedules: boolean,
 ): Array<{ label: string; items: NavItem[] }> {
   const isAdmin = roles.includes("admin");
   const isStaff = roles.includes("staff") && !isAdmin;
@@ -84,12 +85,17 @@ function buildNavigation(
   const hasSkillsScope = roomTypeCodes.includes("nursing_skills");
   const hasSkillsWorkspace = canUseSkillsWorkspace(roles, roomTypeCodes);
   const canImport =
-    isAdmin || isStaff || (roles.includes("importer") && hasSkillsScope);
+    isAdmin ||
+    (canImportSchedules &&
+      hasSkillsScope &&
+      roles.some((role) =>
+        ["staff", "lecturer", "teaching_assistant"].includes(role),
+      ));
   const canCreateSkills =
     isAdmin ||
     isStaff ||
     (hasSkillsScope &&
-      roles.some((role) => ["lecturer", "importer"].includes(role)));
+      roles.some((role) => ["lecturer", "teaching_assistant"].includes(role)));
   const isViewer = roles.includes("viewer");
   const groups: Array<{ label: string; items: NavItem[] }> = [];
 
@@ -248,7 +254,7 @@ function buildNavigation(
               },
             ]
           : []),
-        ...(isAdmin || isStaff
+        ...(isAdmin || isStaff || canImport
           ? [
               {
                 label: "Lịch sử import",
@@ -297,7 +303,9 @@ function buildNavigation(
         activeIcon: ClipboardListSolid,
       });
     }
-    if (canImportBasicMedicalSchedules(roles)) {
+    if (
+      canImportBasicMedicalSchedules(roles, roomTypeCodes, canImportSchedules)
+    ) {
       yItems.push({
         label: "Import lịch Y cơ sở",
         href: "/basic-medical/import",
@@ -364,6 +372,7 @@ export function WorkspaceShell({
   children,
   roomTypeCodes = [],
   allowBasicMedicalAccess = false,
+  canImportSchedules = false,
 }: {
   fullName: string;
   roles: AppRole[];
@@ -373,6 +382,7 @@ export function WorkspaceShell({
   children: React.ReactNode;
   roomTypeCodes?: string[];
   allowBasicMedicalAccess?: boolean;
+  canImportSchedules?: boolean;
 }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -387,6 +397,7 @@ export function WorkspaceShell({
     roles,
     roomTypeCodes,
     allowBasicMedicalAccess,
+    canImportSchedules,
   );
   const primaryRoleLabel = getPrimaryRoleLabel(roles);
   const initials = getNameInitials(fullName);

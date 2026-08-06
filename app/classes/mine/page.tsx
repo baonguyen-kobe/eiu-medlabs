@@ -29,6 +29,7 @@ export default async function MyClassesPage({
     roles,
     roomTypes,
     allowBasicMedicalAccess,
+    canImportSchedules,
   } = await getViewer();
   const roomTypeCodes = roomTypes.map(({ code }) => code);
   if (!canUseSkillsWorkspace(roles, roomTypeCodes)) {
@@ -89,6 +90,7 @@ export default async function MyClassesPage({
       roles={roles}
       roomTypeCodes={roomTypeCodes}
       allowBasicMedicalAccess={allowBasicMedicalAccess}
+      canImportSchedules={canImportSchedules}
       title="Lớp của tôi"
       description="Theo dõi lớp đã nhận và rút lớp chưa bắt đầu khi cần."
     >

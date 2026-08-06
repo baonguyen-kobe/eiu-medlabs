@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
-export type AppRole = "admin" | "lecturer" | "staff" | "importer" | "viewer";
+export type AppRole =
+  "admin" | "staff" | "lecturer" | "teaching_assistant" | "viewer";
 
 export async function getViewer() {
   const supabase = await createClient();
@@ -13,7 +14,9 @@ export async function getViewer() {
     await Promise.all([
       supabase
         .from("profiles")
-        .select("full_name, title, allow_basic_medical_access")
+        .select(
+          "full_name, title, allow_basic_medical_access, can_import_schedules",
+        )
         .eq("id", userId)
         .single(),
       supabase.from("user_roles").select("role").eq("user_id", userId),
@@ -42,5 +45,6 @@ export async function getViewer() {
     roles: (roleRows ?? []).map(({ role }) => role as AppRole),
     roomTypes,
     allowBasicMedicalAccess: profile?.allow_basic_medical_access ?? false,
+    canImportSchedules: profile?.can_import_schedules ?? false,
   };
 }

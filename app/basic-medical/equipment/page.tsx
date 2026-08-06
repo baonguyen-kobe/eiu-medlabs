@@ -24,8 +24,14 @@ export default async function BasicMedicalEquipmentPage({
   searchParams: Promise<{ tab?: string; notice?: string; error?: string }>;
 }) {
   const query = await searchParams;
-  const { supabase, fullName, roles, roomTypes, allowBasicMedicalAccess } =
-    await getViewer();
+  const {
+    supabase,
+    fullName,
+    roles,
+    roomTypes,
+    allowBasicMedicalAccess,
+    canImportSchedules,
+  } = await getViewer();
   const roomTypeCodes = roomTypes.map(({ code }) => code);
   if (!isWorkspaceManager(roles)) redirect("/dashboard");
   const canManage = isWorkspaceManager(roles);
@@ -80,6 +86,7 @@ export default async function BasicMedicalEquipmentPage({
       roles={roles}
       roomTypeCodes={roomTypeCodes}
       allowBasicMedicalAccess={allowBasicMedicalAccess}
+      canImportSchedules={canImportSchedules}
       title="Danh sách thiết bị Y cơ sở"
       description="Quản lý thiết bị riêng theo từng phòng, tình trạng Tốt/Hư và lịch sử thay đổi."
     >

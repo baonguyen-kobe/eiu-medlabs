@@ -710,7 +710,7 @@ export async function createEquipmentRequest(
   if (
     !profile?.is_active ||
     !(roleRows ?? []).some(({ role }) =>
-      ["admin", "staff", "importer", "lecturer"].includes(role),
+      ["admin", "staff", "teaching_assistant", "lecturer"].includes(role),
     )
   ) {
     return { ok: false, message: "Bạn không có quyền tạo phiếu thiết bị." };

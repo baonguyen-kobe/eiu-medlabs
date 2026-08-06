@@ -192,7 +192,7 @@ begin
         (select private.has_room_type(basic_medical_room_type_id))
         and (
           (select private.has_role('lecturer'))
-          or (select private.has_role('importer'))
+          or (select private.has_role('teaching_assistant'))
         )
         and exists (
           select 1
@@ -943,7 +943,7 @@ begin
     or not (
       (select private.has_role('admin'))
       or (select private.has_role('staff'))
-      or (select private.has_role('importer'))
+      or (select private.has_role('teaching_assistant'))
       or (select private.has_role('lecturer'))
     ) then
     raise exception 'Bạn không có quyền tạo phiếu thiết bị.' using errcode = '42501';
@@ -1144,7 +1144,7 @@ as $$
   );
 $$;
 create policy basic_medical_registrations_select on public.basic_medical_registrations for select to authenticated using ((select private.is_active_user()) and ((select private.has_role('admin')) or (select private.has_role('staff')) or ((select private.has_room_type('40000000-0000-0000-0000-000000000002'::uuid)) and (created_by = (select auth.uid()) or registrant_id = (select auth.uid()) or responsible_lecturer_id = (select auth.uid())))));
-create policy basic_medical_registrations_manage on public.basic_medical_registrations for all to authenticated using ((select private.has_role('admin')) or (select private.has_role('staff')) or created_by = (select auth.uid())) with check (created_by = (select auth.uid()) and ((select private.has_role('admin')) or (select private.has_role('staff')) or (((select private.has_role('lecturer')) or (select private.has_role('importer'))) and (select private.has_room_type('40000000-0000-0000-0000-000000000002'::uuid)) and exists (select 1 from public.profiles where profiles.id = (select auth.uid()) and profiles.allow_basic_medical_access))));
+create policy basic_medical_registrations_manage on public.basic_medical_registrations for all to authenticated using ((select private.has_role('admin')) or (select private.has_role('staff')) or created_by = (select auth.uid())) with check (created_by = (select auth.uid()) and ((select private.has_role('admin')) or (select private.has_role('staff')) or (((select private.has_role('lecturer')) or (select private.has_role('teaching_assistant'))) and (select private.has_room_type('40000000-0000-0000-0000-000000000002'::uuid)) and exists (select 1 from public.profiles where profiles.id = (select auth.uid()) and profiles.allow_basic_medical_access))));
 create policy basic_medical_sessions_select on public.basic_medical_registration_sessions for select to authenticated using (exists (select 1 from public.basic_medical_registrations r where r.id = registration_id));
 create policy basic_medical_sessions_manage on public.basic_medical_registration_sessions for all to authenticated using (exists (select 1 from public.basic_medical_registrations r where r.id = registration_id and (r.created_by = (select auth.uid()) or (select private.has_role('admin')) or (select private.has_role('staff'))))) with check (exists (select 1 from public.basic_medical_registrations r where r.id = registration_id and (r.created_by = (select auth.uid()) or (select private.has_role('admin')) or (select private.has_role('staff')))));
 create policy equipment_catalog_select on public.equipment_catalog for select to authenticated using ((select private.is_active_user()));

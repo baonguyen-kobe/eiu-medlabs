@@ -45,7 +45,7 @@ export async function createScheduleDraft(
   const roleNames = (roles ?? []).map(({ role }) => role);
   if (
     !roleNames.some((role) =>
-      ["admin", "staff", "importer", "lecturer"].includes(role),
+      ["admin", "staff", "teaching_assistant", "lecturer"].includes(role),
     )
   ) {
     return { ok: false, message: "Bạn không có quyền tạo phiếu lịch." };
@@ -102,6 +102,28 @@ export async function createScheduleDraft(
     return {
       ok: false,
       message: "Mỗi lớp chỉ được phân công tối đa 2 giảng viên.",
+    };
+  }
+  if (
+    roleNames.includes("lecturer") &&
+    !roleNames.some((role) =>
+      ["admin", "staff", "teaching_assistant"].includes(role),
+    ) &&
+    !requestedLecturerIds.includes(userId)
+  ) {
+    return {
+      ok: false,
+      message: "Giảng viên tạo lịch phải có tên trong danh sách giảng dạy.",
+    };
+  }
+  if (
+    roleNames.includes("teaching_assistant") &&
+    !roleNames.some((role) => ["admin", "staff"].includes(role)) &&
+    requestedLecturerIds.length === 0
+  ) {
+    return {
+      ok: false,
+      message: "Trợ giảng phải chọn ít nhất một giảng viên phụ trách.",
     };
   }
   if (requestedLecturerIds.length) {

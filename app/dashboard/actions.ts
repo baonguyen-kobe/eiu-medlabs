@@ -187,7 +187,7 @@ export async function deleteClassSchedule(
     .eq("user_id", userId);
   const roleNames = new Set((roles ?? []).map(({ role }) => role));
   if (
-    !["admin", "staff", "importer", "lecturer"].some((role) =>
+    !["admin", "staff", "teaching_assistant", "lecturer"].some((role) =>
       roleNames.has(role),
     )
   ) {
@@ -330,7 +330,7 @@ async function requireClassManagerAction() {
     .from("user_roles")
     .select("role")
     .eq("user_id", userId)
-    .in("role", ["admin", "staff", "importer"]);
+    .in("role", ["admin", "staff", "teaching_assistant"]);
   return roles?.length ? { supabase, userId } : null;
 }
 
