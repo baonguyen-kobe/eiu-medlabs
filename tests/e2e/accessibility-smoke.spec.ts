@@ -15,6 +15,21 @@ async function expectNoWcagViolations(page: Page) {
   ).toEqual([]);
 }
 
+async function loginAsAdminAfterReset(page: Page) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await page.goto("/login");
+    await page.getByLabel("ID hoặc email").fill("admin@campus.local");
+    await page.getByLabel("Mật khẩu").fill("LocalAdmin123!");
+    await page.getByRole("button", { name: "Đăng nhập", exact: true }).click();
+    try {
+      await page.waitForURL(/\/dashboard$/, { timeout: 10_000 });
+      return;
+    } catch {
+      if (attempt === 1) throw new Error("E2E_ADMIN_LOGIN_FAILED_AFTER_RETRY");
+    }
+  }
+}
+
 test("trang đăng nhập không có vi phạm WCAG tự động", async ({ page }) => {
   await page.goto("/login");
   await expect(
@@ -26,11 +41,7 @@ test("trang đăng nhập không có vi phạm WCAG tự động", async ({ page
 test("workspace chính có skip link, tên truy cập và không vi phạm WCAG", async ({
   page,
 }) => {
-  await page.goto("/login");
-  await page.getByLabel("ID hoặc email").fill("admin@campus.local");
-  await page.getByLabel("Mật khẩu").fill("LocalAdmin123!");
-  await page.getByRole("button", { name: "Đăng nhập", exact: true }).click();
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await loginAsAdminAfterReset(page);
 
   await page.reload();
   await page.keyboard.press("Tab");
