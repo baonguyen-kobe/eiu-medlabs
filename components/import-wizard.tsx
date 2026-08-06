@@ -419,10 +419,16 @@ export function ImportWizard({
               <strong>{result.warningRows}</strong>
             </article>
             <article className="danger">
-              <span>Lỗi / trùng</span>
-              <strong>
-                {(result.errorRows ?? 0) + (result.duplicateRows ?? 0)}
-              </strong>
+              <span>Lỗi</span>
+              <strong>{result.errorRows ?? 0}</strong>
+            </article>
+            <article>
+              <span>Trùng</span>
+              <strong>{result.duplicateRows ?? 0}</strong>
+            </article>
+            <article className="danger">
+              <span>Xung đột</span>
+              <strong>{result.conflictRows ?? 0}</strong>
             </article>
           </div>
           {result.issues?.length ? (
@@ -459,12 +465,15 @@ export function ImportWizard({
           ) : null}
           <div className="import-footer centered">
             {result.batchId &&
-            (result.errorRows ?? 0) + (result.duplicateRows ?? 0) > 0 ? (
+            (result.errorRows ?? 0) +
+              (result.duplicateRows ?? 0) +
+              (result.conflictRows ?? 0) >
+              0 ? (
               <Link
                 className="button button-secondary"
                 href={`/api/import-errors/${result.batchId}`}
               >
-                <Download size={16} /> Tải file lỗi / trùng
+                <Download size={16} /> Tải file lỗi / trùng / xung đột
               </Link>
             ) : null}
             <button className="button button-secondary" onClick={resetImport}>

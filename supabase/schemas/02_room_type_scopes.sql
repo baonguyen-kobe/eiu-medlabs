@@ -748,6 +748,30 @@ $$;
 revoke all on function public.reschedule_class(uuid, date) from public, anon;
 grant execute on function public.reschedule_class(uuid, date) to authenticated;
 
+create or replace function private.import_schedule_business_key(
+  target_course_code text, target_room_id uuid, target_date date,
+  target_start time, target_end time
+)
+returns text language sql immutable set search_path = '' as $$
+  select concat(
+    length(upper(btrim(coalesce(target_course_code, '')))), ':', upper(btrim(coalesce(target_course_code, ''))),
+    length(target_room_id::text), ':', target_room_id::text,
+    length(target_date::text), ':', target_date::text,
+    length(to_char(target_start, 'HH24:MI:SS')), ':', to_char(target_start, 'HH24:MI:SS'),
+    length(to_char(target_end, 'HH24:MI:SS')), ':', to_char(target_end, 'HH24:MI:SS')
+  );
+$$;
+
+create or replace function private.import_schedule_hash(
+  target_course_code text, target_room_id uuid, target_date date,
+  target_start time, target_end time
+)
+returns text language sql immutable set search_path = '' as $$
+  select encode(extensions.digest(convert_to(private.import_schedule_business_key(
+    target_course_code, target_room_id, target_date, target_start, target_end
+  ), 'UTF8'), 'sha256'), 'hex');
+$$;
+
 create or replace function public.create_import_schedule_row(
   target_batch_id uuid, target_row_number integer, target_hash text,
   target_raw jsonb, target_normalized jsonb, target_status public.import_row_status,
@@ -766,6 +790,7 @@ declare
   schedule_id uuid;
   batch_room_type_id uuid;
   selected_room_type_id uuid;
+  canonical_hash text;
 begin
   if not (select private.can_create_schedule_entries()) then
     raise exception 'SCHEDULE_CREATOR_ROLE_REQUIRED' using errcode = '42501';
@@ -776,8 +801,8 @@ begin
   if target_student_count is null or target_student_count < 1 then
     raise exception 'INVALID_STUDENT_COUNT' using errcode = '22023';
   end if;
-  if target_hash is null or btrim(target_hash) = '' then
-    raise exception 'INVALID_IMPORT_HASH' using errcode = '22023';
+  if target_date is null or target_start is null or target_end is null or target_end <= target_start then
+    raise exception 'INVALID_IMPORT_SCHEDULE' using errcode = '22023';
   end if;
   select batches.room_type_id into batch_room_type_id
   from public.import_batches as batches
@@ -797,14 +822,18 @@ begin
     raise exception 'LECTURER_ROOM_TYPE_MISMATCH' using errcode = '42501';
   end if;
 
-  -- Serialize identical rows so the earlier preview check cannot race another batch.
-  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(target_hash, 0));
+  canonical_hash := private.import_schedule_hash(target_course_code, target_room_id, target_date, target_start, target_end);
+  if target_hash is distinct from canonical_hash then
+    raise exception 'INVALID_IMPORT_HASH' using errcode = '22023';
+  end if;
+  -- Serialize the DB-derived business key; caller-supplied random hashes cannot bypass this lock.
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(canonical_hash, 0));
   if exists (
-    select 1
-    from public.import_rows as existing_rows
-    where existing_rows.normalized_row_hash = target_hash
-      and existing_rows.class_schedule_id is not null
-      and existing_rows.validation_status in ('imported', 'warning')
+    select 1 from public.class_schedules schedules
+    where schedules.schedule_status <> 'cancelled'
+      and schedules.room_id = target_room_id and schedules.schedule_date = target_date
+      and schedules.start_time = target_start and schedules.end_time = target_end
+      and upper(btrim(schedules.course_code_snapshot)) = upper(btrim(target_course_code))
   ) then
     raise exception 'IMPORT_ROW_DUPLICATE' using errcode = '23505';
   end if;
@@ -825,12 +854,14 @@ begin
     import_batch_id, row_number, source_row_id, normalized_row_hash,
     raw_data, normalized_data, validation_status, errors, warnings, class_schedule_id
   ) values (
-    target_batch_id, target_row_number, null, target_hash,
+    target_batch_id, target_row_number, null, canonical_hash,
     coalesce(target_raw, '{}'::jsonb), coalesce(target_normalized, '{}'::jsonb),
     target_status, coalesce(target_errors, '[]'::jsonb),
     coalesce(target_warnings, '[]'::jsonb), schedule_id
   );
   return schedule_id;
+exception when exclusion_violation then
+  raise exception 'SCHEDULE_CONFLICT' using errcode = '23P01';
 end;
 $$;
 
@@ -838,6 +869,8 @@ revoke all on function public.create_import_schedule_row(
   uuid, integer, text, jsonb, jsonb, public.import_row_status, jsonb, jsonb,
   uuid, text, text, uuid, uuid, date, time, time, text, integer
 ) from public, anon;
+revoke all on function private.import_schedule_business_key(text, uuid, date, time, time) from public, anon, authenticated;
+revoke all on function private.import_schedule_hash(text, uuid, date, time, time) from public, anon, authenticated;
 grant execute on function public.create_import_schedule_row(
   uuid, integer, text, jsonb, jsonb, public.import_row_status, jsonb, jsonb,
   uuid, text, text, uuid, uuid, date, time, time, text, integer
@@ -869,18 +902,39 @@ security definer
 set search_path = ''
 as $$
 declare
+  actor_id uuid := (select auth.uid());
   before_row public.class_schedules;
   changed_row public.class_schedules;
+  source_room_type uuid;
   target_room_type uuid;
   normalized_ids uuid[] := coalesce(target_lecturer_ids, '{}'::uuid[]);
-  is_manager boolean;
+  is_admin boolean := (select private.has_role('admin'));
+  is_staff boolean := (select private.has_role('staff'));
+  is_importer boolean := (select private.has_role('importer'));
+  can_manage_details boolean := false;
 begin
-  select * into before_row from public.class_schedules
-  where id = target_schedule_id and schedule_status <> 'cancelled' for update;
+  select * into before_row from public.class_schedules schedules
+  where schedules.id = target_schedule_id and schedules.schedule_status <> 'cancelled'
+  for update;
   if before_row.id is null then raise exception 'CLASS_NOT_AVAILABLE' using errcode = 'P0001'; end if;
+  select rooms.room_type_id into source_room_type from public.rooms rooms where rooms.id = before_row.room_id;
 
-  is_manager := (select private.has_role('admin')) or (select private.has_role('staff')) or (select private.has_role('importer'));
-  if not is_manager then
+  select room_type_id into target_room_type from public.rooms where id = target_room_id and is_active;
+  if target_room_type is null then raise exception 'ROOM_TYPE_SCOPE_REQUIRED' using errcode = '42501'; end if;
+  if is_admin then
+    can_manage_details := true;
+  elsif is_staff then
+    can_manage_details := (select private.has_room_type(source_room_type)) and (select private.has_room_type(target_room_type));
+  elsif is_importer then
+    can_manage_details := (select private.has_room_type(source_room_type))
+      and (select private.has_room_type(target_room_type))
+      and (before_row.created_by = actor_id or exists (
+        select 1 from public.import_batches batches
+        where batches.id = before_row.import_batch_id and batches.created_by = actor_id
+      ));
+  end if;
+
+  if not can_manage_details then
     if not coalesce(
       (select auth.uid()) in (before_row.lecturer_id, before_row.lecturer_2_id),
       false
@@ -896,17 +950,19 @@ begin
   end if;
 
   if target_schedule_date is null or target_start_time is null or target_end_time <= target_start_time
-    or target_student_count < 1 or target_room_id is null or cardinality(normalized_ids) > 2
+    or target_student_count is null or target_student_count < 1 or target_room_id is null or cardinality(normalized_ids) > 2
     or cardinality(normalized_ids) <> cardinality(array(select distinct unnest(normalized_ids)))
   then raise exception 'INVALID_CLASS_DETAILS' using errcode = '22023'; end if;
 
-  select room_type_id into target_room_type from public.rooms where id = target_room_id and is_active;
-  if target_room_type is null or not (select private.has_room_type(target_room_type)) then
+  if not is_admin and (not (select private.has_room_type(source_room_type)) or not (select private.has_room_type(target_room_type))) then
     raise exception 'ROOM_TYPE_SCOPE_REQUIRED' using errcode = '42501';
   end if;
   if exists (
-    select 1 from unnest(normalized_ids) lecturer_id
-    where not exists (select 1 from public.profile_room_types where profile_id = lecturer_id and room_type_id = target_room_type)
+    select 1 from unnest(normalized_ids) lecturer_id where not exists (
+      select 1 from public.profiles profiles where profiles.id = lecturer_id and profiles.is_active
+        and exists (select 1 from public.user_roles roles where roles.user_id = lecturer_id and roles.role = 'lecturer')
+        and exists (select 1 from public.profile_room_types scopes where scopes.profile_id = lecturer_id and scopes.room_type_id = target_room_type)
+    )
   ) then raise exception 'LECTURER_ROOM_TYPE_MISMATCH' using errcode = '42501'; end if;
 
   update public.class_schedules set

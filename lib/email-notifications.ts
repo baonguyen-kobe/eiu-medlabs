@@ -3,6 +3,10 @@ import "server-only";
 import { createHmac, randomUUID } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { renderEmailV2 } from "@/lib/email-template-v2";
+import {
+  canonicalEmailWebhookPayload,
+  emailFailureStatus,
+} from "@/lib/email-webhook-signature";
 
 export type ScheduleSummary = {
   course_code?: string;
@@ -22,6 +26,7 @@ export type EmailNotification = {
   dedupe_key: string;
   subject: string;
   payload: Record<string, unknown>;
+  delivery_mode_at_enqueue: EmailDeliveryMode;
 };
 
 export type EquipmentEmailItem = {
@@ -675,55 +680,67 @@ async function suppressPendingNotifications(dedupeKeys?: string[]) {
     console.error("Không thể đánh dấu email đã tắt gửi:", error.message);
 }
 
-async function deliverNotification(
-  notification: EmailNotification,
-  claimedDeliveryMode: EmailDeliveryMode,
-) {
+async function deliverNotification(notification: EmailNotification) {
   const supabase = createAdminClient();
   const appsScriptUrl = process.env.EMAIL_APPS_SCRIPT_URL;
   const appsScriptSecret = process.env.EMAIL_APPS_SCRIPT_SECRET;
-  const currentDeliveryMode = await getEmailDeliveryMode();
-  if (currentDeliveryMode === "off") {
-    const { error } = await supabase
-      .from("email_notifications")
-      .update({
-        status: "suppressed",
-        processing_started_at: null,
-        last_error: "Đã bỏ qua vì hệ thống đang tắt gửi email.",
-      })
-      .eq("id", notification.id)
-      .eq("status", "processing");
-    if (error) {
-      console.error("Không thể dừng email đang xử lý:", error.message);
-    }
-    return;
-  }
-  const deliveryMode =
-    currentDeliveryMode === claimedDeliveryMode
-      ? claimedDeliveryMode
-      : currentDeliveryMode;
-  const isTestDelivery = deliveryMode === "test";
-  const deliveryRecipient = isTestDelivery
-    ? getEmailTestRecipient()
-    : notification.recipient_email;
-  const deliverySubject = isTestDelivery
-    ? `[KIỂM THỬ] ${notification.subject}`
-    : notification.subject;
-  const originalHtml = renderEmail(notification);
-  const originalText = renderEmailText(notification);
-  const testBannerHtml = `
-    <div style="margin:0 0 18px;padding:14px 16px;border:1px solid #d9a441;border-radius:10px;background:#fff7df;color:#163b66;font-family:Verdana,Arial,sans-serif">
-      <strong>EMAIL KIỂM THỬ — KHÔNG GỬI CHO NGƯỜI NHẬN GỐC</strong><br>
-      Người nhận gốc: ${escapeHtml(notification.recipient_email)}
-    </div>`;
-  const deliveryHtml = isTestDelivery
-    ? addTestBanner(originalHtml, testBannerHtml)
-    : originalHtml;
-  const deliveryText = isTestDelivery
-    ? `EMAIL KIỂM THỬ — KHÔNG GỬI CHO NGƯỜI NHẬN GỐC\nNgười nhận gốc: ${notification.recipient_email}\n\n${originalText}`
-    : originalText;
+  let providerSucceeded = false;
+  let providerMessageId: string | null = null;
 
   try {
+    const currentDeliveryMode = await getEmailDeliveryMode();
+    if (currentDeliveryMode === "off") {
+      const { error } = await supabase
+        .from("email_notifications")
+        .update({
+          status: "suppressed",
+          processing_started_at: null,
+          last_error: "Đã bỏ qua vì hệ thống đang tắt gửi email.",
+        })
+        .eq("id", notification.id)
+        .eq("status", "processing");
+      if (error) throw new Error(`EMAIL_SUPPRESS_ACK_FAILED: ${error.message}`);
+      return;
+    }
+
+    const deliveryMode = notification.delivery_mode_at_enqueue;
+    if (deliveryMode === "off") {
+      const { error } = await supabase
+        .from("email_notifications")
+        .update({
+          status: "suppressed",
+          processing_started_at: null,
+          last_error: "Email được tạo khi chế độ gửi đang tắt.",
+        })
+        .eq("id", notification.id)
+        .eq("status", "processing");
+      if (error) throw new Error(`EMAIL_SUPPRESS_ACK_FAILED: ${error.message}`);
+      return;
+    }
+
+    // A change between Test and Live must never retarget an already queued item.
+    // The stored snapshot wins. Changing to Off remains an emergency stop.
+    const isTestDelivery = deliveryMode === "test";
+    const deliveryRecipient = isTestDelivery
+      ? getEmailTestRecipient()
+      : notification.recipient_email;
+    const deliverySubject = isTestDelivery
+      ? `[KIỂM THỬ] ${notification.subject}`
+      : notification.subject;
+    const originalHtml = renderEmail(notification);
+    const originalText = renderEmailText(notification);
+    const testBannerHtml = `
+      <div style="margin:0 0 18px;padding:14px 16px;border:1px solid #d9a441;border-radius:10px;background:#fff7df;color:#163b66;font-family:Verdana,Arial,sans-serif">
+        <strong>EMAIL KIỂM THỬ — KHÔNG GỬI CHO NGƯỜI NHẬN GỐC</strong><br>
+        Người nhận gốc: ${escapeHtml(notification.recipient_email)}
+      </div>`;
+    const deliveryHtml = isTestDelivery
+      ? addTestBanner(originalHtml, testBannerHtml)
+      : originalHtml;
+    const deliveryText = isTestDelivery
+      ? `EMAIL KIỂM THỬ — KHÔNG GỬI CHO NGƯỜI NHẬN GỐC\nNgười nhận gốc: ${notification.recipient_email}\n\n${originalText}`
+      : originalText;
+
     if (!appsScriptUrl || !appsScriptSecret) {
       throw new Error(
         "Thiếu EMAIL_APPS_SCRIPT_URL hoặc EMAIL_APPS_SCRIPT_SECRET.",
@@ -738,39 +755,24 @@ async function deliverNotification(
         : "MedLabs Calendar";
     const timestamp = Date.now().toString();
     const nonce = randomUUID();
-    const canonicalPayload = [
+    const webhookPayload = {
       timestamp,
       nonce,
-      notification.id,
-      notification.dedupe_key,
-      deliveryRecipient,
-      deliverySubject,
-      deliveryHtml,
-      deliveryText,
+      id: notification.id,
+      dedupeKey: notification.dedupe_key,
+      to: deliveryRecipient,
+      subject: deliverySubject,
+      html: deliveryHtml,
+      text: deliveryText,
       senderName,
-    ].join("\n");
+    };
     const signature = createHmac("sha256", appsScriptSecret)
-      .update(canonicalPayload)
+      .update(canonicalEmailWebhookPayload(webhookPayload))
       .digest("hex");
     const response = await fetch(appsScriptUrl, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        timestamp,
-        nonce,
-        signature,
-        id: notification.id,
-        dedupeKey: notification.dedupe_key,
-        to: deliveryRecipient,
-        subject: deliverySubject,
-        html: deliveryHtml,
-        text: deliveryText,
-        senderName,
-      }),
-      // Apps Script có thể cần thêm thời gian khởi động nguội khi gửi email HTML.
-      // Giữ timeout đủ dài để tránh đánh dấu thất bại rồi gửi trùng khi người dùng thử lại.
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...webhookPayload, signature }),
       signal: AbortSignal.timeout(60_000),
     });
 
@@ -782,32 +784,49 @@ async function deliverNotification(
     if (!response.ok || !result.ok) {
       throw new Error(result.error ?? `APPS_SCRIPT_EMAIL_${response.status}`);
     }
+    providerSucceeded = true;
+    providerMessageId = result.messageId ?? notification.dedupe_key;
 
-    const { error: acknowledgementError } = await supabase
+    const { error } = await supabase
       .from("email_notifications")
       .update({
         status: isTestDelivery ? "simulated" : "sent",
-        provider_message_id: result.messageId ?? notification.dedupe_key,
+        provider_message_id: providerMessageId,
+        provider_succeeded_at: new Date().toISOString(),
         sent_at: new Date().toISOString(),
         processing_started_at: null,
+        acknowledgement_error: null,
         last_error: isTestDelivery
           ? `Đã gửi bản kiểm thử tới ${deliveryRecipient}; không gửi tới ${notification.recipient_email}.`
           : null,
       })
-      .eq("id", notification.id);
-    if (acknowledgementError) {
-      throw new Error(`EMAIL_DB_ACK_FAILED: ${acknowledgementError.message}`);
-    }
+      .eq("id", notification.id)
+      .eq("status", "processing");
+    if (error) throw new Error(`EMAIL_DB_ACK_FAILED: ${error.message}`);
   } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message.slice(0, 1000)
+        : "Không thể gửi email.";
     const { error: failureUpdateError } = await supabase
       .from("email_notifications")
-      .update({
-        status: "failed",
-        last_error:
-          error instanceof Error
-            ? error.message.slice(0, 1000)
-            : "Không thể gửi email.",
-      })
+      .update(
+        providerSucceeded
+          ? {
+              status: emailFailureStatus(true),
+              provider_message_id: providerMessageId,
+              provider_succeeded_at: new Date().toISOString(),
+              processing_started_at: null,
+              acknowledgement_error: message,
+              last_error:
+                "Provider đã gửi; cần đối soát DB, không được gửi lại tự động.",
+            }
+          : {
+              status: emailFailureStatus(false),
+              processing_started_at: null,
+              last_error: message,
+            },
+      )
       .eq("id", notification.id);
     if (failureUpdateError) {
       console.error(
@@ -832,7 +851,7 @@ export async function processEmailNotificationsByDedupeKeys(
   const { data, error } = await supabase
     .from("email_notifications")
     .select(
-      "id,notification_type,recipient_email,dedupe_key,subject,payload,attempts",
+      "id,notification_type,recipient_email,dedupe_key,subject,payload,attempts,delivery_mode_at_enqueue",
     )
     .in("dedupe_key", dedupeKeys)
     .eq("status", "pending");
@@ -860,7 +879,7 @@ export async function processEmailNotificationsByDedupeKeys(
           .eq("status", "pending")
           .select("id")
           .maybeSingle();
-        if (claimed) await deliverNotification(notification, deliveryMode);
+        if (claimed) await deliverNotification(notification);
       },
     ),
   );
@@ -904,7 +923,7 @@ export async function processPendingScheduleEmails() {
 
   await Promise.all(
     ((data ?? []) as EmailNotification[]).map((notification) =>
-      deliverNotification(notification, deliveryMode),
+      deliverNotification(notification),
     ),
   );
 }

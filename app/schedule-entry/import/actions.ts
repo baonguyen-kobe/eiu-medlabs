@@ -14,6 +14,7 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { isWithinOperatingHours } from "@/lib/business-time";
 import { roomTypeIdForScope, type ScheduleScope } from "@/lib/room-types";
+import { createImportScheduleHash } from "@/lib/import-schedule-hash";
 
 type ImportRow = Record<string, unknown>;
 type ImportLecturer = {
@@ -31,6 +32,7 @@ export type ImportResult = {
   errorRows?: number;
   warningRows?: number;
   duplicateRows?: number;
+  conflictRows?: number;
   durationMs?: number;
   issues?: Array<{
     rowNumber: number;
@@ -263,9 +265,17 @@ export async function validateScheduleRows(
       student_count: studentCount,
       note: text(row, "note") || null,
     };
-    const rowHash = createHash("sha256")
-      .update(JSON.stringify(normalizedData))
-      .digest("hex");
+    const rowHash = room
+      ? createImportScheduleHash({
+          courseCode,
+          roomId: room.id,
+          scheduleDate: scheduleDate ?? "",
+          startTime: startTime ?? "",
+          endTime: endTime ?? "",
+        })
+      : createHash("sha256")
+          .update(JSON.stringify(normalizedData))
+          .digest("hex");
     const duplicateWithinFile = seenHashes.has(rowHash);
     seenHashes.add(rowHash);
     return { duplicateWithinFile, errors, index, rowHash, warnings };
@@ -528,9 +538,17 @@ export async function importScheduleRows(
       student_count: studentCount,
       note: text(row, "note") || null,
     };
-    const rowHash = createHash("sha256")
-      .update(JSON.stringify(normalizedData))
-      .digest("hex");
+    const rowHash = room
+      ? createImportScheduleHash({
+          courseCode,
+          roomId: room.id,
+          scheduleDate: scheduleDate ?? "",
+          startTime: startTime ?? "",
+          endTime: endTime ?? "",
+        })
+      : createHash("sha256")
+          .update(JSON.stringify(normalizedData))
+          .digest("hex");
     const duplicateWithinFile = seenHashes.has(rowHash);
     seenHashes.add(rowHash);
 
@@ -603,7 +621,13 @@ export async function importScheduleRows(
         prepared.duplicateWithinFile || remoteDuplicateChecks[index];
 
       let scheduleId: string | null = null;
-      let validationStatus: "imported" | "warning" | "error" | "duplicate";
+      let validationStatus:
+        | "imported"
+        | "warning"
+        | "error"
+        | "duplicate"
+        | "conflict"
+        | "system_error";
       if (duplicate) {
         validationStatus = "duplicate";
         errors.push(
@@ -644,14 +668,19 @@ export async function importScheduleRows(
           });
 
         if (scheduleError || !createdScheduleId) {
-          errors.push(
-            scheduleError?.code === "23P01"
-              ? "Trùng phòng hoặc trùng lịch giảng viên"
-              : scheduleError?.code === "23514"
-                ? "Thời gian nằm ngoài khung hoạt động"
-                : "Không thể tạo lịch",
-          );
-          validationStatus = "error";
+          if (scheduleError?.code === "23505") {
+            errors.push("Lịch trùng business key với dữ liệu đã có");
+            validationStatus = "duplicate";
+          } else if (scheduleError?.code === "23P01") {
+            errors.push("Xung đột phòng hoặc lịch giảng viên");
+            validationStatus = "conflict";
+          } else if (scheduleError?.code === "23514") {
+            errors.push("Thời gian nằm ngoài khung hoạt động");
+            validationStatus = "error";
+          } else {
+            errors.push("Không thể tạo lịch");
+            validationStatus = "system_error";
+          }
         } else {
           scheduleId = String(createdScheduleId);
           validationStatus = requestedStatus;
@@ -698,6 +727,12 @@ export async function importScheduleRows(
   const duplicateRows = outcomes.filter(
     ({ status }) => status === "duplicate",
   ).length;
+  const conflictRows = outcomes.filter(
+    ({ status }) => status === "conflict",
+  ).length;
+  const systemErrorRows = outcomes.filter(
+    ({ status }) => status === "system_error",
+  ).length;
   const issues = outcomes
     .filter(({ errors, warnings }) => errors.length > 0 || warnings.length > 0)
     .map(({ rowNumber, errors, warnings }) => ({ rowNumber, errors, warnings }))
@@ -706,7 +741,16 @@ export async function importScheduleRows(
   if (outcomes.some(({ fatal }) => fatal)) {
     await supabase
       .from("import_batches")
-      .update({ status: "failed", completed_at: new Date().toISOString() })
+      .update({
+        status: importedRows > 0 ? "completed_with_errors" : "failed",
+        valid_rows: importedRows - warningRows,
+        warning_rows: warningRows,
+        error_rows: errorRows + systemErrorRows,
+        imported_rows: importedRows,
+        duplicate_rows: duplicateRows,
+        conflict_rows: conflictRows,
+        completed_at: new Date().toISOString(),
+      })
       .eq("id", batch.id);
     return {
       ok: false,
@@ -715,9 +759,10 @@ export async function importScheduleRows(
       batchId: batch.id,
       totalRows: inputRows.length,
       importedRows,
-      errorRows,
+      errorRows: errorRows + systemErrorRows,
       warningRows,
       duplicateRows,
+      conflictRows,
       durationMs: Date.now() - startedAt,
       issues,
     };
@@ -726,12 +771,16 @@ export async function importScheduleRows(
   const { error: finishError } = await supabase
     .from("import_batches")
     .update({
-      status: "completed",
+      status:
+        errorRows + systemErrorRows + conflictRows > 0
+          ? "completed_with_errors"
+          : "completed",
       valid_rows: importedRows - warningRows,
       warning_rows: warningRows,
-      error_rows: errorRows,
+      error_rows: errorRows + systemErrorRows,
       imported_rows: importedRows,
       duplicate_rows: duplicateRows,
+      conflict_rows: conflictRows,
       completed_at: new Date().toISOString(),
     })
     .eq("id", batch.id);
@@ -758,9 +807,10 @@ export async function importScheduleRows(
     batchId: batch.id,
     totalRows: inputRows.length,
     importedRows,
-    errorRows,
+    errorRows: errorRows + systemErrorRows,
     warningRows,
     duplicateRows,
+    conflictRows,
     durationMs: Date.now() - startedAt,
     issues,
   };

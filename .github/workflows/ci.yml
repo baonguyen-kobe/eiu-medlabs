@@ -25,6 +25,9 @@ jobs:
           node-version: 24
           cache: npm
 
+      - name: Use lockfile npm version
+        run: npm install --global npm@11.17.0
+
       - name: Install dependencies
         run: npm ci
 
@@ -68,11 +71,18 @@ jobs:
       - name: Run unit and database tests
         run: npm test
 
+      - name: Run database history tests
+        run: npm run test:db
+
+      - name: Restore E2E fixtures after database tests
+        shell: pwsh
+        run: ./scripts/seed-local-users.ps1
+
       - name: Install browser for accessibility smoke tests
         run: npx playwright install --with-deps chromium
 
-      - name: Run accessibility smoke tests
-        run: npx playwright test tests/e2e/accessibility-smoke.spec.ts
+      - name: Run critical end-to-end suite
+        run: npm run test:e2e:critical
 
       - name: Build production bundle
         run: npm run build

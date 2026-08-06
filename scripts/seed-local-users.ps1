@@ -34,31 +34,36 @@ $users = @(
     email     = "admin@campus.local"
     password  = "LocalAdmin123!"
     full_name = "Nguyễn An"
+    phone     = "0901000001"
     roles     = @("admin", "staff", "lecturer", "importer")
-    allow_early_equipment_handover = $true
+    allow_early_equipment_handover = $false
   },
   @{
     email     = "giangvien@campus.local"
     password  = "LocalLecturer123!"
     full_name = "Nguyễn Ngọc Diễm"
+    phone     = "0901000002"
     roles     = @("lecturer")
   },
   @{
     email     = "staff@campus.local"
     password  = "LocalStaff123!"
     full_name = "Nguyễn Bảo"
+    phone     = "0901000003"
     roles     = @("staff")
   },
   @{
     email     = "importer@campus.local"
     password  = "LocalImporter123!"
     full_name = "Trần Minh Anh"
+    phone     = "0901000004"
     roles     = @("lecturer", "importer")
   },
   @{
     email     = "dieuphoi@eiu.edu.vn"
     password  = "LocalCoordinator123!"
     full_name = "Lê Hoàng Minh"
+    phone     = "0901000005"
     roles     = @("staff", "importer")
   }
 )
@@ -106,6 +111,10 @@ foreach ($entry in $users) {
 
   & $npxCommand supabase db query --local `
     "insert into public.user_roles (user_id, role) values $roleValues on conflict do nothing;" |
+    Out-Null
+
+  & $npxCommand supabase db query --local `
+    "update public.profiles set phone = '$($entry.phone)' where id = '$userId';" |
     Out-Null
 
   if ($entry.allow_early_equipment_handover) {

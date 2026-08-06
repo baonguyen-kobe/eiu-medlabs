@@ -369,6 +369,35 @@ end;
 $$;
 create trigger equipment_catalog_set_updated_at before update on public.equipment_catalog for each row execute function private.set_updated_at();
 create trigger equipment_requests_set_updated_at before update on public.equipment_requests for each row execute function private.set_updated_at();
+create or replace function private.validate_equipment_request_content()
+returns trigger
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare skills_room_type constant uuid := '40000000-0000-0000-0000-000000000001'::uuid;
+begin
+  if new.semester not in ('HK1','HK2','HK3','HK4') then
+    raise exception 'Học kỳ phải là HK1, HK2, HK3 hoặc HK4.' using errcode = '22023';
+  end if;
+  if length(coalesce(new.note, '')) > 2000 then
+    raise exception 'Ghi chú không được vượt quá 2000 ký tự.' using errcode = '22023';
+  end if;
+  if length(coalesce(new.late_registration_reason, '')) > 1000 then
+    raise exception 'Lý do đăng ký trễ không được vượt quá 1000 ký tự.' using errcode = '22023';
+  end if;
+  if not exists (
+    select 1 from public.profiles profiles
+    where profiles.id = new.responsible_lecturer_id and profiles.is_active
+      and exists (select 1 from public.user_roles roles where roles.user_id = profiles.id and roles.role = 'lecturer')
+      and exists (select 1 from public.profile_room_types scopes where scopes.profile_id = profiles.id and scopes.room_type_id = skills_room_type)
+  ) then raise exception 'Giảng viên phụ trách không hợp lệ.' using errcode = '42501'; end if;
+  return new;
+end;
+$$;
+create trigger equipment_requests_validate_content
+before insert or update on public.equipment_requests
+for each row execute function private.validate_equipment_request_content();
 create or replace function private.validate_equipment_request_timing()
 returns trigger
 language plpgsql
@@ -620,8 +649,6 @@ declare
   actor_id uuid := (select auth.uid());
   current_rank integer;
   target_rank integer;
-  actor_email text;
-  can_confirm_handover_early boolean := false;
 begin
   if actor_id is null or not (select private.is_active_user())
     or not ((select private.has_role('admin')) or (select private.has_role('staff'))) then
@@ -636,15 +663,6 @@ begin
   if current_row.id is null then
     raise exception 'Không tìm thấy phiếu thiết bị.' using errcode = 'P0002';
   end if;
-  can_confirm_handover_early :=
-    (select private.has_role('admin'))
-    and exists (
-      select 1
-      from public.profiles as profiles
-      where profiles.id = actor_id
-        and profiles.allow_early_equipment_handover
-    );
-
   current_rank := case current_row.status
     when 'new' then 0 when 'preparing' then 1 when 'handed_over' then 2
     when 'returned' then 3 when 'completed' then 4 end;
@@ -678,7 +696,7 @@ begin
     update public.equipment_requests set status = 'preparing'
     where id = target_request_id returning * into changed_row;
   elsif target_status = 'handed_over' then
-    if current_row.status = 'new' and not can_confirm_handover_early then
+    if current_row.status = 'new' then
       raise exception 'Phải chuyển phiếu sang Đã soạn trước khi xác nhận Đã giao.' using errcode = '22023';
     end if;
     update public.equipment_requests
@@ -1103,6 +1121,7 @@ revoke execute on function public.update_equipment_request_content(uuid, uuid, t
 grant execute on function public.update_equipment_request_content(uuid, uuid, text, uuid, timestamptz, timestamptz, text, jsonb) to authenticated;
 revoke execute on function public.manager_confirm_equipment_status(uuid, text) from public, anon;
 grant execute on function public.manager_confirm_equipment_status(uuid, text) to authenticated;
+revoke all on function private.validate_equipment_request_content() from public, anon, authenticated;
 revoke execute on function public.manager_review_late_equipment_request(uuid, text, text) from public, anon;
 grant execute on function public.manager_review_late_equipment_request(uuid, text, text) to authenticated;
 revoke execute on function public.registrant_confirm_equipment_handoff(uuid, text, text) from public, anon;

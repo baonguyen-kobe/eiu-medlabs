@@ -2,8 +2,6 @@ import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 
-const adminId = "c18c4f94-a58a-4b5f-abd0-8c4856affab8";
-
 test("mã phiếu 12 số tải được và Admin thấy dòng bổ sung thiết bị", async ({
   page,
 }) => {
@@ -25,11 +23,14 @@ test("mã phiếu 12 số tải được và Admin thấy dòng bổ sung thiế
     env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
     { auth: { persistSession: false, autoRefreshToken: false } },
   );
-  const { error: signInError } = await databaseClient.auth.signInWithPassword({
-    email: "admin@campus.local",
-    password: "LocalAdmin123!",
-  });
+  const { data: signedIn, error: signInError } =
+    await databaseClient.auth.signInWithPassword({
+      email: "admin@campus.local",
+      password: "LocalAdmin123!",
+    });
   expect(signInError).toBeNull();
+  const adminId = signedIn.user?.id;
+  expect(adminId).toBeTruthy();
 
   const suffix = crypto.randomUUID().slice(0, 8).toUpperCase();
   const roomId = crypto.randomUUID();
@@ -74,8 +75,8 @@ test("mã phiếu 12 số tải được và Admin thấy dòng bổ sung thiế
           source: "manual",
           schedule_status: "published",
           student_count: 20,
-          created_by: adminId,
-          published_by: adminId,
+          created_by: adminId!,
+          published_by: adminId!,
           published_at: new Date().toISOString(),
         })
       ).error,
@@ -86,14 +87,14 @@ test("mã phiếu 12 số tải được và Admin thấy dòng bổ sung thiế
           id: requestId,
           class_schedule_id: scheduleId,
           semester: "HK1",
-          registrant_id: adminId,
-          responsible_lecturer_id: adminId,
+          registrant_id: adminId!,
+          responsible_lecturer_id: adminId!,
           phone_snapshot: "0901000001",
           email_snapshot: "admin@campus.local",
           receive_at: "2046-08-19T09:00:00+07:00",
           return_at: "2046-08-20T16:00:00+07:00",
           status: "preparing",
-          created_by: adminId,
+          created_by: adminId!,
           created_at: "2046-08-20T12:34:56+07:00",
         })
       ).error,

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import test from "node:test";
 import { createClient } from "@supabase/supabase-js";
 
@@ -39,6 +40,19 @@ async function signIn(email, password) {
   assert.ifError(error);
   assert.ok(data.user);
   return { supabase, user: data.user };
+}
+
+function importScheduleHash({ courseCode, roomId, date, start, end }) {
+  const time = (value) => (/^\d{2}:\d{2}$/.test(value) ? `${value}:00` : value);
+  const parts = [
+    courseCode.trim().toUpperCase(),
+    roomId,
+    date,
+    time(start),
+    time(end),
+  ];
+  const key = parts.map((value) => `${[...value].length}:${value}`).join("");
+  return createHash("sha256").update(key, "utf8").digest("hex");
 }
 
 test("chỉ tài khoản nhân sự được duyệt trước mới có thể được tạo", async () => {
@@ -353,7 +367,7 @@ test("materialize lịch trực cố định không xóa ca thủ công đang ch
       target_effective_to: targetDate,
       target_note: "Pattern xung đột ca thủ công",
     });
-    assert.ok(pattern.error);
+    assert.ifError(pattern.error);
 
     const { data: preserved, error } = await staff.supabase
       .from("staff_shifts")
@@ -363,6 +377,15 @@ test("materialize lịch trực cố định không xóa ca thủ công đang ch
     assert.ifError(error);
     assert.equal(preserved.registration_source, "self_registered");
     assert.equal(preserved.status, "scheduled");
+    for (const createdPattern of pattern.data ?? []) {
+      const cancelledPattern = await staff.supabase.rpc(
+        "cancel_own_shift_pattern",
+        {
+          target_pattern_id: createdPattern.id,
+        },
+      );
+      assert.ifError(cancelledPattern.error);
+    }
   } finally {
     await staff.supabase.rpc("cancel_own_shift", {
       target_shift_id: manual.data.id,
@@ -373,7 +396,14 @@ test("materialize lịch trực cố định không xóa ca thủ công đang ch
 test("hai batch import đồng thời không tạo cùng normalized hash", async () => {
   const admin = await signIn("admin@campus.local", "LocalAdmin123!");
   const batchIds = [crypto.randomUUID(), crypto.randomUUID()];
-  const hash = `concurrent-${crypto.randomUUID()}`;
+  const scheduleDate = "2046-08-07";
+  const hash = importScheduleHash({
+    courseCode: "NUR 101",
+    roomId: "20000000-0000-0000-0000-000000000001",
+    date: scheduleDate,
+    start: "07:30",
+    end: "09:30",
+  });
   const createdScheduleIds = [];
 
   try {
@@ -391,7 +421,7 @@ test("hai batch import đồng thời không tạo cùng normalized hash", async
       assert.ifError(error);
     }
 
-    const createRow = (batchId, rowNumber, scheduleDate) =>
+    const createRow = (batchId, rowNumber) =>
       admin.supabase.rpc("create_import_schedule_row", {
         target_batch_id: batchId,
         target_row_number: rowNumber,
@@ -414,8 +444,8 @@ test("hai batch import đồng thời không tạo cùng normalized hash", async
       });
 
     const results = await Promise.all([
-      createRow(batchIds[0], 2, "2046-08-07"),
-      createRow(batchIds[1], 2, "2046-08-08"),
+      createRow(batchIds[0], 2),
+      createRow(batchIds[1], 2),
     ]);
     createdScheduleIds.push(
       ...results.filter(({ data }) => data).map(({ data }) => data),
@@ -1037,7 +1067,13 @@ test("mỗi dòng import hợp lệ tạo lịch và bản ghi kiểm tra trong 
   const admin = await signIn("admin@campus.local", "LocalAdmin123!");
   const importer = await signIn("importer@campus.local", "LocalImporter123!");
   const batchId = crypto.randomUUID();
-  const hash = crypto.randomUUID().replaceAll("-", "");
+  const hash = importScheduleHash({
+    courseCode: "PHA 110",
+    roomId: "20000000-0000-0000-0000-000000000003",
+    date: "2031-09-02",
+    start: "12:30",
+    end: "16:30",
+  });
 
   const { error: batchError } = await importer.supabase
     .from("import_batches")
@@ -1130,6 +1166,403 @@ test("mỗi dòng import hợp lệ tạo lịch và bản ghi kiểm tra trong 
 
   await admin.supabase.from("class_schedules").delete().eq("id", scheduleId);
   await admin.supabase.from("import_batches").delete().eq("id", batchId);
+});
+
+test("direct RPC không cho Staff đổi lớp từ loại phòng ngoài scope sang scope của mình", async () => {
+  const service = serviceClient();
+  const admin = await signIn("admin@campus.local", "LocalAdmin123!");
+  const staff = await signIn("staff@campus.local", "LocalStaff123!");
+  const importer = await signIn("importer@campus.local", "LocalImporter123!");
+  const lecturer = await signIn("giangvien@campus.local", "LocalLecturer123!");
+  const roomId = crypto.randomUUID();
+  const scheduleId = crypto.randomUUID();
+  try {
+    const { error: roomError } = await admin.supabase.from("rooms").insert({
+      id: roomId,
+      room_code: `YC-${roomId.slice(0, 6)}`,
+      building_code: "B08",
+      room_name: "Y cơ sở kiểm thử",
+      room_type: "Y cơ sở",
+      room_type_id: "40000000-0000-0000-0000-000000000002",
+      capacity: 30,
+    });
+    assert.ifError(roomError);
+    const { error: scheduleError } = await admin.supabase
+      .from("class_schedules")
+      .insert({
+        id: scheduleId,
+        course_id: "10000000-0000-0000-0000-000000000001",
+        course_code_snapshot: "NUR 101",
+        course_name_snapshot: "Thăm khám thể chất",
+        room_id: roomId,
+        schedule_date: "2048-08-10",
+        start_time: "07:30",
+        end_time: "09:30",
+        source: "manual",
+        schedule_status: "published",
+        student_count: 20,
+        created_by: admin.user.id,
+        published_by: admin.user.id,
+        published_at: new Date().toISOString(),
+      });
+    assert.ifError(scheduleError);
+
+    const denied = await staff.supabase.rpc("update_class_schedule_details", {
+      target_schedule_id: scheduleId,
+      target_schedule_date: "2048-08-10",
+      target_start_time: "07:30",
+      target_end_time: "09:30",
+      target_room_id: "20000000-0000-0000-0000-000000000001",
+      target_student_count: 20,
+      target_lecturer_ids: [],
+    });
+    assert.ok(denied.error);
+    assert.equal(denied.error.code, "42501");
+
+    const allowed = await admin.supabase.rpc("update_class_schedule_details", {
+      target_schedule_id: scheduleId,
+      target_schedule_date: "2048-08-10",
+      target_start_time: "07:30",
+      target_end_time: "09:30",
+      target_room_id: "20000000-0000-0000-0000-000000000001",
+      target_student_count: 20,
+      target_lecturer_ids: [],
+    });
+    assert.ifError(allowed.error);
+
+    const importerCannotEditOthers = await importer.supabase.rpc(
+      "update_class_schedule_details",
+      {
+        target_schedule_id: scheduleId,
+        target_schedule_date: "2048-08-11",
+        target_start_time: "07:30",
+        target_end_time: "09:30",
+        target_room_id: "20000000-0000-0000-0000-000000000001",
+        target_student_count: 20,
+        target_lecturer_ids: [],
+      },
+    );
+    assert.ok(importerCannotEditOthers.error);
+    assert.equal(importerCannotEditOthers.error.code, "42501");
+
+    const invalidLecturer = await admin.supabase.rpc(
+      "update_class_schedule_details",
+      {
+        target_schedule_id: scheduleId,
+        target_schedule_date: "2048-08-10",
+        target_start_time: "07:30",
+        target_end_time: "09:30",
+        target_room_id: "20000000-0000-0000-0000-000000000001",
+        target_student_count: 20,
+        target_lecturer_ids: [staff.user.id],
+      },
+    );
+    assert.ok(invalidLecturer.error);
+    assert.equal(invalidLecturer.error.code, "42501");
+
+    assert.ifError(
+      (
+        await service
+          .from("profiles")
+          .update({ is_active: false })
+          .eq("id", lecturer.user.id)
+      ).error,
+    );
+    const inactiveLecturer = await admin.supabase.rpc(
+      "update_class_schedule_details",
+      {
+        target_schedule_id: scheduleId,
+        target_schedule_date: "2048-08-10",
+        target_start_time: "07:30",
+        target_end_time: "09:30",
+        target_room_id: "20000000-0000-0000-0000-000000000001",
+        target_student_count: 20,
+        target_lecturer_ids: [lecturer.user.id],
+      },
+    );
+    assert.ok(inactiveLecturer.error);
+    assert.equal(inactiveLecturer.error.code, "42501");
+  } finally {
+    await service
+      .from("profiles")
+      .update({ is_active: true })
+      .eq("id", lecturer.user.id);
+    await admin.supabase.from("class_schedules").delete().eq("id", scheduleId);
+    await admin.supabase.from("rooms").delete().eq("id", roomId);
+  }
+});
+
+test("email giữ snapshot Test khi setting đổi sang Live", async () => {
+  const service = serviceClient();
+  const admin = await signIn("admin@campus.local", "LocalAdmin123!");
+  const id = crypto.randomUUID();
+  try {
+    assert.ifError(
+      (
+        await service
+          .from("email_delivery_settings")
+          .update({ delivery_mode: "test" })
+          .eq("setting_key", "primary")
+      ).error,
+    );
+    assert.ifError(
+      (
+        await service.from("email_notifications").insert({
+          id,
+          notification_type: "safe_review_mode_snapshot",
+          recipient_id: admin.user.id,
+          recipient_email: "original@example.com",
+          dedupe_key: `mode-snapshot:${id}`,
+          subject: "Mode snapshot",
+          payload: {},
+        })
+      ).error,
+    );
+    assert.ifError(
+      (
+        await service
+          .from("email_delivery_settings")
+          .update({ delivery_mode: "live" })
+          .eq("setting_key", "primary")
+      ).error,
+    );
+    const { data, error } = await service
+      .from("email_notifications")
+      .select("status,delivery_mode_at_enqueue")
+      .eq("id", id)
+      .single();
+    assert.ifError(error);
+    assert.equal(data.status, "pending");
+    assert.equal(data.delivery_mode_at_enqueue, "test");
+  } finally {
+    await service.from("email_notifications").delete().eq("id", id);
+    await service
+      .from("email_delivery_settings")
+      .update({ delivery_mode: "off" })
+      .eq("setting_key", "primary");
+  }
+});
+
+test("email giữ snapshot Live khi setting đổi sang Test và suppress khi tạo ở Off", async () => {
+  const service = serviceClient();
+  const admin = await signIn("admin@campus.local", "LocalAdmin123!");
+  const liveId = crypto.randomUUID();
+  const offId = crypto.randomUUID();
+  try {
+    assert.ifError(
+      (
+        await service
+          .from("email_delivery_settings")
+          .update({ delivery_mode: "live" })
+          .eq("setting_key", "primary")
+      ).error,
+    );
+    assert.ifError(
+      (
+        await service.from("email_notifications").insert({
+          id: liveId,
+          notification_type: "safe_review_mode_snapshot_live",
+          recipient_id: admin.user.id,
+          recipient_email: "original@example.com",
+          dedupe_key: `mode-snapshot-live:${liveId}`,
+          subject: "Mode snapshot Live",
+          payload: {},
+        })
+      ).error,
+    );
+    assert.ifError(
+      (
+        await service
+          .from("email_delivery_settings")
+          .update({ delivery_mode: "test" })
+          .eq("setting_key", "primary")
+      ).error,
+    );
+    const liveRow = await service
+      .from("email_notifications")
+      .select("status,delivery_mode_at_enqueue")
+      .eq("id", liveId)
+      .single();
+    assert.ifError(liveRow.error);
+    assert.equal(liveRow.data.status, "pending");
+    assert.equal(liveRow.data.delivery_mode_at_enqueue, "live");
+
+    assert.ifError(
+      (
+        await service
+          .from("email_delivery_settings")
+          .update({ delivery_mode: "off" })
+          .eq("setting_key", "primary")
+      ).error,
+    );
+    assert.ifError(
+      (
+        await service.from("email_notifications").insert({
+          id: offId,
+          notification_type: "safe_review_mode_snapshot_off",
+          recipient_id: admin.user.id,
+          recipient_email: "original@example.com",
+          dedupe_key: `mode-snapshot-off:${offId}`,
+          subject: "Mode snapshot Off",
+          payload: {},
+        })
+      ).error,
+    );
+    const offRow = await service
+      .from("email_notifications")
+      .select("status,delivery_mode_at_enqueue")
+      .eq("id", offId)
+      .single();
+    assert.ifError(offRow.error);
+    assert.equal(offRow.data.status, "suppressed");
+    assert.equal(offRow.data.delivery_mode_at_enqueue, "off");
+  } finally {
+    await service
+      .from("email_notifications")
+      .delete()
+      .in("id", [liveId, offId]);
+    await service
+      .from("email_delivery_settings")
+      .update({ delivery_mode: "off" })
+      .eq("setting_key", "primary");
+  }
+});
+
+test("direct equipment RPC luôn xác minh giảng viên phụ trách và độ dài nội dung", async () => {
+  const service = serviceClient();
+  const admin = await signIn("admin@campus.local", "LocalAdmin123!");
+  const staff = await signIn("staff@campus.local", "LocalStaff123!");
+  const lecturer = await signIn("giangvien@campus.local", "LocalLecturer123!");
+  const scheduleId = crypto.randomUUID();
+  const catalogId = crypto.randomUUID();
+  try {
+    assert.ifError(
+      (
+        await service
+          .from("profiles")
+          .update({ phone: "0901234567" })
+          .eq("id", staff.user.id)
+      ).error,
+    );
+    assert.ifError(
+      (
+        await admin.supabase.from("class_schedules").insert({
+          id: scheduleId,
+          course_id: "10000000-0000-0000-0000-000000000001",
+          course_code_snapshot: "NUR 101",
+          course_name_snapshot: "Thăm khám thể chất",
+          room_id: "20000000-0000-0000-0000-000000000001",
+          schedule_date: "2049-08-10",
+          start_time: "07:30",
+          end_time: "09:30",
+          source: "manual",
+          schedule_status: "published",
+          student_count: 20,
+          created_by: admin.user.id,
+          published_by: admin.user.id,
+          published_at: new Date().toISOString(),
+        })
+      ).error,
+    );
+    assert.ifError(
+      (
+        await admin.supabase.from("equipment_catalog").insert({
+          id: catalogId,
+          item_name: `Thiết bị ${catalogId}`,
+          unit: "Cái",
+        })
+      ).error,
+    );
+    const base = {
+      target_class_schedule_id: scheduleId,
+      target_semester: "HK1",
+      target_receive_at: "2049-08-10T02:00:00.000Z",
+      target_return_at: "2049-08-10T04:00:00.000Z",
+      target_late_registration_reason: null,
+      target_items: [
+        {
+          skill_name: "Kỹ năng",
+          catalog_item_id: catalogId,
+          quantity: 1,
+          note: null,
+        },
+      ],
+    };
+    const selfAsResponsible = await staff.supabase.rpc(
+      "create_equipment_request_with_items",
+      {
+        ...base,
+        target_responsible_lecturer_id: staff.user.id,
+        target_note: null,
+      },
+    );
+    assert.ok(selfAsResponsible.error);
+    assert.equal(selfAsResponsible.error.code, "42501");
+
+    const oversizedNote = await staff.supabase.rpc(
+      "create_equipment_request_with_items",
+      {
+        ...base,
+        target_responsible_lecturer_id: lecturer.user.id,
+        target_note: "x".repeat(2001),
+      },
+    );
+    assert.ok(oversizedNote.error);
+    assert.equal(oversizedNote.error.code, "22023");
+  } finally {
+    await admin.supabase
+      .from("equipment_requests")
+      .delete()
+      .eq("class_schedule_id", scheduleId);
+    await admin.supabase.from("class_schedules").delete().eq("id", scheduleId);
+    await admin.supabase.from("equipment_catalog").delete().eq("id", catalogId);
+  }
+});
+
+test("direct import RPC từ chối hash giả do caller gửi", async () => {
+  const importer = await signIn("importer@campus.local", "LocalImporter123!");
+  const batchId = crypto.randomUUID();
+  try {
+    assert.ifError(
+      (
+        await importer.supabase.from("import_batches").insert({
+          id: batchId,
+          source_type: "import",
+          original_file_name: "forged-hash.csv",
+          file_hash: crypto.randomUUID(),
+          status: "importing",
+          total_rows: 1,
+          created_by: importer.user.id,
+          room_type_id: "40000000-0000-0000-0000-000000000001",
+        })
+      ).error,
+    );
+    const result = await importer.supabase.rpc("create_import_schedule_row", {
+      target_batch_id: batchId,
+      target_row_number: 1,
+      target_hash: crypto.randomUUID(),
+      target_raw: {},
+      target_normalized: {},
+      target_status: "imported",
+      target_errors: [],
+      target_warnings: [],
+      target_course_id: "10000000-0000-0000-0000-000000000001",
+      target_course_code: "NUR 101",
+      target_course_name: "Thăm khám thể chất",
+      target_room_id: "20000000-0000-0000-0000-000000000001",
+      target_lecturer_id: null,
+      target_date: "2049-09-01",
+      target_start: "07:30",
+      target_end: "09:30",
+      target_note: null,
+      target_student_count: 20,
+    });
+    assert.ok(result.error);
+    assert.equal(result.error.code, "22023");
+    assert.match(result.error.message, /INVALID_IMPORT_HASH/);
+  } finally {
+    await importer.supabase.from("import_batches").delete().eq("id", batchId);
+  }
 });
 
 test("RLS giới hạn Y cơ sở, số sinh viên bắt buộc và đổi ngày chặn trùng phòng", async () => {
@@ -1790,9 +2223,20 @@ test("Phiếu thiết bị chỉ cho ký giao sau khi kho xác nhận và GV ph�
       "manager_confirm_equipment_status",
       { target_request_id: requestId, target_status: "handed_over" },
     );
-    assert.ifError(adminEarly.error);
-    assert.equal(adminEarly.data.status, "new");
-    assert.ok(adminEarly.data.handover_staff_confirmed_at);
+    assert.ok(adminEarly.error);
+    assert.match(adminEarly.error.message, /Đã soạn/i);
+
+    const preparing = await admin.supabase.rpc(
+      "manager_confirm_equipment_status",
+      { target_request_id: requestId, target_status: "preparing" },
+    );
+    assert.ifError(preparing.error);
+    const adminHandover = await admin.supabase.rpc(
+      "manager_confirm_equipment_status",
+      { target_request_id: requestId, target_status: "handed_over" },
+    );
+    assert.ifError(adminHandover.error);
+    assert.ok(adminHandover.data.handover_staff_confirmed_at);
 
     const responsibleEarlySign = await lecturer.supabase.rpc(
       "registrant_confirm_equipment_handoff",

@@ -7,10 +7,11 @@
  *
  * Deploy: Web app / Execute as Me / Who has access: Anyone.
  */
-const MEDLABS_VERSION = "2026.08.05-hmac-v2";
+const MEDLABS_VERSION = "2026.08.06-hmac-v3";
 const SECRET_PROPERTY = "WEBHOOK_SECRET";
 const LEGACY_SECRET_PROPERTY = "EMAIL_WEBHOOK_SECRET";
 const SENT_KEYS_PROPERTY = "MEDLABS_SENT_EMAIL_KEYS";
+const USED_NONCES_PROPERTY = "MEDLABS_USED_NONCES";
 const LOG_SHEET_NAME = "Email logs";
 const MAX_SENT_KEYS = 1000;
 const MAX_LOG_ROWS = 5000;
@@ -43,21 +44,53 @@ function hmacHex_(value, secret) {
 }
 
 function canonicalPayload_(body) {
-  return [
-    body.timestamp,
-    body.nonce,
-    body.id,
-    body.dedupeKey,
-    body.to,
-    body.subject,
-    body.html,
-    body.text,
-    body.senderName,
-  ]
-    .map(function (value) {
+  return JSON.stringify(
+    [
+      body.timestamp,
+      body.nonce,
+      body.id,
+      body.dedupeKey,
+      body.to,
+      body.subject,
+      body.html,
+      body.text,
+      body.senderName,
+    ].map(function (value) {
       return String(value || "");
+    }),
+  );
+}
+
+function safeCell_(value) {
+  const text = String(value || "").slice(0, 1000);
+  return /^[=+\-@]/.test(text) ? "'" + text : text;
+}
+
+function shortRequestHash_(rawBody) {
+  return Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    String(rawBody || ""),
+    Utilities.Charset.UTF_8,
+  )
+    .slice(0, 8)
+    .map(function (byte) {
+      const normalized = byte < 0 ? byte + 256 : byte;
+      return ("0" + normalized.toString(16)).slice(-2);
     })
-    .join("\n");
+    .join("");
+}
+
+function readUsedNonces_(properties) {
+  try {
+    const value = JSON.parse(
+      properties.getProperty(USED_NONCES_PROPERTY) || "{}",
+    );
+    return value && typeof value === "object" && !Array.isArray(value)
+      ? value
+      : {};
+  } catch (_error) {
+    return {};
+  }
 }
 
 function readSentKeys_(properties) {
@@ -114,18 +147,26 @@ function writeLog_(body, status, error) {
     if (!sheet) return;
     sheet.appendRow([
       new Date(),
-      String(body.id || ""),
-      String(body.dedupeKey || ""),
-      String(body.to || ""),
-      String(body.subject || ""),
-      status,
-      String(error || "").slice(0, 1000),
+      safeCell_(body.id),
+      safeCell_(body.dedupeKey),
+      safeCell_(body.to),
+      safeCell_(body.subject),
+      safeCell_(status),
+      safeCell_(error),
     ]);
     const overflow = sheet.getLastRow() - MAX_LOG_ROWS - 1;
     if (overflow > 0) sheet.deleteRows(2, overflow);
   } catch (_error) {
     // Lỗi ghi log không được làm gián đoạn việc gửi email.
   }
+}
+
+function writeUnauthorizedLog_(rawBody) {
+  writeLog_(
+    { id: "request:" + shortRequestHash_(rawBody) },
+    "failed",
+    "UNAUTHORIZED",
+  );
 }
 
 function doGet() {
@@ -141,7 +182,8 @@ function doPost(e) {
   let locked = false;
   let body = {};
   try {
-    body = JSON.parse((e && e.postData && e.postData.contents) || "{}");
+    const rawBody = (e && e.postData && e.postData.contents) || "{}";
+    body = JSON.parse(rawBody);
     const properties = PropertiesService.getScriptProperties();
     const expectedSecret = getWebhookSecret_(properties);
     const timestamp = Number(body.timestamp);
@@ -156,7 +198,7 @@ function doPost(e) {
         hmacHex_(canonicalPayload_(body), expectedSecret),
       );
     if (!signatureIsValid) {
-      writeLog_(body, "failed", "UNAUTHORIZED");
+      writeUnauthorizedLog_(rawBody);
       return jsonResponse_({ ok: false, error: "UNAUTHORIZED" });
     }
     if (
@@ -172,6 +214,25 @@ function doPost(e) {
 
     lock.waitLock(30000);
     locked = true;
+    const now = Date.now();
+    const usedNonces = readUsedNonces_(properties);
+    Object.keys(usedNonces).forEach(function (nonce) {
+      if (now - Number(usedNonces[nonce] || 0) > MAX_REQUEST_AGE_MS * 2) {
+        delete usedNonces[nonce];
+      }
+    });
+    if (usedNonces[String(body.nonce)]) {
+      writeLog_(
+        { id: body.id, dedupeKey: body.dedupeKey },
+        "failed",
+        "NONCE_REPLAY",
+      );
+      return jsonResponse_({ ok: false, error: "NONCE_REPLAY" });
+    }
+    // Persist before the provider call so concurrent/retried copies cannot both send.
+    usedNonces[String(body.nonce)] = now;
+    properties.setProperty(USED_NONCES_PROPERTY, JSON.stringify(usedNonces));
+
     const sentKeys = readSentKeys_(properties);
     if (sentKeys.includes(body.dedupeKey)) {
       writeLog_(body, "duplicate", "");

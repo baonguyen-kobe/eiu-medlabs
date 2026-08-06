@@ -13,6 +13,7 @@ const importStatusLabels: Record<string, string> = {
   validated: "Đã kiểm tra",
   importing: "Đang tạo lịch",
   completed: "Hoàn tất",
+  completed_with_errors: "Hoàn tất · Có lỗi",
   failed: "Thất bại",
 };
 
@@ -35,7 +36,7 @@ export default async function ImportsPage({
     .select(
       `
       id, original_file_name, status, total_rows, valid_rows, warning_rows,
-      error_rows, imported_rows, duplicate_rows, created_at, completed_at,
+      error_rows, imported_rows, duplicate_rows, conflict_rows, created_at, completed_at,
       room_types (name)
     `,
       { count: "exact" },
@@ -81,6 +82,7 @@ export default async function ImportsPage({
                 <th>Cảnh báo</th>
                 <th>Lỗi</th>
                 <th>Trùng</th>
+                <th>Xung đột</th>
               </tr>
             </thead>
             <tbody>
@@ -115,6 +117,7 @@ export default async function ImportsPage({
                   <td>{batch.warning_rows}</td>
                   <td>{batch.error_rows}</td>
                   <td>{batch.duplicate_rows}</td>
+                  <td>{batch.conflict_rows}</td>
                 </tr>
               ))}
             </tbody>
