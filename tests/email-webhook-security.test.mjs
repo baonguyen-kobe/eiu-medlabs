@@ -16,6 +16,28 @@ const scriptSource = readFileSync(
 function appsScriptHarness() {
   const values = new Map([["WEBHOOK_SECRET", "review-secret"]]);
   let sent = 0;
+  let logRows = 0;
+  const logSheet = {
+    appendRow() {
+      logRows += 1;
+    },
+    deleteRows(_start, count) {
+      logRows = Math.max(1, logRows - count);
+    },
+    getLastRow: () => logRows,
+    getRange() {
+      return {
+        setValues() {
+          logRows = Math.max(logRows, 1);
+          return this;
+        },
+        setFontWeight() {
+          return this;
+        },
+      };
+    },
+    setFrozenRows() {},
+  };
   const context = {
     console,
     Date,
@@ -57,7 +79,12 @@ function appsScriptHarness() {
         };
       },
     },
-    SpreadsheetApp: { getActiveSpreadsheet: () => null },
+    SpreadsheetApp: {
+      getActiveSpreadsheet: () => ({
+        getSheetByName: () => logSheet,
+        insertSheet: () => logSheet,
+      }),
+    },
     MailApp: {
       sendEmail() {
         sent += 1;
@@ -67,7 +94,7 @@ function appsScriptHarness() {
   };
   vm.createContext(context);
   vm.runInContext(scriptSource, context);
-  return { context, sentCount: () => sent };
+  return { context, logRowCount: () => logRows, sentCount: () => sent };
 }
 
 test("canonical HMAC giữ nguyên newline, Unicode và chuỗi rỗng giữa Node/Apps Script", () => {
@@ -140,6 +167,26 @@ test("Apps Script loại timestamp cũ và vô hiệu hóa công thức trong lo
   );
   assert.equal(result.ok, false);
   assert.equal(result.error, "UNAUTHORIZED");
+});
+
+test("request unauthorized không append từng dòng vào Google Sheet", () => {
+  const harness = appsScriptHarness();
+  for (let index = 0; index < 25; index += 1) {
+    const result = JSON.parse(
+      harness.context.doPost({
+        postData: {
+          contents: JSON.stringify({
+            timestamp: Date.now().toString(),
+            nonce: `invalid-${index}`,
+            signature: "invalid",
+          }),
+        },
+      }).text,
+    );
+    assert.equal(result.error, "UNAUTHORIZED");
+  }
+  assert.equal(harness.logRowCount(), 0);
+  assert.equal(harness.sentCount(), 0);
 });
 
 test("provider success nhưng DB ACK fail không trở thành lỗi có thể gửi lại", () => {

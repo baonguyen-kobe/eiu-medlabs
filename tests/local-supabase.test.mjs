@@ -69,6 +69,414 @@ test("chỉ tài khoản nhân sự được duyệt trước mới có thể đ
   assert.equal(data.user, null);
 });
 
+test("Importer chỉ sửa, phân công và xóa lịch do mình tạo hoặc batch của mình", async () => {
+  const service = serviceClient();
+  const admin = await signIn("admin@campus.local", "LocalAdmin123!");
+  const importer = await signIn("importer@campus.local", "LocalImporter123!");
+  const lecturer = await signIn("giangvien@campus.local", "LocalLecturer123!");
+  const otherEmail = `other-importer-${crypto.randomUUID()}@campus.local`;
+  const otherPassword = "OtherImporter123!";
+  const { data: created, error: createError } =
+    await service.auth.admin.createUser({
+      email: otherEmail,
+      password: otherPassword,
+      email_confirm: true,
+      app_metadata: { preapproved: true },
+      user_metadata: { full_name: "Importer khác" },
+    });
+  assert.ifError(createError);
+  const otherId = created.user.id;
+  const ownId = crypto.randomUUID();
+  const otherIdSchedule = crypto.randomUUID();
+  const ownBatchId = crypto.randomUUID();
+  const otherBatchId = crypto.randomUUID();
+  const ownBatchScheduleId = crypto.randomUUID();
+  const otherBatchScheduleId = crypto.randomUUID();
+  try {
+    assert.ifError(
+      (
+        await service.from("user_roles").insert({
+          user_id: otherId,
+          role: "importer",
+          created_by: admin.user.id,
+        })
+      ).error,
+    );
+    assert.ifError(
+      (
+        await service.from("profile_room_types").upsert({
+          profile_id: otherId,
+          room_type_id: "40000000-0000-0000-0000-000000000001",
+          created_by: admin.user.id,
+        })
+      ).error,
+    );
+    const otherImporter = await signIn(otherEmail, otherPassword);
+    const batches = [
+      {
+        id: ownBatchId,
+        original_file_name: "own.xlsx",
+        file_hash: crypto.randomUUID(),
+        created_by: importer.user.id,
+        room_type_id: "40000000-0000-0000-0000-000000000001",
+      },
+      {
+        id: otherBatchId,
+        original_file_name: "other.xlsx",
+        file_hash: crypto.randomUUID(),
+        created_by: otherId,
+        room_type_id: "40000000-0000-0000-0000-000000000001",
+      },
+    ];
+    assert.ifError(
+      (await importer.supabase.from("import_batches").insert(batches[0])).error,
+    );
+    assert.ifError(
+      (await otherImporter.supabase.from("import_batches").insert(batches[1]))
+        .error,
+    );
+    const base = {
+      course_id: "10000000-0000-0000-0000-000000000001",
+      course_code_snapshot: "NUR 101",
+      course_name_snapshot: "Thăm khám thể chất",
+      room_id: "20000000-0000-0000-0000-000000000001",
+      start_time: "07:30",
+      end_time: "09:30",
+      student_count: 20,
+      source: "manual",
+      schedule_status: "published",
+      published_at: new Date().toISOString(),
+    };
+    assert.ifError(
+      (
+        await importer.supabase.from("class_schedules").insert([
+          {
+            ...base,
+            id: ownId,
+            schedule_date: "2039-09-01",
+            created_by: importer.user.id,
+            published_by: importer.user.id,
+          },
+          {
+            ...base,
+            id: ownBatchScheduleId,
+            schedule_date: "2039-09-03",
+            source: "import",
+            import_batch_id: ownBatchId,
+            created_by: importer.user.id,
+            published_by: importer.user.id,
+          },
+        ])
+      ).error,
+    );
+    assert.ifError(
+      (
+        await otherImporter.supabase.from("class_schedules").insert([
+          {
+            ...base,
+            id: otherIdSchedule,
+            schedule_date: "2039-09-02",
+            created_by: otherId,
+            published_by: otherId,
+          },
+          {
+            ...base,
+            id: otherBatchScheduleId,
+            schedule_date: "2039-09-04",
+            source: "import",
+            import_batch_id: otherBatchId,
+            created_by: otherId,
+            published_by: otherId,
+          },
+        ])
+      ).error,
+    );
+    assert.ifError(
+      (
+        await admin.supabase
+          .from("class_schedules")
+          .update({ created_by: otherId, published_by: otherId })
+          .eq("id", ownBatchScheduleId)
+      ).error,
+    );
+
+    const deniedReschedule = await importer.supabase.rpc("reschedule_class", {
+      target_schedule_id: otherIdSchedule,
+      target_schedule_date: "2039-09-12",
+    });
+    assert.equal(deniedReschedule.error?.code, "42501");
+    const deniedAssign = await importer.supabase.rpc("assign_class_lecturers", {
+      target_schedule_id: otherIdSchedule,
+      target_lecturer_ids: [],
+    });
+    assert.equal(deniedAssign.error?.code, "42501");
+    const deniedDelete = await importer.supabase
+      .from("class_schedules")
+      .delete()
+      .eq("id", otherIdSchedule)
+      .select("id");
+    assert.ifError(deniedDelete.error);
+    assert.equal(deniedDelete.data.length, 0);
+
+    assert.ifError(
+      (
+        await importer.supabase.rpc("reschedule_class", {
+          target_schedule_id: ownId,
+          target_schedule_date: "2039-09-11",
+        })
+      ).error,
+    );
+    assert.ifError(
+      (
+        await importer.supabase.rpc("assign_class_lecturers", {
+          target_schedule_id: ownId,
+          target_lecturer_ids: [lecturer.user.id],
+        })
+      ).error,
+    );
+    assert.ifError(
+      (
+        await importer.supabase.rpc("reschedule_class", {
+          target_schedule_id: ownBatchScheduleId,
+          target_schedule_date: "2039-09-13",
+        })
+      ).error,
+    );
+    assert.equal(
+      (
+        await importer.supabase.rpc("reschedule_class", {
+          target_schedule_id: otherBatchScheduleId,
+          target_schedule_date: "2039-09-14",
+        })
+      ).error?.code,
+      "42501",
+    );
+    const ownDelete = await importer.supabase
+      .from("class_schedules")
+      .delete()
+      .eq("id", ownId)
+      .select("id")
+      .single();
+    assert.ifError(ownDelete.error);
+  } finally {
+    await admin.supabase
+      .from("class_schedules")
+      .delete()
+      .in("id", [
+        ownId,
+        otherIdSchedule,
+        ownBatchScheduleId,
+        otherBatchScheduleId,
+      ]);
+    await admin.supabase
+      .from("import_batches")
+      .delete()
+      .in("id", [ownBatchId, otherBatchId]);
+    await service.auth.admin.deleteUser(otherId);
+  }
+});
+
+test("Staff ngoài room-type scope không quản lý được phiếu thiết bị bằng direct RPC/RLS", async () => {
+  const service = serviceClient();
+  const admin = await signIn("admin@campus.local", "LocalAdmin123!");
+  const lecturer = await signIn("giangvien@campus.local", "LocalLecturer123!");
+  const scopedEmail = `basic-only-staff-${crypto.randomUUID()}@campus.local`;
+  const password = "ScopedStaff123!";
+  const { data: created, error: createError } =
+    await service.auth.admin.createUser({
+      email: scopedEmail,
+      password,
+      email_confirm: true,
+      app_metadata: { preapproved: true },
+      user_metadata: { full_name: "Staff ngoài scope" },
+    });
+  assert.ifError(createError);
+  const staffId = created.user.id;
+  const scheduleId = crypto.randomUUID();
+  const requestId = crypto.randomUUID();
+  const catalogId = crypto.randomUUID();
+  try {
+    assert.ifError(
+      (
+        await service.from("user_roles").insert({
+          user_id: staffId,
+          role: "staff",
+          created_by: admin.user.id,
+        })
+      ).error,
+    );
+    assert.ifError(
+      (
+        await admin.supabase
+          .from("profile_room_types")
+          .delete()
+          .eq("profile_id", staffId)
+      ).error,
+    );
+    assert.ifError(
+      (
+        await service.from("profile_room_types").insert({
+          profile_id: staffId,
+          room_type_id: "40000000-0000-0000-0000-000000000002",
+          created_by: admin.user.id,
+        })
+      ).error,
+    );
+    assert.ifError(
+      (
+        await admin.supabase.from("class_schedules").insert({
+          id: scheduleId,
+          course_id: "10000000-0000-0000-0000-000000000001",
+          course_code_snapshot: "NUR 101",
+          course_name_snapshot: "Thăm khám thể chất",
+          room_id: "20000000-0000-0000-0000-000000000001",
+          lecturer_id: lecturer.user.id,
+          schedule_date: "2039-10-01",
+          start_time: "07:30",
+          end_time: "09:30",
+          student_count: 20,
+          schedule_status: "published",
+          created_by: admin.user.id,
+          published_by: admin.user.id,
+          published_at: new Date().toISOString(),
+        })
+      ).error,
+    );
+    assert.ifError(
+      (
+        await admin.supabase.from("equipment_requests").insert({
+          id: requestId,
+          class_schedule_id: scheduleId,
+          registrant_id: admin.user.id,
+          responsible_lecturer_id: lecturer.user.id,
+          semester: "HK1",
+          phone_snapshot: "0901000001",
+          email_snapshot: "admin@campus.local",
+          receive_at: "2039-10-01T02:00:00Z",
+          return_at: "2039-10-01T09:00:00Z",
+          status: "new",
+          created_by: admin.user.id,
+        })
+      ).error,
+    );
+    assert.ifError(
+      (
+        await admin.supabase.from("equipment_catalog").insert({
+          id: catalogId,
+          item_name: "Thiết bị kiểm thử scope",
+          commercial_name: `Scope ${catalogId}`,
+          unit: "Cái",
+        })
+      ).error,
+    );
+    const scopedStaff = await signIn(scopedEmail, password);
+    assert.equal(
+      (
+        await scopedStaff.supabase.rpc("manager_confirm_equipment_status", {
+          target_request_id: requestId,
+          target_status: "preparing",
+        })
+      ).error?.code,
+      "42501",
+    );
+    assert.equal(
+      (
+        await scopedStaff.supabase.rpc(
+          "manager_review_late_equipment_request",
+          {
+            target_request_id: requestId,
+            target_decision: "approved",
+            target_note: null,
+          },
+        )
+      ).error?.code,
+      "42501",
+    );
+    const deleted = await scopedStaff.supabase
+      .from("equipment_requests")
+      .delete()
+      .eq("id", requestId)
+      .select("id");
+    assert.ifError(deleted.error);
+    assert.equal(deleted.data.length, 0);
+    const unauthorizedItem = await scopedStaff.supabase
+      .from("equipment_request_items")
+      .insert({
+        request_id: requestId,
+        catalog_item_id: catalogId,
+        skill_name: "Ngoài scope",
+        quantity: 1,
+      });
+    assert.equal(unauthorizedItem.error?.code, "42501");
+
+    const inScopeStaff = await signIn("staff@campus.local", "LocalStaff123!");
+    assert.ifError(
+      (
+        await inScopeStaff.supabase.rpc("manager_confirm_equipment_status", {
+          target_request_id: requestId,
+          target_status: "preparing",
+        })
+      ).error,
+    );
+  } finally {
+    await admin.supabase
+      .from("equipment_requests")
+      .delete()
+      .eq("id", requestId);
+    await admin.supabase.from("equipment_catalog").delete().eq("id", catalogId);
+    await admin.supabase.from("class_schedules").delete().eq("id", scheduleId);
+    await service.auth.admin.deleteUser(staffId);
+  }
+});
+
+test("chuyển email Off chỉ suppress pending, không đổi row đang processing", async () => {
+  const service = serviceClient();
+  const admin = await signIn("admin@campus.local", "LocalAdmin123!");
+  const id = crypto.randomUUID();
+  try {
+    assert.ifError(
+      (
+        await admin.supabase.rpc("set_email_delivery_mode", {
+          target_mode: "live",
+        })
+      ).error,
+    );
+    assert.ifError(
+      (
+        await service.from("email_notifications").insert({
+          id,
+          notification_type: "second_followup_test",
+          recipient_id: admin.user.id,
+          recipient_email: "original@example.com",
+          dedupe_key: `second-followup:${id}`,
+          subject: "Race Off",
+          payload: {},
+        })
+      ).error,
+    );
+    assert.ifError(
+      (await service.rpc("claim_email_notifications", { batch_size: 1 })).error,
+    );
+    assert.ifError(
+      (
+        await admin.supabase.rpc("set_email_delivery_mode", {
+          target_mode: "off",
+        })
+      ).error,
+    );
+    const { data, error } = await service
+      .from("email_notifications")
+      .select("status")
+      .eq("id", id)
+      .single();
+    assert.ifError(error);
+    assert.equal(data.status, "processing");
+  } finally {
+    await service.from("email_notifications").delete().eq("id", id);
+    await admin.supabase.rpc("set_email_delivery_mode", { target_mode: "off" });
+  }
+});
+
 test("Người xem chỉ đọc lịch và nhận email theo loại phòng đã chọn", async () => {
   const service = serviceClient();
   const admin = await signIn("admin@campus.local", "LocalAdmin123!");
@@ -1828,18 +2236,15 @@ test("Admin xóa được danh mục khi chỉ còn lịch hoặc ca đã hủy"
           .eq("id", shiftId)
       ).error,
     );
-    assert.ifError(
-      (
-        await admin.supabase.rpc("delete_catalog_shift_template", {
-          target_shift_template_id: shiftTemplateId,
-        })
-      ).error,
+    const historyProtectedTemplate = await admin.supabase.rpc(
+      "delete_catalog_shift_template",
+      { target_shift_template_id: shiftTemplateId },
     );
+    assert.ok(historyProtectedTemplate.error);
 
     for (const [table, id] of [
       ["rooms", roomId],
       ["courses", courseId],
-      ["shift_templates", shiftTemplateId],
     ]) {
       const { data, error } = await admin.supabase
         .from(table)
@@ -1850,7 +2255,10 @@ test("Admin xóa được danh mục khi chỉ còn lịch hoặc ca đã hủy"
       assert.equal(data, null);
     }
   } finally {
-    await admin.supabase.from("staff_shifts").delete().eq("id", shiftId);
+    await admin.supabase
+      .from("staff_shifts")
+      .update({ shift_template_id: null })
+      .eq("id", shiftId);
     await admin.supabase
       .from("shift_templates")
       .delete()

@@ -568,6 +568,10 @@ export function ImportWizard({
                   <span>Trùng, không tạo</span>
                   <strong>{validation.duplicateRows}</strong>
                 </article>
+                <article className="danger">
+                  <span>Xung đột</span>
+                  <strong>{validation.conflictRows}</strong>
+                </article>
               </div>
               <p className="import-step-note">
                 Kiểm tra từng dòng trong cột <b>Kiểm tra</b>. Bạn vẫn có thể
@@ -600,6 +604,10 @@ export function ImportWizard({
                 <article className="warning">
                   <span>Đã loại do trùng</span>
                   <strong>{validation.duplicateRows}</strong>
+                </article>
+                <article className="danger">
+                  <span>Đã loại do xung đột</span>
+                  <strong>{validation.conflictRows}</strong>
                 </article>
               </div>
               <p className="import-step-note">

@@ -381,6 +381,30 @@ create trigger email_notifications_snapshot_delivery_mode
 before insert on public.email_notifications
 for each row execute function private.snapshot_email_delivery_mode();
 
+create or replace function public.set_email_delivery_mode(target_mode text)
+returns public.email_delivery_settings
+language plpgsql security definer set search_path = '' as $$
+declare changed public.email_delivery_settings;
+begin
+  if not (select private.has_role('admin')) then
+    raise exception 'ADMIN_ROLE_REQUIRED' using errcode = '42501';
+  end if;
+  if target_mode not in ('off', 'test', 'live') then
+    raise exception 'INVALID_EMAIL_DELIVERY_MODE' using errcode = '22023';
+  end if;
+  update public.email_delivery_settings
+  set delivery_mode = target_mode, updated_by = (select auth.uid()), updated_at = clock_timestamp()
+  where setting_key = 'primary' returning * into changed;
+  if target_mode = 'off' then
+    update public.email_notifications
+    set status = 'suppressed', processing_started_at = null,
+        last_error = 'Đã bỏ qua vì hệ thống đang tắt gửi email.'
+    where status = 'pending';
+  end if;
+  return changed;
+end;
+$$;
+
 create or replace function private.set_updated_at()
 returns trigger
 language plpgsql
@@ -1129,6 +1153,21 @@ select cron.schedule(
   'select private.refresh_open_shift_patterns();'
 );
 
+create or replace function private.preserve_staff_shift_history()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  if old.registration_source <> 'generated'
+    or old.status in ('completed', 'cancelled')
+    or old.shift_date < (now() at time zone 'Asia/Ho_Chi_Minh')::date then
+    return null;
+  end if;
+  return old;
+end;
+$$;
+create trigger staff_shifts_preserve_history
+before delete on public.staff_shifts
+for each row execute function private.preserve_staff_shift_history();
+
 create or replace function public.register_own_shift_pattern(
   target_weekday smallint,
   target_shift_type text,
@@ -1440,6 +1479,7 @@ grant execute on function public.register_own_shift_pattern(smallint, text, date
 grant execute on function public.cancel_own_shift_pattern(uuid) to authenticated;
 grant execute on function public.claim_email_notifications(integer) to service_role;
 revoke all on function private.snapshot_email_delivery_mode() from public, anon, authenticated;
+revoke all on function private.preserve_staff_shift_history() from public, anon, authenticated;
 revoke all on function private.materialize_shift_pattern(uuid, date) from public, anon, authenticated;
 revoke execute on function public.create_import_schedule_row(
   uuid, integer, text, jsonb, jsonb, public.import_row_status, jsonb, jsonb,
@@ -1636,3 +1676,5 @@ grant select, insert, update on public.profiles, public.user_roles, public.cours
   to service_role;
 grant select, insert, update, delete on public.email_notifications to service_role;
 grant select, update on public.email_delivery_settings to service_role;
+revoke all on function public.set_email_delivery_mode(text) from public, anon;
+grant execute on function public.set_email_delivery_mode(text) to authenticated;

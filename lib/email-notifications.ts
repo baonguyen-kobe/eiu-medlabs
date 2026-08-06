@@ -673,7 +673,11 @@ async function suppressPendingNotifications(dedupeKeys?: string[]) {
       processing_started_at: null,
       last_error: "Đã bỏ qua vì hệ thống đang tắt gửi email.",
     })
-    .in("status", ["pending", "processing"]);
+    // A processing row may already be inside the provider call. Suppressing it
+    // here would make the database say "suppressed" even when the provider has
+    // actually delivered it. The worker owns processing rows and reconciles
+    // their final state.
+    .eq("status", "pending");
   if (dedupeKeys?.length) query = query.in("dedupe_key", dedupeKeys);
   const { error } = await query;
   if (error)
@@ -690,7 +694,7 @@ async function deliverNotification(notification: EmailNotification) {
   try {
     const currentDeliveryMode = await getEmailDeliveryMode();
     if (currentDeliveryMode === "off") {
-      const { error } = await supabase
+      const { data: suppressed, error } = await supabase
         .from("email_notifications")
         .update({
           status: "suppressed",
@@ -698,14 +702,19 @@ async function deliverNotification(notification: EmailNotification) {
           last_error: "Đã bỏ qua vì hệ thống đang tắt gửi email.",
         })
         .eq("id", notification.id)
-        .eq("status", "processing");
+        .eq("status", "processing")
+        .select("id")
+        .maybeSingle();
       if (error) throw new Error(`EMAIL_SUPPRESS_ACK_FAILED: ${error.message}`);
+      // A concurrent actor may have reconciled the row already. In either case
+      // Off is observed before the provider call, so this worker must stop.
+      if (!suppressed) return;
       return;
     }
 
     const deliveryMode = notification.delivery_mode_at_enqueue;
     if (deliveryMode === "off") {
-      const { error } = await supabase
+      const { data: suppressed, error } = await supabase
         .from("email_notifications")
         .update({
           status: "suppressed",
@@ -713,8 +722,11 @@ async function deliverNotification(notification: EmailNotification) {
           last_error: "Email được tạo khi chế độ gửi đang tắt.",
         })
         .eq("id", notification.id)
-        .eq("status", "processing");
+        .eq("status", "processing")
+        .select("id")
+        .maybeSingle();
       if (error) throw new Error(`EMAIL_SUPPRESS_ACK_FAILED: ${error.message}`);
+      if (!suppressed) return;
       return;
     }
 
@@ -787,7 +799,7 @@ async function deliverNotification(notification: EmailNotification) {
     providerSucceeded = true;
     providerMessageId = result.messageId ?? notification.dedupe_key;
 
-    const { error } = await supabase
+    const { data: acknowledged, error } = await supabase
       .from("email_notifications")
       .update({
         status: isTestDelivery ? "simulated" : "sent",
@@ -801,8 +813,11 @@ async function deliverNotification(notification: EmailNotification) {
           : null,
       })
       .eq("id", notification.id)
-      .eq("status", "processing");
+      .eq("status", "processing")
+      .select("id")
+      .maybeSingle();
     if (error) throw new Error(`EMAIL_DB_ACK_FAILED: ${error.message}`);
+    if (!acknowledged) throw new Error("EMAIL_DB_ACK_FAILED: STATUS_CHANGED");
   } catch (error) {
     const message =
       error instanceof Error

@@ -177,6 +177,57 @@ as $$
   );
 $$;
 
+create or replace function private.can_modify_class_schedule(
+  target_schedule_id uuid,
+  target_action text
+)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  actor_id uuid := (select auth.uid());
+  schedule_row public.class_schedules;
+  room_type_value uuid;
+begin
+  if actor_id is null or not (select private.is_active_user())
+    or target_action not in ('assign_lecturers', 'reschedule', 'details', 'delete') then
+    return false;
+  end if;
+  select schedules.* into schedule_row from public.class_schedules schedules
+  where schedules.id = target_schedule_id and schedules.schedule_status <> 'cancelled';
+  if schedule_row.id is null then return false; end if;
+  select rooms.room_type_id into room_type_value from public.rooms rooms
+  where rooms.id = schedule_row.room_id;
+  if (select private.has_role('admin')) then return true; end if;
+  if (select private.has_role('staff')) then
+    return (select private.has_room_type(room_type_value));
+  end if;
+  if (select private.has_role('importer')) then
+    return (select private.has_room_type(room_type_value)) and (
+      schedule_row.created_by = actor_id or exists (
+        select 1 from public.import_batches batches
+        where batches.id = schedule_row.import_batch_id and batches.created_by = actor_id
+      )
+    );
+  end if;
+  if (select private.has_role('lecturer')) and target_action in ('reschedule', 'details') then
+    return (select private.has_room_type(room_type_value)) and (
+      schedule_row.created_by = actor_id
+      or actor_id in (schedule_row.lecturer_id, schedule_row.lecturer_2_id)
+    );
+  end if;
+  if (select private.has_role('lecturer')) and target_action = 'delete' then
+    return schedule_row.created_by = actor_id
+      and (select private.has_room_type(room_type_value))
+      and room_type_value = '40000000-0000-0000-0000-000000000001'::uuid;
+  end if;
+  return false;
+end;
+$$;
+
 create or replace function private.profile_has_room_type(
   target_profile_id uuid,
   target_room_type_id uuid
@@ -203,11 +254,13 @@ revoke execute on function private.is_admin() from public, anon;
 revoke execute on function private.has_room_type(uuid) from public, anon;
 revoke execute on function private.can_access_room(uuid) from public, anon;
 revoke execute on function private.can_manage_class_room(uuid) from public, anon;
+revoke all on function private.can_modify_class_schedule(uuid, text) from public, anon;
 revoke execute on function private.profile_has_room_type(uuid, uuid) from public, anon;
 grant execute on function private.is_admin() to authenticated;
 grant execute on function private.has_room_type(uuid) to authenticated;
 grant execute on function private.can_access_room(uuid) to authenticated;
 grant execute on function private.can_manage_class_room(uuid) to authenticated;
+grant execute on function private.can_modify_class_schedule(uuid, text) to authenticated;
 grant execute on function private.profile_has_room_type(uuid, uuid) to authenticated;
 
 alter table public.room_types enable row level security;
@@ -339,19 +392,7 @@ drop policy if exists class_schedules_authorized_delete on public.class_schedule
 create policy class_schedules_scoped_delete on public.class_schedules
 for delete to authenticated
 using (
-  (select private.can_manage_class_room(room_id))
-  or (
-    (select private.has_role('lecturer'))
-    and created_by = (select auth.uid())
-    and schedule_status <> 'cancelled'
-    and (select private.can_access_room(room_id))
-    and exists (
-      select 1
-      from public.rooms as lecturer_room
-      where lecturer_room.id = room_id
-        and lecturer_room.room_type_id = '40000000-0000-0000-0000-000000000001'::uuid
-    )
-  )
+  (select private.can_modify_class_schedule(id, 'delete'))
 );
 
 drop policy if exists import_batches_select on public.import_batches;
@@ -542,7 +583,7 @@ begin
   end if;
   select rooms.room_type_id into room_type_value
   from public.rooms as rooms where rooms.id = target_row.room_id;
-  if not (select private.can_manage_class_room(target_row.room_id)) then
+  if not (select private.can_modify_class_schedule(target_schedule_id, 'assign_lecturers')) then
     raise exception 'CLASS_MANAGEMENT_SCOPE_REQUIRED' using errcode = '42501';
   end if;
 
@@ -645,18 +686,7 @@ begin
     before_row.created_at at time zone 'Asia/Ho_Chi_Minh',
     'YYMMDDHH24MISS'
   );
-  if not (select private.has_room_type(room_type_value)) then
-    raise exception 'ROOM_TYPE_SCOPE_REQUIRED' using errcode = '42501';
-  end if;
-  if not (
-    (select private.has_role('admin'))
-    or (select private.has_role('staff'))
-    or (select private.has_role('importer'))
-    or coalesce(
-      (select auth.uid()) in (before_row.lecturer_id, before_row.lecturer_2_id),
-      false
-    )
-  ) then
+  if not (select private.can_modify_class_schedule(target_schedule_id, 'reschedule')) then
     raise exception 'CLASS_DATE_CHANGE_FORBIDDEN' using errcode = '42501';
   end if;
 
@@ -913,6 +943,9 @@ declare
   is_importer boolean := (select private.has_role('importer'));
   can_manage_details boolean := false;
 begin
+  if not (select private.can_modify_class_schedule(target_schedule_id, 'details')) then
+    raise exception 'CLASS_UPDATE_FORBIDDEN' using errcode = '42501';
+  end if;
   select * into before_row from public.class_schedules schedules
   where schedules.id = target_schedule_id and schedules.schedule_status <> 'cancelled'
   for update;

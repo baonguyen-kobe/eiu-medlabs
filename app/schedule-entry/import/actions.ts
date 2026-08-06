@@ -15,6 +15,10 @@ import { createClient } from "@/lib/supabase/server";
 import { isWithinOperatingHours } from "@/lib/business-time";
 import { roomTypeIdForScope, type ScheduleScope } from "@/lib/room-types";
 import { createImportScheduleHash } from "@/lib/import-schedule-hash";
+import {
+  classifyImportPreviewCandidate,
+  type ExistingScheduleForPreview,
+} from "@/lib/import-preview-conflicts";
 
 type ImportRow = Record<string, unknown>;
 type ImportLecturer = {
@@ -42,7 +46,7 @@ export type ImportResult = {
 };
 
 export type ImportValidationStatus =
-  "valid" | "warning" | "error" | "duplicate";
+  "valid" | "warning" | "error" | "duplicate" | "conflict";
 
 export type ImportValidationResult = {
   ok: boolean;
@@ -52,6 +56,7 @@ export type ImportValidationResult = {
   warningRows: number;
   errorRows: number;
   duplicateRows: number;
+  conflictRows: number;
   normalizedRows: ImportRow[];
   rows: Array<{
     rowNumber: number;
@@ -95,6 +100,7 @@ function invalidValidation(message: string): ImportValidationResult {
     warningRows: 0,
     errorRows: 0,
     duplicateRows: 0,
+    conflictRows: 0,
     normalizedRows: [],
     rows: [],
   };
@@ -278,7 +284,19 @@ export async function validateScheduleRows(
           .digest("hex");
     const duplicateWithinFile = seenHashes.has(rowHash);
     seenHashes.add(rowHash);
-    return { duplicateWithinFile, errors, index, rowHash, warnings };
+    return {
+      courseCode,
+      duplicateWithinFile,
+      endTime,
+      errors,
+      index,
+      lecturerId: requestedLecturer?.id ?? null,
+      roomId: room?.id ?? null,
+      rowHash,
+      scheduleDate,
+      startTime,
+      warnings,
+    };
   });
 
   const hashesToCheck = [
@@ -306,22 +324,93 @@ export async function validateScheduleRows(
     ({ rowHash }) => !duplicateCheckError && existingHashSet.has(rowHash),
   );
 
+  const comparableRows = preparedRows.filter(
+    (row) => row.roomId && row.scheduleDate && row.startTime && row.endTime,
+  );
+  const roomIds = [
+    ...new Set(comparableRows.map(({ roomId }) => roomId as string)),
+  ];
+  const lecturerIds = [
+    ...new Set(
+      comparableRows
+        .map(({ lecturerId }) => lecturerId)
+        .filter((lecturerId): lecturerId is string => Boolean(lecturerId)),
+    ),
+  ];
+  const scheduleDates = comparableRows
+    .map(({ scheduleDate }) => scheduleDate as string)
+    .sort();
+  let existingSchedules: ExistingScheduleForPreview[] = [];
+  let scheduleCheckFailed = false;
+  if (roomIds.length && scheduleDates.length) {
+    const select =
+      "course_code_snapshot,room_id,schedule_date,start_time,end_time,lecturer_id,lecturer_2_id";
+    const roomQuery = supabase
+      .from("class_schedules")
+      .select(select)
+      .in("room_id", roomIds)
+      .gte("schedule_date", scheduleDates[0])
+      .lte("schedule_date", scheduleDates.at(-1) as string)
+      .neq("schedule_status", "cancelled");
+    const lecturerQuery = lecturerIds.length
+      ? supabase
+          .from("class_schedules")
+          .select(select)
+          .or(
+            `lecturer_id.in.(${lecturerIds.join(",")}),lecturer_2_id.in.(${lecturerIds.join(",")})`,
+          )
+          .gte("schedule_date", scheduleDates[0])
+          .lte("schedule_date", scheduleDates.at(-1) as string)
+          .neq("schedule_status", "cancelled")
+      : null;
+    const [roomResult, lecturerResult] = await Promise.all([
+      roomQuery,
+      lecturerQuery,
+    ]);
+    scheduleCheckFailed = Boolean(roomResult.error || lecturerResult?.error);
+    existingSchedules = [
+      ...(roomResult.data ?? []),
+      ...(lecturerResult?.data ?? []),
+    ] as ExistingScheduleForPreview[];
+  }
+
+  const scheduleChecks = preparedRows.map((prepared) =>
+    scheduleCheckFailed
+      ? { conflict: false, duplicate: false }
+      : classifyImportPreviewCandidate(prepared, existingSchedules),
+  );
+  if (scheduleCheckFailed) {
+    for (const prepared of preparedRows) {
+      prepared.errors.push("Không thể kiểm tra lịch tạo tay và lịch đang mở");
+    }
+  }
+
   const validationRows = preparedRows.map((prepared, index) => {
-    const duplicate = prepared.duplicateWithinFile || remoteDuplicates[index];
+    const duplicate =
+      prepared.duplicateWithinFile ||
+      remoteDuplicates[index] ||
+      scheduleChecks[index].duplicate;
+    const conflict = !duplicate && scheduleChecks[index].conflict;
     if (duplicate) {
       prepared.errors.push(
         prepared.duplicateWithinFile
           ? "Dòng trùng với một dòng khác trong cùng file"
-          : "Lịch này đã được import trước đó",
+          : "Lịch trùng với lịch đã có (tạo tay hoặc import)",
+      );
+    } else if (conflict) {
+      prepared.errors.push(
+        "Lịch xung đột phòng hoặc giảng viên với lịch đã có",
       );
     }
     const status: ImportValidationStatus = duplicate
       ? "duplicate"
-      : prepared.errors.length > 0
-        ? "error"
-        : prepared.warnings.length > 0
-          ? "warning"
-          : "valid";
+      : conflict
+        ? "conflict"
+        : prepared.errors.length > 0
+          ? "error"
+          : prepared.warnings.length > 0
+            ? "warning"
+            : "valid";
     return {
       rowNumber: prepared.index + 2,
       status,
@@ -342,6 +431,9 @@ export async function validateScheduleRows(
   const duplicateRows = validationRows.filter(
     ({ status }) => status === "duplicate",
   ).length;
+  const conflictRows = validationRows.filter(
+    ({ status }) => status === "conflict",
+  ).length;
   return {
     ok: true,
     message: `Đã kiểm tra ${inputRows.length} dòng. Có ${validRows + warningRows} dòng có thể tạo lịch.`,
@@ -350,6 +442,7 @@ export async function validateScheduleRows(
     warningRows,
     errorRows,
     duplicateRows,
+    conflictRows,
     normalizedRows: inputRows,
     rows: validationRows,
   };

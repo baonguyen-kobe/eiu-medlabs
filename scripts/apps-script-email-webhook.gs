@@ -162,11 +162,10 @@ function writeLog_(body, status, error) {
 }
 
 function writeUnauthorizedLog_(rawBody) {
-  writeLog_(
-    { id: "request:" + shortRequestHash_(rawBody) },
-    "failed",
-    "UNAUTHORIZED",
-  );
+  // The Web App is public by necessity. Never append unauthenticated traffic
+  // to the Sheet: an attacker could otherwise consume Sheet rows/quota with
+  // invalid signatures. Keep only a short, payload-free execution log entry.
+  console.warn("UNAUTHORIZED request:" + shortRequestHash_(rawBody));
 }
 
 function doGet() {
