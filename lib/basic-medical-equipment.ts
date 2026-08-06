@@ -53,6 +53,7 @@ export type BasicMedicalRegistrationSessionItem = {
 
 export type BasicMedicalRegistrationListItem = {
   id: string;
+  registration_code: string;
   created_at: string;
   academic_year: string;
   semester: string;

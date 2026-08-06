@@ -37,6 +37,7 @@ import { getNameInitials } from "@/lib/person-name";
 import {
   canCreateBasicMedicalSchedules,
   canImportBasicMedicalSchedules,
+  canManageBasicMedicalWorkspace,
   canUseSkillsWorkspace,
   canViewBasicMedicalRegistrations,
   canViewBasicMedicalSchedules,
@@ -326,6 +327,9 @@ function buildNavigation(
         activeIcon: ClipboardListSolid,
       },
     ];
+    if (!canManageBasicMedicalWorkspace(roles, roomTypeCodes)) {
+      adminItems.shift();
+    }
     if (isAdmin) {
       adminItems.unshift(
         ...(canManagePersonnel

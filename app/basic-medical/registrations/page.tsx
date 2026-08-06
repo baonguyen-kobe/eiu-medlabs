@@ -39,6 +39,7 @@ export default async function BasicMedicalRegistrationsPage({
     allowBasicMedicalAccess,
     canImportSchedules,
     canManagePersonnel,
+    canManageBasicMedical,
   } = await getViewer();
   const roomTypeCodes = roomTypes.map(({ code }) => code);
   if (!canViewBasicMedicalRegistrations(roles, roomTypeCodes)) {
@@ -49,7 +50,7 @@ export default async function BasicMedicalRegistrationsPage({
     );
   }
 
-  const canDelete = roles.some((role) => ["admin", "staff"].includes(role));
+  const canDelete = canManageBasicMedical;
   const currentPage = normalizePage(query.page);
   const status = query.status === "completed" ? "completed" : "incomplete";
   const search = query.q?.trim() ?? "";
@@ -76,7 +77,7 @@ export default async function BasicMedicalRegistrationsPage({
       ? await supabase
           .from("basic_medical_registrations")
           .select(
-            "id,created_at,academic_year,semester,start_date,end_date,student_count,note,courses(course_code,course_name),rooms(id,room_code,building_code,room_name),registrant:profiles!basic_medical_registrations_registrant_id_fkey(full_name),responsible:profiles!basic_medical_registrations_responsible_lecturer_id_fkey(full_name),basic_medical_registration_sessions(id,session_number,lesson_title,teaching_lecturer_id,teaching:profiles!basic_medical_registration_sessions_teaching_lecturer_id_fkey(full_name),class_schedules(schedule_date,start_time,end_time),confirmations:basic_medical_session_confirmations(id,signer_id,signed_at,invalidated_at,signer:profiles!basic_medical_session_confirmations_signer_id_fkey(full_name)))",
+            "id,registration_code,created_at,academic_year,semester,start_date,end_date,student_count,note,courses(course_code,course_name),rooms(id,room_code,building_code,room_name),registrant:profiles!basic_medical_registrations_registrant_id_fkey(full_name),responsible:profiles!basic_medical_registrations_responsible_lecturer_id_fkey(full_name),basic_medical_registration_sessions(id,session_number,lesson_title,teaching_lecturer_id,teaching:profiles!basic_medical_registration_sessions_teaching_lecturer_id_fkey(full_name),class_schedules(schedule_date,start_time,end_time),confirmations:basic_medical_session_confirmations(id,signer_id,signed_at,invalidated_at,signer:profiles!basic_medical_session_confirmations_signer_id_fkey(full_name)))",
           )
           .in("id", registrationIds)
       : { data: [], error: null };

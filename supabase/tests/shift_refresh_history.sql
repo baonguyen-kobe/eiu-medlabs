@@ -107,10 +107,9 @@ insert into public.staff_shift_patterns (
 select
   '90000000-0000-0000-0000-000000000010'::uuid,
   profiles.id,
-  extract(isodow from clock.business_now)::smallint,
-  (clock.business_now - interval '2 hours')::time,
-  (clock.business_now - interval '1 hour')::time,
-  'MORNING', clock.business_now::date, clock.business_now::date,
+  extract(isodow from clock.business_now::date - 1)::smallint,
+  time '08:00', time '09:00',
+  'MORNING', clock.business_now::date - 1, clock.business_now::date - 1,
   'pgtap-today-started', profiles.id
 from public.profiles profiles cross join third_followup_clock clock
 where profiles.email = 'admin@campus.local';
@@ -122,10 +121,9 @@ insert into public.staff_shift_patterns (
 select
   '90000000-0000-0000-0000-000000000011'::uuid,
   profiles.id,
-  extract(isodow from clock.business_now)::smallint,
-  (clock.business_now + interval '1 hour')::time,
-  (clock.business_now + interval '2 hours')::time,
-  'AFTERNOON', clock.business_now::date, clock.business_now::date,
+  extract(isodow from clock.business_now::date + 1)::smallint,
+  time '13:00', time '14:00',
+  'AFTERNOON', clock.business_now::date + 1, clock.business_now::date + 1,
   'pgtap-today-future', profiles.id
 from public.profiles profiles cross join third_followup_clock clock
 where profiles.email = 'giangvien@campus.local';
@@ -136,21 +134,20 @@ select private.materialize_shift_pattern('90000000-0000-0000-0000-000000000011':
 select is(
   (select count(*)::integer from public.staff_shifts where shift_pattern_id = '90000000-0000-0000-0000-000000000010'::uuid),
   0,
-  'materializer does not create a same-day occurrence after its start time'
+  'materializer does not create an occurrence whose date is already past'
 );
 select is(
   (select count(*)::integer from public.staff_shifts where shift_pattern_id = '90000000-0000-0000-0000-000000000011'::uuid),
   1,
-  'materializer creates a same-day occurrence whose start time is still future'
+  'materializer creates an occurrence whose date is still future'
 );
 
 insert into public.staff_shifts (
   staff_id, shift_date, start_time, end_time, shift_type,
   shift_pattern_id, note, status, registration_source, created_by
 )
-select profiles.id, clock.business_now::date,
-  (clock.business_now - interval '2 hours')::time,
-  (clock.business_now - interval '1 hour')::time,
+select profiles.id, clock.business_now::date - 1,
+  time '08:00', time '09:00',
   'MORNING', '90000000-0000-0000-0000-000000000010'::uuid,
   'started occurrence', 'scheduled', 'generated', profiles.id
 from public.profiles profiles cross join third_followup_clock clock

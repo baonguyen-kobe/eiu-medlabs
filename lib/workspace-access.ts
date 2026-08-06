@@ -11,6 +11,17 @@ export function isWorkspaceManager(roles: AppRole[]) {
   return hasAnyRole(roles, ["admin", "staff"]);
 }
 
+export function canManageBasicMedicalWorkspace(
+  roles: AppRole[],
+  roomTypeCodes: string[],
+) {
+  return (
+    roles.includes("admin") ||
+    (roles.includes("staff") &&
+      roomTypeCodes.includes(basicMedicalRoomTypeCode))
+  );
+}
+
 export function canUseSkillsWorkspace(
   roles: AppRole[],
   roomTypeCodes: string[],
@@ -27,7 +38,7 @@ export function canViewBasicMedicalSchedules(
   roomTypeCodes: string[],
 ) {
   return (
-    isWorkspaceManager(roles) ||
+    canManageBasicMedicalWorkspace(roles, roomTypeCodes) ||
     (roomTypeCodes.includes(basicMedicalRoomTypeCode) &&
       hasAnyRole(roles, ["lecturer", "teaching_assistant", "viewer"]))
   );
@@ -38,7 +49,7 @@ export function canViewBasicMedicalRegistrations(
   roomTypeCodes: string[],
 ) {
   return (
-    isWorkspaceManager(roles) ||
+    canManageBasicMedicalWorkspace(roles, roomTypeCodes) ||
     (roomTypeCodes.includes(basicMedicalRoomTypeCode) &&
       hasAnyRole(roles, ["lecturer", "teaching_assistant", "viewer"]))
   );
@@ -50,7 +61,7 @@ export function canCreateBasicMedicalSchedules(
   allowBasicMedicalAccess: boolean,
 ) {
   return (
-    isWorkspaceManager(roles) ||
+    canManageBasicMedicalWorkspace(roles, roomTypeCodes) ||
     (allowBasicMedicalAccess &&
       roomTypeCodes.includes(basicMedicalRoomTypeCode) &&
       hasAnyRole(roles, ["lecturer", "teaching_assistant"]))

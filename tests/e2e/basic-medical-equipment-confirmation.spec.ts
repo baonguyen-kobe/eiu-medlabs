@@ -73,16 +73,15 @@ test("Danh sách thiết bị Y cơ sở có đủ bốn tab và thao tác quả
   ).toBeVisible();
 });
 
-test("Chuyên viên thấy Danh sách thiết bị Y cơ sở trong nhóm Quản trị", async ({
+test("Chuyên viên ngoài scope không thấy và không mở được thiết bị Y cơ sở", async ({
   page,
 }) => {
   await loginAsStaff(page);
-  await expect(page.getByText("Quản trị", { exact: true })).toBeVisible();
-  await page.getByRole("link", { name: "Danh sách thiết bị Y cơ sở" }).click();
-  await expect(page).toHaveURL(/\/basic-medical\/equipment/);
   await expect(
-    page.getByRole("heading", { name: "Danh sách thiết bị Y cơ sở" }),
-  ).toBeVisible();
+    page.getByRole("link", { name: "Danh sách thiết bị Y cơ sở" }),
+  ).toHaveCount(0);
+  await page.goto("/basic-medical/equipment");
+  await expect(page).toHaveURL(/\/dashboard$/);
 });
 
 test("Hai page Y cơ sở mới không tràn màn hình mobile", async ({ page }) => {

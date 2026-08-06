@@ -46,6 +46,57 @@ async function personnelContext() {
   return { supabase, userId, authority };
 }
 
+type CreatedAuthIdentity = { id: string; email: string };
+
+async function cleanupCreatedAuthUsersOrRecordReconciliation({
+  adminClient,
+  identities,
+  actorId,
+  failureStage,
+}: {
+  adminClient: ReturnType<typeof createAdminClient>;
+  identities: CreatedAuthIdentity[];
+  actorId: string;
+  failureStage: string;
+}) {
+  const failures: Array<CreatedAuthIdentity & { error: string }> = [];
+  for (const identity of identities) {
+    let lastError = "";
+    let deleted = false;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const { error } = await adminClient.auth.admin.deleteUser(identity.id);
+      if (!error) {
+        deleted = true;
+        break;
+      }
+      lastError = error.message;
+    }
+    if (!deleted) {
+      failures.push({
+        ...identity,
+        error: lastError || "Unknown cleanup error",
+      });
+      await adminClient
+        .from("profiles")
+        .update({
+          is_active: false,
+          can_import_schedules: false,
+          allow_basic_medical_access: false,
+        })
+        .eq("id", identity.id);
+      await adminClient.from("personnel_auth_reconciliation_logs").insert({
+        profile_id: identity.id,
+        previous_email: identity.email,
+        requested_email: identity.email,
+        failure_stage: failureStage,
+        error_message: lastError || "Auth cleanup failed",
+        created_by: actorId,
+      });
+    }
+  }
+  return failures;
+}
+
 export async function createCourse(formData: FormData) {
   const { supabase } = await adminContext();
   const courseCode = String(formData.get("course_code") ?? "").trim();
@@ -539,7 +590,7 @@ function parsePersonnelImportBoolean(
 }
 
 export async function createPersonnel(formData: FormData) {
-  const { supabase } = await personnelContext();
+  const { supabase, userId } = await personnelContext();
   const email = String(formData.get("email") ?? "")
     .trim()
     .toLowerCase();
@@ -643,7 +694,20 @@ export async function createPersonnel(formData: FormData) {
   });
 
   if (profileError) {
-    await adminClient.auth.admin.deleteUser(targetId);
+    const cleanupFailures = await cleanupCreatedAuthUsersOrRecordReconciliation(
+      {
+        adminClient,
+        identities: [{ id: targetId, email }],
+        actorId: userId,
+        failureStage: "create_personnel_auth_cleanup",
+      },
+    );
+    if (cleanupFailures.length) {
+      personnelRedirect(
+        "error",
+        "AUTH_PROFILE_RECONCILIATION_REQUIRED: Không thể xóa tài khoản Auth sau khi lưu hồ sơ thất bại. Tài khoản đã được khóa và ghi nhận để đối soát.",
+      );
+    }
     personnelRedirect(
       "error",
       personnelRpcMessage(profileError.message) ||
@@ -656,7 +720,7 @@ export async function createPersonnel(formData: FormData) {
 }
 
 export async function importPersonnel(formData: FormData) {
-  const { supabase } = await personnelContext();
+  const { supabase, userId } = await personnelContext();
   const mode = String(formData.get("mode") ?? "");
   if (!(["new", "all"] as const).includes(mode as "new" | "all")) {
     personnelRedirect("error", "Chế độ import nhân sự không hợp lệ.");
@@ -949,7 +1013,7 @@ export async function importPersonnel(formData: FormData) {
       );
     }
 
-    const createdUserIds: string[] = [];
+    const createdUsers: CreatedAuthIdentity[] = [];
     const resolvedRows: Array<
       (typeof selectedRows)[number] & {
         id: string;
@@ -978,14 +1042,19 @@ export async function importPersonnel(formData: FormData) {
         app_metadata: { preapproved: true },
       });
       if (error || !data.user) {
-        await Promise.all(
-          createdUserIds.map((id) => adminClient.auth.admin.deleteUser(id)),
-        );
+        const failures = await cleanupCreatedAuthUsersOrRecordReconciliation({
+          adminClient,
+          identities: createdUsers,
+          actorId: userId,
+          failureStage: "personnel_import_create_cleanup",
+        });
+        if (failures.length)
+          throw new Error("AUTH_PROFILE_RECONCILIATION_REQUIRED");
         throw new Error(
           `Không thể tạo ${row.email}: ${error?.message ?? "Lỗi không xác định"}`,
         );
       }
-      createdUserIds.push(data.user.id);
+      createdUsers.push({ id: data.user.id, email: row.email });
       resolvedRows.push({
         ...row,
         id: data.user.id,
@@ -1019,9 +1088,14 @@ export async function importPersonnel(formData: FormData) {
     );
 
     if (importError) {
-      await Promise.all(
-        createdUserIds.map((id) => adminClient.auth.admin.deleteUser(id)),
-      );
+      const failures = await cleanupCreatedAuthUsersOrRecordReconciliation({
+        adminClient,
+        identities: createdUsers,
+        actorId: userId,
+        failureStage: "personnel_import_rpc_cleanup",
+      });
+      if (failures.length)
+        throw new Error("AUTH_PROFILE_RECONCILIATION_REQUIRED");
       throw new Error(personnelRpcMessage(importError.message));
     }
     const counts = importResult as {
@@ -1033,7 +1107,9 @@ export async function importPersonnel(formData: FormData) {
     const createdCount = Number(counts?.created ?? 0);
     const updatedCount = Number(counts?.updated ?? 0);
     const lockedCount = Number(counts?.locked ?? 0);
-    const skippedCount = Number(counts?.skipped_protected ?? 0);
+    const skippedCount =
+      Number(counts?.skipped_protected ?? 0) +
+      preservedAdministratorRows.length;
     revalidatePath("/admin/personnel");
     personnelRedirect(
       "notice",
@@ -1124,6 +1200,18 @@ function personnelRpcMessage(message: string) {
       "Hệ thống phải còn ít nhất một Quản trị viên đang hoạt động.",
     ],
     ["PERSONNEL_EMAIL_EXISTS", "Email đăng nhập đã được sử dụng."],
+    [
+      "PERSONNEL_UPDATE_IN_PROGRESS",
+      "Nhân sự đang được một quản trị viên khác cập nhật. Vui lòng thử lại sau.",
+    ],
+    [
+      "PERSONNEL_UPDATE_OPERATION_EXPIRED",
+      "Phiên chỉnh sửa đã hết hạn. Vui lòng tải lại nhân sự trước khi lưu.",
+    ],
+    [
+      "PERSONNEL_EMAIL_CHANGE_REQUIRES_OPERATION",
+      "Thay đổi email phải đi qua luồng đồng bộ tài khoản bảo mật.",
+    ],
     ["PERSONNEL_PHONE_EXISTS", "Số điện thoại đã được sử dụng."],
     [
       "BASIC_MEDICAL_PERMISSION_INVALID",
@@ -1180,7 +1268,7 @@ export async function savePersonnelChanges(
 
   const { data: current, error: currentError } = await supabase
     .from("profiles")
-    .select("email")
+    .select("email,access_version")
     .eq("id", targetId)
     .maybeSingle();
   if (currentError || !current) {
@@ -1198,19 +1286,7 @@ export async function savePersonnelChanges(
     };
   }
 
-  const authStartedAt = performance.now();
-  const emailChanged = current.email.trim().toLowerCase() !== email;
-  if (emailChanged) {
-    const { error: authError } = await adminClient.auth.admin.updateUserById(
-      targetId,
-      { email, email_confirm: true },
-    );
-    if (authError) return { ok: false, message: authError.message };
-  }
-  const authMs = Math.round(performance.now() - authStartedAt);
-
-  const rpcStartedAt = performance.now();
-  const { data, error } = await supabase.rpc("admin_update_personnel", {
+  const rpcInput = {
     target_profile_id: targetId,
     target_email: email,
     target_full_name: fullName,
@@ -1225,20 +1301,79 @@ export async function savePersonnelChanges(
     target_allow_basic_medical_access: allowBasicMedicalAccess,
     target_is_active: isActive,
     target_expected_version: expectedVersion,
+  };
+
+  const rpcStartedAt = performance.now();
+  const { data: operationData, error: beginError } = await supabase.rpc(
+    "begin_personnel_update",
+    rpcInput,
+  );
+  if (beginError) {
+    return {
+      ok: false,
+      code: beginError.code,
+      message: personnelRpcMessage(beginError.message),
+    };
+  }
+  const operation = operationData as {
+    operation_id: string;
+    previous_email: string;
+    requested_email: string;
+    expected_version: number;
+  };
+
+  const authStartedAt = performance.now();
+  const emailChanged = current.email.trim().toLowerCase() !== email;
+  if (emailChanged) {
+    const { error: authError } = await adminClient.auth.admin.updateUserById(
+      targetId,
+      { email, email_confirm: true },
+    );
+    if (authError) {
+      await supabase.rpc("cancel_personnel_update", {
+        target_operation_id: operation.operation_id,
+      });
+      return { ok: false, message: authError.message };
+    }
+  }
+  const authMs = Math.round(performance.now() - authStartedAt);
+
+  const { data, error } = await supabase.rpc("commit_personnel_update", {
+    target_operation_id: operation.operation_id,
   });
   const rpcMs = Math.round(performance.now() - rpcStartedAt);
 
   if (error) {
+    const { data: committedProfile } = await adminClient
+      .from("profiles")
+      .select("email,access_version")
+      .eq("id", targetId)
+      .maybeSingle();
+    if (
+      committedProfile?.email?.trim().toLowerCase() === email &&
+      committedProfile.access_version === expectedVersion + 1
+    ) {
+      revalidatePath("/admin/personnel");
+      return {
+        ok: true,
+        message:
+          "Đã cập nhật nhân sự. Kết quả đã được đối chiếu sau khi phản hồi cơ sở dữ liệu bị gián đoạn.",
+      };
+    }
     if (emailChanged) {
       const { error: rollbackError } =
         await adminClient.auth.admin.updateUserById(targetId, {
-          email: current.email,
+          email: operation.previous_email,
           email_confirm: true,
         });
       if (rollbackError) {
+        await adminClient
+          .from("profiles")
+          .update({ is_active: false })
+          .eq("id", targetId);
         await adminClient.from("personnel_auth_reconciliation_logs").insert({
           profile_id: targetId,
-          previous_email: current.email,
+          previous_email: operation.previous_email,
           requested_email: email,
           failure_stage: "database_rpc_and_auth_rollback",
           error_message: `${error.message}; rollback: ${rollbackError.message}`,
@@ -1252,6 +1387,9 @@ export async function savePersonnelChanges(
         };
       }
     }
+    await supabase.rpc("cancel_personnel_update", {
+      target_operation_id: operation.operation_id,
+    });
     return {
       ok: false,
       code: error.code,

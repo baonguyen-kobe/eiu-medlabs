@@ -8,6 +8,7 @@ type BasicMedicalEmailEvent = "created" | "updated" | "deleted";
 
 export type BasicMedicalEmailSnapshot = {
   id: string;
+  registration_code: string;
   created_at: string;
   academic_year: string;
   semester: string;
@@ -38,7 +39,7 @@ export async function loadBasicMedicalEmailSnapshot(registrationId: string) {
   const { data, error } = await supabase
     .from("basic_medical_registrations")
     .select(
-      "id,created_at,academic_year,semester,start_date,end_date,student_count,note,registrant_id,responsible_lecturer_id,course:courses(course_code,course_name),room:rooms(room_code,building_code),registrant:profiles!basic_medical_registrations_registrant_id_fkey(full_name,email),responsible:profiles!basic_medical_registrations_responsible_lecturer_id_fkey(full_name,email),sessions:basic_medical_registration_sessions(session_number,lesson_title,teaching:profiles(full_name),schedule:class_schedules(schedule_date,start_time,end_time))",
+      "id,registration_code,created_at,academic_year,semester,start_date,end_date,student_count,note,registrant_id,responsible_lecturer_id,course:courses(course_code,course_name),room:rooms(room_code,building_code),registrant:profiles!basic_medical_registrations_registrant_id_fkey(full_name,email),responsible:profiles!basic_medical_registrations_responsible_lecturer_id_fkey(full_name,email),sessions:basic_medical_registration_sessions(session_number,lesson_title,teaching:profiles(full_name),schedule:class_schedules(schedule_date,start_time,end_time))",
     )
     .eq("id", registrationId)
     .maybeSingle();
@@ -98,7 +99,7 @@ export async function enqueueBasicMedicalRegistrationEmails({
     deleted: "Xóa phiếu đăng ký phòng TNTH",
   };
   const registrationCode = formatBasicMedicalRegistrationCode(
-    snapshot.created_at,
+    snapshot.registration_code,
   );
   const dateRange = `${snapshot.start_date.split("-").reverse().join("/")} - ${snapshot.end_date.split("-").reverse().join("/")}`;
   const subjectDetails = `${snapshot.registrant?.full_name ?? "Giảng viên"} - ${snapshot.course?.course_code ?? "Môn học"} - ${dateRange} - ${registrationCode}`;

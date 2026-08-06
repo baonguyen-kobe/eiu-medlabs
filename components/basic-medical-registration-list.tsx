@@ -9,6 +9,7 @@ import {
   useTransition,
 } from "react";
 import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
 import {
   confirmBasicMedicalSession,
   deleteBasicMedicalRegistration,
@@ -67,7 +68,7 @@ function BasicMedicalConfirmationModal({
   onClose: () => void;
   onConfirmed: (confirmation: { id: string; signed_at: string }) => void;
 }) {
-  const [stage, setStage] = useState<"condition" | "signature">("signature");
+  const [stage, setStage] = useState<"condition" | "signature">("condition");
   const [damageByInventory, setDamageByInventory] = useState<DamageDraft>({});
   const [notice, setNotice] = useState<{ ok: boolean; message: string } | null>(
     null,
@@ -319,9 +320,9 @@ function BasicMedicalConfirmationModal({
                 <button
                   type="button"
                   className="button button-secondary"
-                  onClick={() => setStage("signature")}
+                  onClick={onClose}
                 >
-                  Quay lại
+                  Hủy
                 </button>
                 <button
                   type="button"
@@ -472,6 +473,7 @@ export function BasicMedicalRegistrationList({
   viewerId: string;
   canDelete: boolean;
 }) {
+  const router = useRouter();
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [confirmationBySession, setConfirmationBySession] = useState(() => {
     const entries = registrations.flatMap((registration) =>
@@ -595,7 +597,7 @@ export function BasicMedicalRegistrationList({
                               <span>Mã phiếu</span>
                               <strong className="mono">
                                 {formatBasicMedicalRegistrationCode(
-                                  registration.created_at,
+                                  registration.registration_code,
                                 )}
                               </strong>
                             </div>
@@ -713,7 +715,7 @@ export function BasicMedicalRegistrationList({
             inventoriesByRoom.get(active.registration.rooms?.id ?? "") ?? []
           }
           onClose={() => setActive(null)}
-          onConfirmed={(confirmation) =>
+          onConfirmed={(confirmation) => {
             setConfirmationBySession((current) =>
               new Map(current).set(active.session.id, {
                 ...confirmation,
@@ -721,8 +723,9 @@ export function BasicMedicalRegistrationList({
                 invalidated_at: null,
                 signer: null,
               }),
-            )
-          }
+            );
+            router.refresh();
+          }}
         />
       ) : null}
     </>

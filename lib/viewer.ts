@@ -13,8 +13,10 @@ export async function getViewer() {
   const [
     { data: profile },
     { data: roleRows },
-    { data: roomTypeRows },
+    { data: allRoomTypeRows },
+    { data: assignedRoomTypeRows },
     { data: personnelAuthority },
+    { data: basicMedicalAuthority },
   ] = await Promise.all([
     supabase
       .from("profiles")
@@ -29,10 +31,27 @@ export async function getViewer() {
       .select("id, code, name")
       .eq("is_active", true)
       .order("name"),
+    supabase
+      .from("profile_room_types")
+      .select("room_types!inner(id,code,name,is_active)")
+      .eq("profile_id", userId)
+      .eq("room_types.is_active", true),
     supabase.rpc("get_personnel_authority_context"),
+    supabase.rpc("get_basic_medical_authority_context"),
   ]);
 
-  const roomTypes = (roomTypeRows ?? []) as Array<{
+  const roles = (roleRows ?? []).map(({ role }) => role as AppRole);
+  const assignedRoomTypes = (assignedRoomTypeRows ?? []).flatMap((row) => {
+    const roomType = row.room_types as unknown as {
+      id: string;
+      code: string;
+      name: string;
+    } | null;
+    return roomType ? [roomType] : [];
+  });
+  const roomTypes = (
+    roles.includes("admin") ? (allRoomTypeRows ?? []) : assignedRoomTypes
+  ) as Array<{
     id: string;
     code: string;
     name: string;
@@ -47,13 +66,20 @@ export async function getViewer() {
     fullName:
       profile?.full_name || String(claimsData.claims.email ?? "Người dùng"),
     title: profile?.title ?? null,
-    roles: (roleRows ?? []).map(({ role }) => role as AppRole),
+    roles,
     roomTypes,
     allowBasicMedicalAccess: profile?.allow_basic_medical_access ?? false,
     canImportSchedules: profile?.can_import_schedules ?? false,
     canManagePersonnel: Boolean(
       (personnelAuthority as { can_manage_personnel?: boolean } | null)
         ?.can_manage_personnel,
+    ),
+    canManageBasicMedical: Boolean(
+      (
+        basicMedicalAuthority as {
+          can_manage_basic_medical?: boolean;
+        } | null
+      )?.can_manage_basic_medical,
     ),
   };
 }

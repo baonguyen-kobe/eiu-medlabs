@@ -7,6 +7,7 @@ import {
 } from "@/app/admin/actions";
 import { getNameInitials } from "@/lib/person-name";
 import type { AppRole } from "@/lib/viewer";
+import { BASIC_MEDICAL_ROOM_TYPE_ID } from "@/lib/room-types";
 
 export type PersonnelListItem = {
   id: string;
@@ -69,6 +70,11 @@ export function PersonnelManagementList({
       ),
     [draft, original],
   );
+  const basicMedicalEligible = Boolean(
+    draft?.roles.some((role) =>
+      ["lecturer", "teaching_assistant"].includes(role),
+    ) && draft.room_type_ids.includes(BASIC_MEDICAL_ROOM_TYPE_ID),
+  );
 
   function open(item: PersonnelListItem) {
     setOriginal(clone(item));
@@ -113,6 +119,14 @@ export function PersonnelManagementList({
       roles: next,
       email_room_type_ids: [],
       can_import_schedules: canImportRole ? draft.can_import_schedules : false,
+      allow_basic_medical_access:
+        canImportRole &&
+        next.some((value) =>
+          ["lecturer", "teaching_assistant"].includes(value),
+        ) &&
+        draft.room_type_ids.includes(BASIC_MEDICAL_ROOM_TYPE_ID)
+          ? draft.allow_basic_medical_access
+          : false,
     });
   }
 
@@ -406,6 +420,7 @@ export function PersonnelManagementList({
                   <input
                     type="checkbox"
                     checked={draft.allow_basic_medical_access}
+                    disabled={!basicMedicalEligible}
                     onChange={(event) =>
                       setDraft({
                         ...draft,
@@ -415,6 +430,12 @@ export function PersonnelManagementList({
                   />
                   Cho phép tạo lịch Y cơ sở
                 </label>
+                {!basicMedicalEligible ? (
+                  <p className="field-note">
+                    Chỉ Giảng viên hoặc Trợ giảng thuộc phạm vi Y cơ sở mới có
+                    thể nhận quyền này.
+                  </p>
+                ) : null}
               </fieldset>
 
               <fieldset disabled={pending || !draft.can_edit_security}>
@@ -440,6 +461,11 @@ export function PersonnelManagementList({
                                 : draft.email_room_type_ids.filter(
                                     (id) => id !== roomType.id,
                                   ),
+                              allow_basic_medical_access:
+                                !event.target.checked &&
+                                roomType.id === BASIC_MEDICAL_ROOM_TYPE_ID
+                                  ? false
+                                  : draft.allow_basic_medical_access,
                             })
                           }
                         />

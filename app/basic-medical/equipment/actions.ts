@@ -53,12 +53,15 @@ async function requireManager() {
   const { data: claims } = await supabase.auth.getClaims();
   const userId = claims?.claims?.sub;
   if (!userId) redirect("/login");
-  const { data: roles } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId)
-    .in("role", ["admin", "staff"]);
-  if (!roles?.length) redirect("/dashboard");
+  const { data: authority, error } = await supabase.rpc(
+    "get_basic_medical_authority_context",
+  );
+  if (
+    error ||
+    !(authority as { can_manage_basic_medical?: boolean } | null)
+      ?.can_manage_basic_medical
+  )
+    redirect("/dashboard");
   return supabase;
 }
 

@@ -31,11 +31,14 @@ export async function deleteBasicMedicalRegistration(formData: FormData) {
     redirect(registrationsUrl("error", "Phiên đăng nhập đã hết hạn."));
   }
 
-  const { data: roleRows } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId);
-  if (!(roleRows ?? []).some(({ role }) => ["admin", "staff"].includes(role))) {
+  const { data: authority, error: authorityError } = await supabase.rpc(
+    "get_basic_medical_authority_context",
+  );
+  if (
+    authorityError ||
+    !(authority as { can_manage_basic_medical?: boolean } | null)
+      ?.can_manage_basic_medical
+  ) {
     redirect(
       registrationsUrl(
         "error",

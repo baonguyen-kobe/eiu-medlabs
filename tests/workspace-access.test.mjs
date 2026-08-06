@@ -86,11 +86,17 @@ test("Người xem Y cơ sở chỉ xem lịch; admin và staff không phụ thu
 
   for (const role of ["admin", "staff"]) {
     assert.equal(access.canUseSkillsWorkspace([role], []), true);
-    assert.equal(access.canViewBasicMedicalSchedules([role], []), true);
-    assert.equal(access.canViewBasicMedicalRegistrations([role], []), true);
+    assert.equal(
+      access.canViewBasicMedicalSchedules([role], []),
+      role === "admin",
+    );
+    assert.equal(
+      access.canViewBasicMedicalRegistrations([role], []),
+      role === "admin",
+    );
     assert.equal(
       access.canCreateBasicMedicalSchedules([role], [], false),
-      true,
+      role === "admin",
     );
     assert.equal(
       access.canImportBasicMedicalSchedules([role], [], false),

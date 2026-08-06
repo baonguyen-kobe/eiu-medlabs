@@ -11,6 +11,7 @@ import {
   PersonnelManagementList,
   type PersonnelListItem,
 } from "@/components/personnel-management-list";
+import { PersonnelBasicMedicalPermissionField } from "@/components/personnel-basic-medical-permission-field";
 
 const roleLabels = {
   admin: "Quản trị viên",
@@ -140,14 +141,7 @@ export default async function PersonnelPage({
               <input name="can_import_schedules" type="checkbox" value="true" />
               Cho phép nhập lịch
             </label>
-            <label className="check-label">
-              <input
-                name="allow_basic_medical_access"
-                type="checkbox"
-                value="true"
-              />
-              Cho phép tạo lịch Y cơ sở
-            </label>
+            <PersonnelBasicMedicalPermissionField />
           </fieldset>
           <fieldset>
             <legend>Loại phòng</legend>
@@ -223,6 +217,7 @@ export default async function PersonnelPage({
       </form>
 
       <PersonnelManagementList
+        key={`${currentPage}:${query.q ?? ""}:${query.role ?? "all"}:${query.import_permission ?? "all"}:${query.status ?? "all"}:${rows.map((row) => `${row.id}:${row.access_version}`).join("|")}`}
         initialItems={rows.map(({ total_count, ...row }) => {
           void total_count;
           return row;
