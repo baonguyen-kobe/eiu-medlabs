@@ -143,31 +143,23 @@ export async function createScheduleDraft(
       };
     }
   }
-  const { data: createdSchedule, error } = await supabase
-    .from("class_schedules")
-    .insert({
-      course_id: course.id,
-      course_code_snapshot: course.course_code,
-      course_name_snapshot: course.course_name,
-      room_id: room.id,
-      lecturer_id: requestedLecturerIds[0] ?? null,
-      lecturer_2_id: requestedLecturerIds[1] ?? null,
-      class_code: null,
-      schedule_date: scheduleDate,
-      start_time: startTime,
-      end_time: endTime,
-      source: "manual",
-      schedule_status: "published",
-      note: note || null,
-      student_count: studentCount,
-      created_by: userId,
-      published_by: userId,
-      published_at: new Date().toISOString(),
-    })
-    .select("id")
-    .single();
+  const { data: createdSchedule, error } = await supabase.rpc(
+    "create_manual_class_schedule",
+    {
+      target_course_id: course.id,
+      target_room_id: room.id,
+      target_lecturer_id: requestedLecturerIds[0] ?? null,
+      target_lecturer_2_id: requestedLecturerIds[1] ?? null,
+      target_schedule_date: scheduleDate,
+      target_start_time: startTime,
+      target_end_time: endTime,
+      target_note: note || null,
+      target_student_count: studentCount,
+    },
+  );
 
   if (error) {
+    console.error("RPC Error:", error);
     if (error.code === "23P01") {
       return {
         ok: false,
