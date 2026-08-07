@@ -54,18 +54,20 @@ export async function deleteBasicMedicalRegistration(formData: FormData) {
     console.error("Không thể đọc phiếu Y cơ sở trước khi xóa:", emailError);
   }
 
-  const { data, error } = await supabase
-    .from("basic_medical_registrations")
-    .delete()
-    .eq("id", registrationId)
-    .select("id")
-    .maybeSingle();
+  const reason = String(formData.get("reason") ?? "").trim();
+  const { data, error } = await supabase.rpc(
+    "cancel_basic_medical_registration",
+    {
+      target_registration_id: registrationId,
+      target_reason: reason || null,
+    },
+  );
 
   if (error || !data) {
     redirect(
       registrationsUrl(
         "error",
-        "Không thể xóa phiếu Y cơ sở. Phiếu có thể đã bị xóa.",
+        "Không thể hủy phiếu Y cơ sở. Phiếu có thể đã được hủy.",
       ),
     );
   }
@@ -86,7 +88,7 @@ export async function deleteBasicMedicalRegistration(formData: FormData) {
   revalidatePath("/basic-medical/registrations");
   revalidatePath("/basic-medical/schedules");
   revalidatePath("/class-schedules");
-  redirect(registrationsUrl("notice", "Đã xóa phiếu Y cơ sở."));
+  redirect(registrationsUrl("notice", "Đã hủy phiếu Y cơ sở."));
 }
 
 export type ConfirmBasicMedicalSessionResult = {

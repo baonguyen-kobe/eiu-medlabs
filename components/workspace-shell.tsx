@@ -306,6 +306,17 @@ function buildNavigation(
       });
     }
     if (
+      canViewBasicMedicalSchedules(roles, roomTypeCodes) &&
+      !canManageBasicMedicalWorkspace(roles, roomTypeCodes)
+    ) {
+      yItems.push({
+        label: "Thiết bị Y cơ sở",
+        href: "/basic-medical/equipment?tab=rooms",
+        icon: ClipboardList,
+        activeIcon: ClipboardListSolid,
+      });
+    }
+    if (
       canImportBasicMedicalSchedules(roles, roomTypeCodes, canImportSchedules)
     ) {
       yItems.push({

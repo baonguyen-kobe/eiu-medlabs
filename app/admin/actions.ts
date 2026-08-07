@@ -59,7 +59,13 @@ async function cleanupCreatedAuthUsersOrRecordReconciliation({
   actorId: string;
   failureStage: string;
 }) {
-  const failures: Array<CreatedAuthIdentity & { error: string }> = [];
+  const failures: Array<
+    CreatedAuthIdentity & {
+      error: string;
+      profileLockError?: string;
+      reconciliationError?: string;
+    }
+  > = [];
   for (const identity of identities) {
     let lastError = "";
     let deleted = false;
@@ -72,11 +78,7 @@ async function cleanupCreatedAuthUsersOrRecordReconciliation({
       lastError = error.message;
     }
     if (!deleted) {
-      failures.push({
-        ...identity,
-        error: lastError || "Unknown cleanup error",
-      });
-      await adminClient
+      const { error: profileLockError } = await adminClient
         .from("profiles")
         .update({
           is_active: false,
@@ -84,13 +86,28 @@ async function cleanupCreatedAuthUsersOrRecordReconciliation({
           allow_basic_medical_access: false,
         })
         .eq("id", identity.id);
-      await adminClient.from("personnel_auth_reconciliation_logs").insert({
+      const { error: reconciliationError } = await adminClient
+        .from("personnel_auth_reconciliation_logs")
+        .insert({
+          profile_id: identity.id,
+          previous_email: identity.email,
+          requested_email: identity.email,
+          failure_stage: failureStage,
+          error_message: lastError || "Auth cleanup failed",
+          created_by: actorId,
+        });
+      failures.push({
+        ...identity,
+        error: lastError || "Unknown cleanup error",
+        profileLockError: profileLockError?.message,
+        reconciliationError: reconciliationError?.message,
+      });
+      console.error("personnel.auth.cleanup.reconciliation_required", {
+        correlation_id: `${failureStage}:${identity.id}`,
         profile_id: identity.id,
-        previous_email: identity.email,
-        requested_email: identity.email,
-        failure_stage: failureStage,
-        error_message: lastError || "Auth cleanup failed",
-        created_by: actorId,
+        auth_delete_error: lastError || "Unknown cleanup error",
+        profile_lock_error: profileLockError?.message ?? null,
+        reconciliation_insert_error: reconciliationError?.message ?? null,
       });
     }
   }
@@ -1205,6 +1222,14 @@ function personnelRpcMessage(message: string) {
       "Nhân sự đang được một quản trị viên khác cập nhật. Vui lòng thử lại sau.",
     ],
     [
+      "PERSONNEL_RECONCILIATION_REQUIRED",
+      "Nhân sự đang chờ đối soát email đăng nhập. Vui lòng xử lý đối soát trước khi chỉnh sửa tiếp.",
+    ],
+    [
+      "ROOT_ADMIN_REQUIRED_FOR_PERSONNEL_MANAGER",
+      "Chỉ Root Administrator được thay đổi tài khoản quản lý nhân sự.",
+    ],
+    [
       "PERSONNEL_UPDATE_OPERATION_EXPIRED",
       "Phiên chỉnh sửa đã hết hạn. Vui lòng tải lại nhân sự trước khi lưu.",
     ],
@@ -1336,6 +1361,44 @@ export async function savePersonnelChanges(
       return { ok: false, message: authError.message };
     }
   }
+  const { error: markAuthError } = await supabase.rpc(
+    "mark_personnel_auth_updated",
+    { target_operation_id: operation.operation_id },
+  );
+  if (markAuthError) {
+    if (emailChanged) {
+      const { error: rollbackError } =
+        await adminClient.auth.admin.updateUserById(targetId, {
+          email: operation.previous_email,
+          email_confirm: true,
+        });
+      if (rollbackError) {
+        await adminClient
+          .from("personnel_update_operations")
+          .update({
+            status: "reconciliation_required",
+            last_error: `${markAuthError.message}; rollback: ${rollbackError.message}`,
+          })
+          .eq("id", operation.operation_id);
+      } else {
+        await adminClient.rpc("resolve_personnel_update_operation", {
+          target_operation_id: operation.operation_id,
+          target_status: "rolled_back",
+          target_error: markAuthError.message,
+        });
+      }
+    } else {
+      await supabase.rpc("cancel_personnel_update", {
+        target_operation_id: operation.operation_id,
+      });
+    }
+    return {
+      ok: false,
+      code: markAuthError.code,
+      message:
+        "Không thể xác nhận trạng thái đồng bộ email. Hệ thống đã hoàn tác hoặc chuyển phiếu sang đối soát.",
+    };
+  }
   const authMs = Math.round(performance.now() - authStartedAt);
 
   const { data, error } = await supabase.rpc("commit_personnel_update", {
@@ -1353,11 +1416,26 @@ export async function savePersonnelChanges(
       committedProfile?.email?.trim().toLowerCase() === email &&
       committedProfile.access_version === expectedVersion + 1
     ) {
+      const { data: snapshotRows } = await supabase.rpc(
+        "admin_list_personnel",
+        {
+          target_query: email,
+          target_role: null,
+          target_import_permission: "all",
+          target_status: "all",
+          target_page: 1,
+          target_page_size: 50,
+        },
+      );
+      const personnel = (
+        (snapshotRows ?? []) as Array<Record<string, unknown>>
+      ).find((row) => row.id === targetId);
       revalidatePath("/admin/personnel");
       return {
         ok: true,
         message:
           "Đã cập nhật nhân sự. Kết quả đã được đối chiếu sau khi phản hồi cơ sở dữ liệu bị gián đoạn.",
+        personnel,
       };
     }
     if (emailChanged) {
@@ -1379,6 +1457,13 @@ export async function savePersonnelChanges(
           error_message: `${error.message}; rollback: ${rollbackError.message}`,
           created_by: userId,
         });
+        await adminClient
+          .from("personnel_update_operations")
+          .update({
+            status: "reconciliation_required",
+            last_error: `${error.message}; rollback: ${rollbackError.message}`,
+          })
+          .eq("id", operation.operation_id);
         return {
           ok: false,
           code: "AUTH_PROFILE_RECONCILIATION_REQUIRED",
@@ -1386,10 +1471,22 @@ export async function savePersonnelChanges(
             "Lưu dữ liệu thất bại và không thể hoàn tác email đăng nhập. Hệ thống đã ghi nhận để quản trị viên đối soát.",
         };
       }
+      await adminClient.rpc("resolve_personnel_update_operation", {
+        target_operation_id: operation.operation_id,
+        target_status: "rolled_back",
+        target_error: error.message,
+      });
     }
-    await supabase.rpc("cancel_personnel_update", {
-      target_operation_id: operation.operation_id,
-    });
+    if (!emailChanged) {
+      await adminClient
+        .from("personnel_update_operations")
+        .update({
+          status: "expired",
+          resolved_at: new Date().toISOString(),
+          last_error: error.message,
+        })
+        .eq("id", operation.operation_id);
+    }
     return {
       ok: false,
       code: error.code,

@@ -37,17 +37,6 @@ function normalizeKey(value: unknown) {
     .replace(/[^a-z0-9]+/g, "");
 }
 
-function fingerprint(
-  item: Pick<
-    BasicMedicalCatalogInput,
-    "item_name" | "commercial_name" | "model"
-  >,
-) {
-  return [item.item_name, item.commercial_name, item.model]
-    .map(normalizeKey)
-    .join("|");
-}
-
 async function requireManager() {
   const supabase = await createClient();
   const { data: claims } = await supabase.auth.getClaims();
@@ -226,6 +215,19 @@ export async function saveBasicMedicalRoomInventory(input: {
   return { ok: true, message: "Đã cập nhật thiết bị trong phòng." };
 }
 
+export async function searchBasicMedicalCatalogCandidates(query: string) {
+  const supabase = await requireManager();
+  const { data, error } = await supabase.rpc(
+    "search_basic_medical_catalog_candidates",
+    {
+      target_query: query.trim() || null,
+      target_limit: 30,
+    },
+  );
+  if (error) return [] as BasicMedicalCatalogInput[];
+  return (data ?? []) as BasicMedicalCatalogInput[];
+}
+
 export async function adjustBasicMedicalInventoryCondition(input: {
   inventoryId: string;
   goodQuantity: number;
@@ -278,39 +280,21 @@ export async function importBasicMedicalEquipment(formData: FormData) {
     const parsed = rows
       .map(parseCatalogRow)
       .filter((row): row is BasicMedicalCatalogInput => Boolean(row));
-    const unique = new Map(parsed.map((row) => [fingerprint(row), row]));
-    const { data: existing, error: readError } = await supabase
-      .from("basic_medical_equipment_catalog")
-      .select("id,item_name,commercial_name,model,is_active");
-    if (readError) throw readError;
-    const existingMap = new Map(
-      (existing ?? []).map((row) => [fingerprint(row), row]),
+    const { data: importResult, error: importError } = await supabase.rpc(
+      "apply_basic_medical_catalog_import",
+      { target_mode: mode, target_rows: parsed },
     );
-    const inserts: BasicMedicalCatalogInput[] = [];
-    const updates: Array<
-      BasicMedicalCatalogInput & { id: string; is_active: boolean }
-    > = [];
-    for (const [key, row] of unique) {
-      const current = existingMap.get(key);
-      if (current && mode === "all")
-        updates.push({ ...row, id: current.id, is_active: true });
-      else if (!current) inserts.push(row);
-    }
-    if (updates.length) {
-      const { error } = await supabase
-        .from("basic_medical_equipment_catalog")
-        .upsert(updates, { onConflict: "id" });
-      if (error) throw error;
-    }
-    if (inserts.length) {
-      const { error } = await supabase
-        .from("basic_medical_equipment_catalog")
-        .insert(inserts);
-      if (error) throw error;
-    }
+    if (importError) throw importError;
+    const counts = importResult as {
+      inserted?: number;
+      updated?: number;
+      inactivated?: number;
+    } | null;
+    const processed =
+      Number(counts?.inserted ?? 0) + Number(counts?.updated ?? 0);
     revalidatePath("/basic-medical/equipment");
     redirect(
-      `/basic-medical/equipment?notice=${encodeURIComponent(`Đã import ${updates.length + inserts.length} thiết bị.`)}`,
+      `/basic-medical/equipment?notice=${encodeURIComponent(`Đã import ${processed} thiết bị; ngừng sử dụng ${Number(counts?.inactivated ?? 0)} thiết bị vắng trong file.`)}`,
     );
   } catch (error) {
     if (error && typeof error === "object" && "digest" in error) throw error;

@@ -1,17 +1,25 @@
 "use client";
 
-import { useDeferredValue, useMemo, useState, useTransition } from "react";
+import {
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useState,
+  useTransition,
+} from "react";
 import { useRouter } from "next/navigation";
 import {
   adjustBasicMedicalInventoryCondition,
   deleteBasicMedicalCatalogItems,
   saveBasicMedicalRoomInventory,
+  searchBasicMedicalCatalogCandidates,
   setBasicMedicalCatalogActive,
   updateBasicMedicalCatalogItems,
   type BasicMedicalCatalogInput,
 } from "@/app/basic-medical/equipment/actions";
 import { PaginationControls } from "@/components/pagination-controls";
 import { Search } from "@/components/icons";
+import { SearchableCombobox } from "@/components/searchable-combobox";
 import type {
   BasicMedicalConditionLogItem,
   BasicMedicalEquipmentCatalogItem,
@@ -712,8 +720,19 @@ function RoomInventoryForm({
 }) {
   const [roomId, setRoomId] = useState("");
   const [catalogItemId, setCatalogItemId] = useState("");
+  const [candidateQuery, setCandidateQuery] = useState("");
+  const [candidates, setCandidates] = useState(catalog.slice(0, 30));
   const [total, setTotal] = useState(0);
   const [damaged, setDamaged] = useState(0);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        const rows = await searchBasicMedicalCatalogCandidates(candidateQuery);
+        setCandidates(rows as BasicMedicalEquipmentCatalogItem[]);
+      })();
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [candidateQuery]);
   return (
     <div className="basic-medical-inventory-form">
       <div className="basic-medical-inventory-form-heading">
@@ -737,19 +756,21 @@ function RoomInventoryForm({
       </label>
       <label>
         <span>Thiết bị *</span>
-        <select
-          aria-label="Chọn thiết bị phân bổ vào phòng"
+        <SearchableCombobox
+          ariaLabel="Chọn thiết bị phân bổ vào phòng"
           value={catalogItemId}
-          onChange={(event) => setCatalogItemId(event.target.value)}
-        >
-          <option value="">Chọn thiết bị</option>
-          {catalog.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.item_name}
-              {item.commercial_name ? ` · ${item.commercial_name}` : ""}
-            </option>
-          ))}
-        </select>
+          onChange={setCatalogItemId}
+          onQueryChange={setCandidateQuery}
+          placeholder="Gõ để tìm trong toàn bộ danh mục…"
+          emptyLabel="Chọn thiết bị"
+          options={candidates.map((item) => ({
+            value: item.id,
+            label: `${item.item_name}${item.commercial_name ? ` · ${item.commercial_name}` : ""}`,
+            keywords: [item.item_type, item.manufacturer, item.model]
+              .filter(Boolean)
+              .join(" "),
+          }))}
+        />
       </label>
       <label>
         <span>Tổng số lượng *</span>

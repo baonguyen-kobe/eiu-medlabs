@@ -15,6 +15,10 @@ export default defineConfig({
     ? undefined
     : {
         command: "npm run dev",
+        env: {
+          ...process.env,
+          CRON_SECRET: process.env.CRON_SECRET ?? "local-e2e-cron-secret",
+        },
         reuseExistingServer: true,
         timeout: 120_000,
         url: "http://localhost:3000",

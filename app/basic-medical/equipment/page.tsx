@@ -13,6 +13,7 @@ import type {
 import { BASIC_MEDICAL_ROOM_TYPE_ID } from "@/lib/room-types";
 import { getViewer } from "@/lib/viewer";
 import { canManageBasicMedicalWorkspace } from "@/lib/workspace-access";
+import { canViewBasicMedicalSchedules } from "@/lib/workspace-access";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { PaginationLinks } from "@/components/pagination-links";
@@ -29,6 +30,10 @@ export default async function BasicMedicalEquipmentPage({
     room?: string;
     status?: string;
     event?: string;
+    item?: string;
+    actor?: string;
+    from?: string;
+    to?: string;
     page?: string;
     notice?: string;
     error?: string;
@@ -46,94 +51,58 @@ export default async function BasicMedicalEquipmentPage({
     canManageBasicMedical,
   } = await getViewer();
   const roomTypeCodes = roomTypes.map(({ code }) => code);
-  if (
-    !canManageBasicMedical ||
-    !canManageBasicMedicalWorkspace(roles, roomTypeCodes)
-  )
+  if (!canViewBasicMedicalSchedules(roles, roomTypeCodes))
     redirect("/dashboard");
-  const canManage = true;
-  const activeTab: Tab =
-    query.tab === "rooms" || query.tab === "damaged" || query.tab === "logs"
+  const canManage =
+    canManageBasicMedical &&
+    canManageBasicMedicalWorkspace(roles, roomTypeCodes);
+  const activeTab: Tab = !canManage
+    ? "rooms"
+    : query.tab === "rooms" || query.tab === "damaged" || query.tab === "logs"
       ? query.tab
       : "inventory";
   const currentPage = normalizePage(query.page);
   const { from, to } = paginationRange(currentPage);
   const search = query.q?.trim() ?? "";
 
-  let catalogQuery = supabase
-    .from("basic_medical_equipment_catalog")
-    .select(
-      "id,item_name,commercial_name,item_type,country_of_origin,manufacturer,model,unit,is_active",
-      { count: "exact" },
-    );
-  if (search)
-    catalogQuery = catalogQuery.or(
-      `item_name.ilike.%${search}%,commercial_name.ilike.%${search}%,item_type.ilike.%${search}%,manufacturer.ilike.%${search}%,model.ilike.%${search}%`,
-    );
-  if (query.status === "active" || query.status === "inactive")
-    catalogQuery = catalogQuery.eq("is_active", query.status === "active");
-
-  let inventoryQuery = supabase
-    .from("basic_medical_room_inventory")
-    .select(
-      "id,room_id,catalog_item_id,total_quantity,good_quantity,damaged_quantity,is_active,last_damage_reported_at,room:rooms(id,room_code,building_code,room_name),catalog:basic_medical_equipment_catalog(id,item_name,commercial_name,item_type,country_of_origin,manufacturer,model,unit,is_active),last_damage_reporter:profiles!basic_medical_room_inventory_last_damage_reporter_id_fkey(full_name)",
-      { count: "exact" },
-    )
-    .eq("is_active", true);
-  if (activeTab === "damaged")
-    inventoryQuery = inventoryQuery.gt("damaged_quantity", 0);
-  if (query.room) inventoryQuery = inventoryQuery.eq("room_id", query.room);
-
-  const [catalogResult, inventoryResult, roomResult, logResult] =
-    await Promise.all([
-      activeTab === "inventory"
-        ? catalogQuery.order("item_name").range(from, to)
-        : activeTab === "rooms"
-          ? supabase
-              .from("basic_medical_equipment_catalog")
-              .select(
-                "id,item_name,commercial_name,item_type,country_of_origin,manufacturer,model,unit,is_active",
-              )
-              .eq("is_active", true)
-              .order("item_name")
-              .limit(500)
-          : Promise.resolve({ data: [], error: null, count: 0 }),
-      activeTab === "rooms" || activeTab === "damaged"
-        ? inventoryQuery
-            .order("updated_at", { ascending: false })
-            .range(from, to)
-        : Promise.resolve({ data: [], error: null, count: 0 }),
-      activeTab === "rooms" || activeTab === "damaged"
-        ? supabase
-            .from("rooms")
-            .select("id,room_code,building_code,room_name")
-            .eq("room_type_id", BASIC_MEDICAL_ROOM_TYPE_ID)
-            .eq("is_active", true)
-            .order("building_code")
-            .order("room_code")
-        : Promise.resolve({ data: [], error: null }),
-      activeTab === "logs"
-        ? (() => {
-            let logsQuery = supabase
-              .from("basic_medical_equipment_condition_logs")
-              .select(
-                "id,event_type,total_before,good_before,damaged_before,total_after,good_after,damaged_after,quantity_delta,note,created_at,inventory:basic_medical_room_inventory(room:rooms(room_code,building_code,room_name),catalog:basic_medical_equipment_catalog(item_name,commercial_name,unit)),actor:profiles!basic_medical_equipment_condition_logs_actor_id_fkey(full_name)",
-                { count: "exact" },
-              );
-            if (query.event)
-              logsQuery = logsQuery.eq("event_type", query.event);
-            if (search) logsQuery = logsQuery.ilike("note", `%${search}%`);
-            return logsQuery
-              .order("created_at", { ascending: false })
-              .range(from, to);
-          })()
-        : Promise.resolve({ data: [], error: null, count: 0 }),
-    ]);
+  const [searchResult, roomResult, candidateResult] = await Promise.all([
+    supabase.rpc("search_basic_medical_equipment", {
+      target_tab: activeTab,
+      target_query: search || null,
+      target_room_id: query.room || null,
+      target_catalog_item_id: query.item || null,
+      target_event_type: query.event || null,
+      target_actor_id: query.actor || null,
+      target_from_date: query.from || null,
+      target_to_date: query.to || null,
+      target_status: query.status || null,
+      target_page: currentPage,
+      target_page_size: to - from + 1,
+    }),
+    activeTab === "rooms" || activeTab === "damaged"
+      ? supabase
+          .from("rooms")
+          .select("id,room_code,building_code,room_name")
+          .eq("room_type_id", BASIC_MEDICAL_ROOM_TYPE_ID)
+          .eq("is_active", true)
+          .order("building_code")
+          .order("room_code")
+      : Promise.resolve({ data: [], error: null }),
+    canManage && activeTab === "rooms"
+      ? supabase.rpc("search_basic_medical_catalog_candidates", {
+          target_query: null,
+          target_limit: 30,
+        })
+      : Promise.resolve({ data: [], error: null }),
+  ]);
   const loadError =
-    catalogResult.error ??
-    inventoryResult.error ??
-    roomResult.error ??
-    logResult.error;
+    searchResult.error ?? roomResult.error ?? candidateResult.error;
+  const rows = (searchResult.data ?? []) as Array<{
+    row_data: Record<string, unknown>;
+    total_count: number;
+  }>;
+  const resultRows = rows.map(({ row_data }) => row_data);
+  const totalItems = Number(rows[0]?.total_count ?? 0);
 
   return (
     <WorkspaceShell
@@ -158,12 +127,15 @@ export default async function BasicMedicalEquipmentPage({
         className="catalog-tabs basic-medical-equipment-tabs"
         aria-label="Thiết bị Y cơ sở"
       >
-        {[
-          ["inventory", "Thiết bị"],
-          ["rooms", "Thiết bị theo phòng"],
-          ["damaged", "Thiết bị hư"],
-          ["logs", "Log thay đổi"],
-        ].map(([tab, label]) => (
+        {(canManage
+          ? [
+              ["inventory", "Thiết bị"],
+              ["rooms", "Thiết bị theo phòng"],
+              ["damaged", "Thiết bị hư"],
+              ["logs", "Log thay đổi"],
+            ]
+          : [["rooms", "Thiết bị theo phòng"]]
+        ).map(([tab, label]) => (
           <Link
             key={tab}
             className={activeTab === tab ? "active" : ""}
@@ -203,12 +175,31 @@ export default async function BasicMedicalEquipmentPage({
           </select>
         ) : null}
         {activeTab === "logs" ? (
-          <select name="event" defaultValue={query.event ?? ""}>
-            <option value="">Tất cả thay đổi</option>
-            <option value="damage_report">Báo Hư</option>
-            <option value="condition_adjustment">Điều chỉnh Tốt/Hư</option>
-            <option value="stock_adjustment">Điều chỉnh tồn kho</option>
-          </select>
+          <>
+            <select name="event" defaultValue={query.event ?? ""}>
+              <option value="">Tất cả thay đổi</option>
+              <option value="damage_report">Báo Hư</option>
+              <option value="condition_adjustment">Điều chỉnh Tốt/Hư</option>
+              <option value="stock_adjustment">Điều chỉnh tồn kho</option>
+            </select>
+            <input
+              name="actor"
+              defaultValue={query.actor}
+              placeholder="ID người thực hiện"
+            />
+            <input
+              name="from"
+              type="date"
+              defaultValue={query.from}
+              aria-label="Từ ngày"
+            />
+            <input
+              name="to"
+              type="date"
+              defaultValue={query.to}
+              aria-label="Đến ngày"
+            />
+          </>
         ) : null}
         <button className="button button-primary" type="submit">
           Lọc
@@ -298,12 +289,15 @@ export default async function BasicMedicalEquipmentPage({
       <BasicMedicalEquipmentManager
         activeTab={activeTab}
         catalog={
-          (catalogResult.data ??
-            []) as unknown as BasicMedicalEquipmentCatalogItem[]
+          (activeTab === "inventory"
+            ? resultRows
+            : (candidateResult.data ??
+              [])) as unknown as BasicMedicalEquipmentCatalogItem[]
         }
         inventories={
-          (inventoryResult.data ??
-            []) as unknown as BasicMedicalRoomInventoryItem[]
+          (activeTab === "rooms" || activeTab === "damaged"
+            ? resultRows
+            : []) as unknown as BasicMedicalRoomInventoryItem[]
         }
         rooms={
           (roomResult.data ?? []) as Array<{
@@ -314,19 +308,15 @@ export default async function BasicMedicalEquipmentPage({
           }>
         }
         logs={
-          (logResult.data ?? []) as unknown as BasicMedicalConditionLogItem[]
+          (activeTab === "logs"
+            ? resultRows
+            : []) as unknown as BasicMedicalConditionLogItem[]
         }
         canManage={canManage}
       />
       <PaginationLinks
         currentPage={currentPage}
-        totalItems={
-          activeTab === "inventory"
-            ? (catalogResult.count ?? 0)
-            : activeTab === "logs"
-              ? (logResult.count ?? 0)
-              : (inventoryResult.count ?? 0)
-        }
+        totalItems={totalItems}
         pathname="/basic-medical/equipment"
         query={{
           tab: activeTab,
@@ -334,6 +324,9 @@ export default async function BasicMedicalEquipmentPage({
           room: query.room,
           status: query.status,
           event: query.event,
+          actor: query.actor,
+          from: query.from,
+          to: query.to,
         }}
       />
     </WorkspaceShell>

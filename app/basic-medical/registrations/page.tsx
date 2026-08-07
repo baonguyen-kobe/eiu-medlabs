@@ -80,6 +80,7 @@ export default async function BasicMedicalRegistrationsPage({
             "id,registration_code,created_at,academic_year,semester,start_date,end_date,student_count,note,courses(course_code,course_name),rooms(id,room_code,building_code,room_name),registrant:profiles!basic_medical_registrations_registrant_id_fkey(full_name),responsible:profiles!basic_medical_registrations_responsible_lecturer_id_fkey(full_name),basic_medical_registration_sessions(id,session_number,lesson_title,teaching_lecturer_id,teaching:profiles!basic_medical_registration_sessions_teaching_lecturer_id_fkey(full_name),class_schedules(schedule_date,start_time,end_time),confirmations:basic_medical_session_confirmations(id,signer_id,signed_at,invalidated_at,signer:profiles!basic_medical_session_confirmations_signer_id_fkey(full_name)))",
           )
           .in("id", registrationIds)
+          .is("cancelled_at", null)
       : { data: [], error: null };
 
   const order = new Map(registrationIds.map((id, index) => [id, index]));

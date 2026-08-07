@@ -61,6 +61,7 @@ export type BasicMedicalRegistrationListItem = {
   end_date: string;
   student_count: number;
   note: string | null;
+  cancelled_at?: string | null;
   courses: { course_code: string; course_name: string } | null;
   rooms: {
     id: string;

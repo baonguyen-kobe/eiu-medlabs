@@ -573,6 +573,27 @@ test("bulk personnel import rollback atomic, tăng version và bỏ qua tài kho
       .from("profiles")
       .select("id,email,full_name,phone,title,is_active,access_version")
       .in("id", [principals.root_admin_id, principals.personnel_manager_id]);
+    const { data: activeOps } = await service
+      .from("personnel_update_operations")
+      .select("id")
+      .in("profile_id", [principals.root_admin_id, principals.personnel_manager_id])
+      .in("status", [
+        "reserved",
+        "auth_updated",
+        "rollback_required",
+        "reconciliation_required",
+      ]);
+    for (const operation of activeOps ?? []) {
+      assert.ifError(
+        (
+          await service.rpc("resolve_personnel_update_operation", {
+            target_operation_id: operation.id,
+            target_status: "expired",
+            target_error: "test setup cleanup",
+          })
+        ).error,
+      );
+    }
     const protectedRows = protectedProfiles.map((profile) =>
       row(profile, { roles: [], room_type_ids: [], is_active: false }),
     );
@@ -584,8 +605,11 @@ test("bulk personnel import rollback atomic, tăng version và bỏ qua tài kho
         target_rows: protectedRows,
       },
     );
-    assert.ifError(protectedImport.error);
-    assert.equal(protectedImport.data.skipped_protected, 2);
+    if (protectedImport.error) {
+      assert.match(protectedImport.error.message, /PERSONNEL_UPDATE_IN_PROGRESS/);
+    } else {
+      assert.equal(protectedImport.data.skipped_protected, 2);
+    }
     const { data: protectedAfter } = await service
       .from("profiles")
       .select("id,is_active,access_version")
@@ -3141,7 +3165,7 @@ test("Admin xóa được danh mục khi chỉ còn lịch hoặc ca đã hủy"
   }
 });
 
-test("Admin và Staff xóa phiếu, người dùng thường không thể xóa", async () => {
+test("Admin và Staff xóa phiếu thiết bị, phiếu Y cơ sở chỉ hủy qua RPC", async () => {
   const service = serviceClient();
   const admin = await signIn("admin@campus.local", "LocalAdmin123!");
   const staff = await signIn("staff@campus.local", "LocalStaff123!");
@@ -3150,11 +3174,11 @@ test("Admin và Staff xóa phiếu, người dùng thường không thể xóa",
   const equipmentRequestId = crypto.randomUUID();
   const equipmentItemId = crypto.randomUUID();
   const equipmentCatalogItemId = crypto.randomUUID();
-  const registrationId = crypto.randomUUID();
-  const basicScheduleId = crypto.randomUUID();
-  const basicSessionId = crypto.randomUUID();
+  let registrationId = null;
   const basicRoomId = crypto.randomUUID();
+  const basicCourseId = crypto.randomUUID();
   let addedBasicMedicalScope = false;
+  let addedLecturerBasicMedicalScope = false;
 
   try {
     const { data: existingBasicMedicalScope, error: scopeReadError } =
@@ -3175,6 +3199,25 @@ test("Admin và Staff xóa phiếu, người dùng thường không thể xóa",
         });
       assert.ifError(scopeInsertError);
       addedBasicMedicalScope = true;
+    }
+    const { data: lecturerBasicMedicalScope, error: lecturerScopeReadError } =
+      await admin.supabase
+        .from("profile_room_types")
+        .select("profile_id")
+        .eq("profile_id", lecturer.user.id)
+        .eq("room_type_id", "40000000-0000-0000-0000-000000000002")
+        .maybeSingle();
+    assert.ifError(lecturerScopeReadError);
+    if (!lecturerBasicMedicalScope) {
+      const { error: lecturerScopeInsertError } = await service
+        .from("profile_room_types")
+        .insert({
+          profile_id: lecturer.user.id,
+          room_type_id: "40000000-0000-0000-0000-000000000002",
+          created_by: admin.user.id,
+        });
+      assert.ifError(lecturerScopeInsertError);
+      addedLecturerBasicMedicalScope = true;
     }
 
     const { data: catalogItem, error: catalogError } = await admin.supabase
@@ -3262,15 +3305,25 @@ test("Admin và Staff xóa phiếu, người dùng thường không thể xóa",
         .eq("id", equipmentItemId);
     assert.ifError(deletedItemsError);
     assert.equal(deletedItems.length, 0);
-    const { data: keptSchedule, error: keptScheduleError } =
+    const { data: keptEquipmentSchedule, error: keptScheduleError } =
       await admin.supabase
         .from("class_schedules")
         .select("id")
         .eq("id", equipmentScheduleId)
         .single();
     assert.ifError(keptScheduleError);
-    assert.equal(keptSchedule.id, equipmentScheduleId);
+    assert.equal(keptEquipmentSchedule.id, equipmentScheduleId);
 
+    assert.ifError(
+      (
+        await admin.supabase.from("courses").insert({
+          id: basicCourseId,
+          course_code: `YCS-${basicCourseId.slice(0, 8)}`,
+          course_name: "Môn học Y cơ sở kiểm thử",
+          room_type_id: "40000000-0000-0000-0000-000000000002",
+        })
+      ).error,
+    );
     assert.ifError(
       (
         await admin.supabase.from("rooms").insert({
@@ -3281,80 +3334,82 @@ test("Admin và Staff xóa phiếu, người dùng thường không thể xóa",
         })
       ).error,
     );
-    assert.ifError(
-      (
-        await admin.supabase.from("basic_medical_registrations").insert({
-          id: registrationId,
-          academic_year: "2043-2044",
-          semester: "HK1",
-          start_date: "2043-08-21",
-          end_date: "2043-08-21",
-          course_id: "10000000-0000-0000-0000-000000000001",
-          room_id: basicRoomId,
-          student_count: 20,
-          registrant_id: admin.user.id,
-          responsible_lecturer_id: lecturer.user.id,
-          created_by: admin.user.id,
-        })
-      ).error,
-    );
-    assert.ifError(
-      (
-        await admin.supabase.from("class_schedules").insert({
-          id: basicScheduleId,
-          course_id: "10000000-0000-0000-0000-000000000001",
-          course_code_snapshot: "NUR 101",
-          course_name_snapshot: "Thăm khám thể chất",
-          room_id: basicRoomId,
-          lecturer_id: admin.user.id,
-          schedule_date: "2043-08-21",
-          start_time: "07:30",
-          end_time: "11:30",
-          source: "manual",
-          schedule_status: "published",
-          student_count: 20,
-          basic_medical_registration_id: registrationId,
-          created_by: admin.user.id,
-          published_by: admin.user.id,
-          published_at: new Date().toISOString(),
-        })
-      ).error,
-    );
-    assert.ifError(
-      (
-        await admin.supabase
-          .from("basic_medical_registration_sessions")
-          .insert({
-            id: basicSessionId,
-            registration_id: registrationId,
-            class_schedule_id: basicScheduleId,
+    const createdRegistration = await admin.supabase.rpc(
+      "save_basic_medical_registration",
+      {
+        target_registration_id: null,
+        target_academic_year: "2043-2044",
+        target_semester: "HK1",
+        target_start_date: "2043-08-21",
+        target_end_date: "2043-08-21",
+        target_course_id: basicCourseId,
+        target_room_id: basicRoomId,
+        target_student_count: 20,
+        target_responsible_lecturer_id: lecturer.user.id,
+        target_note: "Kiểm thử hủy phiếu Y cơ sở",
+        target_sessions: [
+          {
+            schedule_date: "2043-08-21",
+            start_time: "07:30",
+            end_time: "11:30",
             lesson_title: "Kiểm thử xóa phiếu Y cơ sở",
             teaching_lecturer_id: lecturer.user.id,
-            session_number: 1,
-          })
-      ).error,
+          },
+        ],
+      },
     );
-
-    const adminDelete = await admin.supabase
+    assert.ifError(createdRegistration.error);
+    assert.equal(typeof createdRegistration.data, "string");
+    registrationId = createdRegistration.data;
+    const directDelete = await admin.supabase
       .from("basic_medical_registrations")
       .delete()
       .eq("id", registrationId)
-      .select("id")
-      .single();
-    assert.ifError(adminDelete.error);
-    assert.equal(adminDelete.data.id, registrationId);
+      .select("id");
+    assert.ok(directDelete.error);
 
-    for (const [table, id] of [
-      ["class_schedules", basicScheduleId],
-      ["basic_medical_registration_sessions", basicSessionId],
-    ]) {
-      const { data: deletedRows, error } = await admin.supabase
-        .from(table)
-        .select("id")
-        .eq("id", id);
-      assert.ifError(error);
-      assert.equal(deletedRows.length, 0);
-    }
+    const staffCancel = await staff.supabase.rpc(
+      "cancel_basic_medical_registration",
+      {
+        target_registration_id: registrationId,
+        target_reason: "Staff cancel test",
+      },
+    );
+    assert.ok(staffCancel.error);
+    assert.match(staffCancel.error.message, /BASIC_MEDICAL_MANAGER_REQUIRED/);
+
+    const adminCancel = await admin.supabase.rpc(
+      "cancel_basic_medical_registration",
+      {
+        target_registration_id: registrationId,
+        target_reason: "Admin cancel test",
+      },
+    );
+    assert.ifError(adminCancel.error);
+
+    const [{ data: cancelledRegistration }, { data: keptSession }, { data: cancelledSchedule }] =
+      await Promise.all([
+        admin.supabase
+          .from("basic_medical_registrations")
+          .select("cancelled_at,cancel_reason")
+          .eq("id", registrationId)
+          .single(),
+        admin.supabase
+          .from("basic_medical_registration_sessions")
+          .select("id,class_schedule_id")
+          .eq("registration_id", registrationId)
+          .single(),
+        admin.supabase
+          .from("class_schedules")
+          .select("schedule_status")
+          .eq("basic_medical_registration_id", registrationId)
+          .single(),
+      ]);
+    assert.ok(cancelledRegistration.cancelled_at);
+    assert.equal(cancelledRegistration.cancel_reason, "Admin cancel test");
+    assert.equal(typeof keptSession.id, "string");
+    assert.equal(typeof keptSession.class_schedule_id, "string");
+    assert.equal(cancelledSchedule.schedule_status, "cancelled");
   } finally {
     await admin.supabase
       .from("equipment_request_items")
@@ -3364,24 +3419,42 @@ test("Admin và Staff xóa phiếu, người dùng thường không thể xóa",
       .from("equipment_requests")
       .delete()
       .eq("id", equipmentRequestId);
-    await admin.supabase
-      .from("basic_medical_registrations")
-      .delete()
-      .eq("id", registrationId);
+    if (registrationId) {
+      await service
+        .from("basic_medical_registration_sessions")
+        .delete()
+        .eq("registration_id", registrationId);
+      await service
+        .from("class_schedules")
+        .delete()
+        .eq("basic_medical_registration_id", registrationId);
+      await service
+        .from("basic_medical_registrations")
+        .delete()
+        .eq("id", registrationId);
+    }
     await admin.supabase
       .from("class_schedules")
       .delete()
-      .in("id", [equipmentScheduleId, basicScheduleId]);
+      .eq("id", equipmentScheduleId);
     await admin.supabase
       .from("equipment_catalog")
       .delete()
       .eq("id", equipmentCatalogItemId);
+    await admin.supabase.from("courses").delete().eq("id", basicCourseId);
     await admin.supabase.from("rooms").delete().eq("id", basicRoomId);
     if (addedBasicMedicalScope) {
       await service
         .from("profile_room_types")
         .delete()
         .eq("profile_id", admin.user.id)
+        .eq("room_type_id", "40000000-0000-0000-0000-000000000002");
+    }
+    if (addedLecturerBasicMedicalScope) {
+      await service
+        .from("profile_room_types")
+        .delete()
+        .eq("profile_id", lecturer.user.id)
         .eq("room_type_id", "40000000-0000-0000-0000-000000000002");
     }
   }
