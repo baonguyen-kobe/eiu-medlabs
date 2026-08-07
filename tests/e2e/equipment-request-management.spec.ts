@@ -43,6 +43,9 @@ test("mã phiếu 12 số tải được và Admin thấy dòng bổ sung thiế
     .eq("email", "lecturer@campus.local")
     .single();
   expect(lecturerProfile).toBeTruthy();
+  if (!lecturerProfile) {
+    throw new Error("Missing lecturer test fixture");
+  }
   const lecturerId = lecturerProfile.id;
 
   const suffix = crypto.randomUUID().slice(0, 8).toUpperCase();
@@ -61,6 +64,9 @@ test("mã phiếu 12 số tải được và Admin thấy dòng bổ sung thiế
       .limit(1)
       .single();
     expect(course).toBeTruthy();
+    if (!course) {
+      throw new Error("Missing course test fixture");
+    }
 
     const { data: room } = await databaseClient
       .from("rooms")
@@ -70,6 +76,9 @@ test("mã phiếu 12 số tải được và Admin thấy dòng bổ sung thiế
       .limit(1)
       .single();
     expect(room).toBeTruthy();
+    if (!room) {
+      throw new Error("Missing room test fixture");
+    }
 
     catalogItemId = crypto.randomUUID();
     expect(
