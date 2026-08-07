@@ -168,7 +168,16 @@ test("Người xem Y cơ sở không truy cập Danh sách thiết bị Y cơ s�
       page.getByRole("link", { name: "Danh sách thiết bị Y cơ sở" }),
     ).toHaveCount(0);
     await page.goto("/basic-medical/equipment");
-    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(
+      page.getByRole("heading", { name: "Danh sách thiết bị Y cơ sở" }),
+    ).toBeVisible();
+    await expect(page.getByText("Thêm thiết bị thủ công")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Import mới" })).toHaveCount(
+      0,
+    );
+    await expect(
+      page.getByRole("link", { name: "Export tất cả" }),
+    ).toHaveCount(0);
     await page.goto("/basic-medical/registrations");
     await expect(
       page.getByRole("heading", { name: "Phiếu Y cơ sở" }),
