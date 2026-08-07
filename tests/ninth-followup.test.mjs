@@ -42,13 +42,11 @@ async function createTestUser(email, role = "staff") {
   );
   assert.ifError(
     (
-      await admin
-        .from("profile_room_types")
-        .upsert({
-          profile_id: id,
-          room_type_id: "40000000-0000-0000-0000-000000000001",
-          created_by: id,
-        })
+      await admin.from("profile_room_types").upsert({
+        profile_id: id,
+        room_type_id: "40000000-0000-0000-0000-000000000001",
+        created_by: id,
+      })
     ).error,
   );
   return id;
@@ -237,18 +235,16 @@ await test("import conflict and system_error row statuses persist without fatal 
       [3, "conflict"],
       [4, "system_error"],
     ]) {
-      const { error } = await admin
-        .from("import_rows")
-        .insert({
-          import_batch_id: batchId,
-          row_number: rowNum,
-          normalized_row_hash: `ninth-h-${rowNum}-${Date.now()}`,
-          raw_data: {},
-          normalized_data: {},
-          validation_status: status,
-          errors: [],
-          warnings: [],
-        });
+      const { error } = await admin.from("import_rows").insert({
+        import_batch_id: batchId,
+        row_number: rowNum,
+        normalized_row_hash: `ninth-h-${rowNum}-${Date.now()}`,
+        raw_data: {},
+        normalized_data: {},
+        validation_status: status,
+        errors: [],
+        warnings: [],
+      });
       assert.ifError(
         error,
         `Insert row ${rowNum} (${status}): ${error?.message}`,
