@@ -6,6 +6,7 @@ import { processEmailNotificationsByDedupeKeys } from "@/lib/email-notifications
 import {
   enqueueEquipmentRequestEmails,
   loadEquipmentRequestEmailSnapshot,
+  processPendingEmailOutbox,
 } from "@/lib/equipment-request-emails";
 import { businessTodayString } from "@/lib/business-time";
 import {
@@ -147,17 +148,7 @@ export async function addEquipmentRequestItem({
     .eq("id", newItemId as string)
     .single();
 
-  try {
-    const dedupeKeys = await enqueueEquipmentRequestEmails({
-      requestId,
-      event: "updated",
-      operationId: crypto.randomUUID(),
-      actorId: userId,
-    });
-    after(() => processEmailNotificationsByDedupeKeys(dedupeKeys));
-  } catch (emailError) {
-    console.error("Không thể xếp email bổ sung thiết bị:", emailError);
-  }
+  after(() => processPendingEmailOutbox());
 
   revalidatePath("/equipment/requests");
   revalidatePath("/equipment/mine");
@@ -309,20 +300,7 @@ export async function reviewLateEquipmentRequest(
     };
   }
 
-  try {
-    const dedupeKeys = await enqueueEquipmentRequestEmails({
-      requestId,
-      event:
-        decision === "approved"
-          ? "late_approval_approved"
-          : "late_approval_rejected",
-      operationId: crypto.randomUUID(),
-      actorId: claims.claims.sub,
-    });
-    after(() => processEmailNotificationsByDedupeKeys(dedupeKeys));
-  } catch (emailError) {
-    console.error("Không thể xếp email duyệt đăng ký trễ:", emailError);
-  }
+  after(() => processPendingEmailOutbox());
 
   return {
     ok: true,
@@ -585,18 +563,7 @@ export async function updateEquipmentRequest(
     };
   }
 
-  const emailOperationId = crypto.randomUUID();
-  try {
-    const dedupeKeys = await enqueueEquipmentRequestEmails({
-      requestId,
-      event: requiresLateReview ? "late_approval_requested" : "updated",
-      operationId: emailOperationId,
-      actorId: userId,
-    });
-    after(() => processEmailNotificationsByDedupeKeys(dedupeKeys));
-  } catch (emailError) {
-    console.error("Không thể xếp email điều chỉnh phiếu thiết bị:", emailError);
-  }
+  after(() => processPendingEmailOutbox());
 
   revalidatePath("/equipment/requests");
   revalidatePath("/equipment/mine");
@@ -788,18 +755,7 @@ export async function createEquipmentRequest(
           ? "Lớp này đã có phiếu đăng ký thiết bị."
           : error?.message || "Không thể tạo phiếu thiết bị.",
     };
-  try {
-    const dedupeKeys = await enqueueEquipmentRequestEmails({
-      requestId: String(requestId),
-      event: leadTime.requiresLateApproval
-        ? "late_approval_requested"
-        : "created",
-      actorId: userId,
-    });
-    after(() => processEmailNotificationsByDedupeKeys(dedupeKeys));
-  } catch (emailError) {
-    console.error("Không thể xếp email xác nhận phiếu thiết bị:", emailError);
-  }
+  after(() => processPendingEmailOutbox());
   revalidatePath("/equipment/requests");
   revalidatePath("/equipment/mine");
   revalidatePath("/equipment/register");

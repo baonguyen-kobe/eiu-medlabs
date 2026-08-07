@@ -922,6 +922,12 @@ export async function retryEmailNotification(notificationId: string) {
 
 export async function processPendingScheduleEmails() {
   const supabase = createAdminClient();
+  try {
+    await supabase.rpc("process_email_outbox_events", { batch_size: 50 });
+  } catch (err) {
+    console.error("Không thể mở rộng outbox email:", err);
+  }
+
   const deliveryMode = await getEmailDeliveryMode();
   if (deliveryMode === "off") {
     await suppressPendingNotifications();

@@ -293,3 +293,20 @@ export async function enqueueEquipmentRequestEmails({
 
   return notifications.map(({ dedupe_key }) => dedupe_key);
 }
+
+export async function processPendingEmailOutbox() {
+  const supabase = createAdminClient();
+  const { data: processedCount, error } = await supabase.rpc(
+    "process_email_outbox_events",
+    { batch_size: 25 },
+  );
+  if (error) {
+    console.error("Không thể xử lý hàng đợi outbox email:", error.message);
+    return;
+  }
+  if (processedCount && processedCount > 0) {
+    const { processPendingScheduleEmails } =
+      await import("./email-notifications");
+    await processPendingScheduleEmails();
+  }
+}

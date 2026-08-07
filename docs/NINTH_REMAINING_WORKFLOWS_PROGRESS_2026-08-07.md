@@ -1,12 +1,14 @@
 # Checkpoint status
 
 Starting HEAD: `e3f752b021d24a9c161761ab22e6353e60986082`
-Current local HEAD before commit: `c9663e0f50cbb5ba9ad73b0bb4f5a748433dd063`
+Current local baseline HEAD: `e54ecbdf3a09abeb2c19cbfc98443b3ff40a5966`
 Branch: `review/hardening-20260805`
 
 ## Completed in this checkpoint
 
-- **N-MEDIUM-01 FIXED**: Added real Personnel crash-window reconciliation integration test in `tests/e2e/personnel-management.spec.ts`. The test directly hits the Next.js `GET /api/internal/personnel-reconciliation` endpoint to assert the state rolls back properly.
+- **EMAIL-MEDIUM-01 FIXED**: Finalized email notification matrix & settings.
+- **SHIFT-MEDIUM-01 FIXED**: Shift pattern hard delete & history preservation (`20260807210011_fix_shift_pattern_hard_delete.sql`).
+- **N-MEDIUM-01 FIXED**: Added real Personnel crash-window reconciliation integration test in `tests/e2e/personnel-management.spec.ts`.
 - **N-HIGH-01 FIXED**: `guard_basic_medical_linked_schedule_mutation` trigger correctly protects Basic Medical links.
 - **N-MEDIUM-02 FIXED**: `claim_personnel_reconciliation_batch` handles worker concurrency.
 - **CP2 (Hard Delete architecture) FIXED**: `can_hard_delete` RPC added and applied via RESTRICT policies.
@@ -15,11 +17,13 @@ Branch: `review/hardening-20260805`
 
 ## Partially completed
 
-- None identified currently. All CP2, CP3, CP4 migrations are present.
-
-## Not started / intentionally deferred
-
-- **CP5**: Email queue / shift lifecycle remaining requirements.
+- **EMAIL-MEDIUM-02 (PARTIAL)**:
+  - **Completed**: Equipment Request non-destructive transactional outbox (`public.email_outbox_events`, PL/pgSQL outbox functions in `20260807220000_equipment_request_transactional_outbox.sql`, 5 converted business RPCs, server action integration via `after()`, automatic recovery cron `/api/internal/email-recovery` at `15 * * * *` in `vercel.json`).
+  - **Still Deferred**:
+    - TB-06 destructive Equipment Request lifecycle outbox/deletion reconciliation.
+    - Skills Lab transactional outbox.
+    - Basic Medical transactional outbox.
+    - Equipment Import null-email safety housekeeping (`profile.email?.trim()`).
 
 ## Current migrations
 
@@ -34,37 +38,24 @@ Branch: `review/hardening-20260805`
 - `20260807210007_fix_service_role_and_signature_rpc.sql`
 - `20260807210008_fix_equipment_request_status_and_signature.sql`
 - `20260807210009_fix_equipment_request_items_insert_lock.sql`
+- `20260807210010_fix_service_role_test_setup.sql`
+- `20260807210011_fix_shift_pattern_hard_delete.sql`
+- `20260807220000_equipment_request_transactional_outbox.sql`
 
-## Tests run
+## Tests run and passed
 
-- test: `npx playwright test tests/e2e/personnel-management.spec.ts -g "personnel reconciler actual integration test (N-MEDIUM-01)"`
-  result: 1/1 passing.
-- test: `npm run check`
-  result: Expected to pass typechecks based on previous CI run `31184913979`.
+- `npx supabase test db supabase/tests/equipment_outbox.test.sql`: 15/15 PASS.
+- `npm run test`: 68/68 PASS.
+- `npx playwright test tests/e2e/equipment-request-management.spec.ts`: 1/1 PASS.
+- `npm run test:e2e:critical`: 22/22 PASS.
+- `npm run typecheck`: PASS.
+- `npm run format:check`: PASS.
+- `npm run lint`: PASS.
+- `npx supabase db lint --local --level error`: PASS.
 
-## Known failures
+## Open findings & deferred work
 
-- failure: None.
-
-## Open findings
-
-- CP5: Email queue / shift lifecycle (needs verification if already covered by phases_1_to_5 or if remaining work exists).
-
-## Micro-Checkpoint: Shift Hard Delete Correction
-
-- Fixed `hard_delete_shift_pattern` to properly delete from `public.staff_shifts`.
-- Migration: `20260807210011_fix_shift_pattern_hard_delete.sql`
-- Test: `supabase/tests/shift_pattern_hard_delete.test.sql`
-
-## Exact next actions for next model
-
-1. Review CP5 (Email queue / shift lifecycle) actual implementation state.
-2. Finalize any remaining CP5 workflows if incomplete.
-
-## Working tree before commit
-
-CLEAN (After this commit).
-
-## Background tasks
-
-0 stale watchers remaining.
+- TB-06 destructive Equipment Request outbox.
+- Skills Lab transactional outbox.
+- Basic Medical transactional outbox.
+- Housekeeping: `app/equipment/import/actions.ts` null email safety.

@@ -3,6 +3,10 @@
     {
       "path": "/api/internal/personnel-reconciliation",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/internal/email-recovery",
+      "schedule": "15 * * * *"
     }
   ]
 }
