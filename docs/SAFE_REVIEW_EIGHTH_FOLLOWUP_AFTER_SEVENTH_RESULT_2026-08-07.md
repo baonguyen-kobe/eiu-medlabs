@@ -72,11 +72,11 @@ PR: #1 (Draft)
 ## Validation
 
 - Focused TypeScript checks: PASS.
-- Full local and GitHub Actions metadata: PENDING final validation and push.
+- GitHub Actions CI: PASS (`verify` completed successfully).
 
 ## Delivery metadata
 
-- Implementation commit: PENDING
-- Final HEAD: PENDING
-- GitHub Actions run: PENDING
-- Verify job: PENDING
+- Implementation commit: `032418cac26808260475c8b373ced62874f85e93`
+- Final implementation HEAD: `032418cac26808260475c8b373ced62874f85e93`
+- GitHub Actions run: [31147729879](https://github.com/baonguyen-kobe/eiu-medlabs/actions/runs/31147729879) (`completed / success`)
+- Verify job: [92770615748](https://github.com/baonguyen-kobe/eiu-medlabs/actions/runs/31147729879/job/92770615748) (`completed / success`)
