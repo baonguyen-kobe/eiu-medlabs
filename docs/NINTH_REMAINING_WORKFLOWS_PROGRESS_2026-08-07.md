@@ -50,6 +50,12 @@ Branch: `review/hardening-20260805`
 
 - CP5: Email queue / shift lifecycle (needs verification if already covered by phases_1_to_5 or if remaining work exists).
 
+## Micro-Checkpoint: Shift Hard Delete Correction
+
+- Fixed `hard_delete_shift_pattern` to properly delete from `public.staff_shifts`.
+- Migration: `20260807210011_fix_shift_pattern_hard_delete.sql`
+- Test: `supabase/tests/shift_pattern_hard_delete.test.sql`
+
 ## Exact next actions for next model
 
 1. Review CP5 (Email queue / shift lifecycle) actual implementation state.
