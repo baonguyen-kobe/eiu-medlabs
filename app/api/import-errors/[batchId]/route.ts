@@ -4,7 +4,9 @@ import { createClient } from "@/lib/supabase/server";
 
 function csvCell(value: unknown) {
   const text = typeof value === "string" ? value : JSON.stringify(value ?? "");
-  return `"${text.replaceAll('"', '""')}"`;
+  // Neutralize formula-injection prefixes before quoting (OWASP CSV injection)
+  const safe = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+  return `"${safe.replaceAll('"', '""')}"`;
 }
 
 export async function GET(

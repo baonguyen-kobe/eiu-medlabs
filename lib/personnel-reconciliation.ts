@@ -6,7 +6,7 @@ type PersonnelOperation = {
   previous_email: string;
   requested_email: string;
   expected_version: number;
-  status: string;
+  prior_status: string;
   expires_at: string;
   actor_id: string;
 };
@@ -19,28 +19,21 @@ export type PersonnelReconciliationResult = {
 };
 
 /**
- * Reconciles only expired durable operations. It deliberately prefers rolling
- * Auth back to the still-authoritative profile when the DB commit never ran.
- * This function uses the server-only service client and is safe to call from a
- * protected cron endpoint or an operator task.
+ * Reconciles only expired durable operations.
+ * Uses an atomic claim RPC so parallel workers cannot process the same
+ * operation simultaneously (FOR UPDATE SKIP LOCKED + lease expiry).
  */
 export async function reconcileExpiredPersonnelUpdates(): Promise<PersonnelReconciliationResult> {
   const admin = createAdminClient();
-  const now = new Date().toISOString();
-  const { data, error } = await admin
-    .from("personnel_update_operations")
-    .select(
-      "id,profile_id,previous_email,requested_email,expected_version,status,expires_at,actor_id",
-    )
-    .in("status", [
-      "reserved",
-      "auth_updated",
-      "rollback_required",
-      "reconciliation_required",
-    ])
-    .lte("expires_at", now)
-    .order("created_at")
-    .limit(100);
+  const workerId = crypto.randomUUID();
+  const { data, error } = await admin.rpc(
+    "claim_personnel_reconciliation_batch",
+    {
+      target_limit: 20,
+      target_worker_id: workerId,
+      target_lease_seconds: 300,
+    },
+  );
   if (error) throw error;
 
   const result: PersonnelReconciliationResult = {

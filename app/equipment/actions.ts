@@ -90,30 +90,12 @@ export async function addEquipmentRequestItem({
     return { ok: false, message: "Dòng thiết bị bổ sung không hợp lệ." };
   }
 
-  const [
-    { data: roleRows },
-    { data: request },
-    { data: skill },
-    { data: catalog },
-  ] = await Promise.all([
+  const [{ data: roleRows }, { data: request }] = await Promise.all([
     supabase.from("user_roles").select("role").eq("user_id", userId),
     supabase
       .from("equipment_requests")
       .select("id,status")
       .eq("id", requestId)
-      .maybeSingle(),
-    supabase
-      .from("equipment_request_items")
-      .select("id")
-      .eq("request_id", requestId)
-      .eq("skill_name", normalizedSkillName)
-      .limit(1)
-      .maybeSingle(),
-    supabase
-      .from("equipment_catalog")
-      .select("id")
-      .eq("id", catalogItemId)
-      .eq("is_active", true)
       .maybeSingle(),
   ]);
 
@@ -130,35 +112,40 @@ export async function addEquipmentRequestItem({
         "Chỉ được bổ sung thiết bị khi phiếu ở trạng thái Mới hoặc Đã soạn.",
     };
   }
-  if (!skill) {
-    return { ok: false, message: "Kỹ năng/bài thực hành không còn tồn tại." };
-  }
-  if (!catalog) {
-    return {
-      ok: false,
-      message: "Thiết bị không còn hoạt động trong Danh mục.",
-    };
-  }
 
-  const { data: inserted, error } = await supabase
-    .from("equipment_request_items")
-    .insert({
-      request_id: requestId,
-      skill_name: normalizedSkillName,
-      catalog_item_id: catalogItemId,
-      quantity,
-      note: normalizedNote,
-    })
-    .select(
-      "id,quantity,skill_name,note,equipment_catalog(id,item_name,commercial_name,item_type,country_of_origin,manufacturer,model,unit)",
-    )
-    .single();
-  if (error || !inserted) {
+  const { data: newItemId, error } = await supabase.rpc(
+    "add_equipment_request_item",
+    {
+      target_request_id: requestId,
+      target_skill_name: normalizedSkillName,
+      target_catalog_item_id: catalogItemId,
+      target_quantity: quantity,
+      target_note: normalizedNote,
+    },
+  );
+  if (error || !newItemId) {
+    if (error?.message?.includes("CATALOG_ITEM_INACTIVE_OR_MISSING")) {
+      return {
+        ok: false,
+        message: "Thiết bị không còn hoạt động trong Danh mục.",
+      };
+    }
+    if (error?.message?.includes("SKILL_NOT_FOUND_IN_REQUEST")) {
+      return { ok: false, message: "Kỹ năng/bài thực hành không còn tồn tại." };
+    }
     return {
       ok: false,
       message: error?.message || "Không thể bổ sung thiết bị vào phiếu.",
     };
   }
+
+  const { data: inserted } = await supabase
+    .from("equipment_request_items")
+    .select(
+      "id,quantity,skill_name,note,equipment_catalog(id,item_name,commercial_name,item_type,country_of_origin,manufacturer,model,unit)",
+    )
+    .eq("id", newItemId as string)
+    .single();
 
   try {
     const dedupeKeys = await enqueueEquipmentRequestEmails({

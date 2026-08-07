@@ -258,7 +258,7 @@ test("personnel reconciler explicitly scans expired reserved operations", () => 
     new URL("../lib/personnel-reconciliation.ts", import.meta.url),
     "utf8",
   );
-  assert.match(source, /\.in\("status", \[\s*"reserved"/);
+  assert.match(source, /claim_personnel_reconciliation_batch/);
 });
 
 test("Basic Medical visibility, RPC-only mutation and soft cancellation preserve history", async () => {

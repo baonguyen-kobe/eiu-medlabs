@@ -875,19 +875,9 @@ export async function importScheduleRows(
     .sort((left, right) => left.rowNumber - right.rowNumber);
 
   if (outcomes.some(({ fatal }) => fatal)) {
-    await supabase
-      .from("import_batches")
-      .update({
-        status: importedRows > 0 ? "completed_with_errors" : "failed",
-        valid_rows: importedRows - warningRows,
-        warning_rows: warningRows,
-        error_rows: errorRows + systemErrorRows,
-        imported_rows: importedRows,
-        duplicate_rows: duplicateRows,
-        conflict_rows: conflictRows,
-        completed_at: new Date().toISOString(),
-      })
-      .eq("id", batch.id);
+    await supabase.rpc("finalize_import_batch", {
+      target_batch_id: batch.id,
+    });
     return {
       ok: false,
       message:
@@ -904,22 +894,10 @@ export async function importScheduleRows(
     };
   }
 
-  const { error: finishError } = await supabase
-    .from("import_batches")
-    .update({
-      status:
-        errorRows + systemErrorRows + conflictRows > 0
-          ? "completed_with_errors"
-          : "completed",
-      valid_rows: importedRows - warningRows,
-      warning_rows: warningRows,
-      error_rows: errorRows + systemErrorRows,
-      imported_rows: importedRows,
-      duplicate_rows: duplicateRows,
-      conflict_rows: conflictRows,
-      completed_at: new Date().toISOString(),
-    })
-    .eq("id", batch.id);
+  const { data: finishData, error: finishError } = await supabase.rpc(
+    "finalize_import_batch",
+    { target_batch_id: batch.id },
+  );
 
   if (finishError) {
     return {
@@ -931,6 +909,17 @@ export async function importScheduleRows(
     };
   }
 
+  // Use DB-computed counts from the RPC; fall back to application counts if
+  // the response shape is unexpected (e.g. during a schema migration window).
+  const dbCounts = finishData as Record<string, number> | null;
+  const finalImported = dbCounts?.imported ?? importedRows;
+  const finalErrors = dbCounts
+    ? (dbCounts.errors ?? 0) + (dbCounts.system_errors ?? 0)
+    : errorRows + systemErrorRows;
+  const finalWarnings = dbCounts?.warnings ?? warningRows;
+  const finalDuplicates = dbCounts?.duplicates ?? duplicateRows;
+  const finalConflicts = dbCounts?.conflicts ?? conflictRows;
+
   revalidatePath("/dashboard");
   revalidatePath("/class-schedules");
   revalidatePath("/imports");
@@ -939,14 +928,14 @@ export async function importScheduleRows(
   after(processPendingScheduleEmails);
   return {
     ok: true,
-    message: `Đã tạo ${importedRows} lịch từ ${inputRows.length} dòng.`,
+    message: `Đã tạo ${finalImported} lịch từ ${inputRows.length} dòng.`,
     batchId: batch.id,
     totalRows: inputRows.length,
-    importedRows,
-    errorRows: errorRows + systemErrorRows,
-    warningRows,
-    duplicateRows,
-    conflictRows,
+    importedRows: finalImported,
+    errorRows: finalErrors,
+    warningRows: finalWarnings,
+    duplicateRows: finalDuplicates,
+    conflictRows: finalConflicts,
     durationMs: Date.now() - startedAt,
     issues,
   };

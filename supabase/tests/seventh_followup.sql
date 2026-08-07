@@ -6,7 +6,8 @@ select columns_are(
   array[
     'id','profile_id','actor_id','expected_version','requested_email','payload',
     'expires_at','created_at','previous_email','status','auth_updated_at',
-    'committed_at','resolved_at','last_error'
+    'committed_at','resolved_at','last_error',
+    'reconcile_started_at','reconcile_lease_expires_at','reconcile_worker_id'
   ],
   'personnel operations persist the complete durable saga state'
 );
