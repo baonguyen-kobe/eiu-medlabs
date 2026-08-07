@@ -110,3 +110,129 @@ test("Root và Bảo thấy Personnel, Admin thường bị ẩn menu và redire
   await page.goto("/admin/personnel");
   await expect(page).toHaveURL(/\/dashboard$/);
 });
+
+test("personnel reconciler actual integration test (N-MEDIUM-01)", async ({
+  request,
+}) => {
+  const email = `reconciler-e2e-${Date.now()}@campus.local`;
+  const { data: targetUser, error: createError } =
+    await serviceDb.auth.admin.createUser({
+      email,
+      password: "LocalTest123!",
+      email_confirm: true,
+    });
+  expect(createError).toBeNull();
+
+  try {
+    const { data: principals } = await serviceDb
+      .from("system_security_principals")
+      .select("root_admin_id")
+      .single();
+
+    const rootAdminId = principals!.root_admin_id;
+
+    // Create a fresh client for root admin to avoid sharing state
+    const rootDb = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+      { auth: { autoRefreshToken: false, persistSession: false } },
+    );
+
+    // Sign in as root temporarily to get session
+    const { error: rootAuthError } = await rootDb.auth.signInWithPassword({
+      email: "admin@campus.local",
+      password: "LocalAdmin123!",
+    });
+    expect(rootAuthError).toBeNull();
+
+    // Get profile data for target
+    const { data: profile } = await serviceDb
+      .from("profiles")
+      .select("*")
+      .eq("id", targetUser!.user.id)
+      .single();
+
+    const { data: roomType } = await serviceDb
+      .from("room_types")
+      .select("id")
+      .limit(1)
+      .single();
+
+    // 1. Begin personnel update
+    const requestedEmail = `changed-${email}`;
+    const payload = {
+      target_profile_id: targetUser!.user.id,
+      target_full_name: profile!.full_name || "Reconciler Test",
+      target_email: requestedEmail,
+      target_phone: profile!.phone || "0900999888",
+      target_roles: ["lecturer"],
+      target_room_type_ids: [roomType!.id],
+      target_email_room_type_ids: [roomType!.id],
+      target_title: profile!.title || null,
+      target_allow_basic_medical_access: false,
+      target_is_active: true,
+      target_expected_version: profile!.access_version,
+      target_can_import_schedules: false,
+    };
+
+    const { data: operation, error: beginError } = await rootDb.rpc(
+      "begin_personnel_update",
+      payload,
+    );
+    expect(beginError).toBeNull();
+
+    // 2. Auth update succeeds
+    const { error: authUpdateError } =
+      await serviceDb.auth.admin.updateUserById(targetUser!.user.id, {
+        email: requestedEmail,
+        email_confirm: true,
+      });
+    expect(authUpdateError).toBeNull();
+
+    // 3. DB mark/finalization is intentionally skipped
+    // 4. Operation becomes expired (we simulate by updating expires_at)
+    await serviceDb
+      .from("personnel_update_operations")
+      .update({ expires_at: new Date(Date.now() - 60_000).toISOString() })
+      .eq("id", operation.operation_id);
+
+    // 5. REAL reconciler runs
+    const response = await request.get(
+      "/api/internal/personnel-reconciliation",
+      {
+        headers: {
+          authorization: "Bearer local-e2e-cron-secret",
+        },
+      },
+    );
+    expect(response.status()).toBe(200);
+    const result = await response.json();
+    expect(result.rolledBack).toBeGreaterThanOrEqual(1);
+
+    // 6. Auth is restored
+    const { data: finalAuth } = await serviceDb.auth.admin.getUserById(
+      targetUser!.user.id,
+    );
+    expect(finalAuth.user?.email).toBe(email);
+
+    // 7. Profile stays/restores previous state
+    const { data: finalProfile } = await serviceDb
+      .from("profiles")
+      .select("email")
+      .eq("id", targetUser!.user.id)
+      .single();
+    expect(finalProfile!.email).toBe(email);
+
+    // 8. Operation becomes rolled_back
+    const { data: durable } = await serviceDb
+      .from("personnel_update_operations")
+      .select("status")
+      .eq("id", operation.operation_id)
+      .single();
+    expect(durable!.status).toBe("rolled_back");
+  } finally {
+    if (targetUser?.user?.id) {
+      await serviceDb.auth.admin.deleteUser(targetUser.user.id);
+    }
+  }
+});
