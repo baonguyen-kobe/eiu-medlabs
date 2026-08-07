@@ -5,6 +5,7 @@ Current local HEAD before commit: `e3f752b021d24a9c161761ab22e6353e60986082`
 Branch: `review/hardening-20260805`
 
 ## Completed in this checkpoint
+
 - Fixed integration test 1055, 1717, 1904, 2046, 2236, 3151, 3445.
 - Fixed `service_role` privileges on `equipment_requests` and `equipment_request_items` for full DML.
 - Fixed `registrant_confirm_equipment_handoff` RPC signature and constraints.
@@ -15,15 +16,18 @@ Branch: `review/hardening-20260805`
 - Validated full test suite locally (35/35 passing).
 
 ## Partially completed
+
 - `csv formula injection` handled in API endpoints, but might need further review across all exports.
 
 ## Not started / intentionally deferred
+
 - Hard Delete authority logic (`can_hard_delete`, Root/Bảo limits).
 - Equipment request full edit workflow refinement.
 - Import schedule canonical RPC / schedule creation flow.
 - Email queue / shift lifecycle.
 
 ## Current migrations
+
 - `20260807200000_ninth_and_remaining_workflows_hardening.sql`
 - `20260807210000_complete_hardening_phases_1_to_5.sql`
 - `20260807210001_fix_signature_paths_in_functions.sql`
@@ -37,29 +41,35 @@ Branch: `review/hardening-20260805`
 - `20260807210009_fix_equipment_request_items_insert_lock.sql`
 
 ## Tests run
+
 - test: `tests/local-supabase.test.mjs`
   result: 35/35 passing.
 - test: `npm run check`
   result: Passed typechecks. Linting has 10 minor ignored warnings in `/scripts`.
 
 ## Known failures
+
 - failure: None.
   caused by current diff: NO
   next action: N/A
 
 ## Open findings
+
 - CP2: Hard delete authority (can_hard_delete, Root+Bảo, RESTRICT dependencies)
 - CP3: Equipment request full edit workflow refinement
 - CP4: Import schedule canonical RPC / schedule creation flow
 - CP5: Email queue / shift lifecycle
 
 ## Exact next actions for next model
+
 1. Begin implementation of CP2 (Hard Delete authority logic).
 2. Continue with CP3 and CP4.
 3. Finalize CP5 workflows.
 
 ## Working tree before commit
+
 CLEAN (After this commit). Excluded diagnostic scripts: `scripts/patch*.mjs`, `scripts/check*.sql`, `scripts/check_rls*.mjs`, `scripts/refactor.mjs`, `scripts/fix_tests.cjs`, `scripts/patch_schedules.mjs`. Excluded `docs/SAFE_REVIEW_REMAINING_WORKFLOWS_CROSS_FLOW_2026-08-07(1).md` (duplicate).
 
 ## Background tasks
+
 0 stale watchers remaining (will be cleaned up).

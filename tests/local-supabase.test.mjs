@@ -80,13 +80,15 @@ test("teaching assistant manages only own manual schedules and needs import capa
     lecturer_id: lecturer.user.id,
   };
   try {
-    const ownInsert = await serviceClient().from("class_schedules").insert({
-      ...row,
-      id: scheduleId,
-      schedule_date: "2047-10-01",
-      created_by: assistant.user.id,
-      published_by: assistant.user.id,
-    });
+    const ownInsert = await serviceClient()
+      .from("class_schedules")
+      .insert({
+        ...row,
+        id: scheduleId,
+        schedule_date: "2047-10-01",
+        created_by: assistant.user.id,
+        published_by: assistant.user.id,
+      });
     assert.ifError(ownInsert.error);
     assert.ifError(
       (
@@ -99,13 +101,15 @@ test("teaching assistant manages only own manual schedules and needs import capa
 
     assert.ifError(
       (
-        await serviceClient().from("class_schedules").insert({
-          ...row,
-          id: foreignScheduleId,
-          schedule_date: "2047-10-03",
-          created_by: admin.user.id,
-          published_by: admin.user.id,
-        })
+        await serviceClient()
+          .from("class_schedules")
+          .insert({
+            ...row,
+            id: foreignScheduleId,
+            schedule_date: "2047-10-03",
+            created_by: admin.user.id,
+            published_by: admin.user.id,
+          })
       ).error,
     );
     assert.equal(
@@ -140,7 +144,9 @@ test("teaching assistant manages only own manual schedules and needs import capa
       });
     assert.ifError(allowedBatch.error);
   } finally {
-    await serviceClient().from("class_schedules").delete()
+    await serviceClient()
+      .from("class_schedules")
+      .delete()
       .in("id", [scheduleId, foreignScheduleId]);
     await admin.supabase.from("import_batches").delete().eq("id", ownBatchId);
   }
@@ -816,26 +822,30 @@ test("quyền nhập lịch chỉ quản lý batch của mình và Trợ giảng
     };
     assert.ifError(
       (
-        await serviceClient().from("class_schedules").insert({
-          ...base,
-          id: ownId,
-          schedule_date: "2039-09-01",
-          lecturer_id: importer.user.id,
-          created_by: importer.user.id,
-          published_by: importer.user.id,
-        })
+        await serviceClient()
+          .from("class_schedules")
+          .insert({
+            ...base,
+            id: ownId,
+            schedule_date: "2039-09-01",
+            lecturer_id: importer.user.id,
+            created_by: importer.user.id,
+            published_by: importer.user.id,
+          })
       ).error,
     );
     assert.ifError(
       (
-        await serviceClient().from("class_schedules").insert({
-          ...base,
-          id: otherIdSchedule,
-          schedule_date: "2039-09-02",
-          lecturer_id: importer.user.id,
-          created_by: otherId,
-          published_by: otherId,
-        })
+        await serviceClient()
+          .from("class_schedules")
+          .insert({
+            ...base,
+            id: otherIdSchedule,
+            schedule_date: "2039-09-02",
+            lecturer_id: importer.user.id,
+            created_by: otherId,
+            published_by: otherId,
+          })
       ).error,
     );
     const createImported = async (actor, batchId, date, lecturerId) =>
@@ -910,7 +920,9 @@ test("quyền nhập lịch chỉ quản lý batch của mình và Trợ giảng
       target_lecturer_ids: [],
     });
     assert.equal(deniedAssign.error?.code, "42501");
-    const deniedDelete = await importer.supabase.from("class_schedules").delete()
+    const deniedDelete = await importer.supabase
+      .from("class_schedules")
+      .delete()
       .eq("id", otherIdSchedule)
       .select("id");
     assert.ifError(deniedDelete.error);
@@ -1024,7 +1036,9 @@ test("quyền nhập lịch chỉ quản lý batch của mình và Trợ giảng
       ).error,
     );
 
-    const ownDelete = await serviceClient().from("class_schedules").delete()
+    const ownDelete = await serviceClient()
+      .from("class_schedules")
+      .delete()
       .eq("id", ownId)
       .select("id")
       .single();
@@ -1034,7 +1048,9 @@ test("quyền nhập lịch chỉ quản lý batch của mình và Trợ giảng
       .from("profiles")
       .update({ can_import_schedules: true })
       .eq("id", importer.user.id);
-    await serviceClient().from("class_schedules").delete()
+    await serviceClient()
+      .from("class_schedules")
+      .delete()
       .in(
         "id",
         [
@@ -1286,7 +1302,9 @@ test("Người xem chỉ đọc lịch và nhận email theo loại phòng đã 
       .limit(1);
     assert.ifError(readError);
 
-    const { error: writeError } = await viewer.supabase.from("class_schedules").insert({
+    const { error: writeError } = await viewer.supabase
+      .from("class_schedules")
+      .insert({
         id: crypto.randomUUID(),
         course_id: "10000000-0000-0000-0000-000000000001",
         course_code_snapshot: "NUR 101",
@@ -1303,7 +1321,9 @@ test("Người xem chỉ đọc lịch và nhận email theo loại phòng đã 
       });
     assert.ok(writeError);
 
-    const { error: scheduleError } = await serviceClient().from("class_schedules").insert({
+    const { error: scheduleError } = await serviceClient()
+      .from("class_schedules")
+      .insert({
         id: scheduleId,
         course_id: "10000000-0000-0000-0000-000000000001",
         course_code_snapshot: "NUR 101",
@@ -1366,7 +1386,9 @@ test("tối đa hai giảng viên nhận được lớp khi đăng ký đồng t
   );
   const scheduleId = crypto.randomUUID();
 
-  const { error: insertError } = await serviceClient().from("class_schedules").insert({
+  const { error: insertError } = await serviceClient()
+    .from("class_schedules")
+    .insert({
       id: scheduleId,
       course_id: "10000000-0000-0000-0000-000000000001",
       course_code_snapshot: "NUR 101",
@@ -1428,7 +1450,9 @@ test("giảng viên có quyền import vẫn chỉ tạo lịch manual khi tự 
   const importer = await signIn("importer@campus.local", "LocalImporter123!");
   const scheduleId = crypto.randomUUID();
   const assignedScheduleId = crypto.randomUUID();
-  await serviceClient().from("class_schedules").delete()
+  await serviceClient()
+    .from("class_schedules")
+    .delete()
     .in("schedule_date", ["2030-08-21", "2030-08-22"]);
 
   const baseRow = {
@@ -1444,7 +1468,9 @@ test("giảng viên có quyền import vẫn chỉ tạo lịch manual khi tự 
     created_by: importer.user.id,
   };
 
-  const { error: createError } = await serviceClient().from("class_schedules").insert({
+  const { error: createError } = await serviceClient()
+    .from("class_schedules")
+    .insert({
       ...baseRow,
       id: scheduleId,
       schedule_status: "published",
@@ -1453,7 +1479,9 @@ test("giảng viên có quyền import vẫn chỉ tạo lịch manual khi tự 
     });
   assert.ifError(createError);
 
-  const { error: assignmentError } = await serviceClient().from("class_schedules").insert({
+  const { error: assignmentError } = await serviceClient()
+    .from("class_schedules")
+    .insert({
       ...baseRow,
       id: assignedScheduleId,
       schedule_date: "2030-08-22",
@@ -1464,13 +1492,17 @@ test("giảng viên có quyền import vẫn chỉ tạo lịch manual khi tự 
     });
   assert.ifError(assignmentError);
 
-  const { data: deleted, error: deleteError } = await serviceClient().from("class_schedules").delete()
+  const { data: deleted, error: deleteError } = await serviceClient()
+    .from("class_schedules")
+    .delete()
     .eq("id", scheduleId)
     .select("id")
     .single();
   assert.ifError(deleteError);
   assert.equal(deleted.id, scheduleId);
-  await serviceClient().from("class_schedules").delete()
+  await serviceClient()
+    .from("class_schedules")
+    .delete()
     .eq("id", assignedScheduleId);
 });
 
@@ -1623,7 +1655,9 @@ test("hai batch import đồng thời không tạo cùng normalized hash", async
     assert.equal(count, 1);
   } finally {
     if (createdScheduleIds.length > 0) {
-      await serviceClient().from("class_schedules").delete()
+      await serviceClient()
+        .from("class_schedules")
+        .delete()
         .in("id", createdScheduleIds);
     }
     await admin.supabase.from("import_batches").delete().in("id", batchIds);
@@ -1717,7 +1751,9 @@ test("staff chỉ đăng ký và xóa lịch trực cố định của chính m�
 test("tạo lịch thủ công xếp đúng một email cho mỗi Staff hoặc Admin", async () => {
   const admin = await signIn("admin@campus.local", "LocalAdmin123!");
   const scheduleId = crypto.randomUUID();
-  const { error: insertError } = await serviceClient().from("class_schedules").insert({
+  const { error: insertError } = await serviceClient()
+    .from("class_schedules")
+    .insert({
       id: scheduleId,
       course_id: "10000000-0000-0000-0000-000000000001",
       course_code_snapshot: "NUR 101",
@@ -1734,22 +1770,25 @@ test("tạo lịch thủ công xếp đúng một email cho mỗi Staff hoặc A
     });
   assert.ifError(insertError);
 
-  const [{ data: roleRows }, { data: viewerRows }, { data: queued, error: queueError }] =
-    await Promise.all([
-      admin.supabase
-        .from("user_roles")
-        .select("user_id")
-        .in("role", ["staff", "admin"]),
-      admin.supabase
-        .from("user_room_types")
-        .select("user_id")
-        .eq("room_type_id", "30000000-0000-0000-0000-000000000001"),
-      admin.supabase
-        .from("email_notifications")
-        .select("recipient_id, dedupe_key, payload")
-        .eq("notification_type", "class_schedule_created")
-        .contains("payload", { schedule_id: scheduleId }),
-    ]);
+  const [
+    { data: roleRows },
+    { data: viewerRows },
+    { data: queued, error: queueError },
+  ] = await Promise.all([
+    admin.supabase
+      .from("user_roles")
+      .select("user_id")
+      .in("role", ["staff", "admin"]),
+    admin.supabase
+      .from("user_room_types")
+      .select("user_id")
+      .eq("room_type_id", "30000000-0000-0000-0000-000000000001"),
+    admin.supabase
+      .from("email_notifications")
+      .select("recipient_id, dedupe_key, payload")
+      .eq("notification_type", "class_schedule_created")
+      .contains("payload", { schedule_id: scheduleId }),
+  ]);
   assert.ifError(queueError);
   const expectedRecipients = new Set([
     ...(roleRows ?? []).map(({ user_id }) => user_id),
@@ -1896,7 +1935,9 @@ test("giảng viên được tạo lớp Skills lab mới trong loại phòng c�
   });
   assert.ifError(error);
 
-  const { error: cleanupError } = await serviceClient().from("class_schedules").delete()
+  const { error: cleanupError } = await serviceClient()
+    .from("class_schedules")
+    .delete()
     .eq("id", scheduleId);
   assert.ifError(cleanupError);
 });
@@ -1908,7 +1949,9 @@ test("chỉ Admin hoặc Staff được chuyển trạng thái phiếu thiết b
   const scheduleId = crypto.randomUUID();
   const requestId = crypto.randomUUID();
 
-  const { error: scheduleError } = await serviceClient().from("class_schedules").insert({
+  const { error: scheduleError } = await serviceClient()
+    .from("class_schedules")
+    .insert({
       id: scheduleId,
       course_id: "10000000-0000-0000-0000-000000000001",
       course_code_snapshot: "NUR 101",
@@ -2029,18 +2072,22 @@ test("chỉ Admin hoặc Staff được chuyển trạng thái phiếu thiết b
   assert.equal(nextStatus.status, "preparing");
   assert.equal(nextStatus.handover_staff_confirmed_by, admin.user.id);
 
-  
-  
-  const { error: itemError } = await serviceClient().from("equipment_request_items").delete().eq("request_id", requestId);
+  const { error: itemError } = await serviceClient()
+    .from("equipment_request_items")
+    .delete()
+    .eq("request_id", requestId);
   assert.ifError(itemError);
-  const { error: reqError } = await serviceClient().from("equipment_requests").delete().eq("id", requestId);
+  const { error: reqError } = await serviceClient()
+    .from("equipment_requests")
+    .delete()
+    .eq("id", requestId);
   assert.ifError(reqError);
-  
-  const { error: scheduleCleanupError } = await serviceClient().from("class_schedules").delete().eq("id", scheduleId);
+
+  const { error: scheduleCleanupError } = await serviceClient()
+    .from("class_schedules")
+    .delete()
+    .eq("id", scheduleId);
   assert.ifError(scheduleCleanupError);
-  
-  
-  
 });
 
 test("người đăng ký được điều chỉnh nội dung nhưng không được tự đổi trạng thái phiếu", async () => {
@@ -2217,13 +2264,21 @@ test("người đăng ký được điều chỉnh nội dung nhưng không đư
   assert.ok(lockedItemError);
   assert.equal(lockedItemError.code, "42501");
 
-  const { error: itemError } = await serviceClient().from("equipment_request_items").delete().eq("request_id", requestId);
+  const { error: itemError } = await serviceClient()
+    .from("equipment_request_items")
+    .delete()
+    .eq("request_id", requestId);
   assert.ifError(itemError);
-  const { error: reqError } = await serviceClient().from("equipment_requests").delete().eq("id", requestId);
+  const { error: reqError } = await serviceClient()
+    .from("equipment_requests")
+    .delete()
+    .eq("id", requestId);
   assert.ifError(reqError);
 
   for (const id of [firstScheduleId, secondScheduleId]) {
-    const { error } = await serviceClient().from("class_schedules").delete()
+    const { error } = await serviceClient()
+      .from("class_schedules")
+      .delete()
       .eq("id", id);
     assert.ifError(error);
   }
@@ -2318,7 +2373,10 @@ test("mỗi dòng import hợp lệ tạo lịch và bản ghi kiểm tra trong 
   );
   // Importer (created_by) always receives an email; additional recipients
   // depend on room-type staff/admin assignments in the seed.
-  assert.ok(batchSummaries.length >= 1, `Expected at least 1 import summary email, got ${batchSummaries.length}`);
+  assert.ok(
+    batchSummaries.length >= 1,
+    `Expected at least 1 import summary email, got ${batchSummaries.length}`,
+  );
   const importerEmail = batchSummaries.find(
     ({ recipient_id }) => recipient_id === importer.user.id,
   );
@@ -2357,7 +2415,9 @@ test("direct RPC không cho Staff đổi lớp từ loại phòng ngoài scope s
       capacity: 30,
     });
     assert.ifError(roomError);
-    const { error: scheduleError } = await serviceClient().from("class_schedules").insert({
+    const { error: scheduleError } = await serviceClient()
+      .from("class_schedules")
+      .insert({
         id: scheduleId,
         course_id: "10000000-0000-0000-0000-000000000001",
         course_code_snapshot: "NUR 101",
@@ -2827,7 +2887,10 @@ test("hash của lịch import đã hủy không chặn lần import sau", async
           cancelled_at: null,
         })
         .eq("id", scheduleId);
-      await serviceClient().from("class_schedules").delete().eq("id", scheduleId);
+      await serviceClient()
+        .from("class_schedules")
+        .delete()
+        .eq("id", scheduleId);
     }
     await service.from("import_batches").delete().eq("id", batchId);
   }
@@ -2877,20 +2940,22 @@ test("RLS giới hạn Y cơ sở, số sinh viên bắt buộc và đổi ngày
   };
   assert.ifError(
     (
-      await serviceClient().from("class_schedules").insert([
-        {
-          ...common,
-          id: firstId,
-          schedule_date: "2034-08-20",
-          student_count: 25,
-        },
-        {
-          ...common,
-          id: secondId,
-          schedule_date: "2034-08-21",
-          student_count: 30,
-        },
-      ])
+      await serviceClient()
+        .from("class_schedules")
+        .insert([
+          {
+            ...common,
+            id: firstId,
+            schedule_date: "2034-08-20",
+            student_count: 25,
+          },
+          {
+            ...common,
+            id: secondId,
+            schedule_date: "2034-08-21",
+            student_count: 30,
+          },
+        ])
     ).error,
   );
 
@@ -2923,7 +2988,9 @@ test("RLS giới hạn Y cơ sở, số sinh viên bắt buộc và đổi ngày
   });
   assert.ok(conflict.error);
 
-  await serviceClient().from("class_schedules").delete()
+  await serviceClient()
+    .from("class_schedules")
+    .delete()
     .in("id", [firstId, secondId]);
   await admin.supabase.from("rooms").delete().eq("id", roomId);
   await configurePersonnelFixture(
@@ -2988,26 +3055,28 @@ test("Admin xóa được danh mục khi chỉ còn lịch hoặc ca đã hủy"
     };
     assert.ifError(
       (
-        await serviceClient().from("class_schedules").insert([
-          {
-            ...scheduleBase,
-            id: activeScheduleId,
-            room_id: roomId,
-            schedule_date: "2042-08-20",
-            schedule_status: "published",
-            published_by: admin.user.id,
-            published_at: cancelledAt,
-          },
-          {
-            ...scheduleBase,
-            id: cancelledCourseScheduleId,
-            room_id: courseRoomId,
-            schedule_date: "2042-08-21",
-            schedule_status: "published",
-            published_by: admin.user.id,
-            published_at: cancelledAt,
-          },
-        ])
+        await serviceClient()
+          .from("class_schedules")
+          .insert([
+            {
+              ...scheduleBase,
+              id: activeScheduleId,
+              room_id: roomId,
+              schedule_date: "2042-08-20",
+              schedule_status: "published",
+              published_by: admin.user.id,
+              published_at: cancelledAt,
+            },
+            {
+              ...scheduleBase,
+              id: cancelledCourseScheduleId,
+              room_id: courseRoomId,
+              schedule_date: "2042-08-21",
+              schedule_status: "published",
+              published_by: admin.user.id,
+              published_at: cancelledAt,
+            },
+          ])
       ).error,
     );
     assert.ifError(
@@ -3131,7 +3200,9 @@ test("Admin xóa được danh mục khi chỉ còn lịch hoặc ca đã hủy"
       .from("shift_templates")
       .delete()
       .eq("id", shiftTemplateId);
-    await serviceClient().from("class_schedules").delete()
+    await serviceClient()
+      .from("class_schedules")
+      .delete()
       .in("id", [activeScheduleId, cancelledCourseScheduleId]);
     await admin.supabase.from("courses").delete().eq("id", courseId);
     await admin.supabase
@@ -3403,14 +3474,18 @@ test("Admin và Staff xóa phiếu thiết bị, phiếu Y cơ sở chỉ hủy 
         .from("basic_medical_registration_sessions")
         .delete()
         .eq("registration_id", registrationId);
-      await serviceClient().from("class_schedules").delete()
+      await serviceClient()
+        .from("class_schedules")
+        .delete()
         .eq("basic_medical_registration_id", registrationId);
       await service
         .from("basic_medical_registrations")
         .delete()
         .eq("id", registrationId);
     }
-    await serviceClient().from("class_schedules").delete()
+    await serviceClient()
+      .from("class_schedules")
+      .delete()
       .eq("id", equipmentScheduleId);
     await admin.supabase
       .from("equipment_catalog")
