@@ -40,7 +40,7 @@ test("mã phiếu 12 số tải được và Admin thấy dòng bổ sung thiế
   const { data: lecturerProfile } = await databaseClient
     .from("profiles")
     .select("id")
-    .eq("email", "lecturer@campus.local")
+    .eq("email", "giangvien@campus.local")
     .single();
   expect(lecturerProfile).toBeTruthy();
   if (!lecturerProfile) {
