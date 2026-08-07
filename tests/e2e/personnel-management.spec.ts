@@ -122,15 +122,12 @@ test("personnel reconciler actual integration test (N-MEDIUM-01)", async ({
       email_confirm: true,
     });
   expect(createError).toBeNull();
+  if (!targetUser?.user?.id) {
+    throw new Error("Failed to create personnel reconciliation test user");
+  }
+  const targetUserId = targetUser.user.id;
 
   try {
-    const { data: principals } = await serviceDb
-      .from("system_security_principals")
-      .select("root_admin_id")
-      .single();
-
-    const rootAdminId = principals!.root_admin_id;
-
     // Create a fresh client for root admin to avoid sharing state
     const rootDb = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -149,29 +146,37 @@ test("personnel reconciler actual integration test (N-MEDIUM-01)", async ({
     const { data: profile } = await serviceDb
       .from("profiles")
       .select("*")
-      .eq("id", targetUser!.user.id)
+      .eq("id", targetUserId)
       .single();
+    if (!profile) {
+      throw new Error("Missing personnel reconciliation test profile");
+    }
 
     const { data: roomType } = await serviceDb
       .from("room_types")
       .select("id")
       .limit(1)
       .single();
+    if (!roomType) {
+      throw new Error(
+        "Missing room type fixture for personnel reconciliation test",
+      );
+    }
 
     // 1. Begin personnel update
     const requestedEmail = `changed-${email}`;
     const payload = {
-      target_profile_id: targetUser!.user.id,
-      target_full_name: profile!.full_name || "Reconciler Test",
+      target_profile_id: targetUserId,
+      target_full_name: profile.full_name || "Reconciler Test",
       target_email: requestedEmail,
-      target_phone: profile!.phone || "0900999888",
+      target_phone: profile.phone || "0900999888",
       target_roles: ["lecturer"],
-      target_room_type_ids: [roomType!.id],
-      target_email_room_type_ids: [roomType!.id],
-      target_title: profile!.title || null,
+      target_room_type_ids: [roomType.id],
+      target_email_room_type_ids: [roomType.id],
+      target_title: profile.title || null,
       target_allow_basic_medical_access: false,
       target_is_active: true,
-      target_expected_version: profile!.access_version,
+      target_expected_version: profile.access_version,
       target_can_import_schedules: false,
     };
 
@@ -180,10 +185,14 @@ test("personnel reconciler actual integration test (N-MEDIUM-01)", async ({
       payload,
     );
     expect(beginError).toBeNull();
+    if (!operation?.operation_id) {
+      throw new Error("Personnel update operation is missing operation_id");
+    }
+    const operationId = operation.operation_id;
 
     // 2. Auth update succeeds
     const { error: authUpdateError } =
-      await serviceDb.auth.admin.updateUserById(targetUser!.user.id, {
+      await serviceDb.auth.admin.updateUserById(targetUserId, {
         email: requestedEmail,
         email_confirm: true,
       });
@@ -194,7 +203,7 @@ test("personnel reconciler actual integration test (N-MEDIUM-01)", async ({
     await serviceDb
       .from("personnel_update_operations")
       .update({ expires_at: new Date(Date.now() - 60_000).toISOString() })
-      .eq("id", operation.operation_id);
+      .eq("id", operationId);
 
     // 5. REAL reconciler runs
     const response = await request.get(
@@ -210,26 +219,31 @@ test("personnel reconciler actual integration test (N-MEDIUM-01)", async ({
     expect(result.rolledBack).toBeGreaterThanOrEqual(1);
 
     // 6. Auth is restored
-    const { data: finalAuth } = await serviceDb.auth.admin.getUserById(
-      targetUser!.user.id,
-    );
+    const { data: finalAuth } =
+      await serviceDb.auth.admin.getUserById(targetUserId);
     expect(finalAuth.user?.email).toBe(email);
 
     // 7. Profile stays/restores previous state
     const { data: finalProfile } = await serviceDb
       .from("profiles")
       .select("email")
-      .eq("id", targetUser!.user.id)
+      .eq("id", targetUserId)
       .single();
-    expect(finalProfile!.email).toBe(email);
+    if (!finalProfile) {
+      throw new Error("Missing profile during reconciliation verify");
+    }
+    expect(finalProfile.email).toBe(email);
 
     // 8. Operation becomes rolled_back
     const { data: durable } = await serviceDb
       .from("personnel_update_operations")
       .select("status")
-      .eq("id", operation.operation_id)
+      .eq("id", operationId)
       .single();
-    expect(durable!.status).toBe("rolled_back");
+    if (!durable) {
+      throw new Error("Missing personnel operation during verify");
+    }
+    expect(durable.status).toBe("rolled_back");
   } finally {
     if (targetUser?.user?.id) {
       await serviceDb.auth.admin.deleteUser(targetUser.user.id);
