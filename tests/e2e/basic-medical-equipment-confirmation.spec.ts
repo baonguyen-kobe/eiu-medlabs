@@ -175,9 +175,9 @@ test("Người xem Y cơ sở không truy cập Danh sách thiết bị Y cơ s�
     await expect(page.getByRole("button", { name: "Import mới" })).toHaveCount(
       0,
     );
-    await expect(
-      page.getByRole("link", { name: "Export tất cả" }),
-    ).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Export tất cả" })).toHaveCount(
+      0,
+    );
     await page.goto("/basic-medical/registrations");
     await expect(
       page.getByRole("heading", { name: "Phiếu Y cơ sở" }),
