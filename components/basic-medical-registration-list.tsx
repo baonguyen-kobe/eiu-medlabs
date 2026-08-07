@@ -12,7 +12,7 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
   confirmBasicMedicalSession,
-  deleteBasicMedicalRegistration,
+  cancelBasicMedicalRegistration,
 } from "@/app/basic-medical/registrations/actions";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { Trash2 } from "@/components/icons";
@@ -523,6 +523,7 @@ export function BasicMedicalRegistrationList({
                 sessions.every((session) =>
                   confirmationBySession.has(session.id),
                 );
+              const isCancelled = Boolean(registration.cancelled_at);
               const isOpen = expanded.has(registration.id);
               return (
                 <tbody key={registration.id}>
@@ -564,9 +565,13 @@ export function BasicMedicalRegistrationList({
                     <td>{sessions.length}</td>
                     <td>
                       <span
-                        className={`request-status request-status-${isCompleted ? "green" : "red"}`}
+                        className={`request-status request-status-${isCancelled ? "gray" : isCompleted ? "green" : "red"}`}
                       >
-                        {isCompleted ? "Hoàn thành" : "Chưa hoàn thành"}
+                        {isCancelled
+                          ? "Đã hủy"
+                          : isCompleted
+                            ? "Hoàn thành"
+                            : "Chưa hoàn thành"}
                       </span>
                     </td>
                     <td className="equipment-request-toggle-cell">
@@ -623,8 +628,27 @@ export function BasicMedicalRegistrationList({
                                 {registration.note || "Không có ghi chú"}
                               </strong>
                             </div>
-                            {canDelete ? (
-                              <form action={deleteBasicMedicalRegistration}>
+                            {isCancelled ? (
+                              <>
+                                <div>
+                                  <span>Thời điểm hủy</span>
+                                  <strong>
+                                    {dateTimeFormatter.format(
+                                      new Date(registration.cancelled_at ?? ""),
+                                    )}
+                                  </strong>
+                                </div>
+                                <div>
+                                  <span>Lý do hủy</span>
+                                  <strong>
+                                    {registration.cancel_reason ||
+                                      "Không có lý do"}
+                                  </strong>
+                                </div>
+                              </>
+                            ) : null}
+                            {canDelete && !isCancelled ? (
+                              <form action={cancelBasicMedicalRegistration}>
                                 <input
                                   type="hidden"
                                   name="id"
@@ -632,9 +656,9 @@ export function BasicMedicalRegistrationList({
                                 />
                                 <ConfirmSubmitButton
                                   className="button button-danger"
-                                  message={`Xóa phiếu ${registration.courses?.course_code ?? "Y cơ sở"}? Các buổi và lịch liên kết trong phiếu cũng sẽ bị xóa.`}
+                                  message={`Hủy phiếu ${registration.courses?.course_code ?? "Y cơ sở"}? Các lịch tương lai sẽ chuyển sang Đã hủy. Dữ liệu và lịch sử đã có được giữ lại.`}
                                 >
-                                  <Trash2 size={17} aria-hidden="true" /> Xóa
+                                  <Trash2 size={17} aria-hidden="true" /> Hủy
                                   phiếu
                                 </ConfirmSubmitButton>
                               </form>

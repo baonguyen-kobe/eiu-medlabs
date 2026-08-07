@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { formatBasicMedicalRegistrationCode } from "@/lib/basic-medical-registration-code";
 import { BASIC_MEDICAL_ROOM_TYPE_ID } from "@/lib/room-types";
 
-type BasicMedicalEmailEvent = "created" | "updated" | "deleted";
+type BasicMedicalEmailEvent = "created" | "updated" | "cancelled";
 
 export type BasicMedicalEmailSnapshot = {
   id: string;
@@ -96,7 +96,7 @@ export async function enqueueBasicMedicalRegistrationEmails({
   const labels: Record<BasicMedicalEmailEvent, string> = {
     created: "Có đăng ký phòng TNTH mới",
     updated: "Điều chỉnh phiếu đăng ký phòng TNTH",
-    deleted: "Xóa phiếu đăng ký phòng TNTH",
+    cancelled: "Hủy phiếu đăng ký phòng TNTH",
   };
   const registrationCode = formatBasicMedicalRegistrationCode(
     snapshot.registration_code,

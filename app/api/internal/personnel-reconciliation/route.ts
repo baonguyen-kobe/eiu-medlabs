@@ -1,13 +1,17 @@
 import { reconcileExpiredPersonnelUpdates } from "@/lib/personnel-reconciliation";
 import { NextRequest, NextResponse } from "next/server";
 
-export async function POST(request: NextRequest) {
+async function reconcile(request: NextRequest) {
   const secret = process.env.CRON_SECRET;
   if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "Không có quyền." }, { status: 401 });
   }
   try {
-    return NextResponse.json(await reconcileExpiredPersonnelUpdates());
+    const result = await reconcileExpiredPersonnelUpdates();
+    if (result.reconciliationRequired > 0) {
+      console.error("personnel.reconciliation.manual_action_required", result);
+    }
+    return NextResponse.json(result);
   } catch (error) {
     console.error("personnel.reconciliation.failed", error);
     return NextResponse.json(
@@ -15,4 +19,12 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     );
   }
+}
+
+export async function GET(request: NextRequest) {
+  return reconcile(request);
+}
+
+export async function POST(request: NextRequest) {
+  return reconcile(request);
 }

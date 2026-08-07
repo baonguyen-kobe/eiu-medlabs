@@ -1,5 +1,6 @@
 import nextEnv from "@next/env";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createClient } from "@supabase/supabase-js";
 
@@ -179,7 +180,7 @@ test("Root manages Personnel Manager while self/ordinary-admin mutations stay de
   assert.match(rootAttempt.error.message, /CANNOT_MANAGE_OWN_SECURITY/);
 });
 
-test("durable personnel operation survives Auth/DB crash window and import-all respects it", async () => {
+test("expired reserved personnel operation preserves the Auth/Profile crash window for reconciliation", async () => {
   const suffix = crypto.randomUUID().slice(0, 8);
   const target = await createUser("lecturer", suffix);
   const root = await signIn("admin@campus.local", "LocalAdmin123!");
@@ -201,9 +202,10 @@ test("durable personnel operation survives Auth/DB crash window and import-all r
     );
     assert.ifError(
       (
-        await root.rpc("mark_personnel_auth_updated", {
-          target_operation_id: operation.operation_id,
-        })
+        await service
+          .from("personnel_update_operations")
+          .update({ expires_at: new Date(Date.now() - 60_000).toISOString() })
+          .eq("id", operation.operation_id)
       ).error,
     );
     const importAttempt = await root.rpc("admin_apply_personnel_import", {
@@ -218,7 +220,7 @@ test("durable personnel operation survives Auth/DB crash window and import-all r
       .select("status,previous_email,requested_email")
       .eq("id", operation.operation_id)
       .single();
-    assert.equal(durable.status, "auth_updated");
+    assert.equal(durable.status, "reserved");
     assert.equal(durable.previous_email, target.email);
     assert.equal(durable.requested_email, requestedEmail);
 
@@ -249,6 +251,14 @@ test("durable personnel operation survives Auth/DB crash window and import-all r
   } finally {
     await service.auth.admin.deleteUser(target.id);
   }
+});
+
+test("personnel reconciler explicitly scans expired reserved operations", () => {
+  const source = readFileSync(
+    new URL("../lib/personnel-reconciliation.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /\.in\("status", \[\s*"reserved"/);
 });
 
 test("Basic Medical visibility, RPC-only mutation and soft cancellation preserve history", async () => {
@@ -358,6 +368,17 @@ test("Basic Medical visibility, RPC-only mutation and soft cancellation preserve
       .delete()
       .eq("id", session.id);
     assert.ok(directDelete.error);
+
+    const directScheduleUpdate = await root
+      .from("class_schedules")
+      .update({ note: "direct mutation must be denied" })
+      .eq("id", session.class_schedule_id);
+    assert.ok(directScheduleUpdate.error);
+    const directScheduleDelete = await root
+      .from("class_schedules")
+      .delete()
+      .eq("id", session.class_schedule_id);
+    assert.ok(directScheduleDelete.error);
 
     const cancelled = await root.rpc("cancel_basic_medical_registration", {
       target_registration_id: registrationId,

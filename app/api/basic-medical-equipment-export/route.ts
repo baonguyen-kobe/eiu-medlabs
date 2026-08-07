@@ -84,9 +84,17 @@ export async function GET() {
   );
   XLSX.utils.book_append_sheet(workbook, catalogSheet, "Danh mục thiết bị");
   XLSX.utils.book_append_sheet(workbook, inventorySheet, "Thiết bị theo phòng");
-  await supabase.rpc("audit_basic_medical_equipment_export", {
-    target_row_count: catalogResult.data.length + inventoryResult.data.length,
-  });
+  const { error: auditError } = await supabase.rpc(
+    "audit_basic_medical_equipment_export",
+    {
+      target_row_count: catalogResult.data.length + inventoryResult.data.length,
+    },
+  );
+  if (auditError)
+    return NextResponse.json(
+      { error: "Không thể ghi nhận audit export thiết bị." },
+      { status: 500 },
+    );
   const output = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
   return new NextResponse(new Uint8Array(output), {
     headers: {

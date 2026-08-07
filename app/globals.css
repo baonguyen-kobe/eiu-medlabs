@@ -3799,7 +3799,7 @@ body {
 .panel-empty {
   margin: 0;
   padding: 34px 18px;
-  color: var(--ink-500);
+  color: var(--ink-600);
   text-align: center;
 }
 

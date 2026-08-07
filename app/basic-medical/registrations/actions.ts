@@ -18,7 +18,7 @@ function registrationsUrl(kind: "notice" | "error", message: string) {
   return `/basic-medical/registrations?${kind}=${encodeURIComponent(message)}`;
 }
 
-export async function deleteBasicMedicalRegistration(formData: FormData) {
+export async function cancelBasicMedicalRegistration(formData: FormData) {
   const registrationId = String(formData.get("id") ?? "");
   if (!/^[0-9a-f-]{36}$/i.test(registrationId)) {
     redirect(registrationsUrl("error", "Phiếu Y cơ sở không hợp lệ."));
@@ -42,7 +42,7 @@ export async function deleteBasicMedicalRegistration(formData: FormData) {
     redirect(
       registrationsUrl(
         "error",
-        "Chỉ Admin hoặc Chuyên viên được xóa phiếu Y cơ sở.",
+        "Chỉ Admin hoặc Chuyên viên được hủy phiếu Y cơ sở.",
       ),
     );
   }
@@ -51,7 +51,7 @@ export async function deleteBasicMedicalRegistration(formData: FormData) {
   try {
     emailSnapshot = await loadBasicMedicalEmailSnapshot(registrationId);
   } catch (emailError) {
-    console.error("Không thể đọc phiếu Y cơ sở trước khi xóa:", emailError);
+    console.error("Không thể đọc phiếu Y cơ sở trước khi hủy:", emailError);
   }
 
   const reason = String(formData.get("reason") ?? "").trim();
@@ -76,12 +76,12 @@ export async function deleteBasicMedicalRegistration(formData: FormData) {
     try {
       const dedupeKeys = await enqueueBasicMedicalRegistrationEmails({
         snapshot: emailSnapshot,
-        event: "deleted",
+        event: "cancelled",
         actorId: userId,
       });
       after(() => processEmailNotificationsByDedupeKeys(dedupeKeys));
     } catch (emailError) {
-      console.error("Không thể xếp email xóa phiếu Y cơ sở:", emailError);
+      console.error("Không thể xếp email hủy phiếu Y cơ sở:", emailError);
     }
   }
 

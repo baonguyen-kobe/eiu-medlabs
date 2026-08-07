@@ -5,6 +5,7 @@ type PersonnelOperation = {
   profile_id: string;
   previous_email: string;
   requested_email: string;
+  expected_version: number;
   status: string;
   expires_at: string;
   actor_id: string;
@@ -29,9 +30,10 @@ export async function reconcileExpiredPersonnelUpdates(): Promise<PersonnelRecon
   const { data, error } = await admin
     .from("personnel_update_operations")
     .select(
-      "id,profile_id,previous_email,requested_email,status,expires_at,actor_id",
+      "id,profile_id,previous_email,requested_email,expected_version,status,expires_at,actor_id",
     )
     .in("status", [
+      "reserved",
       "auth_updated",
       "rollback_required",
       "reconciliation_required",
@@ -67,7 +69,8 @@ export async function reconcileExpiredPersonnelUpdates(): Promise<PersonnelRecon
       !profileError &&
       !authResult.error &&
       profileEmail === requestedEmail &&
-      authEmail === requestedEmail
+      authEmail === requestedEmail &&
+      (profile?.access_version ?? 0) > operation.expected_version
     ) {
       await resolveOperation(admin, operation.id, "committed", null);
       result.committed += 1;
@@ -107,6 +110,8 @@ export async function reconcileExpiredPersonnelUpdates(): Promise<PersonnelRecon
       authResult.error?.message,
       `profile=${profileEmail ?? "missing"}`,
       `auth=${authEmail ?? "missing"}`,
+      `profile_version=${profile?.access_version ?? "missing"}`,
+      `expected_version=${operation.expected_version}`,
     ]
       .filter(Boolean)
       .join("; ");

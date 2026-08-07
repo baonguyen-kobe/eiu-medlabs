@@ -69,7 +69,7 @@ test("Danh sách thiết bị Y cơ sở có đủ bốn tab và thao tác quả
   await page.getByRole("link", { name: "Thiết bị hư" }).click();
   await expect(page).toHaveURL(/tab=damaged/);
   await expect(
-    page.getByPlaceholder("Tìm thiết bị, phòng, người báo hư…"),
+    page.getByPlaceholder("Tìm thiết bị, phòng, người thay đổi, ghi chú…"),
   ).toBeVisible();
 });
 

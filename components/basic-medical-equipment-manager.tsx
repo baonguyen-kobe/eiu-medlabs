@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  useDeferredValue,
-  useEffect,
-  useMemo,
-  useState,
-  useTransition,
-} from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   adjustBasicMedicalInventoryCondition,
@@ -17,15 +11,12 @@ import {
   updateBasicMedicalCatalogItems,
   type BasicMedicalCatalogInput,
 } from "@/app/basic-medical/equipment/actions";
-import { PaginationControls } from "@/components/pagination-controls";
-import { Search } from "@/components/icons";
 import { SearchableCombobox } from "@/components/searchable-combobox";
 import type {
   BasicMedicalConditionLogItem,
   BasicMedicalEquipmentCatalogItem,
   BasicMedicalRoomInventoryItem,
 } from "@/lib/basic-medical-equipment";
-import { TABLE_PAGE_SIZE, totalPagesFor } from "@/lib/pagination";
 
 type Tab = "inventory" | "rooms" | "damaged" | "logs";
 type Room = {
@@ -47,21 +38,6 @@ const conditionEventLabels = {
   condition_adjustment: "Điều chỉnh Tốt/Hư",
   stock_adjustment: "Điều chỉnh tồn kho",
 } as const;
-
-function normalize(value: unknown) {
-  return String(value ?? "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLocaleLowerCase("vi")
-    .replace(/đ/g, "d");
-}
-
-function includesQuery(values: unknown[], query: string) {
-  const normalized = normalize(query.trim());
-  return (
-    !normalized || values.some((value) => normalize(value).includes(normalized))
-  );
-}
 
 function roomLabel(
   room?: Pick<Room, "room_code" | "building_code" | "room_name"> | null,
@@ -102,7 +78,6 @@ export function BasicMedicalEquipmentManager({
       {activeTab === "damaged" ? (
         <DamagedTab
           inventories={inventories.filter((item) => item.damaged_quantity > 0)}
-          rooms={rooms}
           canManage={canManage}
         />
       ) : null}
@@ -120,14 +95,6 @@ function InventoryTab({
 }) {
   const router = useRouter();
   const [catalog, setCatalog] = useState(initialCatalog);
-  const [query, setQuery] = useState("");
-  const deferredQuery = useDeferredValue(query);
-  const [statusFilter, setStatusFilter] = useState("");
-  const [sortKey, setSortKey] = useState<
-    "item_name" | "commercial_name" | "item_type" | "unit"
-  >("item_name");
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
-  const [page, setPage] = useState(1);
   const [editing, setEditing] = useState(false);
   const [drafts, setDrafts] = useState<
     Record<string, BasicMedicalEquipmentCatalogItem>
@@ -135,57 +102,6 @@ function InventoryTab({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [notice, setNotice] = useState<Notice>(null);
   const [isPending, startTransition] = useTransition();
-
-  const visible = useMemo(
-    () =>
-      catalog
-        .filter((item) =>
-          includesQuery(
-            [
-              item.item_name,
-              item.commercial_name,
-              item.item_type,
-              item.country_of_origin,
-              item.manufacturer,
-              item.model,
-              item.unit,
-            ],
-            deferredQuery,
-          ),
-        )
-        .filter(
-          (item) =>
-            !statusFilter ||
-            (statusFilter === "active" ? item.is_active : !item.is_active),
-        )
-        .toSorted((left, right) => {
-          const compared = String(left[sortKey] ?? "").localeCompare(
-            String(right[sortKey] ?? ""),
-            "vi",
-            { numeric: true, sensitivity: "base" },
-          );
-          return sortDirection === "asc" ? compared : -compared;
-        }),
-    [catalog, deferredQuery, sortDirection, sortKey, statusFilter],
-  );
-  const safePage = Math.min(
-    page,
-    totalPagesFor(visible.length, TABLE_PAGE_SIZE),
-  );
-  const pageRows = visible.slice(
-    (safePage - 1) * TABLE_PAGE_SIZE,
-    safePage * TABLE_PAGE_SIZE,
-  );
-
-  function sort(key: typeof sortKey) {
-    setPage(1);
-    if (sortKey === key)
-      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
-    else {
-      setSortKey(key);
-      setSortDirection("asc");
-    }
-  }
 
   function run(
     action: () => Promise<{ ok: boolean; message: string }>,
@@ -214,46 +130,8 @@ function InventoryTab({
       ) : null}
       <section className="data-panel equipment-catalog-panel basic-medical-catalog-panel">
         <div className="equipment-catalog-filters basic-medical-catalog-filters">
-          <label className="data-search equipment-catalog-search">
-            <Search size={18} aria-hidden="true" />
-            <input
-              aria-label="Tìm danh mục thiết bị Y cơ sở"
-              type="search"
-              value={query}
-              onChange={(event) => {
-                setQuery(event.target.value);
-                setPage(1);
-              }}
-              placeholder="Tìm thiết bị, tên thương mại, loại, hãng, model…"
-              autoComplete="off"
-              spellCheck={false}
-            />
-          </label>
-          <select
-            aria-label="Lọc trạng thái danh mục"
-            value={statusFilter}
-            onChange={(event) => {
-              setStatusFilter(event.target.value);
-              setPage(1);
-            }}
-          >
-            <option value="">Tất cả trạng thái</option>
-            <option value="active">Đang sử dụng</option>
-            <option value="inactive">Ngừng sử dụng</option>
-          </select>
-          <button
-            type="button"
-            className="button button-secondary"
-            onClick={() => {
-              setQuery("");
-              setStatusFilter("");
-              setPage(1);
-            }}
-          >
-            Xóa bộ lọc
-          </button>
           <span className="equipment-catalog-count">
-            {visible.length}/{catalog.length} thiết bị
+            {catalog.length} thiết bị
           </span>
         </div>
         {canManage ? (
@@ -324,13 +202,13 @@ function InventoryTab({
                       aria-label="Chọn tất cả thiết bị trên trang"
                       type="checkbox"
                       checked={
-                        pageRows.length > 0 &&
-                        pageRows.every((row) => selected.has(row.id))
+                        catalog.length > 0 &&
+                        catalog.every((row) => selected.has(row.id))
                       }
                       onChange={(event) =>
                         setSelected((current) => {
                           const next = new Set(current);
-                          pageRows.forEach((row) =>
+                          catalog.forEach((row) =>
                             event.target.checked
                               ? next.add(row.id)
                               : next.delete(row.id),
@@ -341,38 +219,18 @@ function InventoryTab({
                     />
                   </th>
                 ) : null}
-                <SortHead
-                  label="Tên thiết bị và vật tư"
-                  active={sortKey === "item_name"}
-                  direction={sortDirection}
-                  onClick={() => sort("item_name")}
-                />
-                <SortHead
-                  label="Tên thương mại"
-                  active={sortKey === "commercial_name"}
-                  direction={sortDirection}
-                  onClick={() => sort("commercial_name")}
-                />
-                <SortHead
-                  label="Loại"
-                  active={sortKey === "item_type"}
-                  direction={sortDirection}
-                  onClick={() => sort("item_type")}
-                />
+                <th>Tên thiết bị và vật tư</th>
+                <th>Tên thương mại</th>
+                <th>Loại</th>
                 <th>Nước SX</th>
                 <th>Hãng</th>
                 <th>Model</th>
-                <SortHead
-                  label="ĐVT"
-                  active={sortKey === "unit"}
-                  direction={sortDirection}
-                  onClick={() => sort("unit")}
-                />
+                <th>ĐVT</th>
                 <th>Trạng thái</th>
               </tr>
             </thead>
             <tbody>
-              {pageRows.map((item) => {
+              {catalog.map((item) => {
                 const draft = drafts[item.id] ?? item;
                 return (
                   <tr key={item.id}>
@@ -437,7 +295,7 @@ function InventoryTab({
             </tbody>
           </table>
         </div>
-        {!visible.length ? (
+        {!catalog.length ? (
           <p className="panel-empty">
             Không có thiết bị phù hợp với bộ lọc hiện tại.
           </p>
@@ -468,11 +326,6 @@ function InventoryTab({
             </button>
           </div>
         ) : null}
-        <PaginationControls
-          currentPage={safePage}
-          totalItems={visible.length}
-          onPageChange={setPage}
-        />
       </section>
     </div>
   );
@@ -490,35 +343,8 @@ function RoomInventoryTab({
   canManage: boolean;
 }) {
   const router = useRouter();
-  const [query, setQuery] = useState("");
-  const deferredQuery = useDeferredValue(query);
-  const [roomFilter, setRoomFilter] = useState("");
   const [notice, setNotice] = useState<Notice>(null);
   const [isPending, startTransition] = useTransition();
-  const [page, setPage] = useState(1);
-  const inventoryRows = inventories.filter(
-    (item) =>
-      (!roomFilter || item.room_id === roomFilter) &&
-      includesQuery(
-        [
-          item.catalog?.item_name,
-          item.catalog?.commercial_name,
-          item.catalog?.item_type,
-          item.room?.room_code,
-          item.room?.building_code,
-          item.room?.room_name,
-        ],
-        deferredQuery,
-      ),
-  );
-  const safePage = Math.min(
-    page,
-    totalPagesFor(inventoryRows.length, TABLE_PAGE_SIZE),
-  );
-  const pageRows = inventoryRows.slice(
-    (safePage - 1) * TABLE_PAGE_SIZE,
-    safePage * TABLE_PAGE_SIZE,
-  );
 
   function run(action: () => Promise<{ ok: boolean; message: string }>) {
     startTransition(async () => {
@@ -550,43 +376,8 @@ function RoomInventoryTab({
           </div>
         </header>
         <div className="basic-medical-section-filters">
-          <label className="basic-medical-room-search-field">
-            <span>Tìm kiếm</span>
-            <span className="data-search">
-              <Search size={18} aria-hidden="true" />
-              <input
-                type="search"
-                value={query}
-                onChange={(event) => {
-                  setQuery(event.target.value);
-                  setPage(1);
-                }}
-                placeholder="Tìm thiết bị, tên thương mại, phòng…"
-                autoComplete="off"
-                spellCheck={false}
-              />
-            </span>
-          </label>
-          <label>
-            <span>Phòng</span>
-            <select
-              aria-label="Lọc thiết bị theo phòng"
-              value={roomFilter}
-              onChange={(event) => {
-                setRoomFilter(event.target.value);
-                setPage(1);
-              }}
-            >
-              <option value="">Tất cả phòng</option>
-              {rooms.map((room) => (
-                <option key={room.id} value={room.id}>
-                  {roomLabel(room)}
-                </option>
-              ))}
-            </select>
-          </label>
           <span className="equipment-catalog-count">
-            {inventoryRows.length}/{inventories.length} thiết bị trong phòng
+            {inventories.length} thiết bị trong phòng
           </span>
         </div>
         {canManage ? (
@@ -612,7 +403,7 @@ function RoomInventoryTab({
               </tr>
             </thead>
             <tbody>
-              {pageRows.map((item) => (
+              {inventories.map((item) => (
                 <tr key={item.id}>
                   <td>{roomLabel(item.room)}</td>
                   <td>
@@ -666,38 +457,13 @@ function RoomInventoryTab({
             </tbody>
           </table>
         </div>
-        {!inventoryRows.length ? (
+        {!inventories.length ? (
           <p className="panel-empty">
             Chưa có thiết bị được phân bổ cho phòng phù hợp.
           </p>
         ) : null}
-        <PaginationControls
-          currentPage={safePage}
-          totalItems={inventoryRows.length}
-          onPageChange={setPage}
-        />
       </section>
     </div>
-  );
-}
-
-function SortHead({
-  label,
-  active,
-  direction,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  direction: "asc" | "desc";
-  onClick: () => void;
-}) {
-  return (
-    <th>
-      <button type="button" className="table-sort-button" onClick={onClick}>
-        {label} {active ? (direction === "asc" ? "A–Z" : "Z–A") : "↕"}
-      </button>
-    </th>
   );
 }
 
@@ -821,44 +587,14 @@ function RoomInventoryForm({
 
 function DamagedTab({
   inventories,
-  rooms,
   canManage,
 }: {
   inventories: BasicMedicalRoomInventoryItem[];
-  rooms: Room[];
   canManage: boolean;
 }) {
   const router = useRouter();
-  const [query, setQuery] = useState("");
-  const deferredQuery = useDeferredValue(query);
-  const [room, setRoom] = useState("");
   const [notice, setNotice] = useState<Notice>(null);
   const [isPending, startTransition] = useTransition();
-  const [page, setPage] = useState(1);
-  const rows = inventories
-    .filter(
-      (item) =>
-        (!room || item.room_id === room) &&
-        includesQuery(
-          [
-            item.catalog?.item_name,
-            item.catalog?.commercial_name,
-            item.room?.room_code,
-            item.last_damage_reporter?.full_name,
-          ],
-          deferredQuery,
-        ),
-    )
-    .toSorted((a, b) =>
-      String(b.last_damage_reported_at).localeCompare(
-        String(a.last_damage_reported_at),
-      ),
-    );
-  const safePage = Math.min(page, totalPagesFor(rows.length, TABLE_PAGE_SIZE));
-  const pageRows = rows.slice(
-    (safePage - 1) * TABLE_PAGE_SIZE,
-    safePage * TABLE_PAGE_SIZE,
-  );
   function adjust(item: BasicMedicalRoomInventoryItem) {
     const good = Number(prompt("Số lượng Tốt", String(item.good_quantity)));
     const damaged = Number(
@@ -895,49 +631,8 @@ function DamagedTab({
         </p>
       ) : null}
       <div className="basic-medical-list-filters">
-        <label className="data-search">
-          <Search size={18} aria-hidden="true" />
-          <input
-            aria-label="Tìm thiết bị hư Y cơ sở"
-            type="search"
-            value={query}
-            onChange={(event) => {
-              setQuery(event.target.value);
-              setPage(1);
-            }}
-            placeholder="Tìm thiết bị, phòng, người báo hư…"
-            autoComplete="off"
-            spellCheck={false}
-          />
-        </label>
-        <select
-          aria-label="Lọc thiết bị hư theo phòng"
-          value={room}
-          onChange={(event) => {
-            setRoom(event.target.value);
-            setPage(1);
-          }}
-        >
-          <option value="">Tất cả phòng</option>
-          {rooms.map((item) => (
-            <option key={item.id} value={item.id}>
-              {roomLabel(item)}
-            </option>
-          ))}
-        </select>
-        <button
-          type="button"
-          className="button button-secondary"
-          onClick={() => {
-            setQuery("");
-            setRoom("");
-            setPage(1);
-          }}
-        >
-          Xóa bộ lọc
-        </button>
         <span className="equipment-catalog-count">
-          {rows.length} thiết bị hư
+          {inventories.length} thiết bị hư
         </span>
       </div>
       <div className="responsive-table">
@@ -955,7 +650,7 @@ function DamagedTab({
             </tr>
           </thead>
           <tbody>
-            {pageRows.map((item) => (
+            {inventories.map((item) => (
               <tr key={item.id}>
                 <td>
                   <strong>{item.catalog?.item_name}</strong>
@@ -993,84 +688,18 @@ function DamagedTab({
           </tbody>
         </table>
       </div>
-      {!rows.length ? (
+      {!inventories.length ? (
         <p className="panel-empty">Không có thiết bị đang được báo Hư.</p>
       ) : null}
-      <PaginationControls
-        currentPage={safePage}
-        totalItems={rows.length}
-        onPageChange={setPage}
-      />
     </section>
   );
 }
 
 function LogsTab({ logs }: { logs: BasicMedicalConditionLogItem[] }) {
-  const [query, setQuery] = useState("");
-  const deferredQuery = useDeferredValue(query);
-  const [type, setType] = useState("");
-  const [page, setPage] = useState(1);
-  const rows = logs.filter(
-    (item) =>
-      (!type || item.event_type === type) &&
-      includesQuery(
-        [
-          item.inventory?.catalog?.item_name,
-          item.inventory?.room?.room_code,
-          item.actor?.full_name,
-          item.note,
-        ],
-        deferredQuery,
-      ),
-  );
-  const safePage = Math.min(page, totalPagesFor(rows.length, TABLE_PAGE_SIZE));
-  const pageRows = rows.slice(
-    (safePage - 1) * TABLE_PAGE_SIZE,
-    safePage * TABLE_PAGE_SIZE,
-  );
   return (
     <section className="data-panel basic-medical-list-panel">
       <div className="basic-medical-list-filters">
-        <label className="data-search">
-          <Search size={18} aria-hidden="true" />
-          <input
-            aria-label="Tìm log thiết bị Y cơ sở"
-            type="search"
-            value={query}
-            onChange={(event) => {
-              setQuery(event.target.value);
-              setPage(1);
-            }}
-            placeholder="Tìm thiết bị, phòng, người thay đổi, ghi chú…"
-            autoComplete="off"
-            spellCheck={false}
-          />
-        </label>
-        <select
-          aria-label="Lọc loại thay đổi thiết bị"
-          value={type}
-          onChange={(event) => {
-            setType(event.target.value);
-            setPage(1);
-          }}
-        >
-          <option value="">Tất cả thay đổi</option>
-          <option value="damage_report">Báo Hư</option>
-          <option value="condition_adjustment">Điều chỉnh Tốt/Hư</option>
-          <option value="stock_adjustment">Điều chỉnh tồn kho</option>
-        </select>
-        <button
-          type="button"
-          className="button button-secondary"
-          onClick={() => {
-            setQuery("");
-            setType("");
-            setPage(1);
-          }}
-        >
-          Xóa bộ lọc
-        </button>
-        <span className="equipment-catalog-count">{rows.length} thay đổi</span>
+        <span className="equipment-catalog-count">{logs.length} thay đổi</span>
       </div>
       <div className="responsive-table">
         <table className="data-table">
@@ -1087,7 +716,7 @@ function LogsTab({ logs }: { logs: BasicMedicalConditionLogItem[] }) {
             </tr>
           </thead>
           <tbody>
-            {pageRows.map((item) => (
+            {logs.map((item) => (
               <tr key={item.id}>
                 <td>
                   {logDateTimeFormatter.format(new Date(item.created_at))}
@@ -1108,14 +737,9 @@ function LogsTab({ logs }: { logs: BasicMedicalConditionLogItem[] }) {
           </tbody>
         </table>
       </div>
-      {!rows.length ? (
+      {!logs.length ? (
         <p className="panel-empty">Chưa có lịch sử thay đổi phù hợp.</p>
       ) : null}
-      <PaginationControls
-        currentPage={safePage}
-        totalItems={rows.length}
-        onPageChange={setPage}
-      />
     </section>
   );
 }

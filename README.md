@@ -95,6 +95,19 @@ EMAIL_APPS_SCRIPT_SECRET=...
 
 Xem hướng dẫn triển khai script tại `docs/APPS_SCRIPT_EMAIL_SETUP.md`.
 
+### Personnel reconciliation
+
+Vercel Cron gọi `/api/internal/personnel-reconciliation` mỗi giờ. Cấu hình
+`CRON_SECRET` riêng cho production; Vercel tự gửi secret qua header
+`Authorization: Bearer <CRON_SECRET>`. Theo dõi response `inspected`,
+`committed`, `rolledBack`, và `reconciliationRequired`. Cấu hình alert Vercel
+Logs cho event `personnel.reconciliation.manual_action_required`.
+
+Khi có operation cần xử lý thủ công, Root đối chiếu `profiles.email` với Auth,
+giữ profile inactive đến khi hai nguồn khớp, sau đó resolve operation bằng
+service workflow và lưu lại reconciliation log. Không dùng client để tự sửa
+Auth/Profile trong lúc operation còn mở.
+
 ### Đăng nhập Google cho email EIU
 
 Luồng OAuth và kiểm tra tên miền `@eiu.edu.vn` đã có sẵn. Để bật Google ở local:

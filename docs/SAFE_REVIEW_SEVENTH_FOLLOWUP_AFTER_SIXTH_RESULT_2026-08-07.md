@@ -67,12 +67,12 @@ Implemented and verified the Seventh Follow-up items for Personnel saga hardenin
 ## Finding status
 
 - P-HIGH-01 Root cannot manage Personnel Manager: FIXED
-- P-HIGH-02 Durable crash window Auth vs DB commit: FIXED
+- P-HIGH-02 Durable crash window Auth vs DB commit: PARTIAL / REOPENED in Eighth
 - P-MEDIUM-01 Import-all omitted reserved profile race: FIXED
 - P-MEDIUM-02 Cleanup fallback lock/reconciliation error handling: FIXED
 - P-MEDIUM-03 Commit-success response must return syncable state: FIXED
 - BM-HIGH-01 Viewer/teaching lecturer visibility regression: FIXED
-- BM-HIGH-02 Direct DML bypass on registration/session tables: FIXED
+- BM-HIGH-02 Direct DML bypass on registration/session tables: PARTIAL / REOPENED in Eighth
 - BM-HIGH-03 Hard delete lifecycle mismatch: FIXED
 - BM-MEDIUM-01 Equipment read-only access for Y-scope roles: FIXED
 - BM-MEDIUM-02 Server-side filter/search parity: FIXED
@@ -83,7 +83,7 @@ Implemented and verified the Seventh Follow-up items for Personnel saga hardenin
 
 ## Delivery metadata
 
-- Implementation commit: PENDING
-- Final HEAD: PENDING
-- GitHub Actions run for final HEAD: PENDING
-- Verify job: PENDING
+- Implementation commit: b95b8453498be2933049335787398c17cb705a2c
+- Final HEAD: ea81572077232be0e4caa36e53b49dc2e50b180a
+- GitHub Actions run for final HEAD: 31144021504 (completed / success)
+- Verify job: 92759686000 (completed / success)
