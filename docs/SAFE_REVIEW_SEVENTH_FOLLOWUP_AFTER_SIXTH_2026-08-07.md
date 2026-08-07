@@ -485,7 +485,7 @@ không có `personnel`.
 Client hiện chỉ cập nhật local state khi:
 
 ```ts
-response.ok && response.personnel
+response.ok && response.personnel;
 ```
 
 Kết quả:

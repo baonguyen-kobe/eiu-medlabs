@@ -133,8 +133,13 @@ test("Root manages Personnel Manager while self/ordinary-admin mutations stay de
   let payload = await personnelPayload(managerId);
   await commitPersonnel(root, { ...payload, target_is_active: false });
   assert.equal(
-    (await service.from("profiles").select("is_active").eq("id", managerId).single())
-      .data.is_active,
+    (
+      await service
+        .from("profiles")
+        .select("is_active")
+        .eq("id", managerId)
+        .single()
+    ).data.is_active,
     false,
   );
   payload = await personnelPayload(managerId);
@@ -144,7 +149,8 @@ test("Root manages Personnel Manager while self/ordinary-admin mutations stay de
     target_roles: ["staff"],
   });
   assert.deepEqual(
-    (await service.from("user_roles").select("role").eq("user_id", managerId)).data,
+    (await service.from("user_roles").select("role").eq("user_id", managerId))
+      .data,
     [{ role: "staff" }],
   );
   payload = await personnelPayload(managerId);
@@ -362,24 +368,23 @@ test("Basic Medical visibility, RPC-only mutation and soft cancellation preserve
       { data: registration, error: registrationError },
       { data: preservedSession, error: preservedSessionError },
       { data: schedule, error: scheduleError },
-    ] =
-      await Promise.all([
-        root
-          .from("basic_medical_registrations")
-          .select("cancelled_at,cancel_reason")
-          .eq("id", registrationId)
-          .single(),
-        root
-          .from("basic_medical_registration_sessions")
-          .select("id")
-          .eq("id", session.id)
-          .single(),
-        root
-          .from("class_schedules")
-          .select("schedule_status")
-          .eq("id", session.class_schedule_id)
-          .single(),
-      ]);
+    ] = await Promise.all([
+      root
+        .from("basic_medical_registrations")
+        .select("cancelled_at,cancel_reason")
+        .eq("id", registrationId)
+        .single(),
+      root
+        .from("basic_medical_registration_sessions")
+        .select("id")
+        .eq("id", session.id)
+        .single(),
+      root
+        .from("class_schedules")
+        .select("schedule_status")
+        .eq("id", session.class_schedule_id)
+        .single(),
+    ]);
     assert.ifError(registrationError);
     assert.ifError(preservedSessionError);
     assert.ifError(scheduleError);
@@ -423,7 +428,8 @@ test("Basic Medical catalog candidate search is unbounded and import validation 
   }));
   try {
     assert.ifError(
-      (await service.from("basic_medical_equipment_catalog").insert(rows)).error,
+      (await service.from("basic_medical_equipment_catalog").insert(rows))
+        .error,
     );
     const candidate = await root.rpc(
       "search_basic_medical_catalog_candidates",

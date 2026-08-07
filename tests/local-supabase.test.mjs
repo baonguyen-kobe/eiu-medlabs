@@ -576,7 +576,10 @@ test("bulk personnel import rollback atomic, tăng version và bỏ qua tài kho
     const { data: activeOps } = await service
       .from("personnel_update_operations")
       .select("id")
-      .in("profile_id", [principals.root_admin_id, principals.personnel_manager_id])
+      .in("profile_id", [
+        principals.root_admin_id,
+        principals.personnel_manager_id,
+      ])
       .in("status", [
         "reserved",
         "auth_updated",
@@ -606,7 +609,10 @@ test("bulk personnel import rollback atomic, tăng version và bỏ qua tài kho
       },
     );
     if (protectedImport.error) {
-      assert.match(protectedImport.error.message, /PERSONNEL_UPDATE_IN_PROGRESS/);
+      assert.match(
+        protectedImport.error.message,
+        /PERSONNEL_UPDATE_IN_PROGRESS/,
+      );
     } else {
       assert.equal(protectedImport.data.skipped_protected, 2);
     }
@@ -3387,24 +3393,27 @@ test("Admin và Staff xóa phiếu thiết bị, phiếu Y cơ sở chỉ hủy 
     );
     assert.ifError(adminCancel.error);
 
-    const [{ data: cancelledRegistration }, { data: keptSession }, { data: cancelledSchedule }] =
-      await Promise.all([
-        admin.supabase
-          .from("basic_medical_registrations")
-          .select("cancelled_at,cancel_reason")
-          .eq("id", registrationId)
-          .single(),
-        admin.supabase
-          .from("basic_medical_registration_sessions")
-          .select("id,class_schedule_id")
-          .eq("registration_id", registrationId)
-          .single(),
-        admin.supabase
-          .from("class_schedules")
-          .select("schedule_status")
-          .eq("basic_medical_registration_id", registrationId)
-          .single(),
-      ]);
+    const [
+      { data: cancelledRegistration },
+      { data: keptSession },
+      { data: cancelledSchedule },
+    ] = await Promise.all([
+      admin.supabase
+        .from("basic_medical_registrations")
+        .select("cancelled_at,cancel_reason")
+        .eq("id", registrationId)
+        .single(),
+      admin.supabase
+        .from("basic_medical_registration_sessions")
+        .select("id,class_schedule_id")
+        .eq("registration_id", registrationId)
+        .single(),
+      admin.supabase
+        .from("class_schedules")
+        .select("schedule_status")
+        .eq("basic_medical_registration_id", registrationId)
+        .single(),
+    ]);
     assert.ok(cancelledRegistration.cancelled_at);
     assert.equal(cancelledRegistration.cancel_reason, "Admin cancel test");
     assert.equal(typeof keptSession.id, "string");

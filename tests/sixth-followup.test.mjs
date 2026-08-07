@@ -90,10 +90,9 @@ test("concurrent personnel email reservations allow one winner and keep Auth ali
       { email: winner.requested_email },
     );
     assert.ifError(authError);
-    const { error: markError } = await root.rpc(
-      "mark_personnel_auth_updated",
-      { target_operation_id: winner.operation_id },
-    );
+    const { error: markError } = await root.rpc("mark_personnel_auth_updated", {
+      target_operation_id: winner.operation_id,
+    });
     assert.ifError(markError);
     const { error: commitError } = await root.rpc("commit_personnel_update", {
       target_operation_id: winner.operation_id,

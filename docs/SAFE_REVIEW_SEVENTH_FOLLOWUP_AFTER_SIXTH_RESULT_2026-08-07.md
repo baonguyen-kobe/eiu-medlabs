@@ -11,6 +11,7 @@ Implemented and verified the Seventh Follow-up items for Personnel saga hardenin
 ## Implemented changes
 
 ### Personnel
+
 - Durable state-machine flow for personnel email/security updates in personnel_update_operations.
 - Added previous_email, status lifecycle, auth_updated_at/committed_at/resolved_at, and reconciliation error tracking.
 - Added mark_personnel_auth_updated and resolve_personnel_update_operation RPCs.
@@ -20,6 +21,7 @@ Implemented and verified the Seventh Follow-up items for Personnel saga hardenin
 - Improved cleanup fallback logging and reconciliation diagnostics.
 
 ### Basic Medical registrations
+
 - Centralized view policy via private.can_view_basic_medical_registration.
 - Restored visibility for Viewer and teaching lecturer on linked sessions.
 - Revoked direct INSERT/UPDATE/DELETE for basic_medical_registrations and basic_medical_registration_sessions from authenticated.
@@ -28,6 +30,7 @@ Implemented and verified the Seventh Follow-up items for Personnel saga hardenin
 - Updated registration list/completion views to exclude cancelled registrations by default.
 
 ### Basic Medical equipment
+
 - Added server-side search/filter RPC for inventory, rooms, damaged, logs with paging.
 - Added server-side catalog candidate search to remove hidden 500-row candidate ceiling.
 - Added scoped export authorization via get_basic_medical_authority_context and paged full export reads.
