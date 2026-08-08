@@ -23,9 +23,10 @@ Branch: `review/hardening-20260805`
 ## Partially completed
 
 - **EMAIL-MEDIUM-02 (PARTIAL)**:
-  - **Completed**: Equipment Request non-destructive and destructive TB-06 transactional outbox (`public.email_outbox_events`, PL/pgSQL outbox functions in `20260807220000_equipment_request_transactional_outbox.sql` and `20260808090000_equipment_request_tb06_outbox.sql`, converted business RPCs, server action integration via `after()`, automatic recovery cron `/api/internal/email-recovery` at `15 * * * *` in `vercel.json`).
+  - **Completed**:
+    - Equipment Request non-destructive and destructive TB-06 transactional outbox (`public.email_outbox_events`, PL/pgSQL outbox functions in `20260807220000_equipment_request_transactional_outbox.sql` and `20260808090000_equipment_request_tb06_outbox.sql`).
+    - Skills Lab transactional outbox SL-01 through SL-05 (`20260808120000_skills_lab_transactional_outbox.sql`, RPC `delete_skills_lab_class_schedule`, pre-delete snapshot, closed direct `class_schedules` physical DELETE bypass).
   - **Still Deferred**:
-    - Skills Lab transactional outbox.
     - Basic Medical transactional outbox.
     - Equipment Import null-email safety housekeeping (`profile.email?.trim()`).
 

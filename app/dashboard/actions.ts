@@ -51,6 +51,9 @@ function friendlyDatabaseError(message: string): string {
   if (message.includes("CLASS_DATE_CHANGE_FORBIDDEN")) {
     return "Bạn không có quyền đổi ngày học của lớp này.";
   }
+  if (message.includes("CLASS_DELETE_FORBIDDEN")) {
+    return "Bạn không có quyền xóa lớp này.";
+  }
   if (message.includes("LECTURER_ROOM_TYPE_MISMATCH")) {
     return "Giảng viên được chọn không thuộc Loại phòng của lớp.";
   }
@@ -181,48 +184,19 @@ export async function deleteClassSchedule(
   const userId = claimsData?.claims?.sub;
   if (!userId) return { ok: false, message: "Phiên đăng nhập đã hết hạn." };
 
-  const { data: roles } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId);
-  const roleNames = new Set((roles ?? []).map(({ role }) => role));
-  if (
-    !["admin", "staff", "teaching_assistant", "lecturer"].some((role) =>
-      roleNames.has(role),
-    )
-  ) {
-    return { ok: false, message: "Bạn không có quyền xóa lớp." };
-  }
+  const { error } = await supabase.rpc("delete_skills_lab_class_schedule", {
+    target_schedule_id: scheduleId,
+  });
 
-  const snapshot = await loadScheduleEmailSnapshot(scheduleId);
-  const { data, error } = await supabase
-    .from("class_schedules")
-    .delete()
-    .eq("id", scheduleId)
-    .select("id")
-    .maybeSingle();
-  if (error || !data) {
+  if (error) {
     return {
       ok: false,
-      message: "Không thể xóa lớp. Vui lòng kiểm tra quyền và thử lại.",
+      message: friendlyDatabaseError(error.message),
     };
   }
 
-  const isManager = roleNames.has("admin") || roleNames.has("staff");
-  if (snapshot?.room?.room_types?.code === "nursing_skills" && !isManager) {
-    try {
-      const dedupeKeys = await enqueueScheduleEventEmails({
-        snapshot,
-        event: "skills_lab_deleted",
-        actorId: userId,
-      });
-      after(() => processEmailNotificationsByDedupeKeys(dedupeKeys));
-    } catch (emailError) {
-      console.error("Không thể xếp email xóa lớp Skills Lab:", emailError);
-    }
-  }
-
   revalidateScheduleViews();
+  after(processPendingScheduleEmails);
   return { ok: true, message: "Đã xóa lớp khỏi hệ thống." };
 }
 
