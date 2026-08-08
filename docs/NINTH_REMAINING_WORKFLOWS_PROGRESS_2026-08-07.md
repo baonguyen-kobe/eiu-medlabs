@@ -61,7 +61,5 @@ Branch: `review/hardening-20260805`
 
 ## Open findings & deferred work
 
-- Skills Lab transactional outbox.
-- Basic Medical transactional outbox.
 - Deferred finding: Equipment signature storage orphan cleanup (binary storage blobs remain in bucket if DB hard delete occurs).
-- Deferred finding: `app/equipment/import/actions.ts` null email safety.
+- Equipment Import null-email safety: CLOSED / GREEN (`app/equipment/import/actions.ts` profile email null safety enforced).

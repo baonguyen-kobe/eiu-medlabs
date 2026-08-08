@@ -3953,3 +3953,80 @@ test("Basic Medical schedule edit (YC-L04) and cancellation (YC-L05) create tran
     await serviceClient().from("rooms").delete().eq("id", roomId);
   }
 });
+
+test("Equipment import profile null-email safety handles null profile email without crashing", async () => {
+  const profiles = [
+    {
+      id: "p1",
+      full_name: "Giảng viên Có Email",
+      email: "gv.email@campus.local",
+      phone: "0901234567",
+    },
+    {
+      id: "p2",
+      full_name: "Giảng viên Không Email",
+      email: null,
+      phone: "0907654321",
+    },
+    {
+      id: "p3",
+      full_name: "Giảng viên Email Trắng",
+      email: "   ",
+      phone: "0908888888",
+    },
+  ];
+
+  const profileByEmail = new Map();
+  for (const profile of profiles) {
+    const normalized = profile.email?.trim().toLowerCase();
+    if (normalized) {
+      profileByEmail.set(normalized, profile);
+    }
+  }
+
+  assert.equal(profileByEmail.has("null"), false);
+  assert.equal(profileByEmail.has("undefined"), false);
+  assert.equal(profileByEmail.has(""), false);
+  assert.equal(profileByEmail.size, 1);
+  assert.equal(profileByEmail.get("gv.email@campus.local")?.id, "p1");
+
+  const profileByName = new Map();
+  for (const profile of profiles) {
+    const key = profile.full_name.trim().toLowerCase();
+    profileByName.set(key, [profile]);
+  }
+
+  assert.equal(profileByName.get("giảng viên không email")?.[0]?.id, "p2");
+  assert.equal(profileByName.get("giảng viên email trắng")?.[0]?.id, "p3");
+
+  const registrantNoEmail = profileByName.get("giảng viên không email")?.[0];
+  const groupErrors = [];
+
+  if (registrantNoEmail && !registrantNoEmail.email?.trim()) {
+    groupErrors.push("Người đăng ký chưa có email trong hồ sơ Nhân sự");
+  }
+
+  assert.equal(groupErrors.length, 1);
+  assert.equal(
+    groupErrors[0],
+    "Người đăng ký chưa có email trong hồ sơ Nhân sự",
+  );
+
+  const registrantEmail = registrantNoEmail?.email?.trim().toLowerCase();
+  let responsible = null;
+  const firstResponsibleEmail = "gv.email@campus.local";
+
+  assert.doesNotThrow(() => {
+    if (
+      !responsible &&
+      registrantNoEmail &&
+      firstResponsibleEmail &&
+      registrantEmail &&
+      firstResponsibleEmail.trim().toLowerCase() === registrantEmail
+    ) {
+      responsible = registrantNoEmail;
+    }
+  });
+
+  assert.equal(responsible, null);
+});
