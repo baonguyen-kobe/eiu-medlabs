@@ -1,8 +1,9 @@
 # Checkpoint status
 
 Starting HEAD: `e3f752b021d24a9c161761ab22e6353e60986082`
-Current local baseline HEAD: `59bf14817588d4f4b63ac9f5e205f110545fcb8e`
+Current green baseline HEAD: `192300d50d789eff6ba1ff5e47080729eb6d1cd7`
 Branch: `review/hardening-20260805`
+Latest verified CI: Run #36 — SUCCESS
 
 ## Completed in this checkpoint
 
@@ -19,15 +20,23 @@ Branch: `review/hardening-20260805`
 - **CP2 (Hard Delete architecture) FIXED**: `can_hard_delete` RPC added and applied via RESTRICT policies.
 - **CP3 (Equipment request edit/triggers) FIXED**: Equipment request status and triggers applied.
 - **CP4 (Schedule Import RPC) FIXED**: Manual schedule RPC and related schema rules added.
-
-## Partially completed
-
-- **EMAIL-MEDIUM-02 (CANDIDATE CLOSED)**:
-  - **Completed**:
-    - Equipment Request non-destructive and destructive TB-06 transactional outbox (`public.email_outbox_events`, PL/pgSQL outbox functions in `20260807220000_equipment_request_transactional_outbox.sql` and `20260808090000_equipment_request_tb06_outbox.sql`).
-    - Skills Lab transactional outbox SL-01 through SL-05 (`20260808120000_skills_lab_transactional_outbox.sql`, RPC `delete_skills_lab_class_schedule`, pre-delete snapshot, closed direct `class_schedules` physical DELETE bypass).
-    - Basic Medical Checkpoint A transactional outbox (`20260809090000_basic_medical_transactional_outbox.sql` for YC-P01 create/copy, YC-P02 adjust, YC-P03 cancel, YC-E01 damage report).
-    - Basic Medical Checkpoint B transactional outbox (`20260809100000_basic_medical_schedule_outbox.sql` for YC-L04 full schedule edit, YC-L05 schedule cancellation).
+- **EMAIL-MEDIUM-02 CLOSED / GREEN**:
+  - Equipment Request non-destructive and destructive TB-06 transactional outbox (`20260807220000_equipment_request_transactional_outbox.sql` & `20260808090000_equipment_request_tb06_outbox.sql`).
+  - Skills Lab transactional outbox SL-01 through SL-05 (`20260808120000_skills_lab_transactional_outbox.sql`, `delete_skills_lab_class_schedule`, pre-delete snapshot, closed direct physical DELETE bypass).
+  - Basic Medical Checkpoint A transactional outbox (`20260809090000_basic_medical_transactional_outbox.sql` for YC-P01 create/copy, YC-P02 adjust, YC-P03 cancel, YC-E01 damage report).
+  - Basic Medical Checkpoint B transactional outbox (`20260809100000_basic_medical_schedule_outbox.sql` for YC-L04 full schedule edit, YC-L05 schedule cancellation).
+- **Equipment Import null-email safety CLOSED / GREEN**:
+  - Profile type typed `email: string | null` in `app/equipment/import/actions.ts`.
+  - `profileByEmail` & `lecturerByEmail` exclude null/blank email without creating `"null"` keys.
+  - `profileByName` & `lecturerByName` retain null-email profiles for name matching.
+  - Registrant profile with null email produces clean validation error (`"Người đăng ký chưa có email trong hồ sơ Nhân sự"`).
+  - Commit: `192300d50d789eff6ba1ff5e47080729eb6d1cd7`.
+- **Equipment signature Storage orphan finding CLOSED — STALE / NOT APPLICABLE**:
+  - **Audit result**: Current UI captures PNG signature as `data:image/png;base64,...`. Server action `confirmEquipmentRequestHandoff` passes base64 Data URL to `registrant_confirm_equipment_handoff` RPC which persists it directly into `handover_signature_path` and `return_signature_path` text columns of `public.equipment_requests`.
+  - The `equipment_signatures` bucket exists in `storage.buckets`, but zero application actions/RPCs upload, read, or delete objects there (0 objects in `storage.objects`).
+  - Hard delete (`hard_delete_equipment_request`) removes the `equipment_requests` row, physically deleting the Base64 signature text with the row. Status rewind (`manager_confirm_equipment_status`) sets the signature text column to `NULL`. No Storage orphan is produced.
+  - **Architecture note**: The `*_signature_path` column names and unused `equipment_signatures` bucket reflect architecture drift from a previously intended Storage-backed design. This drift is not a production defect requiring migration.
+  - **Future consideration**: If Storage-backed signatures are ever introduced, object-path/request ownership policies on `storage.objects` should be tightened beyond simple owner equality.
 
 ## Current migrations
 
@@ -46,20 +55,23 @@ Branch: `review/hardening-20260805`
 - `20260807210011_fix_shift_pattern_hard_delete.sql`
 - `20260807220000_equipment_request_transactional_outbox.sql`
 - `20260808090000_equipment_request_tb06_outbox.sql`
+- `20260808090001_fix_equipment_scope_trigger_delete.sql`
+- `20260808120000_skills_lab_transactional_outbox.sql`
+- `20260809090000_basic_medical_transactional_outbox.sql`
+- `20260809100000_basic_medical_schedule_outbox.sql`
 
 ## Tests run and passed
 
-- `npx supabase test db supabase/tests/equipment_tb06_destructive.test.sql`: 20/20 PASS.
-- `npx supabase test db supabase/tests/equipment_outbox.test.sql`: 15/15 PASS.
-- `npm run test`: 68/68 PASS.
-- `npx playwright test tests/e2e/equipment-request-management.spec.ts`: 1/1 PASS.
+- `npm run test`: 70/70 PASS (0 failed, 0 skipped).
+- `npm run test:db`: 11 files, 224/224 assertions PASS.
 - `npm run test:e2e:critical`: 22/22 PASS.
-- `npm run typecheck`: PASS.
 - `npm run format:check`: PASS.
 - `npm run lint`: PASS.
+- `npm run typecheck`: PASS.
+- `npm run build`: PASS.
 - `npx supabase db lint --local --level error`: PASS.
+- Latest GitHub CI: Run #36 SUCCESS.
 
 ## Open findings & deferred work
 
-- Deferred finding: Equipment signature storage orphan cleanup (binary storage blobs remain in bucket if DB hard delete occurs).
-- Equipment Import null-email safety: CLOSED / GREEN (`app/equipment/import/actions.ts` profile email null safety enforced).
+- None remaining in this hardening milestone.
