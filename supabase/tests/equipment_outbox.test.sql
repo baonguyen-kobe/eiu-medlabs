@@ -1,6 +1,52 @@
 -- pgTAP test suite for Equipment Request Transactional Outbox (EMAIL-MEDIUM-02)
 begin;
-select plan(15);
+select plan(16);
+
+-- Deterministic helpers for time-of-day independent late request testing
+create function private.get_test_late_receive_local()
+returns timestamp
+language sql
+stable
+as $$
+  with local_now as (
+    select (clock_timestamp() at time zone 'Asia/Ho_Chi_Minh') as now_vn
+  ),
+  candidates as (
+    select unnest(array[
+      (now_vn::date::text || ' 09:00:00')::timestamp,
+      (now_vn::date::text || ' 11:00:00')::timestamp,
+      (now_vn::date::text || ' 14:00:00')::timestamp,
+      (now_vn::date::text || ' 16:00:00')::timestamp,
+      ((now_vn::date + 1)::text || ' 09:00:00')::timestamp
+    ]) as slot
+    from local_now
+  )
+  select min(slot) from candidates where slot > (select now_vn from local_now);
+$$;
+
+create function private.get_test_late_receive_at()
+returns timestamptz
+language sql
+stable
+as $$
+  select private.get_test_late_receive_local() at time zone 'Asia/Ho_Chi_Minh';
+$$;
+
+create function private.get_test_late_return_at()
+returns timestamptz
+language sql
+stable
+as $$
+  select (private.get_test_late_receive_local() + interval '2 hours') at time zone 'Asia/Ho_Chi_Minh';
+$$;
+
+create function private.get_test_late_schedule_date()
+returns date
+language sql
+stable
+as $$
+  select private.get_test_late_receive_local()::date;
+$$;
 
 -- 1. Ensure test fixture setup (profiles, phones, room types, catalog)
 insert into public.profile_room_types (profile_id, room_type_id)
@@ -30,26 +76,26 @@ values (
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid)
 );
 
--- Sched 2: Tomorrow morning (07:30 - 11:30) for late registration
+-- Sched 2: Deterministic schedule date for late registration (<24h)
 insert into public.class_schedules (id, course_id, room_id, lecturer_id, schedule_date, start_time, end_time, student_count, course_code_snapshot, course_name_snapshot, schedule_status, published_at, published_by, source, created_by)
 values (
   '90000000-0000-0000-0000-000000000002'::uuid,
   (select id from public.courses where room_type_id = '40000000-0000-0000-0000-000000000001'::uuid limit 1),
   (select id from public.rooms where room_type_id = '40000000-0000-0000-0000-000000000001'::uuid limit 1),
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid),
-  current_date + interval '1 day', '07:30', '11:30', 25, 'NURS-101', 'Kỹ năng ĐD', 'published', now(),
+  private.get_test_late_schedule_date(), '07:30', '11:30', 25, 'NURS-101', 'Kỹ năng ĐD', 'published', now(),
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid), 'manual',
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid)
 );
 
--- Sched 3: Tomorrow afternoon (12:30 - 16:30) for late registration
+-- Sched 3: Deterministic schedule date for late registration
 insert into public.class_schedules (id, course_id, room_id, lecturer_id, schedule_date, start_time, end_time, student_count, course_code_snapshot, course_name_snapshot, schedule_status, published_at, published_by, source, created_by)
 values (
   '90000000-0000-0000-0000-000000000003'::uuid,
   (select id from public.courses where room_type_id = '40000000-0000-0000-0000-000000000001'::uuid limit 1),
   (select id from public.rooms where room_type_id = '40000000-0000-0000-0000-000000000001'::uuid limit 1),
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid),
-  current_date + interval '1 day', '12:30', '16:30', 25, 'NURS-101', 'Kỹ năng ĐD', 'published', now(),
+  private.get_test_late_schedule_date(), '12:30', '16:30', 25, 'NURS-101', 'Kỹ năng ĐD', 'published', now(),
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid), 'manual',
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid)
 );
@@ -81,6 +127,13 @@ values (
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select set_config('request.jwt.claim.sub', coalesce((select id::text from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'), true);
 select set_config('request.jwt.claims', json_build_object('sub', coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid), 'role', 'authenticated')::text, true);
+
+-- Test 0: Late fixture boundary assertion (future and < 24h)
+select ok(
+  private.get_test_late_receive_at() > clock_timestamp()
+  and private.get_test_late_receive_at() < clock_timestamp() + interval '24 hours',
+  'Test 0. Late fixture receive_at is in future and under 24 hours'
+);
 
 -- Test 1: Direct DML protection
 select ok(
@@ -130,8 +183,8 @@ select lives_ok(
       '90000000-0000-0000-0000-000000000002'::uuid,
       'HK1',
       coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid),
-      ((current_date + interval '1 day')::date::text || ' 09:00:00 Asia/Ho_Chi_Minh')::timestamptz,
-      ((current_date + interval '1 day')::date::text || ' 11:00:00 Asia/Ho_Chi_Minh')::timestamptz,
+      private.get_test_late_receive_at(),
+      private.get_test_late_return_at(),
       'Ghi chú trễ',
       'Lý do trễ',
       jsonb_build_array(
