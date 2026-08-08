@@ -1175,13 +1175,13 @@ test("Staff ngoài room-type scope không quản lý được phiếu thiết b�
       ).error?.code,
       "42501",
     );
+    // Direct DELETE privilege is revoked from authenticated role — expect 42501
     const deleted = await scopedStaff.supabase
       .from("equipment_requests")
       .delete()
       .eq("id", requestId)
       .select("id");
-    assert.ifError(deleted.error);
-    assert.equal(deleted.data.length, 0);
+    assert.equal(deleted.error?.code, "42501");
     const unauthorizedItem = await scopedStaff.supabase
       .from("equipment_request_items")
       .insert({
@@ -1202,7 +1202,9 @@ test("Staff ngoài room-type scope không quản lý được phiếu thiết b�
       ).error,
     );
   } finally {
-    await admin.supabase
+    // Must delete equipment_requests BEFORE class_schedules (FK dependency)
+    // Use serviceClient() since DELETE privilege is revoked from authenticated role
+    await serviceClient()
       .from("equipment_requests")
       .delete()
       .eq("id", requestId);
@@ -2738,7 +2740,8 @@ test("direct equipment RPC luôn xác minh giảng viên phụ trách và độ 
     assert.ok(oversizedNote.error);
     assert.equal(oversizedNote.error.code, "22023");
   } finally {
-    await admin.supabase
+    // Use serviceClient() since DELETE privilege is revoked from authenticated role
+    await serviceClient()
       .from("equipment_requests")
       .delete()
       .eq("class_schedule_id", scheduleId);
@@ -3328,30 +3331,40 @@ test("Admin và Staff xóa phiếu thiết bị, phiếu Y cơ sở chỉ hủy 
       ).error,
     );
 
+    // Direct DELETE is now privilege-denied for all authenticated roles
     const lecturerDelete = await lecturer.supabase
       .from("equipment_requests")
       .delete()
       .eq("id", equipmentRequestId)
       .select("id");
-    assert.ifError(lecturerDelete.error);
-    assert.equal(lecturerDelete.data.length, 0);
+    assert.equal(lecturerDelete.error?.code, "42501");
 
-    const staffDelete = await staff.supabase
-      .from("equipment_requests")
-      .delete()
-      .eq("id", equipmentRequestId)
-      .select("id")
-      .single();
-    assert.ifError(staffDelete.error);
-    assert.equal(staffDelete.data.id, equipmentRequestId);
+    // Admin/Staff must use soft_cancel_equipment_request RPC instead of direct delete
+    const equipmentStaffCancel = await staff.supabase.rpc(
+      "soft_cancel_equipment_request",
+      { target_request_id: equipmentRequestId },
+    );
+    assert.ifError(equipmentStaffCancel.error);
 
-    const { data: deletedItems, error: deletedItemsError } =
+    // After soft cancel the request remains in the table (not deleted)
+    const { data: cancelledItems, error: cancelledItemsError } =
+      await admin.supabase
+        .from("equipment_requests")
+        .select("status")
+        .eq("id", equipmentRequestId)
+        .single();
+    assert.ifError(cancelledItemsError);
+    assert.equal(cancelledItems.status, "cancelled");
+
+    // Items remain attached (not cascade-deleted by soft cancel)
+    const { data: survivingItems, error: survivingItemsError } =
       await admin.supabase
         .from("equipment_request_items")
         .select("id")
         .eq("id", equipmentItemId);
-    assert.ifError(deletedItemsError);
-    assert.equal(deletedItems.length, 0);
+    assert.ifError(survivingItemsError);
+    // Items survive soft cancel (physical delete only happens via hard_delete RPC)
+    assert.equal(survivingItems.length, 1);
     const { data: keptEquipmentSchedule, error: keptScheduleError } =
       await admin.supabase
         .from("class_schedules")
@@ -3461,11 +3474,11 @@ test("Admin và Staff xóa phiếu thiết bị, phiếu Y cơ sở chỉ hủy 
     assert.equal(typeof keptSession.class_schedule_id, "string");
     assert.equal(cancelledSchedule.schedule_status, "cancelled");
   } finally {
-    await admin.supabase
+    await serviceClient()
       .from("equipment_request_items")
       .delete()
       .eq("id", equipmentItemId);
-    await admin.supabase
+    await serviceClient()
       .from("equipment_requests")
       .delete()
       .eq("id", equipmentRequestId);
@@ -3795,7 +3808,8 @@ test("Phiếu thiết bị chỉ cho ký giao sau khi kho xác nhận và GV ph�
     assert.ifError(responsibleSignsReturnLast.error);
     assert.equal(responsibleSignsReturnLast.data.status, "completed");
   } finally {
-    await admin.supabase
+    // Use serviceClient() since DELETE privilege is revoked from authenticated role
+    await serviceClient()
       .from("equipment_requests")
       .delete()
       .in("id", [requestId, invalidRequestId]);

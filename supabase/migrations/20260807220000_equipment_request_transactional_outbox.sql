@@ -248,7 +248,10 @@ begin
     end loop;
   end if;
 
-  event_key_val := concat('equipment_request:', target_event, ':', target_request_id, ':', coalesce(target_operation_id, gen_random_uuid()));
+  event_key_val := case
+    when target_event = 'deleted' then concat('equipment_request:deleted:', target_request_id)
+    else concat('equipment_request:', target_event, ':', target_request_id, ':', coalesce(target_operation_id, gen_random_uuid()))
+  end;
 
   insert into public.email_outbox_events (
     event_key, domain, event_type, aggregate_id, actor_id, payload, recipients, delivery_mode_at_event, status, last_error

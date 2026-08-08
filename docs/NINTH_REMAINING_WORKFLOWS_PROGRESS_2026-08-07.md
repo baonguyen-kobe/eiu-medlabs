@@ -1,11 +1,16 @@
 # Checkpoint status
 
 Starting HEAD: `e3f752b021d24a9c161761ab22e6353e60986082`
-Current local baseline HEAD: `e54ecbdf3a09abeb2c19cbfc98443b3ff40a5966`
+Current local baseline HEAD: `59bf14817588d4f4b63ac9f5e205f110545fcb8e`
 Branch: `review/hardening-20260805`
 
 ## Completed in this checkpoint
 
+- **TB-06 Destructive Equipment Lifecycle FIXED**:
+  - Soft-cancellation enforced for ordinary Admin/Staff (`soft_cancel_equipment_request`).
+  - Pre-delete transactional outbox snapshot for Root/Bảo hard delete (`hard_delete_equipment_request`).
+  - Exactly-once TB-06 outbox deduplication via `equipment_request:<request_id>:deleted`.
+  - Direct physical `DELETE FROM equipment_requests` table bypass closed for authenticated users.
 - **EMAIL-MEDIUM-01 FIXED**: Finalized email notification matrix & settings.
 - **SHIFT-MEDIUM-01 FIXED**: Shift pattern hard delete & history preservation (`20260807210011_fix_shift_pattern_hard_delete.sql`).
 - **N-MEDIUM-01 FIXED**: Added real Personnel crash-window reconciliation integration test in `tests/e2e/personnel-management.spec.ts`.
@@ -18,9 +23,8 @@ Branch: `review/hardening-20260805`
 ## Partially completed
 
 - **EMAIL-MEDIUM-02 (PARTIAL)**:
-  - **Completed**: Equipment Request non-destructive transactional outbox (`public.email_outbox_events`, PL/pgSQL outbox functions in `20260807220000_equipment_request_transactional_outbox.sql`, 5 converted business RPCs, server action integration via `after()`, automatic recovery cron `/api/internal/email-recovery` at `15 * * * *` in `vercel.json`).
+  - **Completed**: Equipment Request non-destructive and destructive TB-06 transactional outbox (`public.email_outbox_events`, PL/pgSQL outbox functions in `20260807220000_equipment_request_transactional_outbox.sql` and `20260808090000_equipment_request_tb06_outbox.sql`, converted business RPCs, server action integration via `after()`, automatic recovery cron `/api/internal/email-recovery` at `15 * * * *` in `vercel.json`).
   - **Still Deferred**:
-    - TB-06 destructive Equipment Request lifecycle outbox/deletion reconciliation.
     - Skills Lab transactional outbox.
     - Basic Medical transactional outbox.
     - Equipment Import null-email safety housekeeping (`profile.email?.trim()`).
@@ -41,9 +45,11 @@ Branch: `review/hardening-20260805`
 - `20260807210010_fix_service_role_test_setup.sql`
 - `20260807210011_fix_shift_pattern_hard_delete.sql`
 - `20260807220000_equipment_request_transactional_outbox.sql`
+- `20260808090000_equipment_request_tb06_outbox.sql`
 
 ## Tests run and passed
 
+- `npx supabase test db supabase/tests/equipment_tb06_destructive.test.sql`: 20/20 PASS.
 - `npx supabase test db supabase/tests/equipment_outbox.test.sql`: 15/15 PASS.
 - `npm run test`: 68/68 PASS.
 - `npx playwright test tests/e2e/equipment-request-management.spec.ts`: 1/1 PASS.
@@ -55,7 +61,7 @@ Branch: `review/hardening-20260805`
 
 ## Open findings & deferred work
 
-- TB-06 destructive Equipment Request outbox.
 - Skills Lab transactional outbox.
 - Basic Medical transactional outbox.
-- Housekeeping: `app/equipment/import/actions.ts` null email safety.
+- Deferred finding: Equipment signature storage orphan cleanup (binary storage blobs remain in bucket if DB hard delete occurs).
+- Deferred finding: `app/equipment/import/actions.ts` null email safety.

@@ -2,12 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
-import { processEmailNotificationsByDedupeKeys } from "@/lib/email-notifications";
-import {
-  enqueueEquipmentRequestEmails,
-  loadEquipmentRequestEmailSnapshot,
-  processPendingEmailOutbox,
-} from "@/lib/equipment-request-emails";
+import { processPendingEmailOutbox } from "@/lib/equipment-request-emails";
 import { businessTodayString } from "@/lib/business-time";
 import {
   equipmentLeadTime,
@@ -173,57 +168,35 @@ export async function deleteEquipmentRequest(
     return { ok: false, message: "Phiếu thiết bị không hợp lệ." };
   }
 
-  const { data: roleRows } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId);
-  if (!(roleRows ?? []).some(({ role }) => ["admin", "staff"].includes(role))) {
-    return {
-      ok: false,
-      message: "Chỉ Admin hoặc Chuyên viên được xóa phiếu thiết bị.",
-    };
-  }
+  let actionMessage = "";
+  const { data: isHardDeleted, error: hardDeleteErr } = await supabase.rpc(
+    "hard_delete_equipment_request",
+    { target_request_id: requestId },
+  );
 
-  let emailSnapshot = null;
-  try {
-    emailSnapshot = await loadEquipmentRequestEmailSnapshot(requestId);
-  } catch (emailError) {
-    console.error("Không thể đọc phiếu thiết bị trước khi xóa:", emailError);
-  }
-
-  const { data, error } = await supabase
-    .from("equipment_requests")
-    .delete()
-    .eq("id", requestId)
-    .select("id")
-    .maybeSingle();
-  if (error || !data) {
-    return {
-      ok: false,
-      message: "Không thể xóa phiếu thiết bị. Phiếu có thể đã bị xóa.",
-    };
-  }
-
-  if (emailSnapshot) {
-    try {
-      const dedupeKeys = await enqueueEquipmentRequestEmails({
-        requestId,
-        event: "deleted",
-        operationId: crypto.randomUUID(),
-        snapshot: emailSnapshot,
-        actorId: userId,
-      });
-      after(() => processEmailNotificationsByDedupeKeys(dedupeKeys));
-    } catch (emailError) {
-      console.error("Không thể xếp email xóa phiếu thiết bị:", emailError);
+  if (!hardDeleteErr && isHardDeleted) {
+    actionMessage = "Đã xóa vĩnh viễn phiếu thiết bị.";
+  } else {
+    const { data: isCancelled, error: cancelErr } = await supabase.rpc(
+      "soft_cancel_equipment_request",
+      { target_request_id: requestId },
+    );
+    if (cancelErr || !isCancelled) {
+      return {
+        ok: false,
+        message: "Không thể hủy hoặc xóa phiếu thiết bị.",
+      };
     }
+    actionMessage = "Đã hủy phiếu thiết bị.";
   }
+
+  after(() => processPendingEmailOutbox());
 
   revalidatePath("/equipment/requests");
   revalidatePath("/equipment/mine");
   revalidatePath("/equipment/register");
   revalidatePath("/class-schedules");
-  return { ok: true, message: "Đã xóa phiếu thiết bị." };
+  return { ok: true, message: actionMessage };
 }
 
 export async function updateEquipmentRequestStatus(
