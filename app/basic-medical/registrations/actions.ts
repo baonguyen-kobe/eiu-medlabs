@@ -4,15 +4,7 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import {
-  enqueueBasicMedicalRegistrationEmails,
-  loadBasicMedicalEmailSnapshot,
-} from "@/lib/basic-medical-emails";
-import {
-  enqueueBasicMedicalEquipmentDamageEmails,
-  type BasicMedicalDamagedEmailItem,
-} from "@/lib/basic-medical-equipment-emails";
-import { processEmailNotificationsByDedupeKeys } from "@/lib/email-notifications";
+import { processPendingScheduleEmails } from "@/lib/email-notifications";
 
 function registrationsUrl(kind: "notice" | "error", message: string) {
   return `/basic-medical/registrations?${kind}=${encodeURIComponent(message)}`;
@@ -47,13 +39,6 @@ export async function cancelBasicMedicalRegistration(formData: FormData) {
     );
   }
 
-  let emailSnapshot = null;
-  try {
-    emailSnapshot = await loadBasicMedicalEmailSnapshot(registrationId);
-  } catch (emailError) {
-    console.error("Không thể đọc phiếu Y cơ sở trước khi hủy:", emailError);
-  }
-
   const reason = String(formData.get("reason") ?? "").trim();
   const { data, error } = await supabase.rpc(
     "cancel_basic_medical_registration",
@@ -72,18 +57,7 @@ export async function cancelBasicMedicalRegistration(formData: FormData) {
     );
   }
 
-  if (emailSnapshot) {
-    try {
-      const dedupeKeys = await enqueueBasicMedicalRegistrationEmails({
-        snapshot: emailSnapshot,
-        event: "cancelled",
-        actorId: userId,
-      });
-      after(() => processEmailNotificationsByDedupeKeys(dedupeKeys));
-    } catch (emailError) {
-      console.error("Không thể xếp email hủy phiếu Y cơ sở:", emailError);
-    }
-  }
+  after(processPendingScheduleEmails);
 
   revalidatePath("/basic-medical/registrations");
   revalidatePath("/basic-medical/schedules");
@@ -142,26 +116,10 @@ export async function confirmBasicMedicalSession({
   const result = data as unknown as {
     confirmation_id: string;
     signed_at: string;
-    room_code: string;
-    room_name?: string | null;
-    building_code: string;
-    damaged_items?: BasicMedicalDamagedEmailItem[];
+    damaged_items?: unknown[];
   };
   const damagedItems = result.damaged_items ?? [];
-  if (damagedItems.length) {
-    try {
-      const dedupeKeys = await enqueueBasicMedicalEquipmentDamageEmails({
-        confirmationId: result.confirmation_id,
-        roomCode: result.room_code,
-        roomName: result.room_name,
-        buildingCode: result.building_code,
-        damagedItems,
-      });
-      after(() => processEmailNotificationsByDedupeKeys(dedupeKeys));
-    } catch (emailError) {
-      console.error("Không thể xếp email báo thiết bị phòng hư:", emailError);
-    }
-  }
+  after(processPendingScheduleEmails);
   revalidatePath("/basic-medical/registrations");
   revalidatePath("/basic-medical/equipment");
   return {

@@ -3454,6 +3454,26 @@ test("Admin và Staff xóa phiếu thiết bị, phiếu Y cơ sở chỉ hủy 
     );
     assert.ifError(adminCancel.error);
 
+    const { data: outboxEvents } = await serviceClient()
+      .from("email_outbox_events")
+      .select("event_type,event_key")
+      .eq("domain", "basic_medical_registration")
+      .in("event_type", ["created", "cancelled"]);
+    assert.ok(
+      outboxEvents?.some(
+        (e) =>
+          e.event_type === "created" && e.event_key.includes(registrationId),
+      ),
+      "Expected created outbox event for registrationId",
+    );
+    assert.ok(
+      outboxEvents?.some(
+        (e) =>
+          e.event_type === "cancelled" && e.event_key.includes(registrationId),
+      ),
+      "Expected cancelled outbox event for registrationId",
+    );
+
     const [
       { data: cancelledRegistration },
       { data: keptSession },
