@@ -14,7 +14,7 @@ security definer
 set search_path = ''
 as $$
 declare
-  basic_medical_room_type_id constant uuid := '40000000-0000-0000-0000-000000000002'::uuid;
+  basic_medical_room_type_id uuid;
   schedule_row public.class_schedules%rowtype;
   room_row public.rooms%rowtype;
   actor_name text := 'Người dùng hệ thống';
@@ -28,6 +28,15 @@ declare
   payload_json jsonb;
   recipients_json jsonb;
 begin
+  select id into basic_medical_room_type_id
+  from public.room_types
+  where code = 'basic_medical'
+  limit 1;
+
+  if basic_medical_room_type_id is null then
+    return null;
+  end if;
+
   select * into schedule_row from public.class_schedules where id = target_schedule_id;
   if schedule_row.id is null then
     return null;
@@ -77,6 +86,7 @@ begin
     'room_id', schedule_row.room_id,
     'room', concat(room_row.room_code, ' · ', room_row.building_code),
     'room_code', room_row.room_code,
+    'room_name', room_row.room_name,
     'building_code', room_row.building_code,
     'student_count', schedule_row.student_count,
     'lecturer_id', schedule_row.lecturer_id,
@@ -642,10 +652,15 @@ declare
   is_teaching_assistant boolean := (select private.has_role('teaching_assistant'));
   can_import_owner boolean := false;
   can_manage_details boolean := false;
-  basic_medical_room_type_id constant uuid := '40000000-0000-0000-0000-000000000002'::uuid;
+  basic_medical_room_type_id uuid;
   has_actual_change boolean := false;
   mutation_id_val uuid;
 begin
+  select id into basic_medical_room_type_id
+  from public.room_types
+  where code = 'basic_medical'
+  limit 1;
+
   if not (select private.can_modify_class_schedule(target_schedule_id, 'details')) then
     raise exception 'CLASS_UPDATE_FORBIDDEN' using errcode = '42501';
   end if;
@@ -782,8 +797,13 @@ declare
   before_row public.class_schedules;
   changed_row public.class_schedules;
   room_type_val uuid;
-  basic_medical_room_type_id constant uuid := '40000000-0000-0000-0000-000000000002'::uuid;
+  basic_medical_room_type_id uuid;
 begin
+  select id into basic_medical_room_type_id
+  from public.room_types
+  where code = 'basic_medical'
+  limit 1;
+
   if actor_id is null or not (select private.has_role('admin')) then
     raise exception 'ADMIN_ROLE_REQUIRED' using errcode = '42501';
   end if;

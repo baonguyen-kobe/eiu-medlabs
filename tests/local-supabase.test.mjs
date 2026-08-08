@@ -3852,55 +3852,60 @@ test("Phiếu thiết bị chỉ cho ký giao sau khi kho xác nhận và GV ph�
 test("Basic Medical schedule edit (YC-L04) and cancellation (YC-L05) create transactional outbox events", async () => {
   const admin = await signIn("admin@campus.local", "LocalAdmin123!");
   const staff = await signIn("staff@campus.local", "LocalStaff123!");
-  const lecturer = await signIn(
-    "giangvien@campus.local",
-    "LocalLecturer123!",
-  );
+  const lecturer = await signIn("giangvien@campus.local", "LocalLecturer123!");
 
-  await serviceClient().from("profile_room_types").upsert([
-    {
-      profile_id: admin.user.id,
-      room_type_id: "40000000-0000-0000-0000-000000000002",
-    },
-    {
-      profile_id: lecturer.user.id,
-      room_type_id: "40000000-0000-0000-0000-000000000002",
-    },
-  ]);
+  await serviceClient()
+    .from("profile_room_types")
+    .upsert([
+      {
+        profile_id: admin.user.id,
+        room_type_id: "40000000-0000-0000-0000-000000000002",
+      },
+      {
+        profile_id: lecturer.user.id,
+        room_type_id: "40000000-0000-0000-0000-000000000002",
+      },
+    ]);
 
   const roomId = crypto.randomUUID();
   const courseId = crypto.randomUUID();
   const scheduleId = crypto.randomUUID();
 
   try {
-    await serviceClient().from("rooms").insert({
-      id: roomId,
-      room_code: `Y-OUTBOX-${roomId.slice(0, 6)}`,
-      building_code: "YT",
-      room_type_id: "40000000-0000-0000-0000-000000000002",
-    });
-    await serviceClient().from("courses").insert({
-      id: courseId,
-      course_code: `BM-OUTBOX-${courseId.slice(0, 6)}`,
-      course_name: "Basic Medical Outbox Course",
-      room_type_id: "40000000-0000-0000-0000-000000000002",
-    });
-    await serviceClient().from("class_schedules").insert({
-      id: scheduleId,
-      course_id: courseId,
-      course_code_snapshot: `BM-OUTBOX-${courseId.slice(0, 6)}`,
-      course_name_snapshot: "Basic Medical Outbox Course",
-      room_id: roomId,
-      lecturer_id: lecturer.user.id,
-      schedule_date: "2044-10-10",
-      start_time: "08:00",
-      end_time: "11:00",
-      student_count: 30,
-      schedule_status: "published",
-      created_by: admin.user.id,
-      published_by: admin.user.id,
-      published_at: new Date().toISOString(),
-    });
+    await serviceClient()
+      .from("rooms")
+      .insert({
+        id: roomId,
+        room_code: `Y-OUTBOX-${roomId.slice(0, 6)}`,
+        building_code: "YT",
+        room_type_id: "40000000-0000-0000-0000-000000000002",
+      });
+    await serviceClient()
+      .from("courses")
+      .insert({
+        id: courseId,
+        course_code: `BM-OUTBOX-${courseId.slice(0, 6)}`,
+        course_name: "Basic Medical Outbox Course",
+        room_type_id: "40000000-0000-0000-0000-000000000002",
+      });
+    await serviceClient()
+      .from("class_schedules")
+      .insert({
+        id: scheduleId,
+        course_id: courseId,
+        course_code_snapshot: `BM-OUTBOX-${courseId.slice(0, 6)}`,
+        course_name_snapshot: "Basic Medical Outbox Course",
+        room_id: roomId,
+        lecturer_id: lecturer.user.id,
+        schedule_date: "2044-10-10",
+        start_time: "08:00",
+        end_time: "11:00",
+        student_count: 30,
+        schedule_status: "published",
+        created_by: admin.user.id,
+        published_by: admin.user.id,
+        published_at: new Date().toISOString(),
+      });
 
     const editRes = await admin.supabase.rpc("update_class_schedule_details", {
       target_schedule_id: scheduleId,

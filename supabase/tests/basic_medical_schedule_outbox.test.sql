@@ -2,7 +2,7 @@
 -- Checkpoint B: Basic Medical Schedule Transactional Outbox (YC-L04 & YC-L05)
 
 begin;
-select plan(36);
+select plan(38);
 
 -- Setup test fixtures
 create temp table _test_fixtures as
@@ -158,6 +158,11 @@ select is(
   (select payload->>'student_count' from public.email_outbox_events where aggregate_id = (select sched_bm_1_id from _test_fixtures) limit 1),
   '40',
   'FINAL state payload has updated student_count'
+);
+select is(
+  (select payload->>'room_name' from public.email_outbox_events where aggregate_id = (select sched_bm_1_id from _test_fixtures) limit 1),
+  'Phòng Y 2',
+  'FINAL state payload has room_name'
 );
 
 -- Test 5: Recipients list includes lecturer 1, lecturer 2, admin, scoped staff, and opted-in viewer
@@ -346,6 +351,11 @@ select is(
   (select count(*)::integer from public.email_outbox_events where aggregate_id = (select sched_bm_2_id from _test_fixtures) and event_type = 'schedule_cancelled'),
   1,
   'Exactly one schedule_cancelled outbox event created'
+);
+select is(
+  (select payload->>'room_name' from public.email_outbox_events where aggregate_id = (select sched_bm_2_id from _test_fixtures) and event_type = 'schedule_cancelled' limit 1),
+  'Phòng Y 1',
+  'PRE-CANCEL payload has room_name'
 );
 
 -- Test 17: Schedule status updated to cancelled with cancelled_by metadata
