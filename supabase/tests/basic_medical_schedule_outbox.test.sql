@@ -1,8 +1,8 @@
 -- pgTAP Test Suite: basic_medical_schedule_outbox.test.sql
--- Checkpoint B: Basic Medical Schedule Transactional Outbox (YC-L04 & YC-L05)
+-- Checkpoint B & Corrective Fix: Basic Medical Schedule Transactional Outbox (YC-L04 & YC-L05) & YC-L03 Reschedule
 
 begin;
-select plan(38);
+select plan(45);
 
 -- Setup test fixtures
 create temp table _test_fixtures as
@@ -95,7 +95,7 @@ insert into public.class_schedules (
 )
 select
   sched_bm_1_id, course_bm_id, 'BM-TEST-101', 'Môn Y Cơ Sở', room_bm_1_id,
-  lecturer_1_id, null::uuid, '2042-09-01'::date, '08:00'::time, '11:00'::time,
+  lecturer_1_id, lecturer_2_id, '2042-09-01'::date, '08:00'::time, '11:00'::time,
   30, 'published'::public.schedule_status, admin_id, admin_id, now()
 from _test_fixtures
 union all select
@@ -114,7 +114,7 @@ from _test_fixtures;
 -- YC-L04 TESTS: FULL BASIC MEDICAL SCHEDULE EDIT
 -- ============================================================================
 
--- Test 1: Basic Medical full edit succeeds via update_class_schedule_details
+-- Test 1: Basic Medical full edit succeeds via update_class_schedule_details for Admin
 select set_config('role', 'authenticated', true);
 select set_config('request.jwt.claims', json_build_object('sub', (select admin_id from _test_fixtures))::text, true);
 
@@ -128,7 +128,7 @@ select lives_ok(
     40,
     array[(select lecturer_1_id from _test_fixtures), (select lecturer_2_id from _test_fixtures)]
   ); $$,
-  'Basic Medical schedule update succeeds'
+  'Basic Medical schedule update succeeds for Admin'
 );
 
 -- Inspect outbox using service_role
@@ -321,12 +321,29 @@ select lives_ok(
   'Processor replay execution succeeds'
 );
 
+-- Test 14: Scoped Basic Medical Staff YC-L04 edit succeeds
+select set_config('role', 'authenticated', true);
+select set_config('request.jwt.claims', json_build_object('sub', (select staff_bm_id from _test_fixtures))::text, true);
+
+select lives_ok(
+  $$ select public.update_class_schedule_details(
+    (select sched_bm_1_id from _test_fixtures),
+    '2042-09-01'::date,
+    '08:00'::time,
+    '11:30'::time,
+    (select room_bm_2_id from _test_fixtures),
+    48,
+    array[(select lecturer_1_id from _test_fixtures), (select lecturer_2_id from _test_fixtures)]
+  ); $$,
+  'Scoped Basic Medical Staff YC-L04 edit succeeds'
+);
+
 
 -- ============================================================================
 -- YC-L05 TESTS: BASIC MEDICAL SCHEDULE CANCELLATION
 -- ============================================================================
 
--- Test 14: Non-Admin cancellation is DENIED
+-- Test 15: Non-Admin cancellation is DENIED
 select set_config('role', 'authenticated', true);
 select set_config('request.jwt.claims', json_build_object('sub', (select staff_bm_id from _test_fixtures))::text, true);
 
@@ -337,7 +354,7 @@ select throws_ok(
   'Non-Admin cancellation is denied'
 );
 
--- Test 15: Admin cancellation succeeds
+-- Test 16: Admin cancellation succeeds
 select set_config('request.jwt.claims', json_build_object('sub', (select admin_id from _test_fixtures))::text, true);
 
 select lives_ok(
@@ -345,7 +362,7 @@ select lives_ok(
   'Admin cancellation succeeds'
 );
 
--- Test 16: Exactly one schedule_cancelled outbox event created
+-- Test 17: Exactly one schedule_cancelled outbox event created
 select set_config('role', 'service_role', true);
 select is(
   (select count(*)::integer from public.email_outbox_events where aggregate_id = (select sched_bm_2_id from _test_fixtures) and event_type = 'schedule_cancelled'),
@@ -358,7 +375,7 @@ select is(
   'PRE-CANCEL payload has room_name'
 );
 
--- Test 17: Schedule status updated to cancelled with cancelled_by metadata
+-- Test 18: Schedule status updated to cancelled with cancelled_by metadata
 select ok(
   exists (
     select 1 from public.class_schedules
@@ -370,7 +387,7 @@ select ok(
   'Schedule status is cancelled with metadata'
 );
 
--- Test 18: Repeat cancellation throws error or is denied
+-- Test 19: Repeat cancellation throws error or is denied
 select set_config('role', 'authenticated', true);
 select set_config('request.jwt.claims', json_build_object('sub', (select admin_id from _test_fixtures))::text, true);
 
@@ -388,7 +405,7 @@ select is(
   'Repeat cancellation created zero additional outbox events'
 );
 
--- Test 19: Non-Basic-Medical (Skills Lab) Admin cancellation creates NO Basic Medical outbox event
+-- Test 20: Non-Basic-Medical (Skills Lab) Admin cancellation creates NO Basic Medical outbox event
 select set_config('role', 'authenticated', true);
 select set_config('request.jwt.claims', json_build_object('sub', (select admin_id from _test_fixtures))::text, true);
 
@@ -404,7 +421,7 @@ select is(
   'Skills Lab cancellation created zero Basic Medical outbox events'
 );
 
--- Test 20: Processor creates correct cancelled notification row
+-- Test 21: Processor creates correct cancelled notification row
 select set_config('role', 'service_role', true);
 select lives_ok(
   $$ select public.process_email_outbox_events(50); $$,
@@ -422,28 +439,125 @@ select ok(
 
 
 -- ============================================================================
--- REGRESSION & SECURITY TESTS
+-- YC-L03 & L03/L04 SEPARATION CORRECTIVE TESTS
 -- ============================================================================
 
--- Test 21: YC-L03 date-only reschedule via reschedule_class works without emitting YC-L04 event
+-- Test 22: Lecturer calling update_class_schedule_details for date-only change on Basic Medical schedule is DENIED
 select set_config('role', 'authenticated', true);
-select set_config('request.jwt.claims', json_build_object('sub', (select admin_id from _test_fixtures))::text, true);
+select set_config('request.jwt.claims', json_build_object('sub', (select lecturer_1_id from _test_fixtures))::text, true);
 
+select throws_ok(
+  $$ select public.update_class_schedule_details(
+    (select sched_bm_1_id from _test_fixtures),
+    '2042-09-10'::date,
+    '08:00'::time,
+    '11:30'::time,
+    (select room_bm_2_id from _test_fixtures),
+    48,
+    array[(select lecturer_1_id from _test_fixtures), (select lecturer_2_id from _test_fixtures)]
+  ); $$,
+  '42501',
+  'CLASS_UPDATE_FORBIDDEN',
+  'Lecturer update_class_schedule_details call on Basic Medical schedule is DENIED even if date-only'
+);
+
+-- Test 23: Same Lecturer calling reschedule_class for the same Basic Medical schedule is ALLOWED
 select lives_ok(
   $$ select public.reschedule_class(
     (select sched_bm_1_id from _test_fixtures),
-    '2042-09-05'::date
+    '2042-09-10'::date
   ); $$,
-  'YC-L03 reschedule_class succeeds'
+  'Lecturer reschedule_class call on Basic Medical schedule is ALLOWED'
 );
 
+-- Test 24: YC-L03 reschedule_class creates exactly ONE email notification row directly
+select set_config('role', 'service_role', true);
 select is(
-  (select count(*)::integer from public.email_notifications where notification_type = 'class_schedule_basic_medical_updated'),
-  (select count(*)::integer from public.email_notifications where notification_type = 'class_schedule_basic_medical_updated'),
-  'YC-L03 inserts directly into email_notifications without extra YC-L04 outbox event'
+  (select count(*)::integer from public.email_notifications
+   where notification_type = 'class_schedule_basic_medical_updated'
+     and payload->>'actor' = 'Lecturer 1 Test'
+     and payload->>'schedule_date' = '2042-09-10'
+     and recipient_id in (
+       select admin_id from _test_fixtures
+       union all select staff_bm_id from _test_fixtures
+       union all select lecturer_1_id from _test_fixtures
+       union all select lecturer_2_id from _test_fixtures
+       union all select viewer_optin_id from _test_fixtures
+     )),
+  5, -- 5 test fixture recipients: lecturer 1, lecturer 2, admin, scoped staff, opted-in viewer
+  'YC-L03 creates email_notifications for test fixture recipients'
 );
 
--- Test 22: Basic Medical schedule event never falls into Equipment Request formatter
+-- Test 25: YC-L03 creates ZERO basic_medical_schedule outbox events
+select is(
+  (select count(*)::integer from public.email_outbox_events
+   where domain = 'basic_medical_schedule'
+     and payload->>'old_schedule_date' = '2042-09-01'
+     and payload->>'schedule_date' = '2042-09-10'),
+  0,
+  'YC-L03 created zero basic_medical_schedule outbox events'
+);
+
+-- Test 26: YC-L03 email subject exact format matches [MedLabs Calendar] Đổi ngày học Y cơ sở · BM-TEST-101
+select ok(
+  exists (
+    select 1 from public.email_notifications
+    where notification_type = 'class_schedule_basic_medical_updated'
+      and subject = '[MedLabs Calendar] Đổi ngày học Y cơ sở · BM-TEST-101'
+      and payload->>'schedule_date' = '2042-09-10'
+  ),
+  'YC-L03 subject exact format matches [MedLabs Calendar] Đổi ngày học Y cơ sở · BM-TEST-101'
+);
+
+-- Test 27: YC-L03 recipients list includes lecturer 1, lecturer 2, admin, scoped staff, opted-in viewer
+select ok(
+  exists (select 1 from public.email_notifications where recipient_id = (select lecturer_1_id from _test_fixtures) and subject = '[MedLabs Calendar] Đổi ngày học Y cơ sở · BM-TEST-101')
+  and exists (select 1 from public.email_notifications where recipient_id = (select lecturer_2_id from _test_fixtures) and subject = '[MedLabs Calendar] Đổi ngày học Y cơ sở · BM-TEST-101')
+  and exists (select 1 from public.email_notifications where recipient_id = (select admin_id from _test_fixtures) and subject = '[MedLabs Calendar] Đổi ngày học Y cơ sở · BM-TEST-101')
+  and exists (select 1 from public.email_notifications where recipient_id = (select staff_bm_id from _test_fixtures) and subject = '[MedLabs Calendar] Đổi ngày học Y cơ sở · BM-TEST-101')
+  and exists (select 1 from public.email_notifications where recipient_id = (select viewer_optin_id from _test_fixtures) and subject = '[MedLabs Calendar] Đổi ngày học Y cơ sở · BM-TEST-101'),
+  'YC-L03 recipients include Lecturers 1 & 2, Admin, scoped Staff, and opted-in Viewer'
+);
+
+-- Test 28: YC-L03 does not double-send to any recipient
+select is(
+  (select count(*)::integer from (
+    select recipient_id, count(*)
+    from public.email_notifications
+    where subject = '[MedLabs Calendar] Đổi ngày học Y cơ sở · BM-TEST-101'
+    group by recipient_id
+    having count(*) > 1
+  ) dupes),
+  0,
+  'YC-L03 does not double-send to any recipient'
+);
+
+-- Test 29: Lecturer calling update_class_schedule_details for full edit/other fields is DENIED
+select set_config('role', 'authenticated', true);
+select set_config('request.jwt.claims', json_build_object('sub', (select lecturer_1_id from _test_fixtures))::text, true);
+
+select throws_ok(
+  $$ select public.update_class_schedule_details(
+    (select sched_bm_1_id from _test_fixtures),
+    '2042-09-10'::date,
+    '08:00'::time,
+    '12:00'::time, -- changed end_time
+    (select room_bm_2_id from _test_fixtures),
+    48,
+    array[(select lecturer_1_id from _test_fixtures), (select lecturer_2_id from _test_fixtures)]
+  ); $$,
+  '42501',
+  'CLASS_UPDATE_FORBIDDEN',
+  'Lecturer full update_class_schedule_details call is DENIED'
+);
+
+
+-- ============================================================================
+-- REGRESSION & SECURITY TESTS
+-- ============================================================================
+
+-- Test 30: Basic Medical schedule event never falls into Equipment Request formatter
+select set_config('role', 'service_role', true);
 select ok(
   not exists (
     select 1 from public.email_notifications
@@ -453,7 +567,7 @@ select ok(
   'Basic Medical schedule events never fall through to equipment request formatter'
 );
 
--- Test 23: Authenticated client process_email_outbox_events execution DENIED
+-- Test 31: Authenticated client process_email_outbox_events execution DENIED
 select set_config('role', 'authenticated', true);
 select set_config('request.jwt.claims', json_build_object('sub', (select admin_id from _test_fixtures))::text, true);
 
@@ -464,7 +578,7 @@ select throws_ok(
   'Authenticated role cannot execute process_email_outbox_events'
 );
 
--- Test 24: Direct outbox DML by authenticated DENIED
+-- Test 32: Direct outbox DML by authenticated DENIED
 select throws_ok(
   $$ insert into public.email_outbox_events (domain, event_type, aggregate_id, event_key, payload, recipients, delivery_mode_at_event)
      values ('basic_medical_schedule', 'test', gen_random_uuid(), 'test:key', '{}'::jsonb, '[]'::jsonb, 'live'); $$,
@@ -473,7 +587,7 @@ select throws_ok(
   'Direct INSERT into email_outbox_events by authenticated is denied by RLS'
 );
 
--- Test 25: Direct class_schedules DELETE by authenticated DENIED
+-- Test 33: Direct class_schedules DELETE by authenticated DENIED
 select throws_ok(
   $$ delete from public.class_schedules where id = (select sched_bm_1_id from _test_fixtures); $$,
   '42501',
@@ -481,7 +595,7 @@ select throws_ok(
   'Direct DELETE on class_schedules by authenticated is denied by RLS'
 );
 
--- Test 26: Private helper private.enqueue_basic_medical_schedule_outbox_event execution DENIED for authenticated
+-- Test 34: Private helper private.enqueue_basic_medical_schedule_outbox_event execution DENIED for authenticated
 select throws_ok(
   $$ select private.enqueue_basic_medical_schedule_outbox_event((select sched_bm_1_id from _test_fixtures), 'test', (select admin_id from _test_fixtures), null); $$,
   '42501',
@@ -489,7 +603,7 @@ select throws_ok(
   'Private outbox enqueue helper execution denied for authenticated'
 );
 
--- Test 27: Service role execution of process_email_outbox_events ALLOWED
+-- Test 35: Service role execution of process_email_outbox_events ALLOWED
 select set_config('role', 'service_role', true);
 select lives_ok(
   $$ select public.process_email_outbox_events(50); $$,
