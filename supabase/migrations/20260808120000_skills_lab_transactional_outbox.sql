@@ -1,6 +1,8 @@
 -- Migration: Skills Lab Transactional Outbox (SL-01 through SL-05)
 -- Enforces durable outbox for manual creation (SL-01), import finalization (SL-02),
 -- date reschedule (SL-03), and lecturer own delete pre-delete snapshot (SL-05).
+-- Preserves baseline Basic Medical reschedule behavior.
+-- Enforces service_role execution boundary for process_email_outbox_events.
 
 set check_function_bodies = false;
 
@@ -107,27 +109,29 @@ begin
           target_recipient_email := coalesce(rcp.recipient_email, rcp.email);
           dedupe_val := concat('outbox_notif:', evt.id, ':', target_recipient_id);
 
-          insert into public.email_notifications (
-            notification_type,
-            recipient_id,
-            recipient_email,
-            dedupe_key,
-            subject,
-            payload,
-            delivery_mode_at_enqueue,
-            status,
-            last_error
-          ) values (
-            notif_type,
-            target_recipient_id,
-            target_recipient_email,
-            dedupe_val,
-            subject_text,
-            evt.payload,
-            'off',
-            'suppressed',
-            'Email được tạo khi chế độ gửi đang tắt.'
-          ) on conflict (dedupe_key) do nothing;
+          if exists (select 1 from public.profiles where id = target_recipient_id) then
+            insert into public.email_notifications (
+              notification_type,
+              recipient_id,
+              recipient_email,
+              dedupe_key,
+              subject,
+              payload,
+              delivery_mode_at_enqueue,
+              status,
+              last_error
+            ) values (
+              notif_type,
+              target_recipient_id,
+              target_recipient_email,
+              dedupe_val,
+              subject_text,
+              evt.payload,
+              'off',
+              'suppressed',
+              'Email được tạo khi chế độ gửi đang tắt.'
+            ) on conflict (dedupe_key) do nothing;
+          end if;
         end loop;
 
         update public.email_outbox_events
@@ -144,23 +148,25 @@ begin
         target_recipient_email := coalesce(rcp.recipient_email, rcp.email);
         dedupe_val := concat('outbox_notif:', evt.id, ':', target_recipient_id);
 
-        insert into public.email_notifications (
-          notification_type,
-          recipient_id,
-          recipient_email,
-          dedupe_key,
-          subject,
-          payload,
-          delivery_mode_at_enqueue
-        ) values (
-          notif_type,
-          target_recipient_id,
-          target_recipient_email,
-          dedupe_val,
-          subject_text,
-          evt.payload,
-          evt.delivery_mode_at_event
-        ) on conflict (dedupe_key) do nothing;
+        if exists (select 1 from public.profiles where id = target_recipient_id) then
+          insert into public.email_notifications (
+            notification_type,
+            recipient_id,
+            recipient_email,
+            dedupe_key,
+            subject,
+            payload,
+            delivery_mode_at_enqueue
+          ) values (
+            notif_type,
+            target_recipient_id,
+            target_recipient_email,
+            dedupe_val,
+            subject_text,
+            evt.payload,
+            evt.delivery_mode_at_event
+          ) on conflict (dedupe_key) do nothing;
+        end if;
       end loop;
 
       update public.email_outbox_events
@@ -251,8 +257,10 @@ begin
 end;
 $$;
 
-revoke all on function public.process_email_outbox_events(integer) from public, anon;
-grant execute on function public.process_email_outbox_events(integer) to authenticated;
+-- Restored authorization boundary for processor function:
+-- REVOKE from public, anon, authenticated; GRANT to service_role ONLY.
+revoke all on function public.process_email_outbox_events(integer) from public, anon, authenticated;
+grant execute on function public.process_email_outbox_events(integer) to service_role;
 
 -- 3. SL-01: Update private.enqueue_manual_schedule_email to route outbox event via email_outbox_events
 create or replace function private.enqueue_manual_schedule_email()
@@ -349,7 +357,6 @@ begin
     (select delivery_mode from public.email_delivery_settings where setting_key = 'primary')
   on conflict (event_key) do nothing;
 
-  perform public.process_email_outbox_events(50);
   return new;
 end;
 $$;
@@ -467,12 +474,12 @@ begin
     (select delivery_mode from public.email_delivery_settings where setting_key = 'primary')
   on conflict (event_key) do nothing;
 
-  perform public.process_email_outbox_events(50);
   return new;
 end;
 $$;
 
--- 5. SL-03: Update public.reschedule_class to route outbox event via email_outbox_events
+-- 5. SL-03: Update public.reschedule_class to route outbox event via email_outbox_events for Skills Lab,
+-- and preserve exact baseline direct email_notifications behavior for Basic Medical.
 create or replace function public.reschedule_class(
   target_schedule_id uuid,
   target_schedule_date date
@@ -539,77 +546,113 @@ begin
   returning * into changed_row;
 
   if target_schedule_date is distinct from before_row.schedule_date then
-    insert into public.email_outbox_events (
-      domain,
-      event_type,
-      aggregate_id,
-      event_key,
-      payload,
-      recipients,
-      delivery_mode_at_event
-    )
-    select
-      case when room_type_code_value = 'basic_medical'
-        then 'basic_medical_schedule'
-        else 'skills_lab_schedule' end,
-      case when room_type_code_value = 'basic_medical'
-        then 'class_schedule_basic_medical_updated'
-        else 'class_schedule_rescheduled' end,
-      before_row.id,
-      concat(
-        case when room_type_code_value = 'basic_medical'
-          then 'basic_medical:rescheduled:'
-          else 'skills_lab:rescheduled:' end,
-        change_id, ':', before_row.id
-      ),
-      jsonb_build_object(
-        'schedule_id', before_row.id,
-        'course_code', before_row.course_code_snapshot,
-        'course_name', before_row.course_name_snapshot,
-        'old_schedule_date', before_row.schedule_date,
-        'schedule_date', changed_row.schedule_date,
-        'start_time', before_row.start_time,
-        'end_time', before_row.end_time,
-        'room', room_label,
-        'student_count', before_row.student_count,
-        'lecturer', coalesce(lecturer_name, 'Chưa có giảng viên'),
-        'request_code', schedule_code,
-        'actor', coalesce(actor_name, 'Người dùng hệ thống'),
-        'room_type_code', room_type_code_value
-      ),
-      (
-        select coalesce(jsonb_agg(jsonb_build_object('id', recipients.id, 'email', recipients.email)), '[]'::jsonb)
-        from public.profiles as recipients
-        where recipients.is_active
-          and (
-            recipients.id in (before_row.lecturer_id, before_row.lecturer_2_id)
-            or (
-              room_type_code_value <> 'basic_medical'
-              and recipients.id = before_row.created_by
-            )
-            or exists (
-              select 1 from public.user_roles as roles
-              where roles.user_id = recipients.id
-                and roles.role in ('admin', 'staff', 'viewer')
-                and (
-                  roles.role = 'admin'
-                  or exists (
-                    select 1 from public.profile_room_types as assignments
-                    where assignments.profile_id = recipients.id
-                      and assignments.room_type_id = room_type_value
-                      and (
-                        roles.role <> 'viewer'
-                        or assignments.receive_schedule_emails
-                      )
-                  )
+    if room_type_code_value = 'basic_medical' then
+      -- Preserved baseline Basic Medical notification behavior: insert directly into email_notifications
+      insert into public.email_notifications (
+        notification_type, recipient_id, recipient_email, dedupe_key, subject, payload
+      )
+      select
+        'class_schedule_basic_medical_updated',
+        recipients.id, recipients.email,
+        concat('class_schedule_basic_medical_updated:', change_id, ':', before_row.id, ':', recipients.id),
+        concat('[MedLabs Y CS] Cập nhật ngày học ', before_row.course_code_snapshot, ' - ', room_label),
+        jsonb_build_object(
+          'schedule_id', before_row.id,
+          'course_code', before_row.course_code_snapshot,
+          'course_name', before_row.course_name_snapshot,
+          'old_schedule_date', before_row.schedule_date,
+          'schedule_date', changed_row.schedule_date,
+          'start_time', before_row.start_time,
+          'end_time', before_row.end_time,
+          'room', room_label,
+          'student_count', before_row.student_count,
+          'lecturer', coalesce(lecturer_name, 'Chưa có giảng viên'),
+          'request_code', schedule_code,
+          'actor', coalesce(actor_name, 'Người dùng hệ thống')
+        )
+      from public.profiles as recipients
+      where recipients.is_active
+        and (
+          recipients.id in (before_row.lecturer_id, before_row.lecturer_2_id)
+          or exists (
+            select 1 from public.user_roles as roles
+            where roles.user_id = recipients.id
+              and roles.role in ('admin', 'staff', 'viewer')
+              and (
+                roles.role = 'admin'
+                or exists (
+                  select 1 from public.profile_room_types as assignments
+                  where assignments.profile_id = recipients.id
+                    and assignments.room_type_id = room_type_value
+                    and (
+                      roles.role <> 'viewer'
+                      or assignments.receive_schedule_emails
+                    )
                 )
-            )
+              )
           )
-      ),
-      (select delivery_mode from public.email_delivery_settings where setting_key = 'primary')
-    on conflict (event_key) do nothing;
-
-    perform public.process_email_outbox_events(50);
+        )
+      on conflict (dedupe_key) do nothing;
+    else
+      -- Skills Lab outbox event
+      insert into public.email_outbox_events (
+        domain,
+        event_type,
+        aggregate_id,
+        event_key,
+        payload,
+        recipients,
+        delivery_mode_at_event
+      )
+      select
+        'skills_lab_schedule',
+        'class_schedule_rescheduled',
+        before_row.id,
+        concat('skills_lab:rescheduled:', change_id, ':', before_row.id),
+        jsonb_build_object(
+          'schedule_id', before_row.id,
+          'course_code', before_row.course_code_snapshot,
+          'course_name', before_row.course_name_snapshot,
+          'old_schedule_date', before_row.schedule_date,
+          'schedule_date', changed_row.schedule_date,
+          'start_time', before_row.start_time,
+          'end_time', before_row.end_time,
+          'room', room_label,
+          'student_count', before_row.student_count,
+          'lecturer', coalesce(lecturer_name, 'Chưa có giảng viên'),
+          'request_code', schedule_code,
+          'actor', coalesce(actor_name, 'Người dùng hệ thống'),
+          'room_type_code', room_type_code_value
+        ),
+        (
+          select coalesce(jsonb_agg(jsonb_build_object('id', recipients.id, 'email', recipients.email)), '[]'::jsonb)
+          from public.profiles as recipients
+          where recipients.is_active
+            and (
+              recipients.id in (before_row.lecturer_id, before_row.lecturer_2_id)
+              or recipients.id = before_row.created_by
+              or exists (
+                select 1 from public.user_roles as roles
+                where roles.user_id = recipients.id
+                  and roles.role in ('admin', 'staff', 'viewer')
+                  and (
+                    roles.role = 'admin'
+                    or exists (
+                      select 1 from public.profile_room_types as assignments
+                      where assignments.profile_id = recipients.id
+                        and assignments.room_type_id = room_type_value
+                        and (
+                          roles.role <> 'viewer'
+                          or assignments.receive_schedule_emails
+                        )
+                    )
+                  )
+              )
+            )
+        ),
+        (select delivery_mode from public.email_delivery_settings where setting_key = 'primary')
+      on conflict (event_key) do nothing;
+    end if;
   end if;
 
   return changed_row;
@@ -759,7 +802,6 @@ begin
   -- Delete schedule row
   delete from public.class_schedules where id = target_schedule_id;
 
-  perform public.process_email_outbox_events(50);
   return true;
 end;
 $$;

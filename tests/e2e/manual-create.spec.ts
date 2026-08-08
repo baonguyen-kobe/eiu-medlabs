@@ -11,29 +11,34 @@ async function loginAsAdmin(page: Page) {
 }
 
 async function removeClassesForDate(date: string) {
-  const envText = await readFile(
-    new URL("../../.env.local", import.meta.url),
-    "utf8",
-  );
-  const env = Object.fromEntries(
-    envText
-      .split(/\r?\n/)
-      .filter((line) => line && !line.startsWith("#"))
-      .map((line) => {
-        const [key, ...value] = line.split("=");
-        return [key, value.join("=")];
-      }),
-  );
-  const client = createClient(
-    env.NEXT_PUBLIC_SUPABASE_URL,
-    env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
-    { auth: { persistSession: false, autoRefreshToken: false } },
-  );
-  const { error: signInError } = await client.auth.signInWithPassword({
-    email: "admin@campus.local",
-    password: "LocalAdmin123!",
+  let url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  let serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  try {
+    const envText = await readFile(
+      new URL("../../.env.local", import.meta.url),
+      "utf8",
+    );
+    const env = Object.fromEntries(
+      envText
+        .split(/\r?\n/)
+        .filter((line) => line && !line.startsWith("#"))
+        .map((line) => {
+          const [key, ...value] = line.split("=");
+          return [key, value.join("=")];
+        }),
+    );
+    url = url || env.NEXT_PUBLIC_SUPABASE_URL;
+    serviceKey = serviceKey || env.SUPABASE_SERVICE_ROLE_KEY;
+  } catch {
+    // Ignore missing env file
+  }
+  url = url || "http://127.0.0.1:54321";
+  serviceKey =
+    serviceKey ||
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU";
+  const client = createClient(url, serviceKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
   });
-  expect(signInError).toBeNull();
   const { error: deleteError } = await client
     .from("class_schedules")
     .delete()
