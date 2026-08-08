@@ -1,8 +1,8 @@
 -- pgTAP Test Suite: basic_medical_schedule_outbox.test.sql
--- Checkpoint B & Corrective Fix: Basic Medical Schedule Transactional Outbox (YC-L04 & YC-L05) & YC-L03 Reschedule
+-- Checkpoint B & Corrective Fix: Basic Medical Schedule Transactional Outbox (YC-L04 & YC-L05) & YC-L03 Reschedule & YC-L04 Authority Gate
 
 begin;
-select plan(45);
+select plan(50);
 
 -- Setup test fixtures
 create temp table _test_fixtures as
@@ -16,6 +16,7 @@ select
   'a0000000-0000-0000-0000-000000000005'::uuid as lecturer_2_id,
   'a0000000-0000-0000-0000-000000000006'::uuid as viewer_optin_id,
   'a0000000-0000-0000-0000-000000000007'::uuid as viewer_optout_id,
+  'a0000000-0000-0000-0000-000000000008'::uuid as ta_bm_id,
   'b0000000-0000-0000-0000-000000000001'::uuid as course_bm_id,
   'b0000000-0000-0000-0000-000000000002'::uuid as course_sl_id,
   'c0000000-0000-0000-0000-000000000001'::uuid as room_bm_1_id,
@@ -23,7 +24,12 @@ select
   'c0000000-0000-0000-0000-000000000003'::uuid as room_sl_id,
   'd0000000-0000-0000-0000-000000000001'::uuid as sched_bm_1_id,
   'd0000000-0000-0000-0000-000000000002'::uuid as sched_bm_2_id,
-  'd0000000-0000-0000-0000-000000000003'::uuid as sched_sl_1_id;
+  'd0000000-0000-0000-0000-000000000003'::uuid as sched_sl_1_id,
+  'd0000000-0000-0000-0000-000000000004'::uuid as sched_bm_ta_id,
+  'd0000000-0000-0000-0000-000000000005'::uuid as sched_bm_imp_id,
+  'd0000000-0000-0000-0000-000000000006'::uuid as sched_sl_imp_id,
+  'e0000000-0000-0000-0000-000000000001'::uuid as import_batch_bm_id,
+  'e0000000-0000-0000-0000-000000000002'::uuid as import_batch_sl_id;
 
 grant select, update on table _test_fixtures to authenticated, service_role;
 grant select on public.email_outbox_events to authenticated;
@@ -38,21 +44,24 @@ union all select lecturer_1_id, 'lecturer.1@campus.local' from _test_fixtures
 union all select lecturer_2_id, 'lecturer.2@campus.local' from _test_fixtures
 union all select viewer_optin_id, 'viewer.optin@campus.local' from _test_fixtures
 union all select viewer_optout_id, 'viewer.optout@campus.local' from _test_fixtures
+union all select ta_bm_id, 'ta.bm@campus.local' from _test_fixtures
 on conflict do nothing;
 
 -- Seed test profiles
-insert into public.profiles (id, email, full_name, is_active)
-select admin_id, 'admin.test@campus.local', 'Admin Test', true from _test_fixtures
-union all select staff_bm_id, 'staff.bm@campus.local', 'Staff BM Test', true from _test_fixtures
-union all select staff_sl_id, 'staff.sl@campus.local', 'Staff SL Test', true from _test_fixtures
-union all select lecturer_1_id, 'lecturer.1@campus.local', 'Lecturer 1 Test', true from _test_fixtures
-union all select lecturer_2_id, 'lecturer.2@campus.local', 'Lecturer 2 Test', true from _test_fixtures
-union all select viewer_optin_id, 'viewer.optin@campus.local', 'Viewer Optin Test', true from _test_fixtures
-union all select viewer_optout_id, 'viewer.optout@campus.local', 'Viewer Optout Test', true from _test_fixtures
+insert into public.profiles (id, email, full_name, is_active, can_import_schedules)
+select admin_id, 'admin.test@campus.local', 'Admin Test', true, false from _test_fixtures
+union all select staff_bm_id, 'staff.bm@campus.local', 'Staff BM Test', true, false from _test_fixtures
+union all select staff_sl_id, 'staff.sl@campus.local', 'Staff SL Test', true, false from _test_fixtures
+union all select lecturer_1_id, 'lecturer.1@campus.local', 'Lecturer 1 Test', true, true from _test_fixtures
+union all select lecturer_2_id, 'lecturer.2@campus.local', 'Lecturer 2 Test', true, false from _test_fixtures
+union all select viewer_optin_id, 'viewer.optin@campus.local', 'Viewer Optin Test', true, false from _test_fixtures
+union all select viewer_optout_id, 'viewer.optout@campus.local', 'Viewer Optout Test', true, false from _test_fixtures
+union all select ta_bm_id, 'ta.bm@campus.local', 'TA BM Test', true, true from _test_fixtures
 on conflict (id) do update set
   email = excluded.email,
   full_name = excluded.full_name,
-  is_active = excluded.is_active;
+  is_active = excluded.is_active,
+  can_import_schedules = excluded.can_import_schedules;
 
 -- Seed user roles
 insert into public.user_roles (user_id, role)
@@ -63,6 +72,7 @@ union all select lecturer_1_id, 'lecturer'::public.app_role from _test_fixtures
 union all select lecturer_2_id, 'lecturer'::public.app_role from _test_fixtures
 union all select viewer_optin_id, 'viewer'::public.app_role from _test_fixtures
 union all select viewer_optout_id, 'viewer'::public.app_role from _test_fixtures
+union all select ta_bm_id, 'teaching_assistant'::public.app_role from _test_fixtures
 on conflict (user_id, role) do nothing;
 
 -- Seed profile room types
@@ -74,8 +84,15 @@ union all select lecturer_1_id, skills_room_type_id, false from _test_fixtures
 union all select lecturer_2_id, basic_medical_room_type_id, false from _test_fixtures
 union all select viewer_optin_id, basic_medical_room_type_id, true from _test_fixtures
 union all select viewer_optout_id, basic_medical_room_type_id, false from _test_fixtures
+union all select ta_bm_id, basic_medical_room_type_id, false from _test_fixtures
+union all select ta_bm_id, skills_room_type_id, false from _test_fixtures
 on conflict (profile_id, room_type_id) do update set
   receive_schedule_emails = excluded.receive_schedule_emails;
+
+-- Seed import batches
+insert into public.import_batches (id, original_file_name, file_hash, created_by, status, room_type_id)
+select import_batch_bm_id, 'bm_import.csv', 'hash_bm_123', lecturer_1_id, 'completed'::public.import_status, basic_medical_room_type_id from _test_fixtures
+union all select import_batch_sl_id, 'sl_import.csv', 'hash_sl_123', lecturer_1_id, 'completed'::public.import_status, skills_room_type_id from _test_fixtures;
 
 -- Seed courses & rooms
 insert into public.courses (id, course_code, course_name, room_type_id, is_active)
@@ -91,22 +108,44 @@ union all select room_sl_id, 'SL201', 'SL', 'Phòng Skills 1', skills_room_type_
 insert into public.class_schedules (
   id, course_id, course_code_snapshot, course_name_snapshot, room_id,
   lecturer_id, lecturer_2_id, schedule_date, start_time, end_time,
-  student_count, schedule_status, created_by, published_by, published_at
+  student_count, schedule_status, created_by, published_by, published_at,
+  source, import_batch_id
 )
 select
   sched_bm_1_id, course_bm_id, 'BM-TEST-101', 'Môn Y Cơ Sở', room_bm_1_id,
   lecturer_1_id, lecturer_2_id, '2042-09-01'::date, '08:00'::time, '11:00'::time,
-  30, 'published'::public.schedule_status, admin_id, admin_id, now()
+  30, 'published'::public.schedule_status, admin_id, admin_id, now(),
+  'manual'::public.schedule_source, null::uuid
 from _test_fixtures
 union all select
   sched_bm_2_id, course_bm_id, 'BM-TEST-101', 'Môn Y Cơ Sở', room_bm_1_id,
   lecturer_1_id, null::uuid, '2042-09-02'::date, '08:00'::time, '11:00'::time,
-  30, 'published'::public.schedule_status, admin_id, admin_id, now()
+  30, 'published'::public.schedule_status, admin_id, admin_id, now(),
+  'manual'::public.schedule_source, null::uuid
 from _test_fixtures
 union all select
   sched_sl_1_id, course_sl_id, 'SL-TEST-101', 'Môn Skills Lab', room_sl_id,
   lecturer_1_id, null::uuid, '2042-09-03'::date, '08:00'::time, '11:00'::time,
-  25, 'published'::public.schedule_status, admin_id, admin_id, now()
+  25, 'published'::public.schedule_status, admin_id, admin_id, now(),
+  'manual'::public.schedule_source, null::uuid
+from _test_fixtures
+union all select
+  sched_bm_ta_id, course_bm_id, 'BM-TEST-101', 'Môn Y Cơ Sở', room_bm_1_id,
+  lecturer_1_id, null::uuid, '2042-09-04'::date, '08:00'::time, '11:00'::time,
+  25, 'published'::public.schedule_status, ta_bm_id, ta_bm_id, now(),
+  'manual'::public.schedule_source, null::uuid
+from _test_fixtures
+union all select
+  sched_bm_imp_id, course_bm_id, 'BM-TEST-101', 'Môn Y Cơ Sở', room_bm_1_id,
+  lecturer_1_id, null::uuid, '2042-09-05'::date, '08:00'::time, '11:00'::time,
+  25, 'published'::public.schedule_status, lecturer_1_id, lecturer_1_id, now(),
+  'import'::public.schedule_source, import_batch_bm_id
+from _test_fixtures
+union all select
+  sched_sl_imp_id, course_sl_id, 'SL-TEST-101', 'Môn Skills Lab', room_sl_id,
+  lecturer_1_id, null::uuid, '2042-09-06'::date, '08:00'::time, '11:00'::time,
+  25, 'published'::public.schedule_status, lecturer_1_id, lecturer_1_id, now(),
+  'import'::public.schedule_source, import_batch_sl_id
 from _test_fixtures;
 
 
@@ -470,7 +509,7 @@ select lives_ok(
   'Lecturer reschedule_class call on Basic Medical schedule is ALLOWED'
 );
 
--- Test 24: YC-L03 reschedule_class creates exactly ONE email notification row directly
+-- Test 24: YC-L03 reschedule_class creates email notifications directly
 select set_config('role', 'service_role', true);
 select is(
   (select count(*)::integer from public.email_notifications
@@ -553,10 +592,102 @@ select throws_ok(
 
 
 -- ============================================================================
+-- YC-L04 AUTHORITY GATE TESTS (TEST A THROUGH TEST F)
+-- ============================================================================
+
+-- TEST A: Teaching Assistant owner calling update_class_schedule_details on Basic Medical schedule is DENIED
+select set_config('role', 'authenticated', true);
+select set_config('request.jwt.claims', json_build_object('sub', (select ta_bm_id from _test_fixtures))::text, true);
+
+select throws_ok(
+  $$ select public.update_class_schedule_details(
+    (select sched_bm_ta_id from _test_fixtures),
+    '2042-09-12'::date,
+    '08:00'::time,
+    '11:00'::time,
+    (select room_bm_1_id from _test_fixtures),
+    25,
+    array[(select lecturer_1_id from _test_fixtures)]
+  ); $$,
+  '42501',
+  'CLASS_UPDATE_FORBIDDEN',
+  'TEST A: Teaching Assistant owner calling update_class_schedule_details on Basic Medical is DENIED'
+);
+
+-- TEST B: Import-capable Lecturer owning import batch calling update_class_schedule_details on imported Basic Medical schedule is DENIED
+select set_config('request.jwt.claims', json_build_object('sub', (select lecturer_1_id from _test_fixtures))::text, true);
+
+select throws_ok(
+  $$ select public.update_class_schedule_details(
+    (select sched_bm_imp_id from _test_fixtures),
+    '2042-09-12'::date,
+    '08:00'::time,
+    '11:00'::time,
+    (select room_bm_1_id from _test_fixtures),
+    25,
+    array[(select lecturer_1_id from _test_fixtures)]
+  ); $$,
+  '42501',
+  'CLASS_UPDATE_FORBIDDEN',
+  'TEST B: Import-capable Lecturer owning import batch calling update_class_schedule_details on imported Basic Medical is DENIED'
+);
+
+-- TEST C: Import-capable Teaching Assistant owning import batch calling update_class_schedule_details on imported Basic Medical schedule is DENIED
+select set_config('request.jwt.claims', json_build_object('sub', (select ta_bm_id from _test_fixtures))::text, true);
+
+select throws_ok(
+  $$ select public.update_class_schedule_details(
+    (select sched_bm_imp_id from _test_fixtures),
+    '2042-09-12'::date,
+    '08:00'::time,
+    '11:00'::time,
+    (select room_bm_1_id from _test_fixtures),
+    25,
+    array[(select lecturer_1_id from _test_fixtures)]
+  ); $$,
+  '42501',
+  'CLASS_UPDATE_FORBIDDEN',
+  'TEST C: Import-capable TA owning import batch calling update_class_schedule_details on imported Basic Medical is DENIED'
+);
+
+-- TEST D & E: Scoped Staff & Admin calling update_class_schedule_details on Basic Medical is ALLOWED
+select set_config('request.jwt.claims', json_build_object('sub', (select staff_bm_id from _test_fixtures))::text, true);
+
+select lives_ok(
+  $$ select public.update_class_schedule_details(
+    (select sched_bm_ta_id from _test_fixtures),
+    '2042-09-12'::date,
+    '08:00'::time,
+    '11:00'::time,
+    (select room_bm_1_id from _test_fixtures),
+    28,
+    array[(select lecturer_1_id from _test_fixtures)]
+  ); $$,
+  'TEST D: Scoped Staff calling update_class_schedule_details on Basic Medical is ALLOWED'
+);
+
+-- TEST F: Non-Basic-Medical (Skills Lab) regression - TA owner & import-owner authorization remains ALLOWED
+select set_config('request.jwt.claims', json_build_object('sub', (select lecturer_1_id from _test_fixtures))::text, true);
+
+select lives_ok(
+  $$ select public.update_class_schedule_details(
+    (select sched_sl_imp_id from _test_fixtures),
+    '2042-09-15'::date,
+    '08:00'::time,
+    '11:00'::time,
+    (select room_sl_id from _test_fixtures),
+    28,
+    array[(select lecturer_1_id from _test_fixtures)]
+  ); $$,
+  'TEST F: Non-Basic-Medical (Skills Lab) import-owner update_class_schedule_details is ALLOWED'
+);
+
+
+-- ============================================================================
 -- REGRESSION & SECURITY TESTS
 -- ============================================================================
 
--- Test 30: Basic Medical schedule event never falls into Equipment Request formatter
+-- Test 35: Basic Medical schedule event never falls into Equipment Request formatter
 select set_config('role', 'service_role', true);
 select ok(
   not exists (
@@ -567,7 +698,7 @@ select ok(
   'Basic Medical schedule events never fall through to equipment request formatter'
 );
 
--- Test 31: Authenticated client process_email_outbox_events execution DENIED
+-- Test 36: Authenticated client process_email_outbox_events execution DENIED
 select set_config('role', 'authenticated', true);
 select set_config('request.jwt.claims', json_build_object('sub', (select admin_id from _test_fixtures))::text, true);
 
@@ -578,7 +709,7 @@ select throws_ok(
   'Authenticated role cannot execute process_email_outbox_events'
 );
 
--- Test 32: Direct outbox DML by authenticated DENIED
+-- Test 37: Direct outbox DML by authenticated DENIED
 select throws_ok(
   $$ insert into public.email_outbox_events (domain, event_type, aggregate_id, event_key, payload, recipients, delivery_mode_at_event)
      values ('basic_medical_schedule', 'test', gen_random_uuid(), 'test:key', '{}'::jsonb, '[]'::jsonb, 'live'); $$,
@@ -587,7 +718,7 @@ select throws_ok(
   'Direct INSERT into email_outbox_events by authenticated is denied by RLS'
 );
 
--- Test 33: Direct class_schedules DELETE by authenticated DENIED
+-- Test 38: Direct class_schedules DELETE by authenticated DENIED
 select throws_ok(
   $$ delete from public.class_schedules where id = (select sched_bm_1_id from _test_fixtures); $$,
   '42501',
@@ -595,7 +726,7 @@ select throws_ok(
   'Direct DELETE on class_schedules by authenticated is denied by RLS'
 );
 
--- Test 34: Private helper private.enqueue_basic_medical_schedule_outbox_event execution DENIED for authenticated
+-- Test 39: Private helper private.enqueue_basic_medical_schedule_outbox_event execution DENIED for authenticated
 select throws_ok(
   $$ select private.enqueue_basic_medical_schedule_outbox_event((select sched_bm_1_id from _test_fixtures), 'test', (select admin_id from _test_fixtures), null); $$,
   '42501',
@@ -603,7 +734,7 @@ select throws_ok(
   'Private outbox enqueue helper execution denied for authenticated'
 );
 
--- Test 35: Service role execution of process_email_outbox_events ALLOWED
+-- Test 40: Service role execution of process_email_outbox_events ALLOWED
 select set_config('role', 'service_role', true);
 select lives_ok(
   $$ select public.process_email_outbox_events(50); $$,
