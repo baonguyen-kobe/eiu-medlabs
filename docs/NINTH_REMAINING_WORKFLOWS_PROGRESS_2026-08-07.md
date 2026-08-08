@@ -22,14 +22,12 @@ Branch: `review/hardening-20260805`
 
 ## Partially completed
 
-- **EMAIL-MEDIUM-02 (PARTIAL)**:
+- **EMAIL-MEDIUM-02 (CANDIDATE CLOSED)**:
   - **Completed**:
     - Equipment Request non-destructive and destructive TB-06 transactional outbox (`public.email_outbox_events`, PL/pgSQL outbox functions in `20260807220000_equipment_request_transactional_outbox.sql` and `20260808090000_equipment_request_tb06_outbox.sql`).
     - Skills Lab transactional outbox SL-01 through SL-05 (`20260808120000_skills_lab_transactional_outbox.sql`, RPC `delete_skills_lab_class_schedule`, pre-delete snapshot, closed direct `class_schedules` physical DELETE bypass).
     - Basic Medical Checkpoint A transactional outbox (`20260809090000_basic_medical_transactional_outbox.sql` for YC-P01 create/copy, YC-P02 adjust, YC-P03 cancel, YC-E01 damage report).
-  - **Still Deferred**:
-    - Basic Medical Checkpoint B (YC-L04 full schedule edit, YC-L05 schedule cancellation).
-    - Equipment Import null-email safety housekeeping (`profile.email?.trim()`).
+    - Basic Medical Checkpoint B transactional outbox (`20260809100000_basic_medical_schedule_outbox.sql` for YC-L04 full schedule edit, YC-L05 schedule cancellation).
 
 ## Current migrations
 

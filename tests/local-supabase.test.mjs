@@ -3848,3 +3848,103 @@ test("Phiếu thiết bị chỉ cho ký giao sau khi kho xác nhận và GV ph�
       .eq("id", catalogItemId);
   }
 });
+
+test("Basic Medical schedule edit (YC-L04) and cancellation (YC-L05) create transactional outbox events", async () => {
+  const admin = await signIn("admin@campus.local", "LocalAdmin123!");
+  const staff = await signIn("staff@campus.local", "LocalStaff123!");
+  const lecturer = await signIn(
+    "giangvien@campus.local",
+    "LocalLecturer123!",
+  );
+
+  await serviceClient().from("profile_room_types").upsert([
+    {
+      profile_id: admin.user.id,
+      room_type_id: "40000000-0000-0000-0000-000000000002",
+    },
+    {
+      profile_id: lecturer.user.id,
+      room_type_id: "40000000-0000-0000-0000-000000000002",
+    },
+  ]);
+
+  const roomId = crypto.randomUUID();
+  const courseId = crypto.randomUUID();
+  const scheduleId = crypto.randomUUID();
+
+  try {
+    await serviceClient().from("rooms").insert({
+      id: roomId,
+      room_code: `Y-OUTBOX-${roomId.slice(0, 6)}`,
+      building_code: "YT",
+      room_type_id: "40000000-0000-0000-0000-000000000002",
+    });
+    await serviceClient().from("courses").insert({
+      id: courseId,
+      course_code: `BM-OUTBOX-${courseId.slice(0, 6)}`,
+      course_name: "Basic Medical Outbox Course",
+      room_type_id: "40000000-0000-0000-0000-000000000002",
+    });
+    await serviceClient().from("class_schedules").insert({
+      id: scheduleId,
+      course_id: courseId,
+      course_code_snapshot: `BM-OUTBOX-${courseId.slice(0, 6)}`,
+      course_name_snapshot: "Basic Medical Outbox Course",
+      room_id: roomId,
+      lecturer_id: lecturer.user.id,
+      schedule_date: "2044-10-10",
+      start_time: "08:00",
+      end_time: "11:00",
+      student_count: 30,
+      schedule_status: "published",
+      created_by: admin.user.id,
+      published_by: admin.user.id,
+      published_at: new Date().toISOString(),
+    });
+
+    const editRes = await admin.supabase.rpc("update_class_schedule_details", {
+      target_schedule_id: scheduleId,
+      target_schedule_date: "2044-10-10",
+      target_start_time: "08:00",
+      target_end_time: "11:30",
+      target_room_id: roomId,
+      target_student_count: 40,
+      target_lecturer_ids: [lecturer.user.id],
+    });
+    assert.ifError(editRes.error);
+
+    const { data: updateEvents } = await serviceClient()
+      .from("email_outbox_events")
+      .select("*")
+      .eq("aggregate_id", scheduleId)
+      .eq("event_type", "schedule_updated");
+    assert.equal(updateEvents?.length, 1);
+    assert.equal(updateEvents[0].domain, "basic_medical_schedule");
+
+    const staffCancel = await staff.supabase.rpc("cancel_class_schedule", {
+      target_schedule_id: scheduleId,
+    });
+    assert.ok(staffCancel.error);
+
+    const cancelRes = await admin.supabase.rpc("cancel_class_schedule", {
+      target_schedule_id: scheduleId,
+    });
+    assert.ifError(cancelRes.error);
+
+    const { data: cancelEvents } = await serviceClient()
+      .from("email_outbox_events")
+      .select("*")
+      .eq("aggregate_id", scheduleId)
+      .eq("event_type", "schedule_cancelled");
+    assert.equal(cancelEvents?.length, 1);
+    assert.equal(cancelEvents[0].domain, "basic_medical_schedule");
+  } finally {
+    await serviceClient()
+      .from("email_outbox_events")
+      .delete()
+      .eq("aggregate_id", scheduleId);
+    await serviceClient().from("class_schedules").delete().eq("id", scheduleId);
+    await serviceClient().from("courses").delete().eq("id", courseId);
+    await serviceClient().from("rooms").delete().eq("id", roomId);
+  }
+});
