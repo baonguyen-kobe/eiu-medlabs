@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { parsePersonnelUpdateOperation } from "@/lib/personnel-update-operation";
 import { personnelRoleDisplayNames } from "@/lib/admin-catalog-template";
 import {
   assertUniquePersonnelImportIdentities,
@@ -1243,7 +1244,10 @@ function personnelRpcMessage(message: string) {
       "Quyền tạo lịch Y cơ sở không phù hợp với vai trò hoặc phạm vi.",
     ],
   ];
-  return mappings.find(([code]) => message.includes(code))?.[1] ?? message;
+  return (
+    mappings.find(([code]) => message.includes(code))?.[1] ??
+    "KhÃ´ng thá»ƒ cáº­p nháº­t nhÃ¢n sá»±. Vui lÃ²ng thá»­ láº¡i."
+  );
 }
 
 export async function savePersonnelChanges(
@@ -1340,12 +1344,14 @@ export async function savePersonnelChanges(
       message: personnelRpcMessage(beginError.message),
     };
   }
-  const operation = operationData as {
-    operation_id: string;
-    previous_email: string;
-    requested_email: string;
-    expected_version: number;
-  };
+  const operation = parsePersonnelUpdateOperation(operationData);
+  if (!operation) {
+    return {
+      ok: false,
+      message:
+        "KhÃ´ng thá»ƒ khá»Ÿi táº¡o phiÃªn cáº­p nháº­t nhÃ¢n sá»± an toÃ n.",
+    };
+  }
 
   const authStartedAt = performance.now();
   const emailChanged = current.email.trim().toLowerCase() !== email;
