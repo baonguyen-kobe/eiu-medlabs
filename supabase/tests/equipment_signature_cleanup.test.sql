@@ -1,6 +1,6 @@
 -- pgTAP Test Suite: equipment_signature_cleanup.test.sql
 begin;
-select plan(46);
+select plan(50);
 select has_column('public','equipment_signature_operations','cleanup_state','1 cleanup state exists');
 select has_column('public','equipment_signature_operations','cleanup_claim_token','2 claim token exists');
 select has_column('public','equipment_signature_operations','cleanup_claimed_at','3 claim time exists');
@@ -14,11 +14,13 @@ select ok(not has_function_privilege('authenticated','public.claim_equipment_sig
 select ok(not has_function_privilege('authenticated','public.ack_equipment_signature_cleanup(uuid,uuid,text,text)','EXECUTE'),'11 authenticated cannot ack');
 select ok(not has_function_privilege('anon','public.claim_equipment_signature_cleanup_candidates(timestamptz,timestamptz,timestamptz,integer,uuid)','EXECUTE'),'12 anon cannot claim');
 select ok(not has_function_privilege('anon','public.ack_equipment_signature_cleanup(uuid,uuid,text,text)','EXECUTE'),'13 anon cannot ack');
+select ok(has_function_privilege('service_role','public.claim_equipment_signature_cleanup_candidates(timestamptz,timestamptz,timestamptz,integer,uuid)','EXECUTE'),'13a service role can claim');
+select ok(has_function_privilege('service_role','public.ack_equipment_signature_cleanup(uuid,uuid,text,text)','EXECUTE'),'13b service role can ack');
 select ok(to_regprocedure('public.claim_equipment_signature_cleanup_candidates(timestamptz,timestamptz,timestamptz,integer,uuid)') is not null,'14 claim RPC exists');
 select ok(to_regprocedure('public.ack_equipment_signature_cleanup(uuid,uuid,text,text)') is not null,'15 ack RPC exists');
 select is((select pronargs from pg_proc where oid='public.claim_equipment_signature_cleanup_candidates(timestamptz,timestamptz,timestamptz,integer,uuid)'::regprocedure),5::smallint,'16 claim takes cutoffs limit token');
 select is((select pronargs from pg_proc where oid='public.ack_equipment_signature_cleanup(uuid,uuid,text,text)'::regprocedure),4::smallint,'17 ack takes operation token outcome error');
-select ok(pg_get_functiondef('public.claim_equipment_signature_cleanup_candidates(timestamptz,timestamptz,timestamptz,integer,uuid)'::regprocedure) like '%FOR UPDATE SKIP LOCKED%','18 claim locks with skip locked');
+select ok(lower(pg_get_functiondef('public.claim_equipment_signature_cleanup_candidates(timestamptz,timestamptz,timestamptz,integer,uuid)'::regprocedure)) like '%for update skip locked%','18 claim locks with skip locked');
 select ok(pg_get_functiondef('public.claim_equipment_signature_cleanup_candidates(timestamptz,timestamptz,timestamptz,integer,uuid)'::regprocedure) like '%state in (''pending'',''rejected'')%','19 only pending rejected are candidates');
 select ok(pg_get_functiondef('public.claim_equipment_signature_cleanup_candidates(timestamptz,timestamptz,timestamptz,integer,uuid)'::regprocedure) like '%handover_recipient_signature_storage_path%','20 handover reference blocks claim');
 select ok(pg_get_functiondef('public.claim_equipment_signature_cleanup_candidates(timestamptz,timestamptz,timestamptz,integer,uuid)'::regprocedure) like '%return_recipient_signature_storage_path%','21 return reference blocks claim');
@@ -36,9 +38,9 @@ select ok(not has_function_privilege('authenticated','public.registrant_confirm_
 select ok(has_function_privilege('authenticated','public.finalize_equipment_signature(uuid)','EXECUTE'),'33 normal finalize permission remains');
 select ok(exists(select 1 from pg_indexes where indexname='equipment_signature_operations_cleanup_claim_idx'),'34 cleanup claim index exists');
 
-insert into public.equipment_signature_operations (id,request_id,phase,actor_id,object_path,state,created_at) values
-('e1000000-0000-0000-0000-000000000001','e2000000-0000-0000-0000-000000000001','handover','e3000000-0000-0000-0000-000000000001','equipment-requests/e2000000-0000-0000-0000-000000000001/handover/e1000000-0000-0000-0000-000000000001.png','pending','2000-01-01T00:00:00Z'),
-('e1000000-0000-0000-0000-000000000002','e2000000-0000-0000-0000-000000000002','return','e3000000-0000-0000-0000-000000000002','equipment-requests/e2000000-0000-0000-0000-000000000002/return/e1000000-0000-0000-0000-000000000002.png','pending','2099-01-01T00:00:00Z'),
+insert into public.equipment_signature_operations (id,request_id,phase,actor_id,object_path,state,created_at,finalized_at) values
+('e1000000-0000-0000-0000-000000000001','e2000000-0000-0000-0000-000000000001','handover','e3000000-0000-0000-0000-000000000001','equipment-requests/e2000000-0000-0000-0000-000000000001/handover/e1000000-0000-0000-0000-000000000001.png','pending','2000-01-01T00:00:00Z',null),
+('e1000000-0000-0000-0000-000000000002','e2000000-0000-0000-0000-000000000002','return','e3000000-0000-0000-0000-000000000002','equipment-requests/e2000000-0000-0000-0000-000000000002/return/e1000000-0000-0000-0000-000000000002.png','pending','2099-01-01T00:00:00Z',null),
 ('e1000000-0000-0000-0000-000000000003','e2000000-0000-0000-0000-000000000003','handover','e3000000-0000-0000-0000-000000000003','equipment-requests/e2000000-0000-0000-0000-000000000003/handover/e1000000-0000-0000-0000-000000000003.png','rejected','2000-01-01T00:00:00Z','2000-01-02T00:00:00Z'),
 ('e1000000-0000-0000-0000-000000000004','e2000000-0000-0000-0000-000000000004','return','e3000000-0000-0000-0000-000000000004','equipment-requests/e2000000-0000-0000-0000-000000000004/return/e1000000-0000-0000-0000-000000000004.png','adopted','2000-01-01T00:00:00Z','2000-01-02T00:00:00Z');
 create temp table cleanup_claims as select * from public.claim_equipment_signature_cleanup_candidates('2001-01-01T00:00:00Z','2001-01-01T00:00:00Z','2001-01-01T00:00:00Z',10,'e4000000-0000-0000-0000-000000000001');
@@ -54,5 +56,12 @@ select is((select state from public.equipment_signature_operations where id='e10
 select throws_ok($$select public.ack_equipment_signature_cleanup('e1000000-0000-0000-0000-000000000001','e4000000-0000-0000-0000-000000000099','deleted',null)$$,'42501','EQUIPMENT_SIGNATURE_CLEANUP_CLAIM_REQUIRED','44 wrong token is rejected');
 select lives_ok($$select public.ack_equipment_signature_cleanup('e1000000-0000-0000-0000-000000000001','e4000000-0000-0000-0000-000000000001','retry','retry')$$,'45 retry releases claim');
 select is((select cleanup_state from public.equipment_signature_operations where id='e1000000-0000-0000-0000-000000000001'),'retry','46 retry state persists');
+update public.equipment_signature_operations set cleanup_state='claimed',cleanup_claim_token='e4000000-0000-0000-0000-000000000001',cleanup_claimed_at='2000-01-01T00:00:00Z',cleanup_last_error=null where id='e1000000-0000-0000-0000-000000000001';
+create temp table same_token_claim as select * from public.claim_equipment_signature_cleanup_candidates('2001-01-01T00:00:00Z','2001-01-01T00:00:00Z','2001-01-01T00:00:00Z',10,'e4000000-0000-0000-0000-000000000001');
+select is((select count(*)::integer from same_token_claim),0,'47 expired claim cannot be reclaimed with the same token');
+create temp table new_token_claim as select * from public.claim_equipment_signature_cleanup_candidates('2001-01-01T00:00:00Z','2001-01-01T00:00:00Z','2001-01-01T00:00:00Z',10,'e4000000-0000-0000-0000-000000000002');
+select is((select count(*)::integer from new_token_claim where operation_id='e1000000-0000-0000-0000-000000000001'),1,'48 expired claim is reclaimed with a new token');
+select is((select cleanup_claim_token from public.equipment_signature_operations where id='e1000000-0000-0000-0000-000000000001'),'e4000000-0000-0000-0000-000000000002'::uuid,'49 new token becomes authoritative');
+select throws_ok($$select public.ack_equipment_signature_cleanup('e1000000-0000-0000-0000-000000000001','e4000000-0000-0000-0000-000000000001','deleted',null)$$,'42501','EQUIPMENT_SIGNATURE_CLEANUP_CLAIM_REQUIRED','50 stale token cannot acknowledge after reclaim');
 select * from finish();
 rollback;
