@@ -357,6 +357,7 @@ declare
   v_ctx record;
   v_sess_id uuid;
   v_inv_id uuid;
+  v_session_date date := (clock_timestamp() at time zone 'Asia/Ho_Chi_Minh')::date - 1;
   v_png_sig text := 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
   v_conf_res jsonb;
 begin
@@ -373,11 +374,11 @@ begin
 
   -- Create active session
   insert into public.basic_medical_registrations (academic_year, semester, start_date, end_date, course_id, room_id, student_count, registrant_id, responsible_lecturer_id, created_by)
-  values ('2026-2027', 'HK1', clock_timestamp()::date, clock_timestamp()::date, v_ctx.course_id, v_ctx.room_id, 20, v_ctx.lecturer_id, v_ctx.lecturer_id, v_ctx.lecturer_id)
+  values ('2026-2027', 'HK1', v_session_date, v_session_date, v_ctx.course_id, v_ctx.room_id, 20, v_ctx.lecturer_id, v_ctx.lecturer_id, v_ctx.lecturer_id)
   returning id into v_ctx.registration_id;
 
   insert into public.class_schedules (course_id, course_code_snapshot, course_name_snapshot, room_id, lecturer_id, schedule_date, start_time, end_time, schedule_status, published_by, published_at, student_count, created_by, basic_medical_registration_id)
-  values (v_ctx.course_id, 'BM-101', 'Giải phẫu cơ bản', v_ctx.room_id, v_ctx.lecturer_id, clock_timestamp()::date, '08:00', '10:00', 'published', v_ctx.lecturer_id, clock_timestamp(), 20, v_ctx.lecturer_id, v_ctx.registration_id)
+  values (v_ctx.course_id, 'BM-101', 'Giải phẫu cơ bản', v_ctx.room_id, v_ctx.lecturer_id, v_session_date, '08:00', '10:00', 'published', v_ctx.lecturer_id, clock_timestamp(), 20, v_ctx.lecturer_id, v_ctx.registration_id)
   returning id into v_sess_id;
 
   insert into public.basic_medical_registration_sessions (registration_id, class_schedule_id, lesson_title, teaching_lecturer_id, session_number)
@@ -432,7 +433,7 @@ begin
 
   -- Create a second session for damage test
   insert into public.class_schedules (course_id, course_code_snapshot, course_name_snapshot, room_id, lecturer_id, schedule_date, start_time, end_time, schedule_status, published_by, published_at, student_count, created_by, basic_medical_registration_id)
-  values (v_ctx.course_id, 'BM-101', 'Giải phẫu cơ bản', v_ctx.room_id, v_ctx.lecturer_id, clock_timestamp()::date, '10:00', '12:00', 'published', v_ctx.lecturer_id, clock_timestamp(), 20, v_ctx.lecturer_id, v_ctx.registration_id)
+  values (v_ctx.course_id, 'BM-101', 'Giải phẫu cơ bản', v_ctx.room_id, v_ctx.lecturer_id, (clock_timestamp() at time zone 'Asia/Ho_Chi_Minh')::date - 1, '10:00', '12:00', 'published', v_ctx.lecturer_id, clock_timestamp(), 20, v_ctx.lecturer_id, v_ctx.registration_id)
   returning id into v_sess_id;
 
   insert into public.basic_medical_registration_sessions (registration_id, class_schedule_id, lesson_title, teaching_lecturer_id, session_number)

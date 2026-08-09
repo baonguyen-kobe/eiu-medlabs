@@ -3,25 +3,36 @@ begin;
 select plan(16);
 
 -- Deterministic helpers for time-of-day independent late request testing
+create function private.get_test_late_fixture()
+returns table (receive_local timestamp, return_local timestamp)
+language sql
+stable
+as $$
+  with local_now as (
+    select (now() at time zone 'Asia/Ho_Chi_Minh') as now_vn
+  ),
+  candidates as (
+    select pair.receive_local, pair.return_local
+    from local_now
+    cross join lateral (values
+      (now_vn::date + time '09:00', now_vn::date + time '11:00'),
+      (now_vn::date + time '14:00', now_vn::date + time '16:00'),
+      (now_vn::date + 1 + time '09:00', now_vn::date + 1 + time '11:00')
+    ) as pair(receive_local, return_local)
+  )
+  select receive_local, return_local
+  from candidates
+  where receive_local > (select now_vn + interval '2 hours' from local_now)
+  order by receive_local
+  limit 1;
+$$;
+
 create function private.get_test_late_receive_local()
 returns timestamp
 language sql
 stable
 as $$
-  with local_now as (
-    select (clock_timestamp() at time zone 'Asia/Ho_Chi_Minh') as now_vn
-  ),
-  candidates as (
-    select unnest(array[
-      (now_vn::date::text || ' 09:00:00')::timestamp,
-      (now_vn::date::text || ' 11:00:00')::timestamp,
-      (now_vn::date::text || ' 14:00:00')::timestamp,
-      (now_vn::date::text || ' 16:00:00')::timestamp,
-      ((now_vn::date + 1)::text || ' 09:00:00')::timestamp
-    ]) as slot
-    from local_now
-  )
-  select min(slot) from candidates where slot > (select now_vn from local_now);
+  select receive_local from private.get_test_late_fixture();
 $$;
 
 create function private.get_test_late_receive_at()
@@ -37,7 +48,8 @@ returns timestamptz
 language sql
 stable
 as $$
-  select (private.get_test_late_receive_local() + interval '2 hours') at time zone 'Asia/Ho_Chi_Minh';
+  select return_local at time zone 'Asia/Ho_Chi_Minh'
+  from private.get_test_late_fixture();
 $$;
 
 create function private.get_test_late_schedule_date()
