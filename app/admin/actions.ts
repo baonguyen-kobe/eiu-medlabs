@@ -1246,7 +1246,7 @@ function personnelRpcMessage(message: string) {
   ];
   return (
     mappings.find(([code]) => message.includes(code))?.[1] ??
-    "KhÃ´ng thá»ƒ cáº­p nháº­t nhÃ¢n sá»±. Vui lÃ²ng thá»­ láº¡i."
+    "Không thể cập nhật nhân sự. Vui lòng thử lại."
   );
 }
 
@@ -1344,12 +1344,15 @@ export async function savePersonnelChanges(
       message: personnelRpcMessage(beginError.message),
     };
   }
-  const operation = parsePersonnelUpdateOperation(operationData);
+  const operation = parsePersonnelUpdateOperation(operationData, {
+    previousEmail: current.email,
+    requestedEmail: email,
+    expectedVersion,
+  });
   if (!operation) {
     return {
       ok: false,
-      message:
-        "KhÃ´ng thá»ƒ khá»Ÿi táº¡o phiÃªn cáº­p nháº­t nhÃ¢n sá»± an toÃ n.",
+      message: "Không thể khởi tạo phiên cập nhật nhân sự an toàn.",
     };
   }
 
@@ -1364,7 +1367,10 @@ export async function savePersonnelChanges(
       await supabase.rpc("cancel_personnel_update", {
         target_operation_id: operation.operation_id,
       });
-      return { ok: false, message: authError.message };
+      return {
+        ok: false,
+        message: "Không thể cập nhật tài khoản đăng nhập. Vui lòng thử lại.",
+      };
     }
   }
   const { error: markAuthError } = await supabase.rpc(
