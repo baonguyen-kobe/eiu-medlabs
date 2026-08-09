@@ -1,11 +1,12 @@
 -- pgTAP Test Suite: equipment_signature_cleanup.test.sql
 begin;
-select plan(76);
+select plan(90);
 select has_column('public','equipment_signature_operations','cleanup_state','1 cleanup state exists');
 select has_column('public','equipment_signature_operations','cleanup_claim_token','2 claim token exists');
 select has_column('public','equipment_signature_operations','cleanup_claimed_at','3 claim time exists');
 select has_column('public','equipment_signature_operations','cleanup_completed_at','4 completion time exists');
 select has_column('public','equipment_signature_operations','cleanup_last_error','5 error metadata exists');
+select has_column('public','equipment_signature_operations','last_reserved_at','5a reservation lease exists');
 select ok(exists(select 1 from pg_constraint where conname='equipment_signature_operations_cleanup_coherence'),'6 cleanup coherence constraint exists');
 select ok((select pg_get_constraintdef(oid) from pg_constraint where conname='equipment_signature_operations_cleanup_coherence') like '%claimed%','7 claimed coherence is constrained');
 select ok((select pg_get_constraintdef(oid) from pg_constraint where conname='equipment_signature_operations_cleanup_coherence') like '%deleted%','8 terminal coherence is constrained');
@@ -25,12 +26,15 @@ select ok(pg_get_functiondef('public.claim_equipment_signature_cleanup_candidate
 select ok(pg_get_functiondef('public.claim_equipment_signature_cleanup_candidates(timestamptz,timestamptz,timestamptz,integer,uuid)'::regprocedure) like '%handover_recipient_signature_storage_path%','20 handover reference blocks claim');
 select ok(pg_get_functiondef('public.claim_equipment_signature_cleanup_candidates(timestamptz,timestamptz,timestamptz,integer,uuid)'::regprocedure) like '%return_recipient_signature_storage_path%','21 return reference blocks claim');
 select ok(pg_get_functiondef('public.claim_equipment_signature_cleanup_candidates(timestamptz,timestamptz,timestamptz,integer,uuid)'::regprocedure) like '%target_claimed_before%','22 expired claims use caller cutoff');
+select ok(lower(pg_get_functiondef('public.claim_equipment_signature_cleanup_candidates(timestamptz,timestamptz,timestamptz,integer,uuid)'::regprocedure)) like '%last_reserved_at%target_pending_before%','22a pending eligibility uses the reservation lease');
+select ok(lower(pg_get_functiondef('public.reserve_equipment_signature(uuid,text)'::regprocedure)) like '%last_reserved_at%clock_timestamp()%','22b reused reservations renew the lease');
 select ok(pg_get_functiondef('public.claim_equipment_signature_cleanup_candidates(timestamptz,timestamptz,timestamptz,integer,uuid)'::regprocedure) like '%target_limit not between 1 and 100%','23 claim limit is bounded');
 select ok(pg_get_functiondef('public.ack_equipment_signature_cleanup(uuid,uuid,text,text)'::regprocedure) like '%cleanup_claim_token <> target_claim_token%','24 ack token is bound');
 select ok(pg_get_functiondef('public.ack_equipment_signature_cleanup(uuid,uuid,text,text)'::regprocedure) like '%''deleted'',''missing'',''retry''%','25 ack outcomes are constrained');
 select ok(pg_get_functiondef('public.ack_equipment_signature_cleanup(uuid,uuid,text,text)'::regprocedure) like '%length(coalesce(target_error,'''')) > 500%','26 retry error is bounded');
 select ok(to_regprocedure('private.guard_equipment_signature_cleanup_fence()') is not null,'27 finalize fence trigger function exists');
-select ok(pg_get_functiondef('private.guard_equipment_signature_cleanup_fence()'::regprocedure) like '%old.cleanup_state = ''claimed'' and new.state = ''adopted''%','28 active claim fences adoption');
+select ok(regexp_replace(lower(pg_get_functiondef('private.guard_equipment_signature_cleanup_fence()'::regprocedure)), '\s+', '', 'g') like '%old.cleanup_state<>''none''%','28 cleanup lifecycle fences adoption');
+select ok(pg_get_functiondef('public.finalize_equipment_signature(uuid)'::regprocedure) like '%EQUIPMENT_SIGNATURE_CLEANUP_OWNED%','28a finalize returns a stable cleanup-owned error');
 select ok(exists(select 1 from pg_trigger where tgname='equipment_signature_operations_cleanup_fence' and not tgisinternal),'29 adoption fence trigger exists');
 select ok((select count(*) from pg_constraint where conname='equipment_signature_operations_state_check')=1,'30 business state remains constrained');
 select ok((select pg_get_constraintdef(oid) from pg_constraint where conname='equipment_signature_operations_state_check') like '%adopted%','31 adopted state retained');
@@ -136,6 +140,14 @@ select throws_ok(
 
 create temp table reservation_a as
 select * from public.reserve_equipment_signature('e2000000-0000-0000-0000-000000000101', 'handover');
+set local role postgres;
+update public.equipment_signature_operations
+set last_reserved_at = clock_timestamp() - interval '2 hours'
+where id = (select operation_id from reservation_a);
+create temp table reservation_a_stale_lease as
+select last_reserved_at from public.equipment_signature_operations
+where id = (select operation_id from reservation_a);
+set local role authenticated;
 create temp table reservation_a_reuse as
 select * from public.reserve_equipment_signature('e2000000-0000-0000-0000-000000000101', 'handover');
 set local role postgres;
@@ -144,6 +156,19 @@ select is((select operation_id from reservation_a_reuse), (select operation_id f
 select is((select object_path from reservation_a_reuse), (select object_path from reservation_a), 'normal pending reservation reuses its object path');
 select is((select state from public.equipment_signature_operations where id = (select operation_id from reservation_a)), 'pending', 'normal reservation remains pending');
 select is((select cleanup_state from public.equipment_signature_operations where id = (select operation_id from reservation_a)), 'none', 'normal reservation remains outside cleanup');
+select ok((select last_reserved_at > (select last_reserved_at from reservation_a_stale_lease) from public.equipment_signature_operations where id = (select operation_id from reservation_a)), 'reusing a stale operation renews its lease');
+
+set local role service_role;
+create temp table renewed_lease_claim as
+select * from public.claim_equipment_signature_cleanup_candidates(
+  (select last_reserved_at + interval '1 hour' from reservation_a_stale_lease),
+  clock_timestamp() + interval '1 hour',
+  clock_timestamp() - interval '1 hour',
+  10,
+  'e4000000-0000-0000-0000-000000000100'
+);
+set local role postgres;
+select is((select count(*)::integer from renewed_lease_claim), 0, 'a cutoff between stale and renewed leases cannot claim the reused operation');
 
 set local role service_role;
 create temp table reservation_a_claim as
@@ -207,11 +232,33 @@ select throws_ok(
 );
 set local role postgres;
 
-insert into public.equipment_signature_operations (id,request_id,phase,actor_id,object_path,state,created_at,finalized_at) values
-('e1000000-0000-0000-0000-000000000001','e2000000-0000-0000-0000-000000000001','handover','e3000000-0000-0000-0000-000000000001','equipment-requests/e2000000-0000-0000-0000-000000000001/handover/e1000000-0000-0000-0000-000000000001.png','pending','2000-01-01T00:00:00Z',null),
-('e1000000-0000-0000-0000-000000000002','e2000000-0000-0000-0000-000000000002','return','e3000000-0000-0000-0000-000000000002','equipment-requests/e2000000-0000-0000-0000-000000000002/return/e1000000-0000-0000-0000-000000000002.png','pending','2099-01-01T00:00:00Z',null),
-('e1000000-0000-0000-0000-000000000003','e2000000-0000-0000-0000-000000000003','handover','e3000000-0000-0000-0000-000000000003','equipment-requests/e2000000-0000-0000-0000-000000000003/handover/e1000000-0000-0000-0000-000000000003.png','rejected','2000-01-01T00:00:00Z','2000-01-02T00:00:00Z'),
-('e1000000-0000-0000-0000-000000000004','e2000000-0000-0000-0000-000000000004','return','e3000000-0000-0000-0000-000000000004','equipment-requests/e2000000-0000-0000-0000-000000000004/return/e1000000-0000-0000-0000-000000000004.png','adopted','2000-01-01T00:00:00Z','2000-01-02T00:00:00Z');
+insert into public.equipment_signature_operations (
+  id, request_id, phase, actor_id, object_path, state, created_at,
+  last_reserved_at, cleanup_state, cleanup_claim_token, cleanup_claimed_at,
+  cleanup_completed_at
+)
+values
+  ('e1000000-0000-0000-0000-000000000010', 'e2000000-0000-0000-0000-000000000101', 'handover', (select registrant_id from public.equipment_requests where id = 'e2000000-0000-0000-0000-000000000101'), 'equipment-requests/e2000000-0000-0000-0000-000000000101/handover/e1000000-0000-0000-0000-000000000010.png', 'pending', clock_timestamp(), clock_timestamp(), 'claimed', 'e4000000-0000-0000-0000-000000000010', clock_timestamp(), null),
+  ('e1000000-0000-0000-0000-000000000011', 'e2000000-0000-0000-0000-000000000101', 'handover', (select registrant_id from public.equipment_requests where id = 'e2000000-0000-0000-0000-000000000101'), 'equipment-requests/e2000000-0000-0000-0000-000000000101/handover/e1000000-0000-0000-0000-000000000011.png', 'pending', clock_timestamp(), clock_timestamp(), 'retry', null, null, null),
+  ('e1000000-0000-0000-0000-000000000012', 'e2000000-0000-0000-0000-000000000101', 'handover', (select registrant_id from public.equipment_requests where id = 'e2000000-0000-0000-0000-000000000101'), 'equipment-requests/e2000000-0000-0000-0000-000000000101/handover/e1000000-0000-0000-0000-000000000012.png', 'pending', clock_timestamp(), clock_timestamp(), 'deleted', null, null, clock_timestamp()),
+  ('e1000000-0000-0000-0000-000000000013', 'e2000000-0000-0000-0000-000000000101', 'handover', (select registrant_id from public.equipment_requests where id = 'e2000000-0000-0000-0000-000000000101'), 'equipment-requests/e2000000-0000-0000-0000-000000000101/handover/e1000000-0000-0000-0000-000000000013.png', 'pending', clock_timestamp(), clock_timestamp(), 'missing', null, null, clock_timestamp());
+
+set local role authenticated;
+select throws_ok($$select public.finalize_equipment_signature('e1000000-0000-0000-0000-000000000010')$$, '55000', 'EQUIPMENT_SIGNATURE_CLEANUP_OWNED', 'claimed cleanup ownership cannot be adopted');
+select throws_ok($$select public.finalize_equipment_signature('e1000000-0000-0000-0000-000000000011')$$, '55000', 'EQUIPMENT_SIGNATURE_CLEANUP_OWNED', 'retry cleanup ownership cannot be adopted');
+select throws_ok($$select public.finalize_equipment_signature('e1000000-0000-0000-0000-000000000012')$$, '55000', 'EQUIPMENT_SIGNATURE_CLEANUP_OWNED', 'deleted cleanup ownership cannot be adopted');
+select throws_ok($$select public.finalize_equipment_signature('e1000000-0000-0000-0000-000000000013')$$, '55000', 'EQUIPMENT_SIGNATURE_CLEANUP_OWNED', 'missing cleanup ownership cannot be adopted');
+set local role postgres;
+select is((select handover_recipient_signature_storage_path from public.equipment_requests where id = 'e2000000-0000-0000-0000-000000000101'), (select object_path from reservation_c), 'claimed finalize leaves the request path unchanged');
+select is((select handover_recipient_signature_storage_path from public.equipment_requests where id = 'e2000000-0000-0000-0000-000000000101'), (select object_path from reservation_c), 'retry finalize leaves the request path unchanged');
+select is((select handover_recipient_signature_storage_path from public.equipment_requests where id = 'e2000000-0000-0000-0000-000000000101'), (select object_path from reservation_c), 'deleted finalize leaves the request path unchanged');
+select is((select handover_recipient_signature_storage_path from public.equipment_requests where id = 'e2000000-0000-0000-0000-000000000101'), (select object_path from reservation_c), 'missing finalize leaves the request path unchanged');
+
+insert into public.equipment_signature_operations (id,request_id,phase,actor_id,object_path,state,created_at,last_reserved_at,finalized_at) values
+('e1000000-0000-0000-0000-000000000001','e2000000-0000-0000-0000-000000000001','handover','e3000000-0000-0000-0000-000000000001','equipment-requests/e2000000-0000-0000-0000-000000000001/handover/e1000000-0000-0000-0000-000000000001.png','pending','2000-01-01T00:00:00Z','2000-01-01T00:00:00Z',null),
+('e1000000-0000-0000-0000-000000000002','e2000000-0000-0000-0000-000000000002','return','e3000000-0000-0000-0000-000000000002','equipment-requests/e2000000-0000-0000-0000-000000000002/return/e1000000-0000-0000-0000-000000000002.png','pending','2099-01-01T00:00:00Z','2099-01-01T00:00:00Z',null),
+('e1000000-0000-0000-0000-000000000003','e2000000-0000-0000-0000-000000000003','handover','e3000000-0000-0000-0000-000000000003','equipment-requests/e2000000-0000-0000-0000-000000000003/handover/e1000000-0000-0000-0000-000000000003.png','rejected','2000-01-01T00:00:00Z','2000-01-01T00:00:00Z','2000-01-02T00:00:00Z'),
+('e1000000-0000-0000-0000-000000000004','e2000000-0000-0000-0000-000000000004','return','e3000000-0000-0000-0000-000000000004','equipment-requests/e2000000-0000-0000-0000-000000000004/return/e1000000-0000-0000-0000-000000000004.png','adopted','2000-01-01T00:00:00Z','2000-01-01T00:00:00Z','2000-01-02T00:00:00Z');
 create temp table cleanup_claims as select * from public.claim_equipment_signature_cleanup_candidates('2001-01-01T00:00:00Z','2001-01-01T00:00:00Z','2001-01-01T00:00:00Z',10,'e4000000-0000-0000-0000-000000000001');
 select is((select count(*)::integer from cleanup_claims where operation_id='e1000000-0000-0000-0000-000000000001'),1,'35 stale pending is claimed');
 select is((select count(*)::integer from cleanup_claims where operation_id='e1000000-0000-0000-0000-000000000002'),0,'36 fresh pending is excluded');

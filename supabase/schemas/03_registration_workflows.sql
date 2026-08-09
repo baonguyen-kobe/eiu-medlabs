@@ -1360,6 +1360,7 @@ create table public.equipment_signature_operations (
   ),
   state text not null constraint equipment_signature_operations_state_check check (state in ('pending', 'adopted', 'rejected')),
   created_at timestamptz not null default clock_timestamp(),
+  last_reserved_at timestamptz not null default clock_timestamp(),
   finalized_at timestamptz
 );
 
@@ -1378,7 +1379,7 @@ create unique index equipment_signature_operations_pending_actor_idx
   where state = 'pending' and cleanup_state = 'none';
 create index equipment_signature_operations_request_idx
   on public.equipment_signature_operations(request_id, phase);
-create index equipment_signature_operations_cleanup_claim_idx on public.equipment_signature_operations(cleanup_state, state, created_at);
+create index equipment_signature_operations_cleanup_claim_idx on public.equipment_signature_operations(cleanup_state, state, last_reserved_at);
 
 create or replace function private.guard_equipment_request_update()
 returns trigger
@@ -1598,7 +1599,14 @@ begin
     if request_row.status not in ('handed_over','returned') then raise exception 'EQUIPMENT_RETURN_PREREQUISITE_REQUIRED' using errcode = '22023'; end if;
   end if;
   select * into existing from public.equipment_signature_operations as operations where operations.request_id = target_request_id and operations.phase = target_phase and operations.actor_id = current_actor_id and operations.state = 'pending' and operations.cleanup_state = 'none' for update;
-  if existing.id is not null then return query select existing.id, existing.object_path, existing.state; return; end if;
+  if existing.id is not null then
+    update public.equipment_signature_operations
+    set last_reserved_at = clock_timestamp()
+    where id = existing.id
+    returning * into existing;
+    return query select existing.id, existing.object_path, existing.state;
+    return;
+  end if;
   new_path := format('equipment-requests/%s/%s/%s.png', lower(target_request_id::text), target_phase, lower(new_id::text));
   insert into public.equipment_signature_operations(id,request_id,phase,actor_id,object_path,state) values (new_id,target_request_id,target_phase,current_actor_id,new_path,'pending');
   return query select new_id,new_path,'pending'::text;
@@ -1633,6 +1641,7 @@ begin
   if not exists (select 1 from public.class_schedules schedules where schedules.id = request_row.class_schedule_id and schedules.schedule_status <> 'cancelled') then raise exception 'EQUIPMENT_REQUEST_CANCELLED' using errcode = '22023'; end if;
   if operation_row.state = 'adopted' then return request_row; end if;
   if operation_row.state <> 'pending' then raise exception 'EQUIPMENT_SIGNATURE_OPERATION_REJECTED' using errcode = '22023'; end if;
+  if operation_row.cleanup_state <> 'none' then raise exception 'EQUIPMENT_SIGNATURE_CLEANUP_OWNED' using errcode = '55000'; end if;
   if current_actor_id not in (request_row.registrant_id, request_row.responsible_lecturer_id) then
     update public.equipment_signature_operations set state='rejected', finalized_at=clock_timestamp() where id=operation_row.id;
     raise exception 'EQUIPMENT_SIGNATURE_SIGNER_REQUIRED' using errcode = '42501';
@@ -1668,7 +1677,7 @@ grant execute on function public.finalize_equipment_signature(uuid) to authentic
 create or replace function private.guard_equipment_signature_cleanup_fence()
 returns trigger language plpgsql security invoker set search_path = '' as $$
 begin
-  if old.cleanup_state = 'claimed' and new.state = 'adopted' then raise exception 'EQUIPMENT_SIGNATURE_CLEANUP_CLAIMED' using errcode = '55000'; end if;
+  if new.state = 'adopted' and (old.cleanup_state <> 'none' or new.cleanup_state <> 'none') then raise exception 'EQUIPMENT_SIGNATURE_CLEANUP_OWNED' using errcode = '55000'; end if;
   return new;
 end;
 $$;
@@ -1680,7 +1689,7 @@ language plpgsql security definer set search_path = '' as $$
 begin
   if target_pending_before is null or target_rejected_before is null or target_claimed_before is null or target_claim_token is null or target_limit not between 1 and 100 then raise exception 'EQUIPMENT_SIGNATURE_CLEANUP_INPUT_INVALID' using errcode = '22023'; end if;
   return query with candidates as (
-    select o.id from public.equipment_signature_operations o where o.state in ('pending','rejected') and ((o.state='pending' and o.created_at < target_pending_before) or (o.state='rejected' and coalesce(o.finalized_at,o.created_at) < target_rejected_before)) and (o.cleanup_state in ('none','retry') or (o.cleanup_state='claimed' and o.cleanup_claimed_at < target_claimed_before and o.cleanup_claim_token is distinct from target_claim_token)) and not exists (select 1 from public.equipment_requests r where r.handover_recipient_signature_storage_path=o.object_path or r.return_recipient_signature_storage_path=o.object_path) order by o.created_at for update skip locked limit target_limit
+    select o.id from public.equipment_signature_operations o where o.state in ('pending','rejected') and ((o.state='pending' and o.last_reserved_at < target_pending_before) or (o.state='rejected' and coalesce(o.finalized_at,o.created_at) < target_rejected_before)) and (o.cleanup_state in ('none','retry') or (o.cleanup_state='claimed' and o.cleanup_claimed_at < target_claimed_before and o.cleanup_claim_token is distinct from target_claim_token)) and not exists (select 1 from public.equipment_requests r where r.handover_recipient_signature_storage_path=o.object_path or r.return_recipient_signature_storage_path=o.object_path) order by o.last_reserved_at for update skip locked limit target_limit
   ), claimed as (
     update public.equipment_signature_operations o set cleanup_state='claimed', cleanup_claim_token=target_claim_token, cleanup_claimed_at=clock_timestamp(), cleanup_completed_at=null, cleanup_last_error=null from candidates c where o.id=c.id returning o.id,o.request_id,o.phase,o.object_path,o.state,o.cleanup_claim_token
   ) select claimed_rows.id,claimed_rows.request_id,claimed_rows.phase,claimed_rows.object_path,claimed_rows.state,claimed_rows.cleanup_claim_token from claimed as claimed_rows;
