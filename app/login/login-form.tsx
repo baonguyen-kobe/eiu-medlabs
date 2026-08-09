@@ -27,6 +27,13 @@ export function LoginForm({ oauthError }: { oauthError?: string }) {
       },
     });
     if (error) {
+      if (!error.message.includes("Unsupported provider")) {
+        setGoogleError(
+          "Không thể bắt đầu đăng nhập bằng Google. Vui lòng thử lại.",
+        );
+        setGooglePending(false);
+        return;
+      }
       setGoogleError(
         error.message.includes("Unsupported provider")
           ? "Google chưa được cấu hình trong Supabase local."
