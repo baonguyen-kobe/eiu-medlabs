@@ -3770,6 +3770,10 @@ test("Phiếu thiết bị chỉ cho ký giao sau khi kho xác nhận và GV ph�
     );
     assert.ifError(responsibleSignsHandover.error);
     assert.equal(responsibleSignsHandover.data.status, "handed_over");
+    assert.equal(
+      responsibleSignsHandover.data.handover_recipient_signature,
+      signature,
+    );
 
     const managerAddsAfterHandover = await staff.supabase
       .from("equipment_request_items")
@@ -3791,6 +3795,10 @@ test("Phiếu thiết bị chỉ cho ký giao sau khi kho xác nhận và GV ph�
     );
     assert.ifError(responsibleSignsReturn.error);
     assert.equal(responsibleSignsReturn.data.status, "handed_over");
+    assert.equal(
+      responsibleSignsReturn.data.return_recipient_signature,
+      signature,
+    );
 
     const staffConfirmsReturn = await staff.supabase.rpc(
       "manager_confirm_equipment_status",
