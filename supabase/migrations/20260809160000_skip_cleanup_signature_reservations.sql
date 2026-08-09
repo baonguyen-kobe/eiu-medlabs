@@ -13,8 +13,12 @@ begin
   if not exists (select 1 from public.class_schedules s where s.id=request_row.class_schedule_id and s.schedule_status <> 'cancelled') then raise exception 'EQUIPMENT_REQUEST_CANCELLED' using errcode='22023'; end if;
   if current_actor_id not in (request_row.registrant_id,request_row.responsible_lecturer_id) then raise exception 'EQUIPMENT_SIGNATURE_SIGNER_REQUIRED' using errcode='42501'; end if;
   if target_phase='handover' then
-    if request_row.handover_recipient_signature is not null or request_row.handover_recipient_signature_storage_path is not null or (request_row.status not in ('new','preparing','handed_over') or (request_row.handover_staff_confirmed_at is null and request_row.status <> 'handed_over')) then raise exception 'EQUIPMENT_HANDOVER_PREREQUISITE_REQUIRED' using errcode='22023'; end if;
-  elsif request_row.return_recipient_signature is not null or request_row.return_recipient_signature_storage_path is not null or request_row.status not in ('handed_over','returned') then raise exception 'EQUIPMENT_RETURN_PREREQUISITE_REQUIRED' using errcode='22023'; end if;
+    if request_row.handover_recipient_signature is not null or request_row.handover_recipient_signature_storage_path is not null then raise exception 'EQUIPMENT_SIGNATURE_ALREADY_SIGNED' using errcode='22023'; end if;
+    if request_row.status not in ('new','preparing','handed_over') or (request_row.handover_staff_confirmed_at is null and request_row.status <> 'handed_over') then raise exception 'EQUIPMENT_HANDOVER_PREREQUISITE_REQUIRED' using errcode='22023'; end if;
+  else
+    if request_row.return_recipient_signature is not null or request_row.return_recipient_signature_storage_path is not null then raise exception 'EQUIPMENT_SIGNATURE_ALREADY_SIGNED' using errcode='22023'; end if;
+    if request_row.status not in ('handed_over','returned') then raise exception 'EQUIPMENT_RETURN_PREREQUISITE_REQUIRED' using errcode='22023'; end if;
+  end if;
   select * into existing from public.equipment_signature_operations o where o.request_id=target_request_id and o.phase=target_phase and o.actor_id=current_actor_id and o.state='pending' and o.cleanup_state='none' for update;
   if existing.id is not null then return query select existing.id,existing.object_path,existing.state; return; end if;
   new_path:=format('equipment-requests/%s/%s/%s.png',lower(target_request_id::text),target_phase,lower(new_id::text));
