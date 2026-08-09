@@ -1375,7 +1375,7 @@ alter table public.equipment_signature_operations enable row level security;
 revoke all on table public.equipment_signature_operations from public, anon, authenticated;
 create unique index equipment_signature_operations_pending_actor_idx
   on public.equipment_signature_operations(request_id, phase, actor_id)
-  where state = 'pending';
+  where state = 'pending' and cleanup_state = 'none';
 create index equipment_signature_operations_request_idx
   on public.equipment_signature_operations(request_id, phase);
 create index equipment_signature_operations_cleanup_claim_idx on public.equipment_signature_operations(cleanup_state, state, created_at);
@@ -1597,7 +1597,7 @@ begin
     if request_row.return_recipient_signature is not null or request_row.return_recipient_signature_storage_path is not null then raise exception 'EQUIPMENT_SIGNATURE_ALREADY_SIGNED' using errcode = '22023'; end if;
     if request_row.status not in ('handed_over','returned') then raise exception 'EQUIPMENT_RETURN_PREREQUISITE_REQUIRED' using errcode = '22023'; end if;
   end if;
-  select * into existing from public.equipment_signature_operations as operations where operations.request_id = target_request_id and operations.phase = target_phase and operations.actor_id = current_actor_id and operations.state = 'pending' for update;
+  select * into existing from public.equipment_signature_operations as operations where operations.request_id = target_request_id and operations.phase = target_phase and operations.actor_id = current_actor_id and operations.state = 'pending' and operations.cleanup_state = 'none' for update;
   if existing.id is not null then return query select existing.id, existing.object_path, existing.state; return; end if;
   new_path := format('equipment-requests/%s/%s/%s.png', lower(target_request_id::text), target_phase, lower(new_id::text));
   insert into public.equipment_signature_operations(id,request_id,phase,actor_id,object_path,state) values (new_id,target_request_id,target_phase,current_actor_id,new_path,'pending');
