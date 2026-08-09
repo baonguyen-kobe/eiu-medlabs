@@ -47,29 +47,29 @@ select is(
 
 -- Test 7: Total RLS policies on storage.objects for equipment_signatures is exactly 0
 select is(
-  (select count(*)::integer from pg_policies where schemaname = 'storage' and tablename = 'objects' and (qual ilike '%equipment_signatures%' or with_check ilike '%equipment_signatures%')),
+  (select count(*)::integer from pg_policies where schemaname = 'storage' and tablename = 'objects' and (coalesce(qual, '') ilike '%equipment_signatures%' or coalesce(with_check, '') ilike '%equipment_signatures%')),
   0,
   'Test 7. Zero RLS policies exist on storage.objects for equipment_signatures'
 );
 
--- Test 8: Other storage bucket policies (e.g. equipment_handovers) remain intact
-select ok(
-  exists (
-    select 1 from pg_policies
-    where schemaname = 'storage'
-      and tablename = 'objects'
-      and (qual ilike '%equipment_handovers%' or with_check ilike '%equipment_handovers%')
-  ),
-  'Test 8. RLS policies for other storage buckets (equipment_handovers) remain intact'
+-- Test 8: equipment_signatures allowed MIME types remain unchanged
+select is(
+  (select allowed_mime_types from storage.buckets where id = 'equipment_signatures'),
+  array['image/png', 'image/jpeg']::text[],
+  'Test 8. equipment_signatures allowed_mime_types remain image/png and image/jpeg'
 );
 
--- Test 9: Direct authenticated SELECT on storage.objects for equipment_signatures yields 0 rows
+select set_config('role', 'postgres', true);
+insert into storage.objects (bucket_id, name)
+values ('equipment_signatures', 'signature-a-authenticated-denial-test.png');
+
 select set_config('role', 'authenticated', true);
 select is(
-  (select count(*)::integer from storage.objects where bucket_id = 'equipment_signatures'),
+  (select count(*)::integer from storage.objects where bucket_id = 'equipment_signatures' and name = 'signature-a-authenticated-denial-test.png'),
   0,
-  'Test 9. Direct authenticated query on storage.objects for equipment_signatures returns 0 rows'
+  'Test 9. Authenticated users cannot see a controlled equipment_signatures object'
 );
+select set_config('role', 'postgres', true);
 
 select * from finish();
 rollback;
