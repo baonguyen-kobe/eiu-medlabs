@@ -152,7 +152,7 @@ export async function addEquipmentRequestItem({
     };
   }
 
-  const { data: inserted } = await supabase
+  const { data: inserted, error: itemLoadError } = await supabase
     .from("equipment_request_items")
     .select(
       "id,quantity,skill_name,note,equipment_catalog(id,item_name,commercial_name,item_type,country_of_origin,manufacturer,model,unit)",
@@ -165,6 +165,12 @@ export async function addEquipmentRequestItem({
   revalidatePath("/equipment/requests");
   revalidatePath("/equipment/mine");
   revalidatePath("/equipment/register");
+  if (itemLoadError || !inserted) {
+    return {
+      ok: true,
+      message: "Đã bổ sung thiết bị. Danh sách sẽ được làm mới.",
+    };
+  }
   return {
     ok: true,
     message: "Đã bổ sung thiết bị vào phiếu.",
