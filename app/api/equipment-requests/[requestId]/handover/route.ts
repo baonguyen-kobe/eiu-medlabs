@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import {
   createEquipmentHandoverPdf,
+  equipmentHandoverPdfSelect,
   type EquipmentHandoverRequest,
 } from "@/lib/equipment-handover-pdf";
 import { formatEquipmentRequestCode } from "@/lib/equipment-request-code";
-import { equipmentHandoverSelect } from "@/lib/equipment-requests";
 import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -36,7 +36,7 @@ export async function GET(
   const { requestId } = await params;
   const { data, error } = await supabase
     .from("equipment_requests")
-    .select(equipmentHandoverSelect)
+    .select(equipmentHandoverPdfSelect)
     .eq("id", requestId)
     .maybeSingle();
   if (error || !data) {

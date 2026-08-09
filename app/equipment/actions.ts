@@ -14,7 +14,12 @@ import {
   type EquipmentRequestListItem,
   type EquipmentRequestStatus,
 } from "@/lib/equipment-requests";
+import { parseEquipmentSignatureDataUrl } from "@/lib/equipment-signature-storage-core";
 import { NURSING_SKILLS_ROOM_TYPE_ID } from "@/lib/room-types";
+import {
+  EquipmentSignatureStorageError,
+  uploadEquipmentSignature,
+} from "@/lib/equipment-signature-storage";
 import { createClient } from "@/lib/supabase/server";
 
 export type EquipmentActionState = {
@@ -294,13 +299,15 @@ export async function confirmEquipmentRequestHandoff(
     !/^[0-9a-f-]{36}$/i.test(requestId) ||
     !["handover", "return"].includes(phase)
   ) {
-    return { ok: false, message: "Phiếu hoặc bước xác nhận không hợp lệ." };
+    return {
+      ok: false,
+      message: "Phiếu hoặc bước xác nhận không hợp lệ.",
+    };
   }
-  if (
-    !signature.startsWith("data:image/png;base64,") ||
-    signature.length < 100 ||
-    signature.length > 400000
-  ) {
+
+  try {
+    parseEquipmentSignatureDataUrl(signature);
+  } catch {
     return { ok: false, message: "Chữ ký điện tử không hợp lệ." };
   }
 
@@ -310,31 +317,118 @@ export async function confirmEquipmentRequestHandoff(
     return { ok: false, message: "Phiên đăng nhập đã hết hạn." };
   }
 
-  const { data, error } = await supabase.rpc(
-    "registrant_confirm_equipment_handoff",
-    {
-      target_request_id: requestId,
-      target_phase: phase,
-      target_signature: signature,
-    },
+  const { data: reservation, error: reservationError } = await supabase.rpc(
+    "reserve_equipment_signature",
+    { target_request_id: requestId, target_phase: phase },
   );
-  if (error || !data) {
+  const reserved = Array.isArray(reservation) ? reservation[0] : reservation;
+  const operation = reserved as {
+    operation_id?: unknown;
+    object_path?: unknown;
+    state?: unknown;
+  } | null;
+  if (
+    reservationError ||
+    !operation ||
+    typeof operation.operation_id !== "string" ||
+    typeof operation.object_path !== "string" ||
+    typeof operation.state !== "string"
+  ) {
     return {
       ok: false,
-      message: error?.message || "Không thể lưu chữ ký xác nhận.",
+      message: "Không thể đặt chỗ chữ ký xác nhận.",
     };
   }
 
-  const row = toEquipmentConfirmationState(data as Record<string, unknown>);
-  const message =
-    phase === "handover"
-      ? row.status === "handed_over"
-        ? "Đã đủ hai xác nhận và chuyển sang Xác nhận đã giao."
-        : "Đã lưu chữ ký giao; đang chờ xác nhận của kho."
-      : row.status === "completed"
-        ? "Đã đủ hai xác nhận trả và hoàn thành phiếu."
-        : "Đã lưu chữ ký trả; đang chờ xác nhận của kho.";
-  return { ok: true, message, data: row };
+  const operationId = operation.operation_id;
+  const objectPath = operation.object_path;
+  const readOperationState = async () => {
+    const { data: status } = await supabase.rpc(
+      "get_equipment_signature_operation_status",
+      { target_operation_id: operationId },
+    );
+    const row = Array.isArray(status) ? status[0] : status;
+    return (row as { state?: unknown } | null)?.state;
+  };
+  const finalize = () =>
+    supabase.rpc("finalize_equipment_signature", {
+      target_operation_id: operationId,
+    });
+  const toSuccess = (row: Record<string, unknown>) => {
+    const confirmation = toEquipmentConfirmationState(row);
+    const message =
+      phase === "handover"
+        ? confirmation.status === "handed_over"
+          ? "Đã đủ hai xác nhận và chuyển sang Xác nhận đã giao."
+          : "Đã lưu chữ ký giao; đang chờ xác nhận của kho."
+        : confirmation.status === "completed"
+          ? "Đã đủ hai xác nhận trả và hoàn thành phiếu."
+          : "Đã lưu chữ ký trả; đang chờ xác nhận của kho.";
+    return { ok: true, message, data: confirmation };
+  };
+
+  if (operation.state === "rejected") {
+    return { ok: false, message: "Chữ ký không còn hợp lệ để xác nhận." };
+  }
+  if (operation.state === "adopted") {
+    const { data, error } = await finalize();
+    return error || !data
+      ? { ok: false, message: "Không thể tải trạng thái chữ ký đã xác nhận." }
+      : toSuccess(data as Record<string, unknown>);
+  }
+  if (operation.state !== "pending") {
+    return { ok: false, message: "Trạng thái chữ ký không hợp lệ." };
+  }
+
+  try {
+    await uploadEquipmentSignature({
+      requestId,
+      phase,
+      operationId,
+      objectPath,
+      signatureDataUrl: signature,
+    });
+  } catch (error) {
+    if (
+      !(error instanceof EquipmentSignatureStorageError) ||
+      error.code !== "SIGNATURE_STORAGE_CONFLICT"
+    ) {
+      return {
+        ok: false,
+        message: "Không thể tải chữ ký lên kho lưu trữ. Vui lòng thử lại.",
+      };
+    }
+
+    const state = await readOperationState();
+    if (state === "rejected") {
+      return { ok: false, message: "Chữ ký không còn hợp lệ để xác nhận." };
+    }
+    if (state !== "pending" && state !== "adopted") {
+      return {
+        ok: false,
+        message: "Không thể xác minh trạng thái chữ ký. Vui lòng thử lại.",
+      };
+    }
+  }
+
+  let { data, error } = await finalize();
+  if (error || !data) {
+    const state = await readOperationState();
+    if (state === "adopted") {
+      ({ data, error } = await finalize());
+    } else if (state === "rejected") {
+      return { ok: false, message: "Chữ ký không còn hợp lệ để xác nhận." };
+    } else {
+      return {
+        ok: false,
+        message: "Chữ ký đang chờ xác nhận an toàn. Vui lòng thử lại.",
+      };
+    }
+  }
+
+  return error || !data
+    ? { ok: false, message: "Không thể tải trạng thái chữ ký đã xác nhận." }
+    : toSuccess(data as Record<string, unknown>);
 }
 
 export async function updateEquipmentRequest(

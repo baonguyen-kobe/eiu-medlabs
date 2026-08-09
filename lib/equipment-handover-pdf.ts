@@ -1,7 +1,15 @@
 import path from "node:path";
+import {
+  downloadEquipmentSignature,
+  type DownloadEquipmentSignatureInput,
+} from "@/lib/equipment-signature-storage";
+import { resolveEquipmentSignatureForPdf } from "@/lib/equipment-handover-pdf-signatures";
 import { formatEquipmentRequestCode } from "@/lib/equipment-request-code";
 import PDFDocument from "pdfkit";
-import type { EquipmentRequestListItem } from "@/lib/equipment-requests";
+import {
+  equipmentHandoverSelect,
+  type EquipmentRequestListItem,
+} from "@/lib/equipment-requests";
 
 const regularFontPath = path.join(
   process.cwd(),
@@ -40,9 +48,15 @@ export type EquipmentHandoverRequest = EquipmentRequestListItem & {
   return_staff: { full_name: string } | null;
   handover_recipient_signature: string | null;
   return_recipient_signature: string | null;
+  handover_recipient_signature_storage_path: string | null;
+  return_recipient_signature_storage_path: string | null;
 };
 
 type Item = EquipmentHandoverRequest["equipment_request_items"][number];
+
+export const equipmentHandoverPdfSelect =
+  equipmentHandoverSelect +
+  ",handover_recipient_signature_storage_path,return_recipient_signature_storage_path";
 
 const dateFormatter = new Intl.DateTimeFormat("vi-VN", {
   timeZone: "Asia/Ho_Chi_Minh",
@@ -69,15 +83,6 @@ function formatDate(value: string | Date) {
 
 function formatTime(value: string | Date) {
   return timeFormatter.format(new Date(value));
-}
-
-function signatureBuffer(value: string | null) {
-  if (!value?.startsWith("data:image/png;base64,")) return null;
-  try {
-    return Buffer.from(value.slice(value.indexOf(",") + 1), "base64");
-  } catch {
-    return null;
-  }
 }
 
 function drawBrandHeader(
@@ -590,7 +595,7 @@ function drawSignatureBox(
     .stroke();
 }
 
-function drawSignatures(
+async function drawSignatures(
   doc: PDFKit.PDFDocument,
   y: number,
   request: EquipmentHandoverRequest,
@@ -604,6 +609,28 @@ function drawSignatures(
   const width = (CONTENT_WIDTH - gap) / 2;
   const handoverAt = request.handover_effective_at ?? request.receive_at;
   const returnAt = request.return_effective_at ?? request.return_at;
+  const download = (input: DownloadEquipmentSignatureInput) =>
+    downloadEquipmentSignature(input);
+  const [handoverSignature, returnSignature] = await Promise.all([
+    resolveEquipmentSignatureForPdf(
+      {
+        requestId: request.id,
+        phase: "handover",
+        storagePath: request.handover_recipient_signature_storage_path,
+        legacyDataUrl: request.handover_recipient_signature,
+      },
+      download,
+    ),
+    resolveEquipmentSignatureForPdf(
+      {
+        requestId: request.id,
+        phase: "return",
+        storagePath: request.return_recipient_signature_storage_path,
+        legacyDataUrl: request.return_recipient_signature,
+      },
+      download,
+    ),
+  ]);
   drawSignatureBox(
     doc,
     LEFT,
@@ -615,7 +642,7 @@ function drawSignatures(
     {
       leftName: request.handover_staff?.full_name,
       leftTypedNameOnly: true,
-      right: signatureBuffer(request.handover_recipient_signature),
+      right: handoverSignature,
       rightName: request.profiles?.full_name,
     },
   );
@@ -628,7 +655,7 @@ function drawSignatures(
     formatDate(returnAt),
     formatTime(returnAt),
     {
-      left: signatureBuffer(request.return_recipient_signature),
+      left: returnSignature,
       leftName: request.profiles?.full_name,
       rightName: request.return_staff?.full_name,
       rightTypedNameOnly: true,
@@ -693,7 +720,7 @@ export async function createEquipmentHandoverPdf(
   y = drawInformationTable(doc, y, request);
   y = drawSectionTitle(doc, y + 12, "II. DANH MỤC THIẾT BỊ");
   y = drawEquipmentGroups(doc, y, request);
-  drawSignatures(doc, y, request);
+  await drawSignatures(doc, y, request);
   addFooters(doc, formatEquipmentRequestCode(request.created_at));
   doc.end();
   return completed;
