@@ -1,6 +1,6 @@
 -- pgTAP Test Suite: equipment_signature_cleanup.test.sql
 begin;
-select plan(52);
+select plan(76);
 select has_column('public','equipment_signature_operations','cleanup_state','1 cleanup state exists');
 select has_column('public','equipment_signature_operations','cleanup_claim_token','2 claim token exists');
 select has_column('public','equipment_signature_operations','cleanup_claimed_at','3 claim time exists');
@@ -37,6 +37,175 @@ select ok((select pg_get_constraintdef(oid) from pg_constraint where conname='eq
 select ok(not has_function_privilege('authenticated','public.registrant_confirm_equipment_handoff(uuid,text,text)','EXECUTE'),'32 legacy signing stays revoked');
 select ok(has_function_privilege('authenticated','public.finalize_equipment_signature(uuid)','EXECUTE'),'33 normal finalize permission remains');
 select ok(exists(select 1 from pg_indexes where indexname='equipment_signature_operations_cleanup_claim_idx'),'34 cleanup claim index exists');
+select ok(
+  replace(
+    regexp_replace(
+      lower((
+        select pg_get_expr(indexes.indpred, indexes.indrelid)
+        from pg_index as indexes
+        where indexes.indexrelid = 'public.equipment_signature_operations_pending_actor_idx'::regclass
+      )),
+      '\s+',
+      '',
+      'g'
+    ),
+    '::text',
+    ''
+  ) like '%state=''pending''%'
+  and replace(
+    regexp_replace(
+      lower((
+        select pg_get_expr(indexes.indpred, indexes.indrelid)
+        from pg_index as indexes
+        where indexes.indexrelid = 'public.equipment_signature_operations_pending_actor_idx'::regclass
+      )),
+      '\s+',
+      '',
+      'g'
+    ),
+    '::text',
+    ''
+  ) like '%cleanup_state=''none''%',
+  'pending reservation index requires pending and cleanup_state none'
+);
+
+insert into public.profile_room_types (profile_id, room_type_id)
+select
+  coalesce((select id from public.profiles where lower(email) = 'giangvien@campus.local'), '10000000-0000-0000-0000-000000000003'::uuid),
+  '40000000-0000-0000-0000-000000000001'::uuid
+on conflict do nothing;
+
+insert into public.class_schedules (
+  id, course_id, room_id, lecturer_id, schedule_date, start_time, end_time,
+  student_count, course_code_snapshot, course_name_snapshot, schedule_status,
+  published_at, published_by, source, created_by
+)
+values (
+  'e5000000-0000-0000-0000-000000000001',
+  (select id from public.courses where room_type_id = '40000000-0000-0000-0000-000000000001'::uuid order by id limit 1),
+  (select id from public.rooms where room_type_id = '40000000-0000-0000-0000-000000000001'::uuid order by id limit 1),
+  coalesce((select id from public.profiles where lower(email) = 'giangvien@campus.local'), '10000000-0000-0000-0000-000000000003'::uuid),
+  current_date + 30, '07:30', '11:30', 25, 'SIGNATURE-REGRESSION',
+  'Signature reservation regression', 'published', clock_timestamp(),
+  coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid),
+  'manual',
+  coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid)
+);
+
+insert into public.equipment_requests (
+  id, class_schedule_id, registrant_id, responsible_lecturer_id, semester,
+  phone_snapshot, email_snapshot, receive_at, return_at, status, created_by
+)
+values (
+  'e2000000-0000-0000-0000-000000000101',
+  'e5000000-0000-0000-0000-000000000001',
+  coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid),
+  coalesce((select id from public.profiles where lower(email) = 'giangvien@campus.local'), '10000000-0000-0000-0000-000000000003'::uuid),
+  'HK1', '0901234567', 'admin@campus.local',
+  ((current_date + 30)::text || ' 09:00:00 Asia/Ho_Chi_Minh')::timestamptz,
+  ((current_date + 30)::text || ' 11:00:00 Asia/Ho_Chi_Minh')::timestamptz,
+  'new',
+  coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid)
+);
+
+select set_config('request.jwt.claim.role', 'authenticated', true);
+select set_config('request.jwt.claim.sub', coalesce((select id::text from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'), true);
+select set_config('request.jwt.claims', json_build_object('sub', coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid), 'role', 'authenticated')::text, true);
+
+set local role authenticated;
+select throws_ok(
+  $$select public.reserve_equipment_signature('e2000000-0000-0000-0000-000000000101', 'handover')$$,
+  '22023',
+  'EQUIPMENT_HANDOVER_PREREQUISITE_REQUIRED',
+  'handover reserve requires staff confirmation'
+);
+select lives_ok(
+  $$select public.manager_confirm_equipment_status('e2000000-0000-0000-0000-000000000101', 'preparing')$$,
+  'manager can prepare the signature regression request'
+);
+select lives_ok(
+  $$select public.manager_confirm_equipment_status('e2000000-0000-0000-0000-000000000101', 'handed_over')$$,
+  'manager can record handover staff confirmation'
+);
+select throws_ok(
+  $$select public.reserve_equipment_signature('e2000000-0000-0000-0000-000000000101', 'return')$$,
+  '22023',
+  'EQUIPMENT_RETURN_PREREQUISITE_REQUIRED',
+  'return reserve requires a completed handover'
+);
+
+create temp table reservation_a as
+select * from public.reserve_equipment_signature('e2000000-0000-0000-0000-000000000101', 'handover');
+create temp table reservation_a_reuse as
+select * from public.reserve_equipment_signature('e2000000-0000-0000-0000-000000000101', 'handover');
+set local role postgres;
+
+select is((select operation_id from reservation_a_reuse), (select operation_id from reservation_a), 'normal pending reservation reuses its operation');
+select is((select object_path from reservation_a_reuse), (select object_path from reservation_a), 'normal pending reservation reuses its object path');
+select is((select state from public.equipment_signature_operations where id = (select operation_id from reservation_a)), 'pending', 'normal reservation remains pending');
+select is((select cleanup_state from public.equipment_signature_operations where id = (select operation_id from reservation_a)), 'none', 'normal reservation remains outside cleanup');
+
+set local role service_role;
+create temp table reservation_a_claim as
+select * from public.claim_equipment_signature_cleanup_candidates(
+  clock_timestamp() + interval '1 hour',
+  clock_timestamp() + interval '1 hour',
+  clock_timestamp() - interval '1 hour',
+  10,
+  'e4000000-0000-0000-0000-000000000101'
+);
+set local role authenticated;
+create temp table reservation_b as
+select * from public.reserve_equipment_signature('e2000000-0000-0000-0000-000000000101', 'handover');
+set local role postgres;
+
+select isnt((select operation_id from reservation_b), (select operation_id from reservation_a), 'claimed reservation is not reused');
+select isnt((select object_path from reservation_b), (select object_path from reservation_a), 'claimed reservation does not reuse its object path');
+select is((select state from public.equipment_signature_operations where id = (select operation_id from reservation_a)), 'pending', 'claimed reservation remains pending');
+select is((select cleanup_state from public.equipment_signature_operations where id = (select operation_id from reservation_a)), 'claimed', 'claimed reservation remains cleanup owned');
+select is((select cleanup_claim_token from public.equipment_signature_operations where id = (select operation_id from reservation_a)), 'e4000000-0000-0000-0000-000000000101'::uuid, 'claimed reservation preserves its cleanup token');
+select is((select state from public.equipment_signature_operations where id = (select operation_id from reservation_b)), 'pending', 'fresh reservation after claim is pending');
+select is((select cleanup_state from public.equipment_signature_operations where id = (select operation_id from reservation_b)), 'none', 'fresh reservation after claim is outside cleanup');
+
+set local role service_role;
+create temp table reservation_b_claim as
+select * from public.claim_equipment_signature_cleanup_candidates(
+  clock_timestamp() + interval '1 hour',
+  clock_timestamp() + interval '1 hour',
+  clock_timestamp() - interval '1 hour',
+  10,
+  'e4000000-0000-0000-0000-000000000102'
+);
+select public.ack_equipment_signature_cleanup(
+  (select operation_id from reservation_b_claim),
+  'e4000000-0000-0000-0000-000000000102',
+  'retry',
+  'transient cleanup failure'
+);
+set local role authenticated;
+create temp table reservation_c as
+select * from public.reserve_equipment_signature('e2000000-0000-0000-0000-000000000101', 'handover');
+set local role postgres;
+
+select isnt((select operation_id from reservation_c), (select operation_id from reservation_b), 'retry reservation is not reused');
+select isnt((select object_path from reservation_c), (select object_path from reservation_b), 'retry reservation does not reuse its object path');
+select is((select state from public.equipment_signature_operations where id = (select operation_id from reservation_b)), 'pending', 'retry reservation remains pending');
+select is((select cleanup_state from public.equipment_signature_operations where id = (select operation_id from reservation_b)), 'retry', 'retry reservation remains in cleanup lifecycle');
+select is((select state from public.equipment_signature_operations where id = (select operation_id from reservation_c)), 'pending', 'fresh reservation after retry is pending');
+select is((select cleanup_state from public.equipment_signature_operations where id = (select operation_id from reservation_c)), 'none', 'fresh reservation after retry is outside cleanup');
+
+set local role authenticated;
+select lives_ok(
+  $$select public.finalize_equipment_signature((select operation_id from reservation_c))$$,
+  'finalizing the fresh reservation records signature evidence'
+);
+select throws_ok(
+  $$select public.reserve_equipment_signature('e2000000-0000-0000-0000-000000000101', 'handover')$$,
+  '22023',
+  'EQUIPMENT_SIGNATURE_ALREADY_SIGNED',
+  'signature evidence preserves the already signed error contract'
+);
+set local role postgres;
 
 insert into public.equipment_signature_operations (id,request_id,phase,actor_id,object_path,state,created_at,finalized_at) values
 ('e1000000-0000-0000-0000-000000000001','e2000000-0000-0000-0000-000000000001','handover','e3000000-0000-0000-0000-000000000001','equipment-requests/e2000000-0000-0000-0000-000000000001/handover/e1000000-0000-0000-0000-000000000001.png','pending','2000-01-01T00:00:00Z',null),
