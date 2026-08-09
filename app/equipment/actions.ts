@@ -39,8 +39,9 @@ const equipmentHandoffTimes = new Set(["09:00", "11:00", "14:00", "16:00"]);
 function equipmentActionErrorMessage(
   error: { code?: string } | null,
   fallback: string,
+  duplicateRequest = false,
 ) {
-  return error?.code === "23505"
+  return duplicateRequest && error?.code === "23505"
     ? "Lớp này đã có một phiếu đăng ký thiết bị khác."
     : fallback;
 }
@@ -647,8 +648,11 @@ export async function updateEquipmentRequest(
   if (error || !updatedId) {
     return {
       ok: false,
-      message:
-        equipmentActionErrorMessage(error, "Không thể lưu nội dung điều chỉnh."),
+      message: equipmentActionErrorMessage(
+        error,
+        "Không thể lưu nội dung điều chỉnh.",
+        true,
+      ),
     };
   }
 
