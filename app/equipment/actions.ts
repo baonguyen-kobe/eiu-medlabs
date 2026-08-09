@@ -15,9 +15,11 @@ import {
   type EquipmentRequestStatus,
 } from "@/lib/equipment-requests";
 import { parseEquipmentSignatureDataUrl } from "@/lib/equipment-signature-storage-core";
+import { compensateCleanupOwnedSignatureUpload } from "@/lib/equipment-signature-upload-compensation-core";
 import { NURSING_SKILLS_ROOM_TYPE_ID } from "@/lib/room-types";
 import {
   EquipmentSignatureStorageError,
+  deleteEquipmentSignature,
   uploadEquipmentSignature,
 } from "@/lib/equipment-signature-storage";
 import { createClient } from "@/lib/supabase/server";
@@ -404,6 +406,7 @@ export async function confirmEquipmentRequestHandoff(
     return { ok: false, message: "Trạng thái chữ ký không hợp lệ." };
   }
 
+  let uploadedByThisAttempt = false;
   try {
     await uploadEquipmentSignature({
       requestId,
@@ -412,6 +415,7 @@ export async function confirmEquipmentRequestHandoff(
       objectPath,
       signatureDataUrl: signature,
     });
+    uploadedByThisAttempt = true;
   } catch (error) {
     if (
       !(error instanceof EquipmentSignatureStorageError) ||
@@ -437,6 +441,30 @@ export async function confirmEquipmentRequestHandoff(
 
   let { data, error } = await finalize();
   if (error || !data) {
+    try {
+      const compensated = await compensateCleanupOwnedSignatureUpload({
+        createdByThisAttempt: uploadedByThisAttempt,
+        finalizeError: error,
+        deleteObject: () =>
+          deleteEquipmentSignature({
+            requestId,
+            phase,
+            operationId,
+            objectPath,
+          }),
+      });
+      if (compensated) {
+        return {
+          ok: false,
+          message: "Chá»¯ kÃ½ khÃ´ng cÃ²n há»£p lá»‡ Ä‘á»ƒ xÃ¡c nháº­n.",
+        };
+      }
+    } catch {
+      return {
+        ok: false,
+        message: "Chá»¯ kÃ½ khÃ´ng cÃ²n há»£p lá»‡ Ä‘á»ƒ xÃ¡c nháº­n.",
+      };
+    }
     const state = await readOperationState();
     if (state === "adopted") {
       ({ data, error } = await finalize());
