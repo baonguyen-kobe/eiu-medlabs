@@ -36,6 +36,15 @@ export type EquipmentItemActionState = {
 
 const equipmentHandoffTimes = new Set(["09:00", "11:00", "14:00", "16:00"]);
 
+function equipmentActionErrorMessage(
+  error: { code?: string } | null,
+  fallback: string,
+) {
+  return error?.code === "23505"
+    ? "Lớp này đã có một phiếu đăng ký thiết bị khác."
+    : fallback;
+}
+
 function toEquipmentConfirmationState(
   row: Record<string, unknown>,
 ): EquipmentConfirmationState {
@@ -136,7 +145,10 @@ export async function addEquipmentRequestItem({
     }
     return {
       ok: false,
-      message: error?.message || "Không thể bổ sung thiết bị vào phiếu.",
+      message: equipmentActionErrorMessage(
+        error,
+        "Không thể bổ sung thiết bị vào phiếu.",
+      ),
     };
   }
 
@@ -230,7 +242,10 @@ export async function updateEquipmentRequestStatus(
   if (error || !data) {
     return {
       ok: false,
-      message: error?.message || "Không thể cập nhật trạng thái phiếu.",
+      message: equipmentActionErrorMessage(
+        error,
+        "Không thể cập nhật trạng thái phiếu.",
+      ),
     };
   }
 
@@ -274,7 +289,10 @@ export async function reviewLateEquipmentRequest(
     return {
       ok: false,
       message:
-        error?.message || "Không thể cập nhật kết quả duyệt đăng ký trễ.",
+        equipmentActionErrorMessage(
+          error,
+          "Không thể cập nhật kết quả duyệt đăng ký trễ.",
+        ),
     };
   }
 
@@ -624,9 +642,7 @@ export async function updateEquipmentRequest(
     return {
       ok: false,
       message:
-        error?.code === "23505"
-          ? "Lớp này đã có một phiếu đăng ký thiết bị khác."
-          : error?.message || "Không thể lưu nội dung điều chỉnh.",
+        equipmentActionErrorMessage(error, "Không thể lưu nội dung điều chỉnh."),
     };
   }
 
@@ -820,7 +836,7 @@ export async function createEquipmentRequest(
       message:
         error?.code === "23505"
           ? "Lớp này đã có phiếu đăng ký thiết bị."
-          : error?.message || "Không thể tạo phiếu thiết bị.",
+          : equipmentActionErrorMessage(error, "Không thể tạo phiếu thiết bị."),
     };
   after(() => processPendingEmailOutbox());
   revalidatePath("/equipment/requests");
