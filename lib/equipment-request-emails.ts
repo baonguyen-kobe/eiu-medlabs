@@ -164,7 +164,13 @@ export async function enqueueEquipmentRequestEmails({
     : Promise.resolve({ data: [], error: null });
 
   const schedule = request.class_schedules;
-  const { data: actor } = await actorQuery;
+  const [actorResult, managerResult] = await Promise.all([
+    actorQuery,
+    managerQuery,
+  ]);
+  const { data: actor } = actorResult;
+  const { data: managerRows, error: managerError } = managerResult;
+  if (managerError) throw new Error(managerError.message);
   const requestCode = formatEquipmentRequestCode(request.created_at);
   const room = schedule.rooms;
   const roomLabel = room
@@ -250,9 +256,6 @@ export async function enqueueEquipmentRequestEmails({
       payload: { ...payload, audience: "responsible" },
     });
   }
-
-  const { data: managerRows, error: managerError } = await managerQuery;
-  if (managerError) throw new Error(managerError.message);
 
   const seenAdminEmails = new Set(
     notifications.map(({ recipient_email }) => recipient_email),
