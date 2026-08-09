@@ -295,11 +295,10 @@ export async function reviewLateEquipmentRequest(
   if (error || !data) {
     return {
       ok: false,
-      message:
-        equipmentActionErrorMessage(
-          error,
-          "Không thể cập nhật kết quả duyệt đăng ký trễ.",
-        ),
+      message: equipmentActionErrorMessage(
+        error,
+        "Không thể cập nhật kết quả duyệt đăng ký trễ.",
+      ),
     };
   }
 
