@@ -256,9 +256,10 @@ function EquipmentItemsModal({
         setLocalItems((current) => [...current, ...addedItems]);
       }
       const savedCount = results.filter((result) => result.ok).length;
+      const needsRefresh = savedCount > addedItems.length;
+      if (needsRefresh) router.refresh();
       if (savedCount === drafts.length) {
         clearDrafts(skillName);
-        if (addedItems.length !== savedCount) router.refresh();
         setNotice({
           ok: true,
           message:
