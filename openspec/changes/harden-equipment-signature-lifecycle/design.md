@@ -34,6 +34,11 @@ requiring `cleanup_state = none`.
   signing flow carries a `created` result from upload and compensates only on
   the cleanup-owned error; conflicts and ambiguous finalization remain intact.
 
+- If that exact delete fails, record `cleanup_compensation_required_at` through
+  a service-role, operation-id-only RPC. The marker preserves the existing
+  cleanup ownership and is claimable only when that ownership permits it; it
+  never adopts an operation or starts a physical cleanup runner.
+
 ## Risks / Trade-offs
 
 - [Migration and schema drift] → update the corrective migration and declarative
@@ -42,6 +47,10 @@ requiring `cleanup_state = none`.
   to the explicit cleanup-owned stable error, not generic failures.
 - [Storage delete scope] → validate request, phase, operation, and canonical
   path binding before one exact private-bucket delete.
+
+- [Delete and marker both fail]: return a stable user-facing failure while
+  retaining the residual double-failure for operational review; distributed
+  Storage and database failures cannot be made impossible in this request.
 
 ## Migration Plan
 

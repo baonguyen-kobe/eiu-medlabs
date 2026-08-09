@@ -1,6 +1,6 @@
 -- pgTAP Test Suite: equipment_signature_cleanup.test.sql
 begin;
-select plan(90);
+select plan(105);
 select has_column('public','equipment_signature_operations','cleanup_state','1 cleanup state exists');
 select has_column('public','equipment_signature_operations','cleanup_claim_token','2 claim token exists');
 select has_column('public','equipment_signature_operations','cleanup_claimed_at','3 claim time exists');
@@ -267,7 +267,7 @@ select is((select count(*)::integer from cleanup_claims where operation_id='e100
 select is((select cleanup_state from public.equipment_signature_operations where id='e1000000-0000-0000-0000-000000000001'),'claimed','39 claim state persists');
 select is((select cleanup_claim_token from public.equipment_signature_operations where id='e1000000-0000-0000-0000-000000000001'),'e4000000-0000-0000-0000-000000000001'::uuid,'40 claim token persists');
 select ok((select cleanup_claimed_at is not null from public.equipment_signature_operations where id='e1000000-0000-0000-0000-000000000001'),'41 claim timestamp persists');
-select throws_ok($$update public.equipment_signature_operations set state='adopted' where id='e1000000-0000-0000-0000-000000000001'$$,'55000','EQUIPMENT_SIGNATURE_CLEANUP_CLAIMED','42 active claim fences adoption');
+select throws_ok($$update public.equipment_signature_operations set state='adopted' where id='e1000000-0000-0000-0000-000000000001'$$,'55000','EQUIPMENT_SIGNATURE_CLEANUP_OWNED','42 active claim fences adoption');
 select is((select state from public.equipment_signature_operations where id='e1000000-0000-0000-0000-000000000001'),'pending','43 fenced row remains pending');
 select throws_ok($$select public.ack_equipment_signature_cleanup('e1000000-0000-0000-0000-000000000001','e4000000-0000-0000-0000-000000000099','deleted',null)$$,'42501','EQUIPMENT_SIGNATURE_CLEANUP_CLAIM_REQUIRED','44 wrong token is rejected');
 select lives_ok($$select public.ack_equipment_signature_cleanup('e1000000-0000-0000-0000-000000000001','e4000000-0000-0000-0000-000000000001','retry','retry')$$,'45 retry releases claim');
@@ -279,5 +279,107 @@ create temp table new_token_claim as select * from public.claim_equipment_signat
 select is((select count(*)::integer from new_token_claim where operation_id='e1000000-0000-0000-0000-000000000001'),1,'48 expired claim is reclaimed with a new token');
 select is((select cleanup_claim_token from public.equipment_signature_operations where id='e1000000-0000-0000-0000-000000000001'),'e4000000-0000-0000-0000-000000000002'::uuid,'49 new token becomes authoritative');
 select throws_ok($$select public.ack_equipment_signature_cleanup('e1000000-0000-0000-0000-000000000001','e4000000-0000-0000-0000-000000000001','deleted',null)$$,'42501','EQUIPMENT_SIGNATURE_CLEANUP_CLAIM_REQUIRED','50 stale token cannot acknowledge after reclaim');
+
+select has_column('public','equipment_signature_operations','cleanup_compensation_required_at','91 compensation marker exists');
+select ok(
+  not has_function_privilege('authenticated','public.mark_equipment_signature_cleanup_compensation(uuid)','EXECUTE')
+  and not has_function_privilege('anon','public.mark_equipment_signature_cleanup_compensation(uuid)','EXECUTE'),
+  '92 authenticated and anon cannot mark compensation'
+);
+select ok(has_function_privilege('service_role','public.mark_equipment_signature_cleanup_compensation(uuid)','EXECUTE'),'93 service role can mark compensation');
+select is(
+  (select pg_get_function_identity_arguments('public.mark_equipment_signature_cleanup_compensation(uuid)'::regprocedure)),
+  'target_operation_id uuid',
+  '94 compensation marker takes operation identity only'
+);
+
+insert into public.equipment_signature_operations (
+  id, request_id, phase, actor_id, object_path, state, created_at,
+  last_reserved_at, cleanup_state, cleanup_claim_token, cleanup_claimed_at,
+  cleanup_completed_at
+)
+values
+  ('e1000000-0000-0000-0000-000000000020','e2000000-0000-0000-0000-000000000101','return',(select registrant_id from public.equipment_requests where id='e2000000-0000-0000-0000-000000000101'),'equipment-requests/e2000000-0000-0000-0000-000000000101/return/e1000000-0000-0000-0000-000000000020.png','pending',clock_timestamp(),clock_timestamp(),'claimed','e4000000-0000-0000-0000-000000000020',clock_timestamp(),null),
+  ('e1000000-0000-0000-0000-000000000021','e2000000-0000-0000-0000-000000000101','return',(select registrant_id from public.equipment_requests where id='e2000000-0000-0000-0000-000000000101'),'equipment-requests/e2000000-0000-0000-0000-000000000101/return/e1000000-0000-0000-0000-000000000021.png','pending','2000-01-01T00:00:00Z','2000-01-01T00:00:00Z','claimed','e4000000-0000-0000-0000-000000000021','2000-01-01T00:00:00Z',null),
+  ('e1000000-0000-0000-0000-000000000022','e2000000-0000-0000-0000-000000000101','return',(select registrant_id from public.equipment_requests where id='e2000000-0000-0000-0000-000000000101'),'equipment-requests/e2000000-0000-0000-0000-000000000101/return/e1000000-0000-0000-0000-000000000022.png','pending',clock_timestamp(),clock_timestamp(),'missing',null,null,clock_timestamp()),
+  ('e1000000-0000-0000-0000-000000000023','e2000000-0000-0000-0000-000000000101','return',(select registrant_id from public.equipment_requests where id='e2000000-0000-0000-0000-000000000101'),'equipment-requests/e2000000-0000-0000-0000-000000000101/return/e1000000-0000-0000-0000-000000000023.png','pending',clock_timestamp(),clock_timestamp(),'deleted',null,null,clock_timestamp()),
+  ('e1000000-0000-0000-0000-000000000024','e2000000-0000-0000-0000-000000000101','return',(select registrant_id from public.equipment_requests where id='e2000000-0000-0000-0000-000000000101'),'equipment-requests/e2000000-0000-0000-0000-000000000101/return/e1000000-0000-0000-0000-000000000024.png','pending',clock_timestamp(),clock_timestamp(),'retry',null,null,null),
+  ('e1000000-0000-0000-0000-000000000025','e2000000-0000-0000-0000-000000000101','return',(select registrant_id from public.equipment_requests where id='e2000000-0000-0000-0000-000000000101'),'equipment-requests/e2000000-0000-0000-0000-000000000101/return/e1000000-0000-0000-0000-000000000025.png','pending',clock_timestamp(),clock_timestamp(),'retry',null,null,null),
+  ('e1000000-0000-0000-0000-000000000026','e2000000-0000-0000-0000-000000000101','return',(select registrant_id from public.equipment_requests where id='e2000000-0000-0000-0000-000000000101'),'equipment-requests/e2000000-0000-0000-0000-000000000101/return/e1000000-0000-0000-0000-000000000026.png','pending',clock_timestamp(),clock_timestamp(),'retry',null,null,null);
+
+set local role service_role;
+select public.mark_equipment_signature_cleanup_compensation('e1000000-0000-0000-0000-000000000020');
+set local role postgres;
+create temp table active_compensation_marker as
+select cleanup_claimed_at, cleanup_compensation_required_at
+from public.equipment_signature_operations
+where id='e1000000-0000-0000-0000-000000000020';
+select ok(
+  (select state='pending' and cleanup_state='claimed' and cleanup_claim_token='e4000000-0000-0000-0000-000000000020'::uuid and cleanup_claimed_at=(select cleanup_claimed_at from active_compensation_marker) and cleanup_compensation_required_at is not null from public.equipment_signature_operations where id='e1000000-0000-0000-0000-000000000020'),
+  '95 marking preserves business state and active claim ownership'
+);
+set local role service_role;
+select public.mark_equipment_signature_cleanup_compensation('e1000000-0000-0000-0000-000000000020');
+set local role postgres;
+select is((select cleanup_compensation_required_at from public.equipment_signature_operations where id='e1000000-0000-0000-0000-000000000020'),(select cleanup_compensation_required_at from active_compensation_marker),'96 marking is idempotent');
+set local role service_role;
+create temp table active_compensation_claim as
+select * from public.claim_equipment_signature_cleanup_candidates(clock_timestamp()+interval '1 hour',clock_timestamp()+interval '1 hour',clock_timestamp()-interval '1 hour',10,'e4000000-0000-0000-0000-000000000027');
+set local role postgres;
+select is((select count(*)::integer from active_compensation_claim where operation_id='e1000000-0000-0000-0000-000000000020'),0,'97 active claimed compensation is not stolen');
+
+set local role service_role;
+select public.mark_equipment_signature_cleanup_compensation('e1000000-0000-0000-0000-000000000021');
+create temp table expired_compensation_claim as
+select * from public.claim_equipment_signature_cleanup_candidates(clock_timestamp()+interval '1 hour',clock_timestamp()+interval '1 hour',clock_timestamp()-interval '1 hour',10,'e4000000-0000-0000-0000-000000000028');
+set local role postgres;
+select ok((select count(*)=1 from expired_compensation_claim where operation_id='e1000000-0000-0000-0000-000000000021') and (select cleanup_claim_token='e4000000-0000-0000-0000-000000000028'::uuid from public.equipment_signature_operations where id='e1000000-0000-0000-0000-000000000021'),'98 expired claimed compensation is reclaimed by a new token');
+
+set local role service_role;
+select public.mark_equipment_signature_cleanup_compensation('e1000000-0000-0000-0000-000000000022');
+create temp table missing_compensation_claim as
+select * from public.claim_equipment_signature_cleanup_candidates(clock_timestamp()-interval '1 hour',clock_timestamp()-interval '1 hour',clock_timestamp()-interval '1 hour',10,'e4000000-0000-0000-0000-000000000029');
+set local role postgres;
+select is((select count(*)::integer from missing_compensation_claim where operation_id='e1000000-0000-0000-0000-000000000022'),1,'99 terminal missing compensation is reclaimed');
+set local role service_role;
+select public.ack_equipment_signature_cleanup('e1000000-0000-0000-0000-000000000022','e4000000-0000-0000-0000-000000000029','missing',null);
+
+select public.mark_equipment_signature_cleanup_compensation('e1000000-0000-0000-0000-000000000023');
+create temp table deleted_compensation_claim as
+select * from public.claim_equipment_signature_cleanup_candidates(clock_timestamp()-interval '1 hour',clock_timestamp()-interval '1 hour',clock_timestamp()-interval '1 hour',10,'e4000000-0000-0000-0000-000000000030');
+set local role postgres;
+select is((select count(*)::integer from deleted_compensation_claim where operation_id='e1000000-0000-0000-0000-000000000023'),1,'100 terminal deleted compensation is reclaimed');
+set local role service_role;
+select public.ack_equipment_signature_cleanup('e1000000-0000-0000-0000-000000000023','e4000000-0000-0000-0000-000000000030','deleted',null);
+
+select public.mark_equipment_signature_cleanup_compensation('e1000000-0000-0000-0000-000000000024');
+create temp table retry_compensation_claim as
+select * from public.claim_equipment_signature_cleanup_candidates(clock_timestamp()-interval '1 hour',clock_timestamp()-interval '1 hour',clock_timestamp()-interval '1 hour',10,'e4000000-0000-0000-0000-000000000031');
+set local role postgres;
+select is((select count(*)::integer from retry_compensation_claim where operation_id='e1000000-0000-0000-0000-000000000024'),1,'101 retry compensation is reclaimed');
+set local role service_role;
+select public.ack_equipment_signature_cleanup('e1000000-0000-0000-0000-000000000024','e4000000-0000-0000-0000-000000000031','retry','retry compensation cleanup');
+set local role postgres;
+select ok(
+  (select cleanup_compensation_required_at is null from public.equipment_signature_operations where id='e1000000-0000-0000-0000-000000000022')
+  and (select cleanup_compensation_required_at is null from public.equipment_signature_operations where id='e1000000-0000-0000-0000-000000000023'),
+  '102 deleted and missing acknowledgements clear compensation recovery'
+);
+select ok((select cleanup_compensation_required_at is not null from public.equipment_signature_operations where id='e1000000-0000-0000-0000-000000000024'),'103 retry acknowledgement retains compensation recovery');
+
+select set_config('app.equipment_confirmation_rpc','true',true);
+update public.equipment_requests
+set return_recipient_signature_storage_path='equipment-requests/e2000000-0000-0000-0000-000000000101/return/e1000000-0000-0000-0000-000000000025.png'
+where id='e2000000-0000-0000-0000-000000000101';
+set local role service_role;
+select public.mark_equipment_signature_cleanup_compensation('e1000000-0000-0000-0000-000000000025');
+create temp table referenced_compensation_claim as
+select * from public.claim_equipment_signature_cleanup_candidates(clock_timestamp()-interval '1 hour',clock_timestamp()-interval '1 hour',clock_timestamp()-interval '1 hour',10,'e4000000-0000-0000-0000-000000000032');
+set local role postgres;
+select is((select count(*)::integer from referenced_compensation_claim where operation_id='e1000000-0000-0000-0000-000000000025'),0,'104 active storage references block compensation cleanup');
+set local role service_role;
+select public.mark_equipment_signature_cleanup_compensation('e1000000-0000-0000-0000-000000000026');
+set local role postgres;
+select throws_ok($$update public.equipment_signature_operations set state='adopted' where id='e1000000-0000-0000-0000-000000000026'$$,'55000','EQUIPMENT_SIGNATURE_CLEANUP_OWNED','105 compensation cleanup ownership cannot be adopted');
 select * from finish();
 rollback;

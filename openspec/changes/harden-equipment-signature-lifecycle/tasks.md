@@ -10,6 +10,8 @@
 - [x] 2.1 Add validated exact-path private Storage deletion.
 - [x] 2.2 Compensate only objects created by the current cleanup-owned signing attempt.
 - [x] 2.3 Add focused Storage and signing-flow tests.
+- [x] 2.4 Add durable compensation marker and service-role recovery contract.
+- [x] 2.5 Extend cleanup and focused compensation coverage for marker recovery.
 
 ## 3. Verification
 
