@@ -21,3 +21,18 @@ for ambiguous, generic, invalid-path, or already-adopted outcomes.
 
 - **WHEN** upload reports a conflict because the exact object already exists
 - **THEN** the system does not delete that object
+
+#### Scenario: Exact delete fails after a cleanup-owned finalize
+
+- **WHEN** the current signing attempt created the object, finalization reports
+  `EQUIPMENT_SIGNATURE_CLEANUP_OWNED`, and exact object deletion fails
+- **THEN** the system requests service-role durable recovery by operation
+  identity only, without changing cleanup ownership or accepting a caller path
+
+#### Scenario: A marked terminal cleanup operation is retried
+
+- **WHEN** a cleanup-owned operation marked for compensation is in `retry`,
+  `deleted`, or `missing` and has no active request Storage reference
+- **THEN** a future cleanup claim may reclaim it according to existing claim
+  ownership rules, and a successful `deleted` or `missing` acknowledgement
+  clears the marker

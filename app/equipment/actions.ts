@@ -15,6 +15,7 @@ import {
   type EquipmentRequestStatus,
 } from "@/lib/equipment-requests";
 import { parseEquipmentSignatureDataUrl } from "@/lib/equipment-signature-storage-core";
+import { markEquipmentSignatureCompensationRequired } from "@/lib/equipment-signature-cleanup-compensation";
 import { compensateCleanupOwnedSignatureUpload } from "@/lib/equipment-signature-upload-compensation-core";
 import { NURSING_SKILLS_ROOM_TYPE_ID } from "@/lib/room-types";
 import {
@@ -441,28 +442,23 @@ export async function confirmEquipmentRequestHandoff(
 
   let { data, error } = await finalize();
   if (error || !data) {
-    try {
-      const compensated = await compensateCleanupOwnedSignatureUpload({
-        createdByThisAttempt: uploadedByThisAttempt,
-        finalizeError: error,
-        deleteObject: () =>
-          deleteEquipmentSignature({
-            requestId,
-            phase,
-            operationId,
-            objectPath,
-          }),
-      });
-      if (compensated) {
-        return {
-          ok: false,
-          message: "Chá»¯ kÃ½ khÃ´ng cÃ²n há»£p lá»‡ Ä‘á»ƒ xÃ¡c nháº­n.",
-        };
-      }
-    } catch {
+    const compensation = await compensateCleanupOwnedSignatureUpload({
+      createdByThisAttempt: uploadedByThisAttempt,
+      finalizeError: error,
+      deleteObject: () =>
+        deleteEquipmentSignature({
+          requestId,
+          phase,
+          operationId,
+          objectPath,
+        }),
+      markForCleanup: () =>
+        markEquipmentSignatureCompensationRequired(operationId),
+    });
+    if (compensation !== "not-needed") {
       return {
         ok: false,
-        message: "Chá»¯ kÃ½ khÃ´ng cÃ²n há»£p lá»‡ Ä‘á»ƒ xÃ¡c nháº­n.",
+        message: "Chữ ký không còn hợp lệ để xác nhận.",
       };
     }
     const state = await readOperationState();
