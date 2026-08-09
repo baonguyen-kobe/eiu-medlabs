@@ -3649,7 +3649,14 @@ test("C2 equipment signature reservations bind evidence to authorized lifecycle 
         target_receive_at: "2045-08-19T02:00:00.000Z",
         target_return_at: "2045-08-20T09:00:00.000Z",
         target_note: "Editable while preparing",
-        target_items: [],
+        target_items: [
+          {
+            skill_name: "C2 editable item",
+            catalog_item_id: catalogItemId,
+            quantity: 1,
+            note: null,
+          },
+        ],
       },
     );
     assert.ifError(editableWhilePreparing.error);
