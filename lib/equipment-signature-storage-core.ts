@@ -9,6 +9,7 @@ export type EquipmentSignatureStorageErrorCode =
   | "SIGNATURE_TOO_LARGE"
   | "SIGNATURE_STORAGE_CONFLICT"
   | "SIGNATURE_STORAGE_UPLOAD_FAILED"
+  | "SIGNATURE_STORAGE_DELETE_FAILED"
   | "SIGNATURE_STORAGE_DOWNLOAD_FAILED";
 
 export class EquipmentSignatureStorageError extends Error {
@@ -39,6 +40,7 @@ export type EquipmentSignatureStorageClient = {
         body: Uint8Array,
         options: { contentType: string; upsert: boolean },
       ): Promise<{ error: StorageError | null }>;
+      remove(paths: string[]): Promise<{ error: StorageError | null }>;
       download(path: string): Promise<{
         data: StorageDownloadData | null;
         error: StorageError | null;
@@ -60,6 +62,11 @@ export type DownloadEquipmentSignatureInput = {
   phase: EquipmentSignaturePhase;
   objectPath: string;
 };
+
+export type DeleteEquipmentSignatureInput = Omit<
+  UploadEquipmentSignatureInput,
+  "signatureDataUrl"
+>;
 
 const EQUIPMENT_SIGNATURES_BUCKET = "equipment_signatures";
 const DATA_URL_PREFIX = "data:image/png;base64,";
@@ -208,6 +215,19 @@ export async function uploadEquipmentSignatureWithClient(
     );
   }
   return { path };
+}
+
+export async function deleteEquipmentSignatureWithClient(
+  input: DeleteEquipmentSignatureInput,
+  client: EquipmentSignatureStorageClient,
+) {
+  const path = validateEquipmentSignatureObjectPath(input);
+  const { error } = await client.storage
+    .from(EQUIPMENT_SIGNATURES_BUCKET)
+    .remove([path]);
+  if (error) {
+    throw new EquipmentSignatureStorageError("SIGNATURE_STORAGE_DELETE_FAILED");
+  }
 }
 
 export async function downloadEquipmentSignatureWithClient(

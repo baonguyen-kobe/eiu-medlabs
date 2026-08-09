@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   EquipmentSignatureStorageError,
   buildEquipmentSignatureObjectPath,
+  deleteEquipmentSignatureWithClient,
   downloadEquipmentSignatureWithClient,
   parseEquipmentSignatureDataUrl,
   validateEquipmentSignatureObjectPath,
@@ -68,6 +69,26 @@ function fakeDownloadStorageClient({ error = null, bytes = PNG_BYTES } = {}) {
                   : null,
                 error,
               };
+            },
+          };
+        },
+      },
+    },
+  };
+}
+
+function fakeDeleteStorageClient(error = null) {
+  const calls = [];
+  return {
+    calls,
+    client: {
+      storage: {
+        from(bucket) {
+          calls.push({ bucket });
+          return {
+            async remove(paths) {
+              calls[0] = { ...calls[0], paths };
+              return { error };
             },
           };
         },
@@ -243,6 +264,66 @@ test("upload results cannot expose public or signed URLs", async () => {
 
   assert.equal("publicUrl" in result, false);
   assert.equal("signedUrl" in result, false);
+});
+
+test("delete uses one exact private operation path", async () => {
+  const storage = fakeDeleteStorageClient();
+  const path = `equipment-requests/${REQUEST_ID}/handover/${OPERATION_ID}.png`;
+
+  await deleteEquipmentSignatureWithClient(
+    {
+      requestId: REQUEST_ID,
+      phase: "handover",
+      operationId: OPERATION_ID,
+      objectPath: path,
+    },
+    storage.client,
+  );
+
+  assert.deepEqual(storage.calls, [
+    { bucket: "equipment_signatures", paths: [path] },
+  ]);
+});
+
+test("delete rejects mismatched paths before private Storage access", async () => {
+  const storage = fakeDeleteStorageClient();
+  await assert.rejects(
+    deleteEquipmentSignatureWithClient(
+      {
+        requestId: REQUEST_ID,
+        phase: "handover",
+        operationId: OPERATION_ID,
+        objectPath: `equipment-requests/${REQUEST_ID}/return/${OPERATION_ID}.png`,
+      },
+      storage.client,
+    ),
+    (error) => {
+      assert.ok(error instanceof EquipmentSignatureStorageError);
+      assert.equal(error.code, "INVALID_SIGNATURE_PATH");
+      return true;
+    },
+  );
+  assert.deepEqual(storage.calls, []);
+});
+
+test("delete failures map to a stable internal error", async () => {
+  const storage = fakeDeleteStorageClient({ message: "Storage unavailable" });
+  await assert.rejects(
+    deleteEquipmentSignatureWithClient(
+      {
+        requestId: REQUEST_ID,
+        phase: "return",
+        operationId: OPERATION_ID,
+        objectPath: `equipment-requests/${REQUEST_ID}/return/${OPERATION_ID}.png`,
+      },
+      storage.client,
+    ),
+    (error) => {
+      assert.ok(error instanceof EquipmentSignatureStorageError);
+      assert.equal(error.code, "SIGNATURE_STORAGE_DELETE_FAILED");
+      return true;
+    },
+  );
 });
 
 test("generic upload failures map to a stable internal error", async () => {

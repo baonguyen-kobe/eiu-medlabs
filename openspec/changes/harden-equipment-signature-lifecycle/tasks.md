@@ -7,9 +7,9 @@
 
 ## 2. Server-side upload compensation
 
-- [ ] 2.1 Add validated exact-path private Storage deletion.
-- [ ] 2.2 Compensate only objects created by the current cleanup-owned signing attempt.
-- [ ] 2.3 Add focused Storage and signing-flow tests.
+- [x] 2.1 Add validated exact-path private Storage deletion.
+- [x] 2.2 Compensate only objects created by the current cleanup-owned signing attempt.
+- [x] 2.3 Add focused Storage and signing-flow tests.
 
 ## 3. Verification
 
