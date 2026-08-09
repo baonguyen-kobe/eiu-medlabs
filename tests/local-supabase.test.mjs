@@ -2226,16 +2226,17 @@ test("người đăng ký được điều chỉnh nội dung nhưng không đư
     { target_request_id: requestId, target_status: "handed_over" },
   );
   assert.ifError(warehouseHandoverError);
-  const { error: recipientHandoverError } = await lecturer.supabase.rpc(
-    "registrant_confirm_equipment_handoff",
-    {
-      target_request_id: requestId,
-      target_phase: "handover",
-      target_signature:
-        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
-    },
+  const handoverReservation = await lecturer.supabase.rpc(
+    "reserve_equipment_signature",
+    { target_request_id: requestId, target_phase: "handover" },
   );
+  assert.ifError(handoverReservation.error);
+  const { error: recipientHandoverError, data: handedOverRequest } =
+    await lecturer.supabase.rpc("finalize_equipment_signature", {
+      target_operation_id: handoverReservation.data[0].operation_id,
+    });
   assert.ifError(recipientHandoverError);
+  assert.equal(handedOverRequest.status, "handed_over");
 
   const { error: lockedRpcError } = await lecturer.supabase.rpc(
     "update_equipment_request_content",
@@ -3557,6 +3558,7 @@ test("C2 equipment signature reservations bind evidence to authorized lifecycle 
   const roomId = crypto.randomUUID();
   const scheduleId = crypto.randomUUID();
   const requestId = crypto.randomUUID();
+  const catalogItemId = crypto.randomUUID();
 
   try {
     assert.ifError(
@@ -3606,12 +3608,28 @@ test("C2 equipment signature reservations bind evidence to authorized lifecycle 
         })
       ).error,
     );
+    assert.ifError(
+      (
+        await admin.supabase.from("equipment_catalog").insert({
+          id: catalogItemId,
+          item_name: `C2 workflow ${catalogItemId.slice(0, 8)}`,
+          commercial_name: "C2 workflow QA",
+          unit: "Cái",
+        })
+      ).error,
+    );
 
     const beforeWarehouse = await admin.supabase.rpc(
       "reserve_equipment_signature",
       { target_request_id: requestId, target_phase: "handover" },
     );
     assert.ok(beforeWarehouse.error);
+
+    const managerTooEarly = await staff.supabase.rpc(
+      "manager_confirm_equipment_status",
+      { target_request_id: requestId, target_status: "handed_over" },
+    );
+    assert.ok(managerTooEarly.error);
 
     assert.ifError(
       (
@@ -3621,6 +3639,29 @@ test("C2 equipment signature reservations bind evidence to authorized lifecycle 
         })
       ).error,
     );
+    const editableWhilePreparing = await admin.supabase.rpc(
+      "update_equipment_request_content",
+      {
+        target_request_id: requestId,
+        target_class_schedule_id: scheduleId,
+        target_semester: "HK2",
+        target_responsible_lecturer_id: lecturer.user.id,
+        target_receive_at: "2045-08-19T02:00:00.000Z",
+        target_return_at: "2045-08-20T09:00:00.000Z",
+        target_note: "Editable while preparing",
+        target_items: [],
+      },
+    );
+    assert.ifError(editableWhilePreparing.error);
+    const managerItemWhilePreparing = await staff.supabase
+      .from("equipment_request_items")
+      .insert({
+        request_id: requestId,
+        catalog_item_id: catalogItemId,
+        skill_name: "C2 preparing item",
+        quantity: 1,
+      });
+    assert.ifError(managerItemWhilePreparing.error);
     assert.ifError(
       (
         await staff.supabase.rpc("manager_confirm_equipment_status", {
@@ -3748,6 +3789,56 @@ test("C2 equipment signature reservations bind evidence to authorized lifecycle 
     );
     assert.ifError(managerReturn.error);
     assert.equal(managerReturn.data.status, "completed");
+
+    const rewind = await staff.supabase.rpc(
+      "manager_confirm_equipment_status",
+      {
+        target_request_id: requestId,
+        target_status: "handed_over",
+      },
+    );
+    assert.ifError(rewind.error);
+    assert.equal(rewind.data.status, "handed_over");
+    assert.ok(rewind.data.handover_recipient_signature_storage_path);
+    assert.equal(rewind.data.return_recipient_signature_storage_path, null);
+    assert.equal(rewind.data.return_recipient_signed_at, null);
+
+    const returnFirst = await staff.supabase.rpc(
+      "manager_confirm_equipment_status",
+      { target_request_id: requestId, target_status: "returned" },
+    );
+    assert.ifError(returnFirst.error);
+    assert.equal(returnFirst.data.status, "handed_over");
+    const retriedReturnReservation = await lecturer.supabase.rpc(
+      "reserve_equipment_signature",
+      { target_request_id: requestId, target_phase: "return" },
+    );
+    assert.ifError(retriedReturnReservation.error);
+    assert.notEqual(
+      retriedReturnReservation.data[0].operation_id,
+      returnOperation.operation_id,
+    );
+    const retriedReturn = await lecturer.supabase.rpc(
+      "finalize_equipment_signature",
+      { target_operation_id: retriedReturnReservation.data[0].operation_id },
+    );
+    assert.ifError(retriedReturn.error);
+    assert.equal(retriedReturn.data.status, "completed");
+
+    const lockedContent = await admin.supabase.rpc(
+      "update_equipment_request_content",
+      {
+        target_request_id: requestId,
+        target_class_schedule_id: scheduleId,
+        target_semester: "HK2",
+        target_responsible_lecturer_id: lecturer.user.id,
+        target_receive_at: "2045-08-19T02:00:00.000Z",
+        target_return_at: "2045-08-20T09:00:00.000Z",
+        target_note: "Locked after handover",
+        target_items: [],
+      },
+    );
+    assert.ok(lockedContent.error);
   } finally {
     await serviceClient()
       .from("equipment_requests")
@@ -3755,6 +3846,10 @@ test("C2 equipment signature reservations bind evidence to authorized lifecycle 
       .eq("id", requestId);
     await serviceClient().from("class_schedules").delete().eq("id", scheduleId);
     await admin.supabase.from("rooms").delete().eq("id", roomId);
+    await admin.supabase
+      .from("equipment_catalog")
+      .delete()
+      .eq("id", catalogItemId);
   }
 });
 
