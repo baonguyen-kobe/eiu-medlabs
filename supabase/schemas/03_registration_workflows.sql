@@ -1763,7 +1763,11 @@ begin
       cleanup_claim_token=null,
       cleanup_completed_at=case when target_outcome in ('deleted','missing') then clock_timestamp() else null end,
       cleanup_last_error=case when target_outcome='retry' then target_error else null end,
-      cleanup_compensation_required_at=case when target_outcome in ('deleted','missing') then null else cleanup_compensation_required_at end
+      cleanup_compensation_required_at=case
+        when target_outcome='retry' then cleanup_compensation_required_at
+        when cleanup_compensation_required_at is not null and cleanup_compensation_required_at > row.cleanup_claimed_at then cleanup_compensation_required_at
+        else null
+      end
   where id=row.id;
 end;
 $$;

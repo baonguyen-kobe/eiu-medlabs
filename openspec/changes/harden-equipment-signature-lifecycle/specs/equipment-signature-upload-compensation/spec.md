@@ -34,5 +34,11 @@ for ambiguous, generic, invalid-path, or already-adopted outcomes.
 - **WHEN** a cleanup-owned operation marked for compensation is in `retry`,
   `deleted`, or `missing` and has no active request Storage reference
 - **THEN** a future cleanup claim may reclaim it according to existing claim
-  ownership rules, and a successful `deleted` or `missing` acknowledgement
-  clears the marker
+  ownership rules
+
+#### Scenario: Terminal acknowledgement fences newer compensation work
+
+- **WHEN** a terminal `deleted` or `missing` ACK observes a marker that is
+  newer than its validated `cleanup_claimed_at`
+- **THEN** the ACK preserves that marker for a later cleanup claim; a marker
+  that predates the current claim may be cleared by its terminal ACK

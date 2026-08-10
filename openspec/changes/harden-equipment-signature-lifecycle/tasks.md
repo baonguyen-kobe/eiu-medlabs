@@ -12,6 +12,7 @@
 - [x] 2.3 Add focused Storage and signing-flow tests.
 - [x] 2.4 Add durable compensation marker and service-role recovery contract.
 - [x] 2.5 Extend cleanup and focused compensation coverage for marker recovery.
+- [x] 2.6 Fence terminal ACKs from clearing a newer compensation generation.
 
 ## 3. Verification
 
