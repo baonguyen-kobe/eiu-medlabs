@@ -7055,6 +7055,20 @@ body,
   border-top: 1px solid var(--line);
 }
 
+.equipment-schedule-discovery-form {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+}
+
+.equipment-schedule-discovery-form label {
+  display: grid;
+  flex: 1;
+  gap: 6px;
+  color: var(--ink-800);
+  font-weight: 700;
+}
+
 .equipment-registration-mode label {
   display: grid;
   gap: 6px;
@@ -8436,8 +8450,14 @@ body,
   }
 
   .equipment-registration-tools-heading .button,
-  .equipment-registration-mode form .button {
+  .equipment-registration-mode form .button,
+  .equipment-schedule-discovery-form .button {
     width: 100%;
+  }
+
+  .equipment-schedule-discovery-form {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .form-grid.four,

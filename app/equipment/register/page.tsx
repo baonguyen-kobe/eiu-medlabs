@@ -11,7 +11,9 @@ import {
 } from "@/lib/equipment-request-code";
 import {
   EQUIPMENT_REGISTER_SELECTOR_LIMIT,
+  parseScheduleDiscoveryQuery,
   prependSelectedOption,
+  scheduleSelectorOptions,
 } from "@/lib/equipment-registration-selector";
 import { NURSING_SKILLS_ROOM_TYPE_ID } from "@/lib/room-types";
 import { getViewer } from "@/lib/viewer";
@@ -203,6 +205,69 @@ function RequestModePicker({
   );
 }
 
+function ScheduleDiscovery({
+  scheduleQuery,
+  mode,
+  activeRequestId,
+  selectedScheduleId,
+}: {
+  scheduleQuery: string;
+  mode: RequestMode | null;
+  activeRequestId: string;
+  selectedScheduleId: string;
+}) {
+  const resetParams = new URLSearchParams();
+  if (mode) resetParams.set("mode", mode);
+  if (activeRequestId) resetParams.set("request", activeRequestId);
+  if (selectedScheduleId) resetParams.set("schedule", selectedScheduleId);
+  const resetHref = resetParams.size
+    ? `/equipment/register?${resetParams.toString()}`
+    : "/equipment/register";
+
+  return (
+    <section
+      className="equipment-registration-tools"
+      aria-label="Tìm lớp Skills lab"
+    >
+      <div className="equipment-registration-tools-heading">
+        <div>
+          <strong>Tìm lớp Skills lab</strong>
+          <p>
+            Tìm theo mã học phần hoặc ngày YYYY-MM-DD. Kết quả được giới hạn an
+            toàn ở {EQUIPMENT_REGISTER_SELECTOR_LIMIT} lớp.
+          </p>
+        </div>
+        {scheduleQuery ? (
+          <a className="button button-secondary" href={resetHref}>
+            Xóa tìm kiếm
+          </a>
+        ) : null}
+      </div>
+      <form className="equipment-schedule-discovery-form" method="get">
+        {mode ? <input type="hidden" name="mode" value={mode} /> : null}
+        {activeRequestId ? (
+          <input type="hidden" name="request" value={activeRequestId} />
+        ) : null}
+        {selectedScheduleId ? (
+          <input type="hidden" name="schedule" value={selectedScheduleId} />
+        ) : null}
+        <label>
+          Mã học phần hoặc ngày học
+          <input
+            name="schedule_query"
+            defaultValue={scheduleQuery}
+            placeholder="Ví dụ: NUR 101 hoặc 2049-08-10"
+            autoComplete="off"
+            spellCheck={false}
+            maxLength={80}
+          />
+        </label>
+        <button className="button button-primary">Tìm lớp</button>
+      </form>
+    </section>
+  );
+}
+
 function buildInitialData(
   source: SourceRequest,
   mode: RequestMode,
@@ -257,6 +322,7 @@ export default async function EquipmentRegisterPage({
     mode?: string;
     request?: string;
     request_option?: string;
+    schedule_query?: string;
   }>;
 }) {
   const [viewer, query] = await Promise.all([getViewer(), searchParams]);
@@ -290,6 +356,7 @@ export default async function EquipmentRegisterPage({
   const requestedScheduleId = /^[0-9a-f-]{36}$/i.test(query.schedule ?? "")
     ? query.schedule!
     : "";
+  const scheduleQuery = parseScheduleDiscoveryQuery(query.schedule_query);
   const requestedId = /^[0-9a-f-]{36}$/i.test(rawRequestId) ? rawRequestId : "";
   const requestedCodeBounds = !requestedId
     ? equipmentRequestCodeBounds(rawRequestId)
@@ -313,9 +380,33 @@ export default async function EquipmentRegisterPage({
           ).maybeSingle();
         })()
       : Promise.resolve({ data: null, error: null });
+  const today = businessTodayString();
+  const scheduleDiscoveryPromise = scheduleQuery
+    ? (() => {
+        let discoveryQuery = supabase
+          .from("class_schedules")
+          .select(
+            "id,schedule_date,start_time,end_time,course_code_snapshot,course_name_snapshot,student_count,rooms!inner(room_code,building_code,room_type_id)",
+          )
+          .eq("rooms.room_type_id", NURSING_SKILLS_ROOM_TYPE_ID)
+          .gte("schedule_date", today)
+          .neq("schedule_status", "cancelled");
+        discoveryQuery =
+          scheduleQuery.kind === "date"
+            ? discoveryQuery.eq("schedule_date", scheduleQuery.value)
+            : discoveryQuery.ilike(
+                "course_code_snapshot",
+                `%${scheduleQuery.value}%`,
+              );
+        return discoveryQuery
+          .order("schedule_date")
+          .limit(EQUIPMENT_REGISTER_SELECTOR_LIMIT);
+      })()
+    : Promise.resolve({ data: [] });
 
   const [
     { data: schedules },
+    { data: discoveredSchedules },
     { data: catalog },
     { data: lecturers },
     { data: profile },
@@ -329,10 +420,11 @@ export default async function EquipmentRegisterPage({
         "id,schedule_date,start_time,end_time,course_code_snapshot,course_name_snapshot,student_count,rooms!inner(room_code,building_code,room_type_id)",
       )
       .eq("rooms.room_type_id", NURSING_SKILLS_ROOM_TYPE_ID)
-      .gte("schedule_date", businessTodayString())
+      .gte("schedule_date", today)
       .neq("schedule_status", "cancelled")
       .order("schedule_date")
       .limit(EQUIPMENT_REGISTER_SELECTOR_LIMIT),
+    scheduleDiscoveryPromise,
     supabase
       .from("equipment_catalog")
       .select(
@@ -401,7 +493,11 @@ export default async function EquipmentRegisterPage({
             : "Vui lòng chọn một phiếu trước khi tải dữ liệu."
           : "";
 
-  let scheduleRows = schedules ?? [];
+  let scheduleRows = scheduleSelectorOptions(
+    schedules ?? [],
+    discoveredSchedules ?? [],
+    scheduleQuery,
+  );
   if (
     requestedScheduleId &&
     !scheduleRows.some(({ id }) => id === requestedScheduleId)
@@ -413,7 +509,7 @@ export default async function EquipmentRegisterPage({
       )
       .eq("id", requestedScheduleId)
       .eq("rooms.room_type_id", NURSING_SKILLS_ROOM_TYPE_ID)
-      .gte("schedule_date", businessTodayString())
+      .gte("schedule_date", today)
       .neq("schedule_status", "cancelled")
       .maybeSingle();
     scheduleRows = prependSelectedOption(scheduleRows, selectedSchedule);
@@ -496,6 +592,12 @@ export default async function EquipmentRegisterPage({
         activeRequestId={rawRequestId}
         editOptions={editOptions}
       />
+      <ScheduleDiscovery
+        scheduleQuery={scheduleQuery?.value ?? ""}
+        mode={mode}
+        activeRequestId={rawRequestId}
+        selectedScheduleId={requestedScheduleId}
+      />
       {loadError ? (
         <p className="form-error" role="alert">
           {loadError}
@@ -511,7 +613,7 @@ export default async function EquipmentRegisterPage({
         registrantName={formRegistrantName}
         registrantEmail={formRegistrantEmail}
         skillSuggestions={skillSuggestions}
-        today={businessTodayString()}
+        today={today}
         initialData={initialData}
       />
     </WorkspaceShell>
