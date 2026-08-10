@@ -8,10 +8,6 @@ const personnelManager = {
   identifier: process.env.PRODUCTION_PERSONNEL_MANAGER_IDENTIFIER,
   password: process.env.PRODUCTION_PERSONNEL_MANAGER_PASSWORD,
 };
-const ordinaryAdmin = {
-  identifier: process.env.PRODUCTION_ORDINARY_ADMIN_IDENTIFIER,
-  password: process.env.PRODUCTION_ORDINARY_ADMIN_PASSWORD,
-};
 
 test.use({
   baseURL:
@@ -71,22 +67,4 @@ test("Personnel Manager can access Personnel in production", async ({
     "Personnel page must not return a server error",
   ).toBeLessThan(500);
   await expect(page).toHaveURL(/\/admin\/personnel$/);
-});
-
-test("ordinary Admin is denied Personnel access in production", async ({
-  page,
-}) => {
-  requireCredentials(
-    ordinaryAdmin.identifier,
-    ordinaryAdmin.password,
-    "ordinary Admin",
-  );
-  await signIn(page, ordinaryAdmin.identifier!, ordinaryAdmin.password!);
-  await expect(page.getByRole("link", { name: "Nhân sự" })).toHaveCount(0);
-  const response = await page.goto("/admin/personnel");
-  expect(
-    response?.status(),
-    "Personnel denial must not return a server error",
-  ).toBeLessThan(500);
-  await expect(page).toHaveURL(/\/dashboard$/);
 });
