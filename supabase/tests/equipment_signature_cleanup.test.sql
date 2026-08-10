@@ -1,6 +1,6 @@
 -- pgTAP Test Suite: equipment_signature_cleanup.test.sql
 begin;
-select plan(111);
+select plan(114);
 select has_column('public','equipment_signature_operations','cleanup_state','1 cleanup state exists');
 select has_column('public','equipment_signature_operations','cleanup_claim_token','2 claim token exists');
 select has_column('public','equipment_signature_operations','cleanup_claimed_at','3 claim time exists');
@@ -427,5 +427,39 @@ set local role service_role;
 select public.ack_equipment_signature_cleanup('e1000000-0000-0000-0000-000000000028','e4000000-0000-0000-0000-000000000035','missing',null);
 set local role postgres;
 select ok((select cleanup_state='missing' and cleanup_compensation_required_at is null from public.equipment_signature_operations where id='e1000000-0000-0000-0000-000000000028'),'111 second-generation terminal ACK clears its marker');
+
+insert into public.equipment_signature_operations (
+  id, request_id, phase, actor_id, object_path, state, created_at,
+  last_reserved_at, cleanup_state, cleanup_claim_token, cleanup_claimed_at,
+  cleanup_completed_at
+)
+values
+  ('e1000000-0000-0000-0000-000000000029','e2000000-0000-0000-0000-000000000101','return',(select registrant_id from public.equipment_requests where id='e2000000-0000-0000-0000-000000000101'),'equipment-requests/e2000000-0000-0000-0000-000000000101/return/e1000000-0000-0000-0000-000000000029.png','pending',clock_timestamp(),clock_timestamp(),'claimed','e4000000-0000-0000-0000-000000000036',clock_timestamp()+interval '1 day',null),
+  ('e1000000-0000-0000-0000-000000000030','e2000000-0000-0000-0000-000000000101','return',(select registrant_id from public.equipment_requests where id='e2000000-0000-0000-0000-000000000101'),'equipment-requests/e2000000-0000-0000-0000-000000000101/return/e1000000-0000-0000-0000-000000000030.png','pending',clock_timestamp(),clock_timestamp(),'retry',null,null,null);
+
+set local role service_role;
+select public.mark_equipment_signature_cleanup_compensation('e1000000-0000-0000-0000-000000000029');
+set local role postgres;
+create temp table active_claim_marker as
+select cleanup_compensation_required_at
+from public.equipment_signature_operations
+where id='e1000000-0000-0000-0000-000000000029';
+select ok((select cleanup_compensation_required_at > cleanup_claimed_at from public.equipment_signature_operations where id='e1000000-0000-0000-0000-000000000029'),'112 active claim marker is strictly newer than its claim');
+set local role service_role;
+select public.mark_equipment_signature_cleanup_compensation('e1000000-0000-0000-0000-000000000029');
+set local role postgres;
+select is((select cleanup_compensation_required_at from public.equipment_signature_operations where id='e1000000-0000-0000-0000-000000000029'),(select cleanup_compensation_required_at from active_claim_marker),'113 active claim marker remains idempotent');
+
+set local role service_role;
+select public.mark_equipment_signature_cleanup_compensation('e1000000-0000-0000-0000-000000000030');
+set local role postgres;
+update public.equipment_signature_operations
+set cleanup_compensation_required_at=clock_timestamp()+interval '1 day'
+where id='e1000000-0000-0000-0000-000000000030';
+set local role service_role;
+create temp table marker_ordered_claim as
+select * from public.claim_equipment_signature_cleanup_candidates(clock_timestamp()+interval '1 hour',clock_timestamp()+interval '1 hour',clock_timestamp()-interval '1 hour',100,'e4000000-0000-0000-0000-000000000037');
+set local role postgres;
+select ok((select cleanup_claimed_at > cleanup_compensation_required_at and cleanup_claim_token='e4000000-0000-0000-0000-000000000037'::uuid from public.equipment_signature_operations where id='e1000000-0000-0000-0000-000000000030'),'114 marked operation claim is strictly newer than its marker');
 select * from finish();
 rollback;
