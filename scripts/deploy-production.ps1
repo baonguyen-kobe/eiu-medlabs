@@ -43,15 +43,19 @@ try {
     throw "Refusing production deployment: local HEAD does not equal origin/main."
   }
 
-  $vercel = Get-Command vercel -ErrorAction SilentlyContinue
+  $vercel = Get-Command vercel.cmd -ErrorAction SilentlyContinue
+  if (-not $vercel) {
+    $vercel = Get-Command vercel -ErrorAction SilentlyContinue
+  }
   if (-not $vercel) {
     throw "Vercel CLI is required but is not installed. Installation is intentionally not performed."
   }
+  $vercelPath = if ($vercel.Path) { $vercel.Path } else { $vercel.Source }
   if (-not (Test-Path -LiteralPath ".vercel/project.json")) {
     throw "Vercel project link is missing at .vercel/project.json."
   }
 
-  $deployOutput = & $vercel.Source deploy --prod --yes `
+  $deployOutput = & $vercelPath deploy --prod --yes `
     --meta "appGitSha=$sha" `
     --env "APP_GIT_SHA=$sha" `
     --build-env "APP_GIT_SHA=$sha" 2>&1
@@ -74,7 +78,7 @@ try {
     -ExpectedSha $sha `
     -Label "Production alias"
 
-  $metadataOutput = & $vercel.Source ls --meta "appGitSha=$sha" 2>&1
+  $metadataOutput = & $vercelPath ls --meta "appGitSha=$sha" 2>&1
   if ($LASTEXITCODE -ne 0 -or ($metadataOutput | Out-String) -notmatch [regex]::Escape($sha)) {
     throw "Vercel metadata lookup did not find the deployed appGitSha."
   }
