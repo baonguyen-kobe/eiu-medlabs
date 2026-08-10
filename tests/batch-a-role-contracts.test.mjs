@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createClient } from "@supabase/supabase-js";
+import { assertLocalSupabaseTarget } from "./helpers/local-test-safety.mjs";
 
 const localEnv = Object.fromEntries(
   readFileSync(new URL("../.env.local", import.meta.url), "utf8")
@@ -30,6 +31,7 @@ async function signIn(email, password) {
 }
 
 test("Batch A: Teaching Assistant RPCs enforce scoped role contracts", async () => {
+  assertLocalSupabaseTarget(localEnv.NEXT_PUBLIC_SUPABASE_URL);
   const service = client(localEnv.SUPABASE_SECRET_KEY);
   const suffix = crypto.randomUUID();
   const basicCourseId = crypto.randomUUID();
