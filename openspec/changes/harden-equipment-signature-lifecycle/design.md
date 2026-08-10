@@ -38,6 +38,9 @@ requiring `cleanup_state = none`.
   a service-role, operation-id-only RPC. The marker preserves the existing
   cleanup ownership and is claimable only when that ownership permits it; it
   never adopts an operation or starts a physical cleanup runner.
+- A terminal cleanup ACK clears a compensation marker only when it is absent or
+  predates that ACK's validated `cleanup_claimed_at`. A newer marker belongs to
+  a later recovery generation and remains claimable after the terminal ACK.
 
 ## Risks / Trade-offs
 
