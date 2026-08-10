@@ -905,7 +905,7 @@ select throws_ok(
   'Unscoped Staff cannot update a linked Basic Medical schedule'
 );
 
-select set_config('role', 'service_role', true);
+select set_config('role', 'postgres', true);
 
 select is(
   (select lecturer_id from public.class_schedules
