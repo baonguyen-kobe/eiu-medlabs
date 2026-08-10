@@ -18,6 +18,7 @@ export type ScheduleEvent = {
   owned?: boolean;
   studentCount?: number;
   roomTypeId?: string;
+  basicMedicalRegistrationId?: string;
   equipmentRequest?: { id: string; status: string };
 };
 

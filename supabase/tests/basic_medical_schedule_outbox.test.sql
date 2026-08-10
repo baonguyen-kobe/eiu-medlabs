@@ -2,7 +2,7 @@
 -- Checkpoint B & Corrective Fix: Basic Medical Schedule Transactional Outbox (YC-L04 & YC-L05) & YC-L03 Reschedule & YC-L04 Authority Gate
 
 begin;
-select plan(50);
+select plan(68);
 
 -- Setup test fixtures
 create temp table _test_fixtures as
@@ -147,6 +147,48 @@ union all select
   25, 'published'::public.schedule_status, lecturer_1_id, lecturer_1_id, now(),
   'import'::public.schedule_source, import_batch_sl_id
 from _test_fixtures;
+
+-- Seed one native linked registration/session to exercise the aggregate-safe
+-- schedule editor path. The guard is enabled only for fixture construction.
+insert into public.basic_medical_registrations (
+  id, academic_year, semester, start_date, end_date, course_id, room_id,
+  student_count, registrant_id, responsible_lecturer_id, created_by
+)
+select
+  'f0000000-0000-0000-0000-000000000001'::uuid,
+  '2042-2043', 'HK1', '2042-09-20'::date, '2042-09-22'::date,
+  course_bm_id, room_bm_1_id, 30, lecturer_1_id, lecturer_1_id, admin_id
+from _test_fixtures;
+
+select set_config('app.basic_medical_registration_mutation', 'true', true);
+
+insert into public.class_schedules (
+  id, course_id, course_code_snapshot, course_name_snapshot, room_id,
+  lecturer_id, schedule_date, start_time, end_time, student_count,
+  schedule_status, created_by, published_by, published_at, source,
+  basic_medical_registration_id
+)
+select
+  'd0000000-0000-0000-0000-000000000007'::uuid,
+  course_bm_id, 'BM-LINKED-101', 'Môn Y Cơ Sở liên kết', room_bm_1_id,
+  lecturer_1_id, '2042-09-20'::date, '08:00'::time, '10:00'::time, 30,
+  'published'::public.schedule_status, admin_id, admin_id, now(),
+  'manual'::public.schedule_source,
+  'f0000000-0000-0000-0000-000000000001'::uuid
+from _test_fixtures;
+
+insert into public.basic_medical_registration_sessions (
+  id, registration_id, class_schedule_id, lesson_title,
+  teaching_lecturer_id, session_number
+)
+select
+  'f0000000-0000-0000-0000-000000000002'::uuid,
+  'f0000000-0000-0000-0000-000000000001'::uuid,
+  'd0000000-0000-0000-0000-000000000007'::uuid,
+  'Bài liên kết', lecturer_1_id, 1
+from _test_fixtures;
+
+select set_config('app.basic_medical_registration_mutation', 'false', true);
 
 
 -- ============================================================================
@@ -739,6 +781,175 @@ select set_config('role', 'service_role', true);
 select lives_ok(
   $$ select public.process_email_outbox_events(50); $$,
   'Service role can execute process_email_outbox_events'
+);
+
+-- Tests 51-57: a linked native session is updated atomically and remains
+-- protected from aggregate-level edits or direct access to the core function.
+select set_config('role', 'authenticated', true);
+select set_config('request.jwt.claims', json_build_object('sub', (select admin_id from _test_fixtures))::text, true);
+
+select lives_ok(
+  $$ select public.update_class_schedule_details(
+    'd0000000-0000-0000-0000-000000000007'::uuid,
+    '2042-09-21'::date,
+    '09:00'::time,
+    '11:00'::time,
+    (select room_bm_1_id from _test_fixtures),
+    30,
+    array[(select lecturer_2_id from _test_fixtures)]
+  ); $$,
+  'Linked Basic Medical schedule update succeeds for Admin'
+);
+
+select is(
+  (select lecturer_id from public.class_schedules
+   where id = 'd0000000-0000-0000-0000-000000000007'::uuid),
+  (select lecturer_2_id from _test_fixtures),
+  'Linked schedule stores the selected teaching lecturer'
+);
+
+select is(
+  (select teaching_lecturer_id from public.basic_medical_registration_sessions
+   where id = 'f0000000-0000-0000-0000-000000000002'::uuid),
+  (select lecturer_2_id from _test_fixtures),
+  'Linked session confirmation owner changes in the same transaction'
+);
+
+select is(
+  (select lecturer_2_id from public.class_schedules
+   where id = 'd0000000-0000-0000-0000-000000000007'::uuid),
+  null,
+  'Linked schedule clears its second lecturer'
+);
+
+select throws_ok(
+  $$ select public.update_class_schedule_details(
+    'd0000000-0000-0000-0000-000000000007'::uuid,
+    '2042-09-21'::date, '09:00'::time, '11:00'::time,
+    (select room_bm_2_id from _test_fixtures), 30,
+    array[(select lecturer_2_id from _test_fixtures)]
+  ); $$,
+  '55000',
+  'BASIC_MEDICAL_REGISTRATION_EDIT_REQUIRED',
+  'Linked session room changes must use the registration editor'
+);
+
+select throws_ok(
+  $$ select public.update_class_schedule_details(
+    'd0000000-0000-0000-0000-000000000007'::uuid,
+    '2042-09-21'::date, '09:00'::time, '11:00'::time,
+    (select room_bm_1_id from _test_fixtures), 30,
+    array[(select lecturer_1_id from _test_fixtures), (select lecturer_2_id from _test_fixtures)]
+  ); $$,
+  '22023',
+  'BASIC_MEDICAL_TEACHING_LECTURER_REQUIRED',
+  'Linked Basic Medical session requires exactly one teaching lecturer'
+);
+
+select is(
+  (select lecturer_id from public.class_schedules
+   where id = 'd0000000-0000-0000-0000-000000000007'::uuid),
+  (select lecturer_2_id from _test_fixtures),
+  'Rejected two-lecturer update leaves the linked schedule unchanged'
+);
+
+select is(
+  (select teaching_lecturer_id from public.basic_medical_registration_sessions
+   where id = 'f0000000-0000-0000-0000-000000000002'::uuid),
+  (select lecturer_2_id from _test_fixtures),
+  'Rejected two-lecturer update leaves the linked session unchanged'
+);
+
+select set_config('request.jwt.claims', json_build_object('sub', (select staff_bm_id from _test_fixtures))::text, true);
+select lives_ok(
+  $$ select public.update_class_schedule_details(
+    'd0000000-0000-0000-0000-000000000007'::uuid,
+    '2042-09-21'::date, '09:00'::time, '11:00'::time,
+    (select room_bm_1_id from _test_fixtures), 30,
+    array[(select lecturer_1_id from _test_fixtures)]
+  ); $$,
+  'Scoped Staff can update a linked Basic Medical schedule'
+);
+
+select is(
+  (select lecturer_id from public.class_schedules
+   where id = 'd0000000-0000-0000-0000-000000000007'::uuid),
+  (select lecturer_1_id from _test_fixtures),
+  'Scoped Staff linked edit updates the schedule lecturer'
+);
+
+select is(
+  (select teaching_lecturer_id from public.basic_medical_registration_sessions
+   where id = 'f0000000-0000-0000-0000-000000000002'::uuid),
+  (select lecturer_1_id from _test_fixtures),
+  'Scoped Staff linked edit updates the session teaching lecturer'
+);
+
+select is(
+  (select lecturer_2_id from public.class_schedules
+   where id = 'd0000000-0000-0000-0000-000000000007'::uuid),
+  null,
+  'Scoped Staff linked edit preserves an empty second lecturer'
+);
+
+select set_config('request.jwt.claims', json_build_object('sub', (select staff_sl_id from _test_fixtures))::text, true);
+select throws_ok(
+  $$ select public.update_class_schedule_details(
+    'd0000000-0000-0000-0000-000000000007'::uuid,
+    '2042-09-22'::date, '14:00'::time, '16:00'::time,
+    (select room_bm_1_id from _test_fixtures), 30,
+    array[(select lecturer_2_id from _test_fixtures)]
+  ); $$,
+  '42501',
+  'CLASS_UPDATE_FORBIDDEN',
+  'Unscoped Staff cannot update a linked Basic Medical schedule'
+);
+
+select is(
+  (select lecturer_id from public.class_schedules
+   where id = 'd0000000-0000-0000-0000-000000000007'::uuid),
+  (select lecturer_1_id from _test_fixtures),
+  'Unscoped Staff denial leaves the linked schedule unchanged'
+);
+
+select is(
+  (select teaching_lecturer_id from public.basic_medical_registration_sessions
+   where id = 'f0000000-0000-0000-0000-000000000002'::uuid),
+  (select lecturer_1_id from _test_fixtures),
+  'Unscoped Staff denial leaves the linked session unchanged'
+);
+
+select throws_ok(
+  $$ select public.update_class_schedule_details_core(
+    'd0000000-0000-0000-0000-000000000007'::uuid,
+    '2042-09-21'::date, '09:00'::time, '11:00'::time,
+    (select room_bm_1_id from _test_fixtures), 30,
+    array[(select lecturer_2_id from _test_fixtures)]
+  ); $$,
+  '42501',
+  null,
+  'Authenticated clients cannot bypass the linked schedule wrapper'
+);
+
+select set_config('request.jwt.claims', json_build_object('sub', (select lecturer_1_id from _test_fixtures))::text, true);
+select throws_ok(
+  $$ select public.update_class_schedule_details(
+    'd0000000-0000-0000-0000-000000000007'::uuid,
+    '2042-09-21'::date, '09:00'::time, '11:00'::time,
+    (select room_bm_1_id from _test_fixtures), 30,
+    array[(select lecturer_2_id from _test_fixtures)]
+  ); $$,
+  '42501',
+  'CLASS_UPDATE_FORBIDDEN',
+  'Lecturers cannot use the linked Basic Medical schedule editor'
+);
+
+select set_config('role', 'service_role', true);
+select is(
+  (select count(*)::integer from public.email_outbox_events
+   where aggregate_id = 'd0000000-0000-0000-0000-000000000007'::uuid),
+  2,
+  'Successful linked edits retain one outbox event per actual update'
 );
 
 select * from finish();

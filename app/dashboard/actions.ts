@@ -11,6 +11,21 @@ export type ActionResult = {
 };
 
 function friendlyDatabaseError(message: string): string {
+  if (message.includes("BASIC_MEDICAL_REGISTRATION_EDIT_REQUIRED")) {
+    return "Phòng và số sinh viên phải được điều chỉnh tại Phiếu Y cơ sở.";
+  }
+  if (message.includes("BASIC_MEDICAL_TEACHING_LECTURER_REQUIRED")) {
+    return "Mỗi buổi Y cơ sở phải có đúng một giảng viên giảng dạy/hướng dẫn.";
+  }
+  if (message.includes("BASIC_MEDICAL_SESSION_DATE_OUTSIDE_REGISTRATION")) {
+    return "Ngày học phải nằm trong thời gian đăng ký của Phiếu Y cơ sở.";
+  }
+  if (message.includes("BASIC_MEDICAL_SESSION_ALREADY_CONFIRMED")) {
+    return "Buổi học đã được ký xác nhận nên không thể đổi lịch hoặc giảng viên.";
+  }
+  if (message.includes("BASIC_MEDICAL_LINKED_SCHEDULE_INCONSISTENT")) {
+    return "Lịch và Phiếu Y cơ sở chưa đồng bộ. Vui lòng liên hệ quản trị hệ thống.";
+  }
   if (message.includes("SCHEDULE_CONFLICT")) {
     return "Phòng hoặc giảng viên đã có lịch trùng trong thời gian này.";
   }

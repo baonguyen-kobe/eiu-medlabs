@@ -288,6 +288,7 @@ export function Dashboard({
   calendarKind = "combined",
   roomTypeCodes = [],
   allowBasicMedicalAccess = false,
+  canEditBasicMedicalSchedules = false,
 }: {
   fullName: string;
   roles: Role[];
@@ -305,6 +306,7 @@ export function Dashboard({
   calendarKind?: "combined" | "basic_medical";
   roomTypeCodes?: string[];
   allowBasicMedicalAccess?: boolean;
+  canEditBasicMedicalSchedules?: boolean;
 }) {
   const router = useRouter();
   useScheduleRealtime();
@@ -380,7 +382,9 @@ export function Dashboard({
     setSelectedEvent(event);
     setSelectedLecturerIds(
       event.type === "class"
-        ? (event.personIds ?? (event.personId ? [event.personId] : []))
+        ? event.basicMedicalRegistrationId
+          ? [event.personId].filter((id): id is string => Boolean(id))
+          : (event.personIds ?? (event.personId ? [event.personId] : []))
         : [],
     );
     setSelectedShiftAssigneeId(
@@ -475,6 +479,10 @@ export function Dashboard({
   const classManager = roles.some((item) =>
     ["admin", "staff", "teaching_assistant"].includes(item),
   );
+  const canEditClassDetails =
+    calendarKind === "basic_medical"
+      ? canEditBasicMedicalSchedules
+      : classManager;
 
   return (
     <WorkspaceShell
@@ -833,7 +841,9 @@ export function Dashboard({
                 <dt>Ngày</dt>
                 <dd>
                   {selectedEvent.type === "class" &&
-                  (classManager || selectedEvent.owned) ? (
+                  (canEditClassDetails ||
+                    (calendarKind !== "basic_medical" &&
+                      selectedEvent.owned)) ? (
                     <input
                       aria-label="Ngày học"
                       type="date"
@@ -850,7 +860,7 @@ export function Dashboard({
               <div>
                 <dt>Thời gian</dt>
                 <dd>
-                  {selectedEvent.type === "class" && classManager ? (
+                  {selectedEvent.type === "class" && canEditClassDetails ? (
                     <span className="drawer-time-editor">
                       <input
                         aria-label="Giờ bắt đầu"
@@ -879,7 +889,9 @@ export function Dashboard({
                 <div>
                   <dt>Phòng</dt>
                   <dd className="mono">
-                    {selectedEvent.type === "class" && classManager ? (
+                    {selectedEvent.type === "class" &&
+                    canEditClassDetails &&
+                    calendarKind !== "basic_medical" ? (
                       <select
                         aria-label="Phòng học"
                         value={selectedRoomId}
@@ -901,22 +913,32 @@ export function Dashboard({
               ) : null}
               <div>
                 <dt>
-                  {selectedEvent.type === "class" ? "Giảng viên" : "Người trực"}
+                  {selectedEvent.type === "class"
+                    ? calendarKind === "basic_medical"
+                      ? "Giảng viên giảng dạy/hướng dẫn"
+                      : "Giảng viên"
+                    : "Người trực"}
                 </dt>
                 <dd>
-                  {classManager && selectedEvent.type === "class" ? (
+                  {canEditClassDetails && selectedEvent.type === "class" ? (
                     <span className="drawer-lecturer-selects">
                       <select
                         value={selectedLecturerIds[0] ?? ""}
                         onChange={(event) =>
                           setSelectedLecturerIds(
-                            [
-                              event.target.value,
-                              selectedLecturerIds[1] ?? "",
-                            ].filter(Boolean),
+                            calendarKind === "basic_medical"
+                              ? [event.target.value].filter(Boolean)
+                              : [
+                                  event.target.value,
+                                  selectedLecturerIds[1] ?? "",
+                                ].filter(Boolean),
                           )
                         }
-                        aria-label="Chọn giảng viên thứ nhất"
+                        aria-label={
+                          calendarKind === "basic_medical"
+                            ? "Chọn giảng viên giảng dạy/hướng dẫn"
+                            : "Chọn giảng viên thứ nhất"
+                        }
                       >
                         <option value="">Chưa có giảng viên</option>
                         {lecturers
@@ -929,29 +951,31 @@ export function Dashboard({
                             </option>
                           ))}
                       </select>
-                      <select
-                        value={selectedLecturerIds[1] ?? ""}
-                        onChange={(event) =>
-                          setSelectedLecturerIds(
-                            [
-                              selectedLecturerIds[0] ?? "",
-                              event.target.value,
-                            ].filter(Boolean),
-                          )
-                        }
-                        aria-label="Chọn giảng viên thứ hai"
-                      >
-                        <option value="">Không có giảng viên thứ hai</option>
-                        {lecturers
-                          .filter(
-                            (person) => person.id !== selectedLecturerIds[0],
-                          )
-                          .map((person) => (
-                            <option value={person.id} key={person.id}>
-                              {person.fullName}
-                            </option>
-                          ))}
-                      </select>
+                      {calendarKind !== "basic_medical" ? (
+                        <select
+                          value={selectedLecturerIds[1] ?? ""}
+                          onChange={(event) =>
+                            setSelectedLecturerIds(
+                              [
+                                selectedLecturerIds[0] ?? "",
+                                event.target.value,
+                              ].filter(Boolean),
+                            )
+                          }
+                          aria-label="Chọn giảng viên thứ hai"
+                        >
+                          <option value="">Không có giảng viên thứ hai</option>
+                          {lecturers
+                            .filter(
+                              (person) => person.id !== selectedLecturerIds[0],
+                            )
+                            .map((person) => (
+                              <option value={person.id} key={person.id}>
+                                {person.fullName}
+                              </option>
+                            ))}
+                        </select>
+                      ) : null}
                     </span>
                   ) : role === "admin" && selectedEvent.type === "shift" ? (
                     <select
@@ -988,7 +1012,7 @@ export function Dashboard({
                 <div>
                   <dt>Số sinh viên</dt>
                   <dd>
-                    {classManager ? (
+                    {canEditClassDetails && calendarKind !== "basic_medical" ? (
                       <input
                         aria-label="Số sinh viên"
                         type="number"
@@ -1038,20 +1062,26 @@ export function Dashboard({
             </dl>
             <div className="drawer-actions">
               {selectedEvent.type === "class" &&
-              (classManager || selectedEvent.owned) ? (
+              (canEditClassDetails ||
+                (calendarKind !== "basic_medical" && selectedEvent.owned)) ? (
                 <button
                   className="button button-primary full-width"
                   disabled={pending}
                   onClick={() =>
                     runEventAction(() =>
-                      classManager
+                      canEditClassDetails
                         ? updateClassSchedule(selectedEvent.id, {
                             scheduleDate: selectedScheduleDate,
                             startTime: selectedStartTime,
                             endTime: selectedEndTime,
                             roomId: selectedRoomId,
                             studentCount: selectedStudentCount,
-                            lecturerIds: selectedLecturerIds,
+                            lecturerIds:
+                              selectedEvent.basicMedicalRegistrationId
+                                ? [selectedLecturerIds[0]].filter(
+                                    (id): id is string => Boolean(id),
+                                  )
+                                : selectedLecturerIds,
                           })
                         : rescheduleClass(
                             selectedEvent.id,
@@ -1064,6 +1094,7 @@ export function Dashboard({
                 </button>
               ) : null}
               {selectedEvent.type === "class" &&
+              calendarKind !== "basic_medical" &&
               (selectedEvent.personIds?.length ?? 0) < 2 &&
               !selectedEvent.owned &&
               (role === "lecturer" || role === "admin") ? (
@@ -1076,6 +1107,7 @@ export function Dashboard({
                 </button>
               ) : null}
               {selectedEvent.type === "class" &&
+              calendarKind !== "basic_medical" &&
               selectedEvent.owned &&
               (role === "lecturer" || role === "admin") ? (
                 <button
