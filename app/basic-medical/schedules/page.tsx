@@ -14,7 +14,10 @@ import type { ScheduleEvent } from "@/lib/demo-data";
 import { businessToday, businessTodayString } from "@/lib/business-time";
 import { BASIC_MEDICAL_ROOM_TYPE_ID } from "@/lib/room-types";
 import { getViewer } from "@/lib/viewer";
-import { canViewBasicMedicalSchedules } from "@/lib/workspace-access";
+import {
+  canManageBasicMedicalWorkspace,
+  canViewBasicMedicalSchedules,
+} from "@/lib/workspace-access";
 
 type ViewMode = "month" | "week" | "list";
 
@@ -31,12 +34,8 @@ export default async function BasicMedicalSchedulesPage({
     roomTypes,
     allowBasicMedicalAccess,
   } = await getViewer();
-  if (
-    !canViewBasicMedicalSchedules(
-      roles,
-      roomTypes.map(({ code }) => code),
-    )
-  ) {
+  const roomTypeCodes = roomTypes.map(({ code }) => code);
+  if (!canViewBasicMedicalSchedules(roles, roomTypeCodes)) {
     redirect("/dashboard");
   }
 
@@ -70,7 +69,7 @@ export default async function BasicMedicalSchedulesPage({
         `
         id, room_id, schedule_date, start_time, end_time, course_code_snapshot,
         course_name_snapshot, lecturer_id, lecturer_2_id, schedule_status,
-        source, note, student_count,
+        source, note, student_count, basic_medical_registration_id,
         rooms!inner (room_code, building_code, room_type_id)
       `,
       )
@@ -128,6 +127,8 @@ export default async function BasicMedicalSchedulesPage({
       owned: lecturerIds.includes(userId),
       studentCount: schedule.student_count,
       roomTypeId: room?.room_type_id,
+      basicMedicalRegistrationId:
+        schedule.basic_medical_registration_id ?? undefined,
     };
   });
 
@@ -170,8 +171,12 @@ export default async function BasicMedicalSchedulesPage({
     <Dashboard
       fullName={fullName}
       roles={roles}
-      roomTypeCodes={roomTypes.map(({ code }) => code)}
+      roomTypeCodes={roomTypeCodes}
       allowBasicMedicalAccess={allowBasicMedicalAccess}
+      canEditBasicMedicalSchedules={canManageBasicMedicalWorkspace(
+        roles,
+        roomTypeCodes,
+      )}
       events={classEvents}
       calendarDays={calendarDays}
       periodLabel={periodLabel}
