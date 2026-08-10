@@ -87,27 +87,12 @@ try {
     throw "Vercel project link is missing at .vercel/project.json."
   }
 
-  $deployOutput = Invoke-Vercel -CommandPath $vercelPath -Arguments @(
+  Invoke-Vercel -CommandPath $vercelPath -Arguments @(
     "deploy", "--prod", "--yes",
     "--meta", "appGitSha=$sha",
     "--env", "APP_GIT_SHA=$sha",
     "--build-env", "APP_GIT_SHA=$sha"
-  )
-
-  $deploymentUrls = [regex]::Matches(
-    ($deployOutput | Out-String),
-    "https://[A-Za-z0-9.-]+\\.vercel\\.app(?:[^\\s]*)?"
-  ) | ForEach-Object { $_.Value.TrimEnd("/", ".") }
-  $deploymentUrl = $deploymentUrls | Select-Object -Last 1
-  if (-not $deploymentUrl) {
-    throw "Vercel CLI completed without a deployment URL."
-  }
-
-  Assert-VersionEndpoint -Url $deploymentUrl -ExpectedSha $sha -Label "Deployment"
-  Assert-VersionEndpoint `
-    -Url "https://medlabs-calendar.vercel.app" `
-    -ExpectedSha $sha `
-    -Label "Production alias"
+  ) | Out-Null
 
   $metadataOutput = Invoke-Vercel -CommandPath $vercelPath -Arguments @(
     "ls", "--meta", "appGitSha=$sha"
@@ -115,6 +100,23 @@ try {
   if (($metadataOutput | Out-String) -notmatch [regex]::Escape($sha)) {
     throw "Vercel metadata lookup did not find the deployed appGitSha."
   }
+
+  $deploymentUrls = [regex]::Matches(
+    ($metadataOutput | Out-String),
+    "https://[A-Za-z0-9.-]+\\.vercel\\.app(?:[^\\s]*)?"
+  ) | ForEach-Object { $_.Value.TrimEnd("/", ".") }
+  $deploymentUrl = $deploymentUrls | Select-Object -Last 1
+  if (-not $deploymentUrl) {
+    throw "Vercel metadata lookup completed without a deployment URL."
+  }
+
+  # This project protects raw deployment URLs with Vercel Authentication. The
+  # exact metadata match plus the public production alias validates the same
+  # deployment without relying on an SSO-protected direct deployment endpoint.
+  Assert-VersionEndpoint `
+    -Url "https://medlabs-calendar.vercel.app" `
+    -ExpectedSha $sha `
+    -Label "Production alias"
 
   Write-Output "Production deployment verified: $deploymentUrl"
   Write-Output "Production application SHA: $sha"
