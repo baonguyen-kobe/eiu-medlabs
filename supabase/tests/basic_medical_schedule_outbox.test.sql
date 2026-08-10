@@ -905,6 +905,8 @@ select throws_ok(
   'Unscoped Staff cannot update a linked Basic Medical schedule'
 );
 
+select set_config('role', 'service_role', true);
+
 select is(
   (select lecturer_id from public.class_schedules
    where id = 'd0000000-0000-0000-0000-000000000007'::uuid),
@@ -918,6 +920,9 @@ select is(
   (select lecturer_1_id from _test_fixtures),
   'Unscoped Staff denial leaves the linked session unchanged'
 );
+
+select set_config('role', 'authenticated', true);
+select set_config('request.jwt.claims', json_build_object('sub', (select staff_sl_id from _test_fixtures))::text, true);
 
 select throws_ok(
   $$ select public.update_class_schedule_details_core(
