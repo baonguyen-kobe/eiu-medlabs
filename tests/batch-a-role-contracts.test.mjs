@@ -1,0 +1,464 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import test from "node:test";
+import { createClient } from "@supabase/supabase-js";
+
+const localEnv = Object.fromEntries(
+  readFileSync(new URL("../.env.local", import.meta.url), "utf8")
+    .split(/\r?\n/)
+    .filter((line) => line && !line.startsWith("#"))
+    .map((line) => {
+      const [key, ...value] = line.split("=");
+      return [key, value.join("=")];
+    }),
+);
+
+function client(key = localEnv.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) {
+  return createClient(localEnv.NEXT_PUBLIC_SUPABASE_URL, key, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+}
+
+async function signIn(email, password) {
+  const supabase = client();
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
+  assert.ifError(error);
+  return { supabase, user: data.user };
+}
+
+test("Batch A: Teaching Assistant RPCs enforce scoped role contracts", async () => {
+  const service = client(localEnv.SUPABASE_SECRET_KEY);
+  const suffix = crypto.randomUUID();
+  const basicCourseId = crypto.randomUUID();
+  const basicRoomId = crypto.randomUUID();
+  const equipmentScheduleId = crypto.randomUUID();
+  const equipmentRegressionScheduleId = crypto.randomUUID();
+  const catalogItemId = crypto.randomUUID();
+  const manualScheduleIds = [];
+  const equipmentRequestIds = [];
+  const registrationIds = [];
+  const testUserIds = [];
+  let lecturerId;
+
+  async function createLocalUser({
+    role,
+    scopes,
+    phone = null,
+    allowBasicMedicalAccess = false,
+  }) {
+    const email = `m2-${role}-${crypto.randomUUID()}@campus.local`;
+    const password = "LocalBatchA123!";
+    const { data, error } = await service.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      app_metadata: { preapproved: true },
+      user_metadata: { full_name: `M2 ${role}` },
+    });
+    assert.ifError(error);
+    const id = data.user.id;
+    assert.ifError(
+      (
+        await service
+          .from("profiles")
+          .update({
+            is_active: true,
+            allow_basic_medical_access: allowBasicMedicalAccess,
+            ...(phone ? { phone } : {}),
+          })
+          .eq("id", id)
+      ).error,
+    );
+    assert.ifError(
+      (await service.from("user_roles").upsert({ user_id: id, role })).error,
+    );
+    for (const roomTypeId of scopes) {
+      assert.ifError(
+        (
+          await service.from("profile_room_types").upsert({
+            profile_id: id,
+            room_type_id: roomTypeId,
+          })
+        ).error,
+      );
+    }
+    testUserIds.push(id);
+    return { id, email, password };
+  }
+
+  try {
+    const adminFixture = await createLocalUser({
+      role: "admin",
+      scopes: ["40000000-0000-0000-0000-000000000001"],
+    });
+    const assistantFixture = await createLocalUser({
+      role: "teaching_assistant",
+      scopes: ["40000000-0000-0000-0000-000000000001"],
+      phone: "0901234567",
+    });
+    const staffFixture = await createLocalUser({
+      role: "staff",
+      scopes: ["40000000-0000-0000-0000-000000000001"],
+    });
+    const unscopedAssistantFixture = await createLocalUser({
+      role: "teaching_assistant",
+      scopes: [],
+      allowBasicMedicalAccess: true,
+    });
+    const equipmentNoScopeAssistantFixture = await createLocalUser({
+      role: "teaching_assistant",
+      scopes: [],
+    });
+    const scopedNoAccessAssistantFixture = await createLocalUser({
+      role: "teaching_assistant",
+      scopes: ["40000000-0000-0000-0000-000000000002"],
+    });
+    const lecturerFixture = await createLocalUser({
+      role: "lecturer",
+      scopes: [
+        "40000000-0000-0000-0000-000000000001",
+        "40000000-0000-0000-0000-000000000002",
+      ],
+      phone: "0901234568",
+    });
+    lecturerId = lecturerFixture.id;
+    const admin = await signIn(adminFixture.email, adminFixture.password);
+    assert.ifError(
+      (
+        await service
+          .from("profile_room_types")
+          .update({
+            room_type_id: "40000000-0000-0000-0000-000000000002",
+          })
+          .eq("profile_id", equipmentNoScopeAssistantFixture.id)
+          .eq("room_type_id", "40000000-0000-0000-0000-000000000001")
+      ).error,
+    );
+    const staff = await signIn(staffFixture.email, staffFixture.password);
+    const lecturer = await signIn(
+      lecturerFixture.email,
+      lecturerFixture.password,
+    );
+    const assistant = await signIn(
+      assistantFixture.email,
+      assistantFixture.password,
+    );
+    const unscopedAssistant = await signIn(
+      unscopedAssistantFixture.email,
+      unscopedAssistantFixture.password,
+    );
+    const equipmentNoScopeAssistant = await signIn(
+      equipmentNoScopeAssistantFixture.email,
+      equipmentNoScopeAssistantFixture.password,
+    );
+    const scopedNoAccessAssistant = await signIn(
+      scopedNoAccessAssistantFixture.email,
+      scopedNoAccessAssistantFixture.password,
+    );
+    assert.ifError(
+      (
+        await service.from("courses").insert({
+          id: basicCourseId,
+          course_code: `M2B-${suffix.slice(0, 8)}`,
+          course_name: "M2 Basic Medical contract fixture",
+          room_type_id: "40000000-0000-0000-0000-000000000002",
+        })
+      ).error,
+    );
+    assert.ifError(
+      (
+        await service.from("rooms").insert({
+          id: basicRoomId,
+          room_code: `M2B-${suffix.slice(0, 8)}`,
+          building_code: "M2",
+          room_name: "M2 Basic Medical contract fixture",
+          room_type: "Y cơ sở",
+          capacity: 30,
+          room_type_id: "40000000-0000-0000-0000-000000000002",
+        })
+      ).error,
+    );
+    const basicPayload = (date, note) => ({
+      target_registration_id: null,
+      target_academic_year: "2051-2052",
+      target_semester: "HK1",
+      target_start_date: date,
+      target_end_date: date,
+      target_course_id: basicCourseId,
+      target_room_id: basicRoomId,
+      target_student_count: 20,
+      target_responsible_lecturer_id: lecturerId,
+      target_note: note,
+      target_sessions: [
+        {
+          schedule_date: date,
+          start_time: "07:30",
+          end_time: "09:30",
+          lesson_title: note,
+          teaching_lecturer_id: lecturerId,
+        },
+      ],
+    });
+
+    for (const [actor, date, note] of [
+      [admin.supabase, "2051-11-07", "M2-01 admin regression"],
+      [staff.supabase, "2051-11-08", "M2-01 staff regression"],
+      [lecturer.supabase, "2051-11-09", "M2-01 lecturer regression"],
+      [assistant.supabase, "2051-11-10", "M2-01 scoped Teaching Assistant"],
+    ]) {
+      const manual = await actor.rpc("create_manual_class_schedule", {
+        target_course_id: "10000000-0000-0000-0000-000000000001",
+        target_room_id: "20000000-0000-0000-0000-000000000001",
+        target_lecturer_id: lecturerId,
+        target_lecturer_2_id: null,
+        target_schedule_date: date,
+        target_start_time: "07:30",
+        target_end_time: "09:30",
+        target_note: note,
+        target_student_count: 20,
+      });
+      assert.ifError(manual.error);
+      manualScheduleIds.push(manual.data.id);
+    }
+
+    const manualOutOfScope = await assistant.supabase.rpc(
+      "create_manual_class_schedule",
+      {
+        target_course_id: basicCourseId,
+        target_room_id: basicRoomId,
+        target_lecturer_id: lecturerId,
+        target_lecturer_2_id: null,
+        target_schedule_date: "2051-11-11",
+        target_start_time: "07:30",
+        target_end_time: "09:30",
+        target_note: "M2-01 out-of-scope Teaching Assistant",
+        target_student_count: 20,
+      },
+    );
+    assert.equal(manualOutOfScope.error?.code, "42501");
+
+    assert.ifError(
+      (
+        await service.from("class_schedules").insert({
+          id: equipmentScheduleId,
+          course_id: "10000000-0000-0000-0000-000000000001",
+          course_code_snapshot: "NUR 101",
+          course_name_snapshot: "M2 Skills contract fixture",
+          room_id: "20000000-0000-0000-0000-000000000001",
+          schedule_date: "2051-11-12",
+          start_time: "07:30",
+          end_time: "09:30",
+          source: "manual",
+          schedule_status: "published",
+          student_count: 20,
+          created_by: admin.user.id,
+          published_by: admin.user.id,
+          published_at: new Date().toISOString(),
+        })
+      ).error,
+    );
+    assert.ifError(
+      (
+        await service.from("class_schedules").insert({
+          id: equipmentRegressionScheduleId,
+          course_id: "10000000-0000-0000-0000-000000000001",
+          course_code_snapshot: "NUR 101",
+          course_name_snapshot: "M2 Skills regression fixture",
+          room_id: "20000000-0000-0000-0000-000000000001",
+          schedule_date: "2051-11-13",
+          start_time: "07:30",
+          end_time: "09:30",
+          source: "manual",
+          schedule_status: "published",
+          student_count: 20,
+          created_by: admin.user.id,
+          published_by: admin.user.id,
+          published_at: new Date().toISOString(),
+        })
+      ).error,
+    );
+    assert.ifError(
+      (
+        await service.from("equipment_catalog").insert({
+          id: catalogItemId,
+          item_name: `M2 equipment ${suffix}`,
+          unit: "Cái",
+        })
+      ).error,
+    );
+    const equipment = await assistant.supabase.rpc(
+      "create_equipment_request_with_items",
+      {
+        target_class_schedule_id: equipmentRegressionScheduleId,
+        target_semester: "HK1",
+        target_responsible_lecturer_id: lecturerId,
+        target_receive_at: "2051-11-13T02:00:00.000Z",
+        target_return_at: "2051-11-13T04:00:00.000Z",
+        target_note: "M2-02 scoped Teaching Assistant",
+        target_late_registration_reason: null,
+        target_items: [
+          {
+            skill_name: "M2 skills",
+            catalog_item_id: catalogItemId,
+            quantity: 1,
+            note: null,
+          },
+        ],
+      },
+    );
+    assert.ifError(equipment.error);
+    equipmentRequestIds.push(equipment.data);
+
+    const equipmentNoScope = await equipmentNoScopeAssistant.supabase.rpc(
+      "create_equipment_request_with_items",
+      {
+        target_class_schedule_id: equipmentScheduleId,
+        target_semester: "HK1",
+        target_responsible_lecturer_id: lecturerId,
+        target_receive_at: "2051-11-12T02:00:00.000Z",
+        target_return_at: "2051-11-12T04:00:00.000Z",
+        target_note: "M2-02 unscoped Teaching Assistant",
+        target_late_registration_reason: null,
+        target_items: [
+          {
+            skill_name: "M2 skills",
+            catalog_item_id: catalogItemId,
+            quantity: 1,
+            note: null,
+          },
+        ],
+      },
+    );
+    assert.equal(equipmentNoScope.error?.code, "42501");
+
+    const equipmentLecturerRegression = await lecturer.supabase.rpc(
+      "create_equipment_request_with_items",
+      {
+        target_class_schedule_id: equipmentScheduleId,
+        target_semester: "HK1",
+        target_responsible_lecturer_id: lecturerId,
+        target_receive_at: "2051-11-12T02:00:00.000Z",
+        target_return_at: "2051-11-12T04:00:00.000Z",
+        target_note: "M2-02 lecturer regression",
+        target_late_registration_reason: null,
+        target_items: [
+          {
+            skill_name: "M2 skills",
+            catalog_item_id: catalogItemId,
+            quantity: 1,
+            note: null,
+          },
+        ],
+      },
+    );
+    assert.ifError(equipmentLecturerRegression.error);
+    equipmentRequestIds.push(equipmentLecturerRegression.data);
+
+    const basicNoScope = await unscopedAssistant.supabase.rpc(
+      "save_basic_medical_registration",
+      basicPayload("2051-11-13", "M2-03 Teaching Assistant without scope"),
+    );
+    assert.equal(basicNoScope.error?.code, "42501");
+
+    const basicNoAccess = await scopedNoAccessAssistant.supabase.rpc(
+      "save_basic_medical_registration",
+      basicPayload("2051-11-14", "M2-03 Teaching Assistant without access"),
+    );
+    assert.equal(basicNoAccess.error?.code, "42501");
+
+    const lecturerNoAccess = await lecturer.supabase.rpc(
+      "save_basic_medical_registration",
+      basicPayload("2051-11-15", "M2-03 Lecturer without access"),
+    );
+    assert.equal(lecturerNoAccess.error?.code, "42501");
+
+    const basicManager = await admin.supabase.rpc(
+      "save_basic_medical_registration",
+      basicPayload("2051-11-16", "M2-03 Admin manager regression"),
+    );
+    assert.ifError(basicManager.error);
+    registrationIds.push(basicManager.data);
+
+    assert.ifError(
+      (
+        await service
+          .from("profiles")
+          .update({ allow_basic_medical_access: true })
+          .eq("id", lecturerId)
+      ).error,
+    );
+    const basicLecturer = await lecturer.supabase.rpc(
+      "save_basic_medical_registration",
+      basicPayload("2051-11-17", "M2-03 authorized Lecturer"),
+    );
+    assert.ifError(basicLecturer.error);
+    registrationIds.push(basicLecturer.data);
+
+    assert.ifError(
+      (
+        await service
+          .from("profiles")
+          .update({ allow_basic_medical_access: true })
+          .eq("id", assistantFixture.id)
+      ).error,
+    );
+    assert.ifError(
+      (
+        await service.from("profile_room_types").insert({
+          profile_id: assistantFixture.id,
+          room_type_id: "40000000-0000-0000-0000-000000000002",
+        })
+      ).error,
+    );
+    const basicAllowed = await assistant.supabase.rpc(
+      "save_basic_medical_registration",
+      basicPayload("2051-11-18", "M2-03 authorized Teaching Assistant"),
+    );
+    assert.ifError(basicAllowed.error);
+    registrationIds.push(basicAllowed.data);
+  } finally {
+    if (registrationIds.length) {
+      await service
+        .from("basic_medical_registration_sessions")
+        .delete()
+        .in("registration_id", registrationIds);
+      await service
+        .from("class_schedules")
+        .delete()
+        .in("basic_medical_registration_id", registrationIds);
+      await service
+        .from("basic_medical_registrations")
+        .delete()
+        .in("id", registrationIds);
+    }
+    if (equipmentRequestIds.length) {
+      await service
+        .from("equipment_requests")
+        .delete()
+        .in("id", equipmentRequestIds);
+    }
+    if (manualScheduleIds.length) {
+      await service
+        .from("class_schedules")
+        .delete()
+        .in("id", manualScheduleIds);
+    }
+    await service
+      .from("class_schedules")
+      .delete()
+      .eq("id", equipmentScheduleId);
+    await service
+      .from("class_schedules")
+      .delete()
+      .eq("id", equipmentRegressionScheduleId);
+    await service.from("equipment_catalog").delete().eq("id", catalogItemId);
+    await service.from("courses").delete().eq("id", basicCourseId);
+    await service.from("rooms").delete().eq("id", basicRoomId);
+    for (const userId of testUserIds) {
+      await service.auth.admin.deleteUser(userId);
+    }
+  }
+});
