@@ -2,6 +2,11 @@ import "server-only";
 
 import { createHmac, randomUUID } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  assertEmailOutboxOperationSucceeded,
+  isEmailDeliveryDisabled,
+  isSuccessfulEmailRetryStatus,
+} from "@/lib/email-outbox-contract";
 import { renderEmailV2 } from "@/lib/email-template-v2";
 import {
   canonicalEmailWebhookPayload,
@@ -859,7 +864,7 @@ export async function processEmailNotificationsByDedupeKeys(
 
   const supabase = createAdminClient();
   const deliveryMode = await getEmailDeliveryMode();
-  if (deliveryMode === "off") {
+  if (isEmailDeliveryDisabled(deliveryMode)) {
     await suppressPendingNotifications(dedupeKeys);
     return;
   }
@@ -871,18 +876,12 @@ export async function processEmailNotificationsByDedupeKeys(
     .in("dedupe_key", dedupeKeys)
     .eq("status", "pending");
 
-  if (error) {
-    console.error(
-      "Không thể nhận email phiếu thiết bị từ hàng đợi:",
-      error.message,
-    );
-    return;
-  }
+  assertEmailOutboxOperationSucceeded("QUEUE_READ", error);
 
   await Promise.all(
     ((data ?? []) as Array<EmailNotification & { attempts: number }>).map(
       async (notification) => {
-        const { data: claimed } = await supabase
+        const { data: claimed, error } = await supabase
           .from("email_notifications")
           .update({
             status: "processing",
@@ -894,6 +893,7 @@ export async function processEmailNotificationsByDedupeKeys(
           .eq("status", "pending")
           .select("id")
           .maybeSingle();
+        assertEmailOutboxOperationSucceeded("CLAIM", error);
         if (claimed) await deliverNotification(notification);
       },
     ),
@@ -901,7 +901,7 @@ export async function processEmailNotificationsByDedupeKeys(
 }
 
 export async function retryEmailNotification(notificationId: string) {
-  if ((await getEmailDeliveryMode()) === "off") return false;
+  if (isEmailDeliveryDisabled(await getEmailDeliveryMode())) return false;
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("email_notifications")
@@ -915,21 +915,28 @@ export async function retryEmailNotification(notificationId: string) {
     .eq("status", "failed")
     .select("dedupe_key")
     .maybeSingle();
-  if (error || !data) return false;
+  assertEmailOutboxOperationSucceeded("RETRY", error);
+  if (!data) return false;
   await processEmailNotificationsByDedupeKeys([data.dedupe_key]);
-  return true;
+  const { data: outcome, error: outcomeError } = await supabase
+    .from("email_notifications")
+    .select("status")
+    .eq("id", notificationId)
+    .maybeSingle();
+  assertEmailOutboxOperationSucceeded("RETRY_OUTCOME", outcomeError);
+  return isSuccessfulEmailRetryStatus(outcome?.status ?? null);
 }
 
 export async function processPendingScheduleEmails() {
   const supabase = createAdminClient();
-  try {
-    await supabase.rpc("process_email_outbox_events", { batch_size: 50 });
-  } catch (err) {
-    console.error("Không thể mở rộng outbox email:", err);
-  }
+  const { error: expansionError } = await supabase.rpc(
+    "process_email_outbox_events",
+    { batch_size: 50 },
+  );
+  assertEmailOutboxOperationSucceeded("EXPAND", expansionError);
 
   const deliveryMode = await getEmailDeliveryMode();
-  if (deliveryMode === "off") {
+  if (isEmailDeliveryDisabled(deliveryMode)) {
     await suppressPendingNotifications();
     return;
   }
@@ -937,10 +944,7 @@ export async function processPendingScheduleEmails() {
     batch_size: 25,
   });
 
-  if (error) {
-    console.error("Không thể nhận hàng đợi email:", error.message);
-    return;
-  }
+  assertEmailOutboxOperationSucceeded("CLAIM", error);
 
   await Promise.all(
     ((data ?? []) as EmailNotification[]).map((notification) =>
