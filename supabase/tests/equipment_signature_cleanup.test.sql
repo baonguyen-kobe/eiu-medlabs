@@ -1,6 +1,6 @@
 -- pgTAP Test Suite: equipment_signature_cleanup.test.sql
 begin;
-select plan(114);
+select plan(115);
 select has_column('public','equipment_signature_operations','cleanup_state','1 cleanup state exists');
 select has_column('public','equipment_signature_operations','cleanup_claim_token','2 claim token exists');
 select has_column('public','equipment_signature_operations','cleanup_claimed_at','3 claim time exists');
@@ -332,9 +332,10 @@ select is((select count(*)::integer from active_compensation_claim where operati
 set local role service_role;
 select public.mark_equipment_signature_cleanup_compensation('e1000000-0000-0000-0000-000000000021');
 create temp table expired_compensation_claim as
-select * from public.claim_equipment_signature_cleanup_candidates(clock_timestamp()+interval '1 hour',clock_timestamp()+interval '1 hour',clock_timestamp()-interval '1 hour',10,'e4000000-0000-0000-0000-000000000028');
+select * from public.claim_equipment_signature_cleanup_candidates('-infinity'::timestamptz,'-infinity'::timestamptz,clock_timestamp()-interval '1 hour',10,'e4000000-0000-0000-0000-000000000028');
 set local role postgres;
 select ok((select count(*)=1 from expired_compensation_claim where operation_id='e1000000-0000-0000-0000-000000000021') and (select cleanup_claim_token='e4000000-0000-0000-0000-000000000028'::uuid from public.equipment_signature_operations where id='e1000000-0000-0000-0000-000000000021'),'98 expired claimed compensation is reclaimed by a new token');
+select ok((select cleanup_state='retry' and cleanup_claim_token is null from public.equipment_signature_operations where id='e1000000-0000-0000-0000-000000000024'),'98a expired compensation claim does not preclaim retry fixture');
 
 set local role service_role;
 select public.mark_equipment_signature_cleanup_compensation('e1000000-0000-0000-0000-000000000022');
