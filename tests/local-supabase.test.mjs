@@ -2667,23 +2667,60 @@ test("email giữ snapshot Live khi setting đổi sang Test và suppress khi t�
 
 test("direct equipment RPC luôn xác minh giảng viên phụ trách và độ dài nội dung", async () => {
   const service = serviceClient();
-  const admin = await signIn("admin@campus.local", "LocalAdmin123!");
-  const staff = await signIn("staff@campus.local", "LocalStaff123!");
-  const lecturer = await signIn("giangvien@campus.local", "LocalLecturer123!");
   const scheduleId = crypto.randomUUID();
   const catalogId = crypto.randomUUID();
+  const password = "EquipmentResponsible123!";
+  const fixtureIds = [];
   try {
-    assert.ifError(
-      (
-        await service
-          .from("profiles")
-          .update({ phone: "0901234567" })
-          .eq("id", staff.user.id)
-      ).error,
+    const createActor = async (role, label) => {
+      const { data, error } = await service.auth.admin.createUser({
+        email: `equipment-${role}-${crypto.randomUUID()}@campus.local`,
+        password,
+        email_confirm: true,
+        app_metadata: { preapproved: true },
+        user_metadata: { full_name: label },
+      });
+      assert.ifError(error);
+      assert.ok(data.user);
+      fixtureIds.push(data.user.id);
+      assert.ifError(
+        (
+          await service
+            .from("profiles")
+            .update({ is_active: true, phone: "0901234567" })
+            .eq("id", data.user.id)
+        ).error,
+      );
+      assert.ifError(
+        (
+          await service
+            .from("user_roles")
+            .insert({ user_id: data.user.id, role })
+        ).error,
+      );
+      assert.ifError(
+        (
+          await service.from("profile_room_types").upsert(
+            {
+              profile_id: data.user.id,
+              room_type_id: "40000000-0000-0000-0000-000000000001",
+            },
+            { onConflict: "profile_id,room_type_id", ignoreDuplicates: true },
+          )
+        ).error,
+      );
+      return { id: data.user.id, email: data.user.email };
+    };
+    const staffActor = await createActor("staff", "Staff kiểm thử thiết bị");
+    const lecturerActor = await createActor(
+      "lecturer",
+      "Giảng viên kiểm thử thiết bị",
     );
+    const staff = await signIn(staffActor.email, password);
+    const lecturer = await signIn(lecturerActor.email, password);
     assert.ifError(
       (
-        await serviceClient().from("class_schedules").insert({
+        await service.from("class_schedules").insert({
           id: scheduleId,
           course_id: "10000000-0000-0000-0000-000000000001",
           course_code_snapshot: "NUR 101",
@@ -2695,15 +2732,15 @@ test("direct equipment RPC luôn xác minh giảng viên phụ trách và độ 
           source: "manual",
           schedule_status: "published",
           student_count: 20,
-          created_by: admin.user.id,
-          published_by: admin.user.id,
+          created_by: staff.user.id,
+          published_by: staff.user.id,
           published_at: new Date().toISOString(),
         })
       ).error,
     );
     assert.ifError(
       (
-        await admin.supabase.from("equipment_catalog").insert({
+        await service.from("equipment_catalog").insert({
           id: catalogId,
           item_name: `Thiết bị ${catalogId}`,
           unit: "Cái",
@@ -2736,6 +2773,17 @@ test("direct equipment RPC luôn xác minh giảng viên phụ trách và độ 
     assert.ok(selfAsResponsible.error);
     assert.equal(selfAsResponsible.error.code, "42501");
 
+    const validResponsible = await staff.supabase.rpc(
+      "create_equipment_request_with_items",
+      {
+        ...base,
+        target_responsible_lecturer_id: lecturer.user.id,
+        target_note: null,
+      },
+    );
+    assert.ifError(validResponsible.error);
+    assert.ok(validResponsible.data);
+
     const oversizedNote = await staff.supabase.rpc(
       "create_equipment_request_with_items",
       {
@@ -2753,7 +2801,10 @@ test("direct equipment RPC luôn xác minh giảng viên phụ trách và độ 
       .delete()
       .eq("class_schedule_id", scheduleId);
     await serviceClient().from("class_schedules").delete().eq("id", scheduleId);
-    await admin.supabase.from("equipment_catalog").delete().eq("id", catalogId);
+    await service.from("equipment_catalog").delete().eq("id", catalogId);
+    await Promise.all(
+      fixtureIds.map((id) => service.auth.admin.deleteUser(id)),
+    );
   }
 });
 

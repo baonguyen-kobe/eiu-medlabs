@@ -22,6 +22,10 @@ import {
   equipmentReceiveAt,
   lateEquipmentWarning,
 } from "@/lib/equipment-lead-time";
+import {
+  defaultResponsibleLecturerId,
+  responsibleLecturerOptions,
+} from "@/lib/equipment-responsible-lecturer";
 import type { EquipmentLateApprovalStatus } from "@/lib/equipment-requests";
 
 type CatalogItem = {
@@ -287,19 +291,15 @@ export function EquipmentRequestForm({
       commercialOptionsByItemName,
     };
   }, [catalog]);
-  const responsibleOptions = useMemo(() => {
-    const options = [
-      { id: registrantId, full_name: `${registrantName} (Người đăng ký)` },
-      ...lecturers.map((person) => ({
-        ...person,
-        full_name:
-          person.id === registrantId
-            ? `${person.full_name} (Người đăng ký)`
-            : person.full_name,
-      })),
-    ];
-    return [...new Map(options.map((person) => [person.id, person])).values()];
-  }, [lecturers, registrantId, registrantName]);
+  const responsibleOptions = useMemo(
+    () => responsibleLecturerOptions(lecturers, registrantId),
+    [lecturers, registrantId],
+  );
+  const selectedResponsibleLecturerId = defaultResponsibleLecturerId(
+    responsibleOptions,
+    registrantId,
+    initialData?.responsibleLecturerId,
+  );
   const payload = useMemo(
     () =>
       skills.flatMap((skill) =>
@@ -648,8 +648,11 @@ export function EquipmentRequestForm({
             <select
               name="responsible_lecturer_id"
               required
-              defaultValue={initialData?.responsibleLecturerId ?? registrantId}
+              defaultValue={selectedResponsibleLecturerId}
             >
+              <option value="" disabled>
+                Chọn giảng viên phụ trách
+              </option>
               {responsibleOptions.map((person) => (
                 <option key={person.id} value={person.id}>
                   {person.full_name}

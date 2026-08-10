@@ -450,10 +450,7 @@ export async function updateEquipmentRequest(
   const eligibleLecturerIds = new Set(
     ((eligibleLecturers ?? []) as Array<{ id: string }>).map(({ id }) => id),
   );
-  if (
-    responsibleId !== request.registrant_id &&
-    !eligibleLecturerIds.has(responsibleId)
-  ) {
+  if (!eligibleLecturerIds.has(responsibleId)) {
     return { ok: false, message: "Giảng viên phụ trách không hợp lệ." };
   }
 
@@ -651,10 +648,7 @@ export async function createEquipmentRequest(
   const eligibleLecturerIds = new Set(
     ((eligibleLecturers ?? []) as Array<{ id: string }>).map(({ id }) => id),
   );
-  if (
-    !schedule ||
-    (responsibleId !== userId && !eligibleLecturerIds.has(responsibleId))
-  ) {
+  if (!schedule || !eligibleLecturerIds.has(responsibleId)) {
     return {
       ok: false,
       message: "Lớp hoặc giảng viên phụ trách không hợp lệ.",
