@@ -1696,7 +1696,11 @@ begin
   if operation_row.id is null then raise exception 'EQUIPMENT_SIGNATURE_OPERATION_NOT_FOUND' using errcode = 'P0002'; end if;
   if operation_row.cleanup_state = 'none' then raise exception 'EQUIPMENT_SIGNATURE_CLEANUP_OWNED_REQUIRED' using errcode = '55000'; end if;
   update public.equipment_signature_operations
-  set cleanup_compensation_required_at = coalesce(cleanup_compensation_required_at, clock_timestamp())
+  set cleanup_compensation_required_at = case
+    when cleanup_compensation_required_at is not null then cleanup_compensation_required_at
+    when operation_row.cleanup_state = 'claimed' then greatest(clock_timestamp(), operation_row.cleanup_claimed_at + interval '1 microsecond')
+    else clock_timestamp()
+  end
   where id = operation_row.id;
 end;
 $$;
@@ -1743,7 +1747,10 @@ begin
   ), claimed as (
     update public.equipment_signature_operations o
     set cleanup_state='claimed', cleanup_claim_token=target_claim_token,
-        cleanup_claimed_at=clock_timestamp(), cleanup_completed_at=null,
+        cleanup_claimed_at=case
+          when o.cleanup_compensation_required_at is not null then greatest(clock_timestamp(), o.cleanup_compensation_required_at + interval '1 microsecond')
+          else clock_timestamp()
+        end, cleanup_completed_at=null,
         cleanup_last_error=null
     from candidates c where o.id=c.id
     returning o.id,o.request_id,o.phase,o.object_path,o.state,o.cleanup_claim_token
