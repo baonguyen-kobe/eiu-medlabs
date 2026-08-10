@@ -42,4 +42,4 @@ jobs:
         run: supabase migration list
 
       - name: Preview production migration push
-        run: supabase db push --dry-run
+        run: supabase db push
