@@ -51,6 +51,7 @@ jobs:
       - name: Run Personnel permission smoke
         env:
           PRODUCTION_BASE_URL: https://medlabs-calendar.vercel.app
+          PLAYWRIGHT_BASE_URL: https://medlabs-calendar.vercel.app
           PRODUCTION_ADMIN_IDENTIFIER: ${{ secrets.PRODUCTION_ADMIN_IDENTIFIER }}
           PRODUCTION_ADMIN_PASSWORD: ${{ secrets.PRODUCTION_ADMIN_PASSWORD }}
           PRODUCTION_PERSONNEL_MANAGER_IDENTIFIER: ${{ secrets.PRODUCTION_PERSONNEL_MANAGER_IDENTIFIER }}
