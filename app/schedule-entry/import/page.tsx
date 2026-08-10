@@ -12,15 +12,24 @@ import {
 export const metadata = { title: "Import lịch Skills lab" };
 
 export default async function ImportPage() {
-  const { fullName, roles, roomTypes, allowBasicMedicalAccess } =
-    await getViewer();
+  const {
+    fullName,
+    roles,
+    roomTypes,
+    allowBasicMedicalAccess,
+    canImportSchedules,
+    canManagePersonnel,
+  } = await getViewer();
   const roomTypeCodes = roomTypes.map(({ code }) => code);
   if (!canUseSkillsWorkspace(roles, roomTypeCodes)) {
     redirect(defaultWorkspacePath(roles, roomTypeCodes));
   }
-  const allowed = roles.some((role) =>
-    ["admin", "staff", "importer"].includes(role),
-  );
+  const allowed =
+    roles.includes("admin") ||
+    (canImportSchedules &&
+      roles.some((role) =>
+        ["staff", "lecturer", "teaching_assistant"].includes(role),
+      ));
   if (!allowed) redirect("/dashboard");
 
   return (
@@ -29,6 +38,8 @@ export default async function ImportPage() {
       roles={roles}
       roomTypeCodes={roomTypeCodes}
       allowBasicMedicalAccess={allowBasicMedicalAccess}
+      canImportSchedules={canImportSchedules}
+      canManagePersonnel={canManagePersonnel}
       title="Import lịch Skills lab"
       description="Tải template chuẩn, kiểm tra từng dòng và tạo lịch hợp lệ."
       actions={

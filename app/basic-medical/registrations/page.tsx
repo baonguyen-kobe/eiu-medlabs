@@ -37,6 +37,9 @@ export default async function BasicMedicalRegistrationsPage({
     roles,
     roomTypes,
     allowBasicMedicalAccess,
+    canImportSchedules,
+    canManagePersonnel,
+    canManageBasicMedical,
   } = await getViewer();
   const roomTypeCodes = roomTypes.map(({ code }) => code);
   if (!canViewBasicMedicalRegistrations(roles, roomTypeCodes)) {
@@ -47,17 +50,26 @@ export default async function BasicMedicalRegistrationsPage({
     );
   }
 
-  const canDelete = roles.some((role) => ["admin", "staff"].includes(role));
+  const canDelete = canManageBasicMedical;
   const currentPage = normalizePage(query.page);
-  const status = query.status === "completed" ? "completed" : "incomplete";
+  const status = ["completed", "incomplete", "cancelled", "all"].includes(
+    query.status ?? "",
+  )
+    ? (query.status as "completed" | "incomplete" | "cancelled" | "all")
+    : "incomplete";
   const search = query.q?.trim() ?? "";
   const { from: rowFrom, to: rowTo } = paginationRange(currentPage);
 
   let listQuery = supabase
     .from("basic_medical_registration_list")
     .select("id", { count: "exact" })
-    .eq("is_completed", status === "completed")
     .order("created_at", { ascending: false });
+  if (status === "completed") listQuery = listQuery.eq("is_completed", true);
+  if (status === "incomplete") listQuery = listQuery.eq("is_completed", false);
+  if (status === "cancelled")
+    listQuery = listQuery.not("cancelled_at", "is", null);
+  if (status !== "cancelled" && status !== "all")
+    listQuery = listQuery.is("cancelled_at", null);
   if (search) listQuery = listQuery.ilike("search_text", `%${search}%`);
   if (query.from) listQuery = listQuery.gte("end_date", query.from);
   if (query.to) listQuery = listQuery.lte("start_date", query.to);
@@ -74,7 +86,7 @@ export default async function BasicMedicalRegistrationsPage({
       ? await supabase
           .from("basic_medical_registrations")
           .select(
-            "id,created_at,academic_year,semester,start_date,end_date,student_count,note,courses(course_code,course_name),rooms(id,room_code,building_code,room_name),registrant:profiles!basic_medical_registrations_registrant_id_fkey(full_name),responsible:profiles!basic_medical_registrations_responsible_lecturer_id_fkey(full_name),basic_medical_registration_sessions(id,session_number,lesson_title,teaching_lecturer_id,teaching:profiles!basic_medical_registration_sessions_teaching_lecturer_id_fkey(full_name),class_schedules(schedule_date,start_time,end_time),confirmations:basic_medical_session_confirmations(id,signer_id,signed_at,invalidated_at,signer:profiles!basic_medical_session_confirmations_signer_id_fkey(full_name)))",
+            "id,registration_code,created_at,academic_year,semester,start_date,end_date,student_count,note,cancelled_at,cancelled_by,cancel_reason,courses(course_code,course_name),rooms(id,room_code,building_code,room_name),registrant:profiles!basic_medical_registrations_registrant_id_fkey(full_name),responsible:profiles!basic_medical_registrations_responsible_lecturer_id_fkey(full_name),basic_medical_registration_sessions(id,session_number,lesson_title,teaching_lecturer_id,teaching:profiles!basic_medical_registration_sessions_teaching_lecturer_id_fkey(full_name),class_schedules(schedule_date,start_time,end_time),confirmations:basic_medical_session_confirmations(id,signer_id,signed_at,invalidated_at,signer:profiles!basic_medical_session_confirmations_signer_id_fkey(full_name)))",
           )
           .in("id", registrationIds)
       : { data: [], error: null };
@@ -109,6 +121,8 @@ export default async function BasicMedicalRegistrationsPage({
       roles={roles}
       roomTypeCodes={roomTypeCodes}
       allowBasicMedicalAccess={allowBasicMedicalAccess}
+      canImportSchedules={canImportSchedules}
+      canManagePersonnel={canManagePersonnel}
       title="Phiếu Y cơ sở"
       description="Theo dõi xác nhận từng buổi học và tình trạng thiết bị trong phòng."
     >
@@ -139,6 +153,8 @@ export default async function BasicMedicalRegistrationsPage({
           <select name="status" defaultValue={status}>
             <option value="incomplete">Chưa hoàn thành</option>
             <option value="completed">Hoàn thành</option>
+            <option value="cancelled">Đã hủy</option>
+            <option value="all">Tất cả</option>
           </select>
         </label>
         <label className="equipment-date-filter">

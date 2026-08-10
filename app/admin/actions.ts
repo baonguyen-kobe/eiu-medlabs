@@ -26,6 +26,94 @@ async function adminContext() {
   return { supabase, userId };
 }
 
+async function personnelContext() {
+  const supabase = await createClient();
+  const { data: claimsData } = await supabase.auth.getClaims();
+  const userId = claimsData?.claims?.sub;
+  if (!userId) throw new Error("AUTH_REQUIRED");
+  const { data, error } = await supabase.rpc("get_personnel_authority_context");
+  const authority = data as {
+    configured?: boolean;
+    can_manage_personnel?: boolean;
+    is_root_administrator?: boolean;
+  } | null;
+  if (error || !authority?.configured) {
+    throw new Error("PERSONNEL_SECURITY_NOT_CONFIGURED");
+  }
+  if (!authority.can_manage_personnel) {
+    throw new Error("PERSONNEL_MANAGER_REQUIRED");
+  }
+  return { supabase, userId, authority };
+}
+
+type CreatedAuthIdentity = { id: string; email: string };
+
+async function cleanupCreatedAuthUsersOrRecordReconciliation({
+  adminClient,
+  identities,
+  actorId,
+  failureStage,
+}: {
+  adminClient: ReturnType<typeof createAdminClient>;
+  identities: CreatedAuthIdentity[];
+  actorId: string;
+  failureStage: string;
+}) {
+  const failures: Array<
+    CreatedAuthIdentity & {
+      error: string;
+      profileLockError?: string;
+      reconciliationError?: string;
+    }
+  > = [];
+  for (const identity of identities) {
+    let lastError = "";
+    let deleted = false;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const { error } = await adminClient.auth.admin.deleteUser(identity.id);
+      if (!error) {
+        deleted = true;
+        break;
+      }
+      lastError = error.message;
+    }
+    if (!deleted) {
+      const { error: profileLockError } = await adminClient
+        .from("profiles")
+        .update({
+          is_active: false,
+          can_import_schedules: false,
+          allow_basic_medical_access: false,
+        })
+        .eq("id", identity.id);
+      const { error: reconciliationError } = await adminClient
+        .from("personnel_auth_reconciliation_logs")
+        .insert({
+          profile_id: identity.id,
+          previous_email: identity.email,
+          requested_email: identity.email,
+          failure_stage: failureStage,
+          error_message: lastError || "Auth cleanup failed",
+          created_by: actorId,
+        });
+      failures.push({
+        ...identity,
+        error: lastError || "Unknown cleanup error",
+        profileLockError: profileLockError?.message,
+        reconciliationError: reconciliationError?.message,
+      });
+      console.error("personnel.auth.cleanup.reconciliation_required", {
+        correlation_id: `${failureStage}:${identity.id}`,
+        profile_id: identity.id,
+        auth_delete_error: lastError || "Unknown cleanup error",
+        profile_lock_error: profileLockError?.message ?? null,
+        reconciliation_insert_error: reconciliationError?.message ?? null,
+      });
+    }
+  }
+  return failures;
+}
+
 export async function createCourse(formData: FormData) {
   const { supabase } = await adminContext();
   const courseCode = String(formData.get("course_code") ?? "").trim();
@@ -454,62 +542,29 @@ export async function deleteShiftTemplate(formData: FormData) {
 }
 
 export async function toggleProfile(formData: FormData) {
-  const { supabase, userId } = await adminContext();
-  const targetId = String(formData.get("id") ?? "");
-  const active = String(formData.get("active")) === "true";
-  if (targetId === userId && !active) return;
-  await supabase
-    .from("profiles")
-    .update({ is_active: active })
-    .eq("id", targetId);
-  revalidatePath("/admin/personnel");
+  void formData;
+  await personnelContext();
+  personnelRedirect(
+    "error",
+    "Thao tác cũ đã bị vô hiệu hóa. Vui lòng sử dụng drawer Nhân sự.",
+  );
 }
 
 export async function updateUserRole(formData: FormData) {
-  const { supabase, userId } = await adminContext();
-  const targetId = String(formData.get("user_id") ?? "");
-  const role = String(formData.get("role") ?? "") as
-    "admin" | "lecturer" | "staff" | "importer" | "viewer";
-  const enabled = String(formData.get("enabled")) === "true";
-  if (!["admin", "lecturer", "staff", "importer", "viewer"].includes(role))
-    return;
-  if (targetId === userId && role === "admin" && !enabled) return;
-  if (targetId === userId && role === "viewer" && enabled) return;
-
-  if (enabled) {
-    if (role === "viewer") {
-      await supabase
-        .from("user_roles")
-        .delete()
-        .eq("user_id", targetId)
-        .neq("role", "viewer");
-    } else {
-      await supabase
-        .from("user_roles")
-        .delete()
-        .eq("user_id", targetId)
-        .eq("role", "viewer");
-    }
-    await supabase.from("user_roles").upsert({
-      user_id: targetId,
-      role,
-      created_by: userId,
-    });
-  } else {
-    await supabase
-      .from("user_roles")
-      .delete()
-      .eq("user_id", targetId)
-      .eq("role", role);
-  }
-  revalidatePath("/admin/personnel");
+  void formData;
+  await personnelContext();
+  personnelRedirect(
+    "error",
+    "Thao tác cũ đã bị vô hiệu hóa. Vui lòng sử dụng drawer Nhân sự.",
+  );
 }
 
 function personnelRedirect(kind: "notice" | "error", message: string): never {
   redirect(`/admin/personnel?${kind}=${encodeURIComponent(message)}`);
 }
 
-type PersonnelRole = "admin" | "lecturer" | "staff" | "importer" | "viewer";
+type PersonnelRole =
+  "admin" | "lecturer" | "staff" | "teaching_assistant" | "viewer";
 
 const personnelRoleAliases = new Map<string, PersonnelRole>([
   ["admin", "admin"],
@@ -519,11 +574,17 @@ const personnelRoleAliases = new Map<string, PersonnelRole>([
   ["staff", "staff"],
   ["nhanvien", "staff"],
   ["chuyenvien", "staff"],
-  ["importer", "importer"],
-  ["nguoitaophieu", "importer"],
-  ["trogiang", "importer"],
+  ["teachingassistant", "teaching_assistant"],
+  ["trogiang", "teaching_assistant"],
   ["viewer", "viewer"],
   ["nguoixem", "viewer"],
+]);
+
+const legacyImportRoleAliases = new Set([
+  "importer",
+  "nguoitaophieu",
+  "nguoinhaplich",
+  "quyennhaplich",
 ]);
 
 function splitPersonnelImportValues(value: string) {
@@ -533,18 +594,20 @@ function splitPersonnelImportValues(value: string) {
     .filter(Boolean);
 }
 
-function parsePersonnelImportBoolean(value: string, rowNumber: number) {
+function parsePersonnelImportBoolean(
+  value: string,
+  rowNumber: number,
+  label = "Quyền Y cơ sở",
+) {
   if (!value) return null;
   const normalized = normalizeImportKey(value);
   if (["co", "true", "1", "yes", "x"].includes(normalized)) return true;
   if (["khong", "false", "0", "no"].includes(normalized)) return false;
-  throw new Error(
-    `Quyền Y cơ sở tại dòng ${rowNumber} chỉ nhận Có hoặc Không.`,
-  );
+  throw new Error(`${label} tại dòng ${rowNumber} chỉ nhận Có hoặc Không.`);
 }
 
 export async function createPersonnel(formData: FormData) {
-  const { supabase, userId } = await adminContext();
+  const { supabase, userId } = await personnelContext();
   const email = String(formData.get("email") ?? "")
     .trim()
     .toLowerCase();
@@ -556,7 +619,9 @@ export async function createPersonnel(formData: FormData) {
     .getAll("roles")
     .map(String)
     .filter((role) =>
-      ["admin", "lecturer", "staff", "importer", "viewer"].includes(role),
+      ["admin", "lecturer", "staff", "teaching_assistant", "viewer"].includes(
+        role,
+      ),
     ) as PersonnelRole[];
   const roomTypeIds = [
     ...new Set(formData.getAll("room_type_ids").map(String).filter(Boolean)),
@@ -571,6 +636,8 @@ export async function createPersonnel(formData: FormData) {
   );
   const allowBasicMedicalAccess =
     String(formData.get("allow_basic_medical_access")) === "true";
+  const canImportSchedules =
+    String(formData.get("can_import_schedules")) === "true";
 
   if (!email || !fullName || password.length < 8 || roles.length === 0) {
     personnelRedirect(
@@ -582,6 +649,17 @@ export async function createPersonnel(formData: FormData) {
     personnelRedirect(
       "error",
       "Vai trò Người xem là quyền chỉ đọc và không thể kết hợp với vai trò khác.",
+    );
+  }
+  if (
+    canImportSchedules &&
+    !roles.some((role) =>
+      ["staff", "lecturer", "teaching_assistant"].includes(role),
+    )
+  ) {
+    personnelRedirect(
+      "error",
+      "Quyền nhập lịch chỉ áp dụng cho Chuyên viên, Giảng viên hoặc Trợ giảng.",
     );
   }
 
@@ -610,42 +688,46 @@ export async function createPersonnel(formData: FormData) {
   }
 
   const targetId = data.user.id;
-  const { error: profileError } = await supabase
+  const { data: createdProfile } = await supabase
     .from("profiles")
-    .update({
-      email,
-      full_name: fullName,
-      phone,
-      title,
-      is_active: true,
-      allow_basic_medical_access: allowBasicMedicalAccess,
-    })
-    .eq("id", targetId);
-  const { error: roleError } = await supabase.from("user_roles").insert(
-    roles.map((role) => ({
-      user_id: targetId,
-      role,
-      created_by: userId,
-    })),
-  );
-  const { error: scopeError } = roomTypeIds.length
-    ? await supabase.from("profile_room_types").upsert(
-        roomTypeIds.map((roomTypeId) => ({
-          profile_id: targetId,
-          room_type_id: roomTypeId,
-          created_by: userId,
-          receive_schedule_emails: emailRoomTypeIds.has(roomTypeId),
-        })),
-      )
-    : { error: null };
+    .select("access_version")
+    .eq("id", targetId)
+    .single();
+  const { error: profileError } = await supabase.rpc("admin_update_personnel", {
+    target_profile_id: targetId,
+    target_email: email,
+    target_full_name: fullName,
+    target_phone: phone,
+    target_title: title,
+    target_roles: roles,
+    target_can_import_schedules: canImportSchedules,
+    target_room_type_ids: roomTypeIds,
+    target_email_room_type_ids: roles.includes("viewer")
+      ? [...emailRoomTypeIds]
+      : [],
+    target_allow_basic_medical_access: allowBasicMedicalAccess,
+    target_is_active: true,
+    target_expected_version: createdProfile?.access_version ?? 1,
+  });
 
-  if (profileError || roleError || scopeError) {
-    await adminClient.auth.admin.deleteUser(targetId);
+  if (profileError) {
+    const cleanupFailures = await cleanupCreatedAuthUsersOrRecordReconciliation(
+      {
+        adminClient,
+        identities: [{ id: targetId, email }],
+        actorId: userId,
+        failureStage: "create_personnel_auth_cleanup",
+      },
+    );
+    if (cleanupFailures.length) {
+      personnelRedirect(
+        "error",
+        "AUTH_PROFILE_RECONCILIATION_REQUIRED: Không thể xóa tài khoản Auth sau khi lưu hồ sơ thất bại. Tài khoản đã được khóa và ghi nhận để đối soát.",
+      );
+    }
     personnelRedirect(
       "error",
-      profileError?.message ??
-        roleError?.message ??
-        scopeError?.message ??
+      personnelRpcMessage(profileError.message) ||
         "Không thể hoàn tất hồ sơ nhân sự.",
     );
   }
@@ -655,7 +737,7 @@ export async function createPersonnel(formData: FormData) {
 }
 
 export async function importPersonnel(formData: FormData) {
-  const { supabase, userId } = await adminContext();
+  const { supabase, userId } = await personnelContext();
   const mode = String(formData.get("mode") ?? "");
   if (!(["new", "all"] as const).includes(mode as "new" | "all")) {
     personnelRedirect("error", "Chế độ import nhân sự không hợp lệ.");
@@ -679,7 +761,7 @@ export async function importPersonnel(formData: FormData) {
       supabase
         .from("profiles")
         .select(
-          "id,email,full_name,phone,is_active,allow_basic_medical_access",
+          "id,email,full_name,phone,is_active,allow_basic_medical_access,can_import_schedules,access_version",
         ),
       supabase.from("user_roles").select("user_id,role"),
     ]);
@@ -722,9 +804,11 @@ export async function importPersonnel(formData: FormData) {
       roomTypeIds: string[];
       emailRoomTypeIds: string[];
       allowBasicMedicalAccess: boolean | null;
+      canImportSchedules: boolean;
       rowNumber: number;
     }> = [];
 
+    let compatibilityWarningCount = 0;
     rows.forEach((row, index) => {
       const rowNumber = index + 2;
       const fullName = importValue(row, "Họ và tên", "Họ tên", "full_name");
@@ -735,6 +819,11 @@ export async function importPersonnel(formData: FormData) {
       const phone = importValue(row, "Số điện thoại", "phone") || null;
       const title = importValue(row, "Chức danh", "title") || null;
       const roleText = importValue(row, "Vai trò", "roles", "role");
+      const importPermissionText = importValue(
+        row,
+        "Quyền nhập lịch",
+        "can_import_schedules",
+      );
       const roomTypeText = importValue(
         row,
         "Loại phòng",
@@ -760,16 +849,26 @@ export async function importPersonnel(formData: FormData) {
       }
 
       const roleValues = splitPersonnelImportValues(roleText);
-      const invalidRoleValues = roleValues.filter(
+      const legacyImportValues = roleValues.filter((role) =>
+        legacyImportRoleAliases.has(normalizeImportKey(role)),
+      );
+      const mainRoleValues = roleValues.filter(
+        (role) => !legacyImportRoleAliases.has(normalizeImportKey(role)),
+      );
+      const invalidRoleValues = mainRoleValues.filter(
         (role) => !personnelRoleAliases.has(normalizeImportKey(role)),
       );
-      const roles = [
+      let roles = [
         ...new Set(
-          roleValues.map((role) =>
+          mainRoleValues.map((role) =>
             personnelRoleAliases.get(normalizeImportKey(role)),
           ),
         ),
-      ];
+      ].filter(Boolean) as PersonnelRole[];
+      if (!roles.length && legacyImportValues.length > 0) {
+        roles = ["teaching_assistant"];
+        compatibilityWarningCount += 1;
+      }
       if (!roles.length || invalidRoleValues.length > 0) {
         const received = invalidRoleValues.length
           ? ` Giá trị chưa đúng: "${invalidRoleValues.join(", ")}".`
@@ -783,6 +882,18 @@ export async function importPersonnel(formData: FormData) {
           "Vai trò Người xem tại dòng " +
             rowNumber +
             " không thể kết hợp với vai trò khác.",
+        );
+      }
+      const parsedImportPermission = parsePersonnelImportBoolean(
+        importPermissionText,
+        rowNumber,
+        "Quyền nhập lịch",
+      );
+      const canImportSchedules =
+        parsedImportPermission ?? legacyImportValues.length > 0;
+      if (canImportSchedules && roles.includes("viewer")) {
+        throw new Error(
+          `Quyền nhập lịch tại dòng ${rowNumber} không áp dụng cho Người xem.`,
         );
       }
 
@@ -847,6 +958,7 @@ export async function importPersonnel(formData: FormData) {
           basicMedicalText,
           rowNumber,
         ),
+        canImportSchedules,
         rowNumber,
       });
     });
@@ -918,11 +1030,12 @@ export async function importPersonnel(formData: FormData) {
       );
     }
 
-    const createdUserIds: string[] = [];
+    const createdUsers: CreatedAuthIdentity[] = [];
     const resolvedRows: Array<
       (typeof selectedRows)[number] & {
         id: string;
         isNew: boolean;
+        accessVersion: number;
       }
     > = [];
 
@@ -933,6 +1046,7 @@ export async function importPersonnel(formData: FormData) {
           ...row,
           id: existing.id,
           isNew: false,
+          accessVersion: existing.access_version,
         });
         continue;
       }
@@ -945,120 +1059,80 @@ export async function importPersonnel(formData: FormData) {
         app_metadata: { preapproved: true },
       });
       if (error || !data.user) {
-        await Promise.all(
-          createdUserIds.map((id) => adminClient.auth.admin.deleteUser(id)),
-        );
+        const failures = await cleanupCreatedAuthUsersOrRecordReconciliation({
+          adminClient,
+          identities: createdUsers,
+          actorId: userId,
+          failureStage: "personnel_import_create_cleanup",
+        });
+        if (failures.length)
+          throw new Error("AUTH_PROFILE_RECONCILIATION_REQUIRED");
         throw new Error(
           `Không thể tạo ${row.email}: ${error?.message ?? "Lỗi không xác định"}`,
         );
       }
-      createdUserIds.push(data.user.id);
+      createdUsers.push({ id: data.user.id, email: row.email });
       resolvedRows.push({
         ...row,
         id: data.user.id,
         isNew: true,
+        accessVersion: 1,
       });
     }
-
-    const importedIds = new Set(resolvedRows.map(({ id }) => id));
-    const obsoleteProfiles =
-      mode === "all"
-        ? (profiles ?? []).filter(
-            (profile) =>
-              !administratorIds.has(profile.id) && !importedIds.has(profile.id),
-          )
-        : [];
-    const idsToReplace = [
-      ...new Set([
-        ...resolvedRows.map(({ id }) => id),
-        ...obsoleteProfiles.map(({ id }) => id),
-      ]),
-    ];
-
-    const { error: profileError } = resolvedRows.length
-      ? await supabase.from("profiles").upsert(
-          resolvedRows.map((row) => ({
-            id: row.id,
-            email: row.email,
-            full_name: row.fullName,
-            phone: row.phone,
-            title: row.title,
-            is_active: true,
-            allow_basic_medical_access: row.allowBasicMedicalAccess ?? false,
-          })),
-          { onConflict: "id" },
-        )
-      : { error: null };
-    const { error: roleCleanupError } = idsToReplace.length
-      ? await supabase.from("user_roles").delete().in("user_id", idsToReplace)
-      : { error: null };
-    const { error: scopeCleanupError } = idsToReplace.length
-      ? await supabase
-          .from("profile_room_types")
-          .delete()
-          .in("profile_id", idsToReplace)
-      : { error: null };
-    const roleValues = resolvedRows.flatMap((row) =>
-      row.roles.map((role) => ({
-        user_id: row.id,
-        role,
-        created_by: userId,
-      })),
+    const { data: importResult, error: importError } = await supabase.rpc(
+      "admin_apply_personnel_import",
+      {
+        target_mode: mode,
+        target_file_name: file.name,
+        target_rows: resolvedRows.map((row) => ({
+          id: row.id,
+          email: row.email,
+          full_name: row.fullName,
+          phone: row.phone,
+          title: row.title,
+          roles: row.roles,
+          room_type_ids: row.roomTypeIds,
+          email_room_type_ids: row.roles.includes("viewer")
+            ? row.emailRoomTypeIds
+            : [],
+          can_import_schedules: row.canImportSchedules,
+          allow_basic_medical_access: row.allowBasicMedicalAccess ?? false,
+          is_active: true,
+          is_new: row.isNew,
+          access_version: row.accessVersion,
+        })),
+      },
     );
-    const { error: roleError } = roleValues.length
-      ? await supabase.from("user_roles").insert(roleValues)
-      : { error: null };
-    const scopeValues = resolvedRows.flatMap((row) =>
-      row.roomTypeIds.map((roomTypeId) => ({
-        profile_id: row.id,
-        room_type_id: roomTypeId,
-        created_by: userId,
-        receive_schedule_emails: row.emailRoomTypeIds.includes(roomTypeId),
-      })),
-    );
-    const { error: scopeError } = scopeValues.length
-      ? await supabase.from("profile_room_types").insert(scopeValues)
-      : { error: null };
-    const { error: deactivateError } = obsoleteProfiles.length
-      ? await supabase
-          .from("profiles")
-          .update({ is_active: false })
-          .in(
-            "id",
-            obsoleteProfiles.map(({ id }) => id),
-          )
-      : { error: null };
 
-    if (
-      profileError ||
-      roleCleanupError ||
-      scopeCleanupError ||
-      roleError ||
-      scopeError ||
-      deactivateError
-    ) {
-      await Promise.all(
-        createdUserIds.map((id) => adminClient.auth.admin.deleteUser(id)),
-      );
-      throw new Error(
-        profileError?.message ??
-          roleCleanupError?.message ??
-          scopeCleanupError?.message ??
-          roleError?.message ??
-          scopeError?.message ??
-          deactivateError?.message ??
-          "Không thể hoàn tất import nhân sự.",
-      );
+    if (importError) {
+      const failures = await cleanupCreatedAuthUsersOrRecordReconciliation({
+        adminClient,
+        identities: createdUsers,
+        actorId: userId,
+        failureStage: "personnel_import_rpc_cleanup",
+      });
+      if (failures.length)
+        throw new Error("AUTH_PROFILE_RECONCILIATION_REQUIRED");
+      throw new Error(personnelRpcMessage(importError.message));
     }
-
-    const createdCount = resolvedRows.filter((row) => row.isNew).length;
-    const updatedCount = resolvedRows.length - createdCount;
+    const counts = importResult as {
+      created?: number;
+      updated?: number;
+      locked?: number;
+      skipped_protected?: number;
+    } | null;
+    const createdCount = Number(counts?.created ?? 0);
+    const updatedCount = Number(counts?.updated ?? 0);
+    const lockedCount = Number(counts?.locked ?? 0);
+    const skippedCount =
+      Number(counts?.skipped_protected ?? 0) +
+      preservedAdministratorRows.length;
     revalidatePath("/admin/personnel");
     personnelRedirect(
       "notice",
       mode === "new"
-        ? `Đã thêm ${createdCount} nhân sự mới từ ${file.name}. Dữ liệu hiện có được giữ nguyên.`
-        : `Đã thay danh sách nhân sự theo ${file.name}: ${createdCount} tạo mới, ${updatedCount} cập nhật, ${obsoleteProfiles.length} nhân sự cũ đã khóa; giữ nguyên ${administratorIds.size} tài khoản Quản trị viên${preservedAdministratorRows.length ? ` (${preservedAdministratorRows.length} dòng quản trị trong file được bỏ qua)` : ""}.`,
+        ? `Đã thêm ${createdCount} nhân sự mới từ ${file.name}. Dữ liệu hiện có được giữ nguyên.${compatibilityWarningCount ? ` ${compatibilityWarningCount} dòng Importer cũ đã được chuyển thành Trợ giảng + quyền nhập lịch.` : ""}`
+        : `Đã thay danh sách nhân sự theo ${file.name}: ${createdCount} tạo mới, ${updatedCount} cập nhật, ${lockedCount} nhân sự cũ đã khóa; ${skippedCount} tài khoản được bảo vệ đã bỏ qua.${compatibilityWarningCount ? ` ${compatibilityWarningCount} dòng Importer cũ đã được chuyển thành Trợ giảng + quyền nhập lịch.` : ""}`,
     );
   } catch (error) {
     if (error && typeof error === "object" && "digest" in error) throw error;
@@ -1070,117 +1144,367 @@ export async function importPersonnel(formData: FormData) {
 }
 
 export async function updatePersonnelScope(formData: FormData) {
-  const { supabase, userId } = await adminContext();
-  const targetId = String(formData.get("profile_id") ?? "");
-  const roomTypeIds = [
-    ...new Set(formData.getAll("room_type_ids").map(String).filter(Boolean)),
-  ];
-  const requestedEmailRoomTypeIds = new Set(
-    formData.getAll("email_room_type_ids").map(String).filter(Boolean),
-  );
-  const emailRoomTypeIds = new Set(
-    roomTypeIds.filter((roomTypeId) =>
-      requestedEmailRoomTypeIds.has(roomTypeId),
-    ),
-  );
-  const allowBasicMedicalAccess =
-    String(formData.get("allow_basic_medical_access")) === "true";
-  if (!targetId || roomTypeIds.length === 0) {
-    personnelRedirect(
-      "error",
-      "Mỗi nhân sự phải được gán ít nhất một Loại phòng.",
-    );
-  }
-
-  const { data: validTypes } = await supabase
-    .from("room_types")
-    .select("id")
-    .in("id", roomTypeIds)
-    .eq("is_active", true);
-  if ((validTypes ?? []).length !== roomTypeIds.length) {
-    personnelRedirect("error", "Loại phòng được chọn không hợp lệ.");
-  }
-
-  const { error: deleteError } = await supabase
-    .from("profile_room_types")
-    .delete()
-    .eq("profile_id", targetId);
-  const { error: insertError } = await supabase
-    .from("profile_room_types")
-    .insert(
-      roomTypeIds.map((roomTypeId) => ({
-        profile_id: targetId,
-        room_type_id: roomTypeId,
-        created_by: userId,
-        receive_schedule_emails: emailRoomTypeIds.has(roomTypeId),
-      })),
-    );
-  const { error: profileError } = await supabase
-    .from("profiles")
-    .update({ allow_basic_medical_access: allowBasicMedicalAccess })
-    .eq("id", targetId);
-  if (deleteError || insertError || profileError) {
-    personnelRedirect(
-      "error",
-      deleteError?.message ??
-        insertError?.message ??
-        profileError?.message ??
-        "Không thể cập nhật phạm vi.",
-    );
-  }
-  revalidatePath("/admin/personnel");
-  personnelRedirect(
-    "notice",
-    "Đã cập nhật Loại phòng và quyền truy cập Y cơ sở.",
-  );
+  void formData;
+  await personnelContext();
+  personnelRedirect("error", "Vui lòng cập nhật bằng drawer Nhân sự.");
 }
 
 export async function updatePersonnel(formData: FormData) {
-  const { supabase } = await adminContext();
+  void formData;
+  await personnelContext();
+  personnelRedirect("error", "Vui lòng cập nhật bằng drawer Nhân sự.");
+}
+
+export type SavePersonnelResult = {
+  ok: boolean;
+  message: string;
+  personnel?: Record<string, unknown>;
+  code?: string;
+};
+
+function personnelRpcMessage(message: string) {
+  const mappings: Array<[string, string]> = [
+    [
+      "PERSONNEL_SECURITY_NOT_CONFIGURED",
+      "Chưa cấu hình Root Administrator và tài khoản quản lý nhân sự. Hệ thống đang từ chối thao tác theo nguyên tắc an toàn.",
+    ],
+    ["PERSONNEL_MANAGER_REQUIRED", "Bạn không có quyền quản lý nhân sự."],
+    [
+      "ROOT_ADMIN_SECURITY_IMMUTABLE",
+      "Không thể thay đổi quyền bảo mật của Root Administrator trong trang Nhân sự.",
+    ],
+    [
+      "CANNOT_MANAGE_OWN_SECURITY",
+      "Bạn không thể thay đổi quyền hoặc trạng thái của chính mình trong trang Nhân sự.",
+    ],
+    [
+      "ROOT_ADMIN_REQUIRED_FOR_ADMIN_ACCOUNT",
+      "Chỉ Root Administrator được thay đổi tài khoản Quản trị viên hiện hữu.",
+    ],
+    ["INVALID_PERSONNEL_VERSION", "Phiên bản nhân sự không hợp lệ."],
+    [
+      "PERSONNEL_BOOLEAN_REQUIRED",
+      "Trạng thái và các quyền bổ sung phải được gửi đầy đủ.",
+    ],
+    ["INVALID_PERSONNEL_IMPORT", "Dữ liệu import nhân sự không hợp lệ."],
+    [
+      "PERSONNEL_CHANGED_RELOAD_REQUIRED",
+      "Nhân sự đã được một quản trị viên khác cập nhật. Vui lòng tải lại dữ liệu trước khi lưu.",
+    ],
+    [
+      "VIEWER_ROLE_MUST_BE_EXCLUSIVE",
+      "Người xem không thể kết hợp với vai trò khác.",
+    ],
+    [
+      "IMPORT_PERMISSION_ROLE_REQUIRED",
+      "Quyền nhập lịch chỉ áp dụng cho Chuyên viên, Giảng viên hoặc Trợ giảng.",
+    ],
+    [
+      "EMAIL_SCOPE_VIEWER_ONLY",
+      "Chỉ Người xem mới cấu hình nhận email theo loại phòng.",
+    ],
+    [
+      "EMAIL_SCOPE_MUST_BE_ASSIGNED",
+      "Loại phòng nhận email phải nằm trong phạm vi được phân công.",
+    ],
+    [
+      "CANNOT_LOCK_CURRENT_ADMIN",
+      "Bạn không thể tự khóa tài khoản đang đăng nhập.",
+    ],
+    ["CANNOT_REMOVE_CURRENT_ADMIN", "Bạn không thể tự gỡ quyền Quản trị viên."],
+    [
+      "LAST_ACTIVE_ADMIN_REQUIRED",
+      "Hệ thống phải còn ít nhất một Quản trị viên đang hoạt động.",
+    ],
+    ["PERSONNEL_EMAIL_EXISTS", "Email đăng nhập đã được sử dụng."],
+    [
+      "PERSONNEL_UPDATE_IN_PROGRESS",
+      "Nhân sự đang được một quản trị viên khác cập nhật. Vui lòng thử lại sau.",
+    ],
+    [
+      "PERSONNEL_RECONCILIATION_REQUIRED",
+      "Nhân sự đang chờ đối soát email đăng nhập. Vui lòng xử lý đối soát trước khi chỉnh sửa tiếp.",
+    ],
+    [
+      "ROOT_ADMIN_REQUIRED_FOR_PERSONNEL_MANAGER",
+      "Chỉ Root Administrator được thay đổi tài khoản quản lý nhân sự.",
+    ],
+    [
+      "PERSONNEL_UPDATE_OPERATION_EXPIRED",
+      "Phiên chỉnh sửa đã hết hạn. Vui lòng tải lại nhân sự trước khi lưu.",
+    ],
+    [
+      "PERSONNEL_EMAIL_CHANGE_REQUIRES_OPERATION",
+      "Thay đổi email phải đi qua luồng đồng bộ tài khoản bảo mật.",
+    ],
+    ["PERSONNEL_PHONE_EXISTS", "Số điện thoại đã được sử dụng."],
+    [
+      "BASIC_MEDICAL_PERMISSION_INVALID",
+      "Quyền tạo lịch Y cơ sở không phù hợp với vai trò hoặc phạm vi.",
+    ],
+  ];
+  return mappings.find(([code]) => message.includes(code))?.[1] ?? message;
+}
+
+export async function savePersonnelChanges(
+  formData: FormData,
+): Promise<SavePersonnelResult> {
+  const startedAt = performance.now();
+  const { supabase, userId } = await personnelContext();
   const targetId = String(formData.get("id") ?? "");
   const email = String(formData.get("email") ?? "")
     .trim()
     .toLowerCase();
   const fullName = String(formData.get("full_name") ?? "").trim();
-  if (!targetId || !email || !fullName) {
-    personnelRedirect("error", "Họ tên và email không được để trống.");
+  const roles = [...new Set(formData.getAll("roles").map(String))].filter(
+    (role): role is PersonnelRole =>
+      ["admin", "staff", "lecturer", "teaching_assistant", "viewer"].includes(
+        role,
+      ),
+  );
+  const roomTypeIds = [
+    ...new Set(formData.getAll("room_type_ids").map(String).filter(Boolean)),
+  ];
+  const emailRoomTypeIds = [
+    ...new Set(
+      formData.getAll("email_room_type_ids").map(String).filter(Boolean),
+    ),
+  ];
+  const expectedVersion = Number(formData.get("access_version"));
+  const canImportSchedules = formData.get("can_import_schedules") === "true";
+  const allowBasicMedicalAccess =
+    formData.get("allow_basic_medical_access") === "true";
+  const isActive = formData.get("is_active") === "true";
+
+  if (
+    !targetId ||
+    !email ||
+    !/^\S+@\S+\.\S+$/.test(email) ||
+    !fullName ||
+    !Number.isInteger(expectedVersion) ||
+    roles.length === 0 ||
+    roomTypeIds.length === 0
+  ) {
+    return {
+      ok: false,
+      message: "Vui lòng nhập đủ thông tin, vai trò và phạm vi phụ trách.",
+    };
   }
 
-  const { data: current } = await supabase
+  const { data: current, error: currentError } = await supabase
     .from("profiles")
-    .select("email")
+    .select("email,access_version")
     .eq("id", targetId)
     .maybeSingle();
-  if (!current) personnelRedirect("error", "Không tìm thấy nhân sự.");
+  if (currentError || !current) {
+    return { ok: false, message: "Không tìm thấy nhân sự cần cập nhật." };
+  }
 
-  if (current.email !== email) {
-    let adminClient;
-    try {
-      adminClient = createAdminClient();
-    } catch {
-      personnelRedirect(
-        "error",
-        "Chưa cấu hình SUPABASE_SECRET_KEY để thay đổi email đăng nhập.",
-      );
-    }
+  let adminClient;
+  try {
+    adminClient = createAdminClient();
+  } catch {
+    return {
+      ok: false,
+      message:
+        "Chưa cấu hình SUPABASE_SECRET_KEY cho thao tác quản trị tài khoản.",
+    };
+  }
+
+  const rpcInput = {
+    target_profile_id: targetId,
+    target_email: email,
+    target_full_name: fullName,
+    target_phone: String(formData.get("phone") ?? "").trim() || null,
+    target_title: String(formData.get("title") ?? "").trim() || null,
+    target_roles: roles,
+    target_can_import_schedules: canImportSchedules,
+    target_room_type_ids: roomTypeIds,
+    target_email_room_type_ids: roles.includes("viewer")
+      ? emailRoomTypeIds
+      : [],
+    target_allow_basic_medical_access: allowBasicMedicalAccess,
+    target_is_active: isActive,
+    target_expected_version: expectedVersion,
+  };
+
+  const rpcStartedAt = performance.now();
+  const { data: operationData, error: beginError } = await supabase.rpc(
+    "begin_personnel_update",
+    rpcInput,
+  );
+  if (beginError) {
+    return {
+      ok: false,
+      code: beginError.code,
+      message: personnelRpcMessage(beginError.message),
+    };
+  }
+  const operation = operationData as {
+    operation_id: string;
+    previous_email: string;
+    requested_email: string;
+    expected_version: number;
+  };
+
+  const authStartedAt = performance.now();
+  const emailChanged = current.email.trim().toLowerCase() !== email;
+  if (emailChanged) {
     const { error: authError } = await adminClient.auth.admin.updateUserById(
       targetId,
       { email, email_confirm: true },
     );
-    if (authError) personnelRedirect("error", authError.message);
+    if (authError) {
+      await supabase.rpc("cancel_personnel_update", {
+        target_operation_id: operation.operation_id,
+      });
+      return { ok: false, message: authError.message };
+    }
+  }
+  const { error: markAuthError } = await supabase.rpc(
+    "mark_personnel_auth_updated",
+    { target_operation_id: operation.operation_id },
+  );
+  if (markAuthError) {
+    if (emailChanged) {
+      const { error: rollbackError } =
+        await adminClient.auth.admin.updateUserById(targetId, {
+          email: operation.previous_email,
+          email_confirm: true,
+        });
+      if (rollbackError) {
+        await adminClient
+          .from("personnel_update_operations")
+          .update({
+            status: "reconciliation_required",
+            last_error: `${markAuthError.message}; rollback: ${rollbackError.message}`,
+          })
+          .eq("id", operation.operation_id);
+      } else {
+        await adminClient.rpc("resolve_personnel_update_operation", {
+          target_operation_id: operation.operation_id,
+          target_status: "rolled_back",
+          target_error: markAuthError.message,
+        });
+      }
+    } else {
+      await supabase.rpc("cancel_personnel_update", {
+        target_operation_id: operation.operation_id,
+      });
+    }
+    return {
+      ok: false,
+      code: markAuthError.code,
+      message:
+        "Không thể xác nhận trạng thái đồng bộ email. Hệ thống đã hoàn tác hoặc chuyển phiếu sang đối soát.",
+    };
+  }
+  const authMs = Math.round(performance.now() - authStartedAt);
+
+  const { data, error } = await supabase.rpc("commit_personnel_update", {
+    target_operation_id: operation.operation_id,
+  });
+  const rpcMs = Math.round(performance.now() - rpcStartedAt);
+
+  if (error) {
+    const { data: committedProfile } = await adminClient
+      .from("profiles")
+      .select("email,access_version")
+      .eq("id", targetId)
+      .maybeSingle();
+    if (
+      committedProfile?.email?.trim().toLowerCase() === email &&
+      committedProfile.access_version === expectedVersion + 1
+    ) {
+      const { data: snapshotRows } = await supabase.rpc(
+        "admin_list_personnel",
+        {
+          target_query: email,
+          target_role: null,
+          target_import_permission: "all",
+          target_status: "all",
+          target_page: 1,
+          target_page_size: 50,
+        },
+      );
+      const personnel = (
+        (snapshotRows ?? []) as Array<Record<string, unknown>>
+      ).find((row) => row.id === targetId);
+      revalidatePath("/admin/personnel");
+      return {
+        ok: true,
+        message:
+          "Đã cập nhật nhân sự. Kết quả đã được đối chiếu sau khi phản hồi cơ sở dữ liệu bị gián đoạn.",
+        personnel,
+      };
+    }
+    if (emailChanged) {
+      const { error: rollbackError } =
+        await adminClient.auth.admin.updateUserById(targetId, {
+          email: operation.previous_email,
+          email_confirm: true,
+        });
+      if (rollbackError) {
+        await adminClient
+          .from("profiles")
+          .update({ is_active: false })
+          .eq("id", targetId);
+        await adminClient.from("personnel_auth_reconciliation_logs").insert({
+          profile_id: targetId,
+          previous_email: operation.previous_email,
+          requested_email: email,
+          failure_stage: "database_rpc_and_auth_rollback",
+          error_message: `${error.message}; rollback: ${rollbackError.message}`,
+          created_by: userId,
+        });
+        await adminClient
+          .from("personnel_update_operations")
+          .update({
+            status: "reconciliation_required",
+            last_error: `${error.message}; rollback: ${rollbackError.message}`,
+          })
+          .eq("id", operation.operation_id);
+        return {
+          ok: false,
+          code: "AUTH_PROFILE_RECONCILIATION_REQUIRED",
+          message:
+            "Lưu dữ liệu thất bại và không thể hoàn tác email đăng nhập. Hệ thống đã ghi nhận để quản trị viên đối soát.",
+        };
+      }
+      await adminClient.rpc("resolve_personnel_update_operation", {
+        target_operation_id: operation.operation_id,
+        target_status: "rolled_back",
+        target_error: error.message,
+      });
+    }
+    if (!emailChanged) {
+      await adminClient
+        .from("personnel_update_operations")
+        .update({
+          status: "expired",
+          resolved_at: new Date().toISOString(),
+          last_error: error.message,
+        })
+        .eq("id", operation.operation_id);
+    }
+    return {
+      ok: false,
+      code: error.code,
+      message: personnelRpcMessage(error.message),
+    };
   }
 
-  const { error } = await supabase
-    .from("profiles")
-    .update({
-      email,
-      full_name: fullName,
-      phone: String(formData.get("phone") ?? "").trim() || null,
-      title: String(formData.get("title") ?? "").trim() || null,
-    })
-    .eq("id", targetId);
-  if (error) personnelRedirect("error", error.message);
-
+  if (process.env.VERCEL_ENV !== "production") {
+    console.info("personnel.save.timing", {
+      auth_ms: authMs,
+      rpc_ms: rpcMs,
+      total_ms: Math.round(performance.now() - startedAt),
+    });
+  }
   revalidatePath("/admin/personnel");
-  personnelRedirect("notice", "Đã cập nhật hồ sơ nhân sự.");
+  return {
+    ok: true,
+    message: "Đã cập nhật nhân sự.",
+    personnel: (data ?? {}) as Record<string, unknown>,
+  };
 }

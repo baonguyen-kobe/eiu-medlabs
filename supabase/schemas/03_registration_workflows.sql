@@ -192,7 +192,7 @@ begin
         (select private.has_room_type(basic_medical_room_type_id))
         and (
           (select private.has_role('lecturer'))
-          or (select private.has_role('importer'))
+          or (select private.has_role('teaching_assistant'))
         )
         and exists (
           select 1
@@ -369,6 +369,35 @@ end;
 $$;
 create trigger equipment_catalog_set_updated_at before update on public.equipment_catalog for each row execute function private.set_updated_at();
 create trigger equipment_requests_set_updated_at before update on public.equipment_requests for each row execute function private.set_updated_at();
+create or replace function private.validate_equipment_request_content()
+returns trigger
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare skills_room_type constant uuid := '40000000-0000-0000-0000-000000000001'::uuid;
+begin
+  if new.semester not in ('HK1','HK2','HK3','HK4') then
+    raise exception 'Học kỳ phải là HK1, HK2, HK3 hoặc HK4.' using errcode = '22023';
+  end if;
+  if length(coalesce(new.note, '')) > 2000 then
+    raise exception 'Ghi chú không được vượt quá 2000 ký tự.' using errcode = '22023';
+  end if;
+  if length(coalesce(new.late_registration_reason, '')) > 1000 then
+    raise exception 'Lý do đăng ký trễ không được vượt quá 1000 ký tự.' using errcode = '22023';
+  end if;
+  if not exists (
+    select 1 from public.profiles profiles
+    where profiles.id = new.responsible_lecturer_id and profiles.is_active
+      and exists (select 1 from public.user_roles roles where roles.user_id = profiles.id and roles.role = 'lecturer')
+      and exists (select 1 from public.profile_room_types scopes where scopes.profile_id = profiles.id and scopes.room_type_id = skills_room_type)
+  ) then raise exception 'Giảng viên phụ trách không hợp lệ.' using errcode = '42501'; end if;
+  return new;
+end;
+$$;
+create trigger equipment_requests_validate_content
+before insert or update on public.equipment_requests
+for each row execute function private.validate_equipment_request_content();
 create or replace function private.validate_equipment_request_timing()
 returns trigger
 language plpgsql
@@ -605,6 +634,46 @@ begin
   return new;
 end;
 $$;
+create or replace function private.can_manage_equipment_schedule(target_schedule_id uuid)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select (select private.has_role('admin')) or (
+    (select private.has_role('staff')) and exists (
+      select 1 from public.class_schedules schedules
+      join public.rooms rooms on rooms.id = schedules.room_id
+      where schedules.id = target_schedule_id
+        and (select private.has_room_type(rooms.room_type_id))
+    )
+  );
+$$;
+create or replace function private.can_manage_equipment_request(target_request_id uuid)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select exists (
+    select 1 from public.equipment_requests requests
+    where requests.id = target_request_id
+      and (select private.can_manage_equipment_schedule(requests.class_schedule_id))
+  );
+$$;
+create or replace function private.enforce_equipment_request_room_scope()
+returns trigger language plpgsql security definer set search_path = '' as $$
+declare actor_id uuid := (select auth.uid());
+begin
+  if (select auth.role()) = 'service_role' or (select private.has_role('admin')) then
+    return coalesce(new, old);
+  end if;
+  if (select private.has_role('staff')) then
+    if not (select private.can_manage_equipment_schedule(coalesce(new.class_schedule_id, old.class_schedule_id))) then
+      raise exception 'EQUIPMENT_REQUEST_SCOPE_REQUIRED' using errcode = '42501';
+    end if;
+    return coalesce(new, old);
+  end if;
+  if tg_op = 'INSERT' and new.registrant_id = actor_id and new.created_by = actor_id then return new; end if;
+  if tg_op = 'UPDATE' and ((old.registrant_id = actor_id and new.registrant_id = actor_id) or (old.responsible_lecturer_id = actor_id and new.responsible_lecturer_id = actor_id)) then return new; end if;
+  raise exception 'EQUIPMENT_REQUEST_SCOPE_REQUIRED' using errcode = '42501';
+end;
+$$;
+create trigger equipment_requests_enforce_room_scope
+before insert or update or delete on public.equipment_requests
+for each row execute function private.enforce_equipment_request_room_scope();
 create or replace function public.manager_confirm_equipment_status(
   target_request_id uuid,
   target_status text
@@ -620,8 +689,6 @@ declare
   actor_id uuid := (select auth.uid());
   current_rank integer;
   target_rank integer;
-  actor_email text;
-  can_confirm_handover_early boolean := false;
 begin
   if actor_id is null or not (select private.is_active_user())
     or not ((select private.has_role('admin')) or (select private.has_role('staff'))) then
@@ -636,12 +703,9 @@ begin
   if current_row.id is null then
     raise exception 'Không tìm thấy phiếu thiết bị.' using errcode = 'P0002';
   end if;
-  select lower(btrim(profiles.email)) into actor_email
-  from public.profiles as profiles where profiles.id = actor_id;
-  can_confirm_handover_early :=
-    (select private.has_role('admin'))
-    and actor_email in ('admin@campus.local', 'bao.nguyen@eiu.edu.vn');
-
+  if not (select private.can_manage_equipment_request(target_request_id)) then
+    raise exception 'EQUIPMENT_REQUEST_SCOPE_REQUIRED' using errcode = '42501';
+  end if;
   current_rank := case current_row.status
     when 'new' then 0 when 'preparing' then 1 when 'handed_over' then 2
     when 'returned' then 3 when 'completed' then 4 end;
@@ -675,7 +739,7 @@ begin
     update public.equipment_requests set status = 'preparing'
     where id = target_request_id returning * into changed_row;
   elsif target_status = 'handed_over' then
-    if current_row.status = 'new' and not can_confirm_handover_early then
+    if current_row.status = 'new' then
       raise exception 'Phải chuyển phiếu sang Đã soạn trước khi xác nhận Đã giao.' using errcode = '22023';
     end if;
     update public.equipment_requests
@@ -728,6 +792,9 @@ begin
   for update;
   if current_row.id is null then
     raise exception 'Không tìm thấy phiếu thiết bị.' using errcode = 'P0002';
+  end if;
+  if not (select private.can_manage_equipment_request(target_request_id)) then
+    raise exception 'EQUIPMENT_REQUEST_SCOPE_REQUIRED' using errcode = '42501';
   end if;
   if current_row.late_approval_status <> 'pending' then
     raise exception 'Phiếu không ở trạng thái Chờ duyệt đăng ký trễ.' using errcode = '22023';
@@ -851,6 +918,109 @@ begin
 end;
 $$;
 create trigger equipment_requests_guard_update before update on public.equipment_requests for each row execute function private.guard_equipment_request_update();
+
+create or replace function public.create_equipment_request_with_items(
+  target_class_schedule_id uuid,
+  target_semester text,
+  target_responsible_lecturer_id uuid,
+  target_receive_at timestamptz,
+  target_return_at timestamptz,
+  target_note text,
+  target_late_registration_reason text,
+  target_items jsonb
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  actor_id uuid := (select auth.uid());
+  actor_profile public.profiles;
+  request_id uuid;
+begin
+  if actor_id is null or not (select private.is_active_user())
+    or not (
+      (select private.has_role('admin'))
+      or (select private.has_role('staff'))
+      or (select private.has_role('teaching_assistant'))
+      or (select private.has_role('lecturer'))
+    ) then
+    raise exception 'Bạn không có quyền tạo phiếu thiết bị.' using errcode = '42501';
+  end if;
+  if target_semester not in ('HK1','HK2','HK3','HK4') then
+    raise exception 'Học kỳ phải là HK1, HK2, HK3 hoặc HK4.' using errcode = '22023';
+  end if;
+  if target_items is null or jsonb_typeof(target_items) <> 'array'
+    or jsonb_array_length(target_items) = 0
+    or jsonb_array_length(target_items) > 500 then
+    raise exception 'Danh sách thiết bị phải có từ 1 đến 500 dòng.' using errcode = '22023';
+  end if;
+  if not exists (
+    select 1
+    from public.class_schedules as schedules
+    join public.rooms as rooms on rooms.id = schedules.room_id
+    where schedules.id = target_class_schedule_id
+      and schedules.schedule_status <> 'cancelled'
+      and rooms.room_type_id = '40000000-0000-0000-0000-000000000001'::uuid
+      and (select private.has_room_type(rooms.room_type_id))
+  ) then
+    raise exception 'Lớp Skills lab không hợp lệ.' using errcode = '42501';
+  end if;
+  if target_responsible_lecturer_id <> actor_id
+    and not exists (
+      select 1
+      from public.list_scoped_lecturers('40000000-0000-0000-0000-000000000001'::uuid) as lecturers
+      where lecturers.id = target_responsible_lecturer_id
+    ) then
+    raise exception 'Giảng viên phụ trách không hợp lệ.' using errcode = '42501';
+  end if;
+  if exists (
+    select 1
+    from jsonb_to_recordset(target_items) as item(
+      skill_name text, catalog_item_id uuid, quantity integer, note text
+    )
+    left join public.equipment_catalog as catalog on catalog.id = item.catalog_item_id
+    where item.skill_name is null or btrim(item.skill_name) = ''
+      or length(item.skill_name) > 200
+      or item.catalog_item_id is null
+      or item.quantity is null or item.quantity < 1 or item.quantity > 100000
+      or length(coalesce(item.note, '')) > 1000
+      or catalog.id is null or not catalog.is_active
+  ) then
+    raise exception 'Danh sách thiết bị có dữ liệu không hợp lệ.' using errcode = '22023';
+  end if;
+
+  select * into actor_profile from public.profiles where id = actor_id;
+  if actor_profile.id is null or coalesce(actor_profile.phone, '') !~ '^\d{10}$' then
+    raise exception 'Hồ sơ Nhân sự chưa có số điện thoại 10 chữ số.' using errcode = '22023';
+  end if;
+
+  insert into public.equipment_requests (
+    class_schedule_id, semester, registrant_id, responsible_lecturer_id,
+    phone_snapshot, email_snapshot, receive_at, return_at,
+    late_registration_reason, note, created_by
+  ) values (
+    target_class_schedule_id, target_semester, actor_id, target_responsible_lecturer_id,
+    actor_profile.phone, actor_profile.email, target_receive_at, target_return_at,
+    nullif(btrim(target_late_registration_reason), ''), nullif(btrim(target_note), ''), actor_id
+  ) returning id into request_id;
+
+  insert into public.equipment_request_items (
+    request_id, skill_name, catalog_item_id, quantity, note
+  )
+  select request_id, btrim(item.skill_name), item.catalog_item_id, item.quantity,
+         nullif(btrim(item.note), '')
+  from jsonb_to_recordset(target_items) as item(
+    skill_name text, catalog_item_id uuid, quantity integer, note text
+  );
+  return request_id;
+end;
+$$;
+
+revoke all on function public.create_equipment_request_with_items(uuid,text,uuid,timestamptz,timestamptz,text,text,jsonb) from public, anon;
+grant execute on function public.create_equipment_request_with_items(uuid,text,uuid,timestamptz,timestamptz,text,text,jsonb) to authenticated;
+
 drop function if exists public.update_equipment_request_content(uuid, uuid, uuid, timestamptz, timestamptz, text, jsonb);
 drop function if exists public.update_equipment_request_content(uuid, uuid, text, uuid, timestamptz, timestamptz, text, jsonb);
 create or replace function public.update_equipment_request_content(
@@ -974,17 +1144,17 @@ as $$
   );
 $$;
 create policy basic_medical_registrations_select on public.basic_medical_registrations for select to authenticated using ((select private.is_active_user()) and ((select private.has_role('admin')) or (select private.has_role('staff')) or ((select private.has_room_type('40000000-0000-0000-0000-000000000002'::uuid)) and (created_by = (select auth.uid()) or registrant_id = (select auth.uid()) or responsible_lecturer_id = (select auth.uid())))));
-create policy basic_medical_registrations_manage on public.basic_medical_registrations for all to authenticated using ((select private.has_role('admin')) or (select private.has_role('staff')) or created_by = (select auth.uid())) with check (created_by = (select auth.uid()) and ((select private.has_role('admin')) or (select private.has_role('staff')) or (((select private.has_role('lecturer')) or (select private.has_role('importer'))) and (select private.has_room_type('40000000-0000-0000-0000-000000000002'::uuid)) and exists (select 1 from public.profiles where profiles.id = (select auth.uid()) and profiles.allow_basic_medical_access))));
+create policy basic_medical_registrations_manage on public.basic_medical_registrations for all to authenticated using ((select private.has_role('admin')) or (select private.has_role('staff')) or created_by = (select auth.uid())) with check (created_by = (select auth.uid()) and ((select private.has_role('admin')) or (select private.has_role('staff')) or (((select private.has_role('lecturer')) or (select private.has_role('teaching_assistant'))) and (select private.has_room_type('40000000-0000-0000-0000-000000000002'::uuid)) and exists (select 1 from public.profiles where profiles.id = (select auth.uid()) and profiles.allow_basic_medical_access))));
 create policy basic_medical_sessions_select on public.basic_medical_registration_sessions for select to authenticated using (exists (select 1 from public.basic_medical_registrations r where r.id = registration_id));
 create policy basic_medical_sessions_manage on public.basic_medical_registration_sessions for all to authenticated using (exists (select 1 from public.basic_medical_registrations r where r.id = registration_id and (r.created_by = (select auth.uid()) or (select private.has_role('admin')) or (select private.has_role('staff'))))) with check (exists (select 1 from public.basic_medical_registrations r where r.id = registration_id and (r.created_by = (select auth.uid()) or (select private.has_role('admin')) or (select private.has_role('staff')))));
 create policy equipment_catalog_select on public.equipment_catalog for select to authenticated using ((select private.is_active_user()));
 create policy equipment_catalog_admin on public.equipment_catalog for all to authenticated using ((select private.has_role('admin')) or (select private.has_role('staff'))) with check ((select private.has_role('admin')) or (select private.has_role('staff')));
-create policy equipment_requests_select on public.equipment_requests for select to authenticated using ((select private.is_active_user()) and ((select private.has_role('admin')) or (select private.has_role('staff')) or registrant_id = (select auth.uid()) or responsible_lecturer_id = (select auth.uid())));
+create policy equipment_requests_select on public.equipment_requests for select to authenticated using ((select private.is_active_user()) and ((select private.can_manage_equipment_request(id)) or registrant_id = (select auth.uid()) or responsible_lecturer_id = (select auth.uid())));
 create policy equipment_requests_insert on public.equipment_requests for insert to authenticated with check ((select private.is_active_user()) and registrant_id = (select auth.uid()) and created_by = (select auth.uid()));
-create policy equipment_requests_update on public.equipment_requests for update to authenticated using ((select private.has_role('admin')) or (select private.has_role('staff')) or registrant_id = (select auth.uid())) with check ((select private.has_role('admin')) or (select private.has_role('staff')) or (registrant_id = (select auth.uid()) and created_by = (select auth.uid())));
-create policy equipment_requests_delete on public.equipment_requests for delete to authenticated using ((select private.has_role('admin')) or (select private.has_role('staff')));
+create policy equipment_requests_update on public.equipment_requests for update to authenticated using ((select private.can_manage_equipment_request(id)) or registrant_id = (select auth.uid())) with check ((select private.can_manage_equipment_request(id)) or (registrant_id = (select auth.uid()) and created_by = (select auth.uid())));
+create policy equipment_requests_delete on public.equipment_requests for delete to authenticated using ((select private.can_manage_equipment_request(id)));
 create policy equipment_items_select on public.equipment_request_items for select to authenticated using (exists (select 1 from public.equipment_requests r where r.id = request_id));
-create policy equipment_items_manage on public.equipment_request_items for all to authenticated using (exists (select 1 from public.equipment_requests r where r.id = request_id and r.status in ('new', 'preparing') and (r.registrant_id = (select auth.uid()) or (select private.has_role('admin')) or (select private.has_role('staff'))))) with check (exists (select 1 from public.equipment_requests r where r.id = request_id and r.status in ('new', 'preparing') and (r.registrant_id = (select auth.uid()) or (select private.has_role('admin')) or (select private.has_role('staff')))));
+create policy equipment_items_manage on public.equipment_request_items for all to authenticated using (exists (select 1 from public.equipment_requests r where r.id = request_id and r.status in ('new', 'preparing') and (r.registrant_id = (select auth.uid()) or (select private.can_manage_equipment_request(r.id))))) with check (exists (select 1 from public.equipment_requests r where r.id = request_id and r.status in ('new', 'preparing') and (r.registrant_id = (select auth.uid()) or (select private.can_manage_equipment_request(r.id)))));
 grant select, insert, update, delete on public.basic_medical_registrations, public.basic_medical_registration_sessions,
   public.equipment_catalog, public.equipment_requests, public.equipment_request_items to authenticated;
 revoke execute on function public.save_basic_medical_registration(uuid, text, text, date, date, uuid, uuid, integer, uuid, text, jsonb) from public, anon;
@@ -997,8 +1167,14 @@ revoke execute on function public.update_equipment_request_content(uuid, uuid, t
 grant execute on function public.update_equipment_request_content(uuid, uuid, text, uuid, timestamptz, timestamptz, text, jsonb) to authenticated;
 revoke execute on function public.manager_confirm_equipment_status(uuid, text) from public, anon;
 grant execute on function public.manager_confirm_equipment_status(uuid, text) to authenticated;
+revoke all on function private.validate_equipment_request_content() from public, anon, authenticated;
 revoke execute on function public.manager_review_late_equipment_request(uuid, text, text) from public, anon;
 grant execute on function public.manager_review_late_equipment_request(uuid, text, text) to authenticated;
+revoke all on function private.can_manage_equipment_schedule(uuid) from public, anon;
+revoke all on function private.can_manage_equipment_request(uuid) from public, anon;
+grant execute on function private.can_manage_equipment_schedule(uuid) to authenticated;
+grant execute on function private.can_manage_equipment_request(uuid) to authenticated;
+revoke all on function private.enforce_equipment_request_room_scope() from public, anon, authenticated;
 revoke execute on function public.registrant_confirm_equipment_handoff(uuid, text, text) from public, anon;
 grant execute on function public.registrant_confirm_equipment_handoff(uuid, text, text) to authenticated;
 

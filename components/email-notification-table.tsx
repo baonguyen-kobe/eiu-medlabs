@@ -24,6 +24,7 @@ const statusLabels: Record<string, string> = {
   pending: "Chờ gửi",
   processing: "Đang gửi",
   sent: "Đã gửi",
+  sent_unconfirmed: "Đã gửi · Chờ đối soát DB",
   failed: "Thất bại",
   simulated: "Kiểm thử",
   suppressed: "Đã tắt gửi",

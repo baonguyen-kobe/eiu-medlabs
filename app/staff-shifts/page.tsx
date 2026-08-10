@@ -31,6 +31,8 @@ export default async function StaffShiftsPage({
     roles,
     roomTypes,
     allowBasicMedicalAccess,
+    canImportSchedules,
+    canManagePersonnel,
   } = await getViewer();
   const query = await searchParams;
   const parsedDate = query.date ? parseISO(query.date) : businessToday();
@@ -112,6 +114,8 @@ export default async function StaffShiftsPage({
       roles={roles}
       roomTypeCodes={roomTypes.map(({ code }) => code)}
       allowBasicMedicalAccess={allowBasicMedicalAccess}
+      canImportSchedules={canImportSchedules}
+      canManagePersonnel={canManagePersonnel}
       title="Lịch trực"
       description="Đăng ký lịch cố định hoặc quản lý người trực theo tuần và tháng."
     >

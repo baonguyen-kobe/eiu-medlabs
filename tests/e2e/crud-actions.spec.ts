@@ -305,7 +305,7 @@ test("admin can create, toggle, cancel deletion and delete every catalog type", 
   }
 });
 
-test("admin can create, save, change roles, lock and reactivate personnel", async ({
+test("admin can atomically edit roles, import capability and account state", async ({
   page,
 }) => {
   await loginAsAdmin(page);
@@ -323,39 +323,34 @@ test("admin can create, save, change roles, lock and reactivate personnel", asyn
     await createForm.locator('input[name="password"]').fill("LocalQa123!");
     await createForm.locator('input[name="phone"]').fill("0900000000");
     await createForm.locator('input[name="title"]').fill("Kiểm thử viên");
-    await createForm.locator('input[name="roles"][value="staff"]').check();
+    await createForm
+      .locator('input[name="roles"][value="teaching_assistant"]')
+      .check();
+    await createForm.locator('input[name="can_import_schedules"]').check();
     await createForm.getByRole("button", { name: "Tạo tài khoản" }).click();
     await expect(page.locator(".action-feedback.success")).toContainText(email);
 
-    let card = page.locator(".person-card").filter({ hasText: email });
-    await expect(card).toBeVisible();
-    await card.getByText("Sửa thông tin", { exact: true }).click();
-    await card.locator('input[name="title"]').fill("Kiểm thử viên đã cập nhật");
-    await card.getByRole("button", { name: "Lưu thay đổi" }).click();
-    card = page.locator(".person-card").filter({ hasText: email });
-    await expect(card).toContainText("Kiểm thử viên đã cập nhật");
+    const row = page
+      .locator(".personnel-table tbody tr")
+      .filter({ hasText: email });
+    await expect(row).toContainText("Trợ giảng");
+    await expect(row).toContainText("Nhập lịch");
+    await row.getByRole("button", { name: "Sửa" }).click();
 
-    await card.getByRole("button", { name: "Trợ giảng" }).click();
-    card = page.locator(".person-card").filter({ hasText: email });
-    await expect(card.getByRole("button", { name: "Trợ giảng" })).toHaveClass(
-      /selected/,
-    );
-    await card.getByRole("button", { name: "Trợ giảng" }).click();
-    card = page.locator(".person-card").filter({ hasText: email });
-    await expect(
-      card.getByRole("button", { name: "Trợ giảng" }),
-    ).not.toHaveClass(/selected/);
+    const dialog = page.getByRole("dialog", { name: "Chỉnh sửa nhân sự" });
+    await dialog.getByLabel("Chức danh").fill("Kiểm thử viên đã cập nhật");
+    await dialog.getByLabel("Cho phép nhập lịch").uncheck();
+    await dialog.getByLabel("Đang hoạt động").uncheck();
+    page.once("dialog", (confirmation) => confirmation.accept());
+    await dialog.getByRole("button", { name: "Lưu thay đổi" }).click();
+    await expect(dialog.getByRole("status")).toContainText("Đã lưu");
+    await expect(row).toContainText("Kiểm thử viên đã cập nhật");
+    await expect(row).toContainText("Đã khóa");
 
-    await card.getByRole("button", { name: "Khóa tài khoản" }).click();
-    card = page.locator(".person-card").filter({ hasText: email });
-    await expect(
-      card.getByRole("button", { name: "Kích hoạt tài khoản" }),
-    ).toBeVisible();
-    await card.getByRole("button", { name: "Kích hoạt tài khoản" }).click();
-    card = page.locator(".person-card").filter({ hasText: email });
-    await expect(
-      card.getByRole("button", { name: "Khóa tài khoản" }),
-    ).toBeVisible();
+    await dialog.getByLabel("Đang hoạt động").check();
+    await dialog.getByRole("button", { name: "Lưu thay đổi" }).click();
+    await expect(dialog.getByRole("status")).toContainText("Đã lưu");
+    await expect(row).toContainText("Hoạt động");
   } finally {
     await deletePersonnelByEmail(email);
   }

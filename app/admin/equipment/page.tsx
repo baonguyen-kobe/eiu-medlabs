@@ -12,8 +12,15 @@ export default async function EquipmentCatalogPage({
 }: {
   searchParams: Promise<{ notice?: string; error?: string }>;
 }) {
-  const { supabase, fullName, roles, roomTypes, allowBasicMedicalAccess } =
-    await getViewer();
+  const {
+    supabase,
+    fullName,
+    roles,
+    roomTypes,
+    allowBasicMedicalAccess,
+    canImportSchedules,
+    canManagePersonnel,
+  } = await getViewer();
   if (!roles.some((role) => ["admin", "staff"].includes(role))) {
     redirect("/dashboard");
   }
@@ -42,6 +49,8 @@ export default async function EquipmentCatalogPage({
       roles={roles}
       roomTypeCodes={roomTypes.map(({ code }) => code)}
       allowBasicMedicalAccess={allowBasicMedicalAccess}
+      canImportSchedules={canImportSchedules}
+      canManagePersonnel={canManagePersonnel}
       title="Danh mục thiết bị"
       description="Thiết bị và vật tư dùng cho phiếu đăng ký Skills lab."
     >

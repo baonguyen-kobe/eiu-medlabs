@@ -22,7 +22,7 @@ import {
   defaultWorkspacePath,
 } from "@/lib/workspace-access";
 
-type Role = "admin" | "lecturer" | "staff" | "importer" | "viewer";
+type Role = "admin" | "lecturer" | "staff" | "teaching_assistant" | "viewer";
 type ViewMode = "month" | "week" | "list";
 
 export default async function ClassSchedulesPage({

@@ -3,14 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import {
-  processEmailNotificationsByDedupeKeys,
-  processPendingScheduleEmails,
-} from "@/lib/email-notifications";
-import {
-  enqueueScheduleEventEmails,
-  loadScheduleEmailSnapshot,
-} from "@/lib/schedule-event-emails";
+import { processPendingScheduleEmails } from "@/lib/email-notifications";
 
 export type ActionResult = {
   ok: boolean;
@@ -50,6 +43,9 @@ function friendlyDatabaseError(message: string): string {
   }
   if (message.includes("CLASS_DATE_CHANGE_FORBIDDEN")) {
     return "Bạn không có quyền đổi ngày học của lớp này.";
+  }
+  if (message.includes("CLASS_DELETE_FORBIDDEN")) {
+    return "Bạn không có quyền xóa lớp này.";
   }
   if (message.includes("LECTURER_ROOM_TYPE_MISMATCH")) {
     return "Giảng viên được chọn không thuộc Loại phòng của lớp.";
@@ -181,51 +177,19 @@ export async function deleteClassSchedule(
   const userId = claimsData?.claims?.sub;
   if (!userId) return { ok: false, message: "Phiên đăng nhập đã hết hạn." };
 
-  const { data: roles } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId);
-  const roleNames = new Set((roles ?? []).map(({ role }) => role));
-  if (
-    !["admin", "staff", "importer", "lecturer"].some((role) =>
-      roleNames.has(role),
-    )
-  ) {
-    return { ok: false, message: "Bạn không có quyền xóa lớp." };
-  }
+  const { error } = await supabase.rpc("delete_skills_lab_class_schedule", {
+    target_schedule_id: scheduleId,
+  });
 
-  const snapshot = await loadScheduleEmailSnapshot(scheduleId);
-  const { data, error } = await supabase
-    .from("class_schedules")
-    .delete()
-    .eq("id", scheduleId)
-    .select("id")
-    .maybeSingle();
-  if (error || !data) {
+  if (error) {
     return {
       ok: false,
-      message: "Không thể xóa lớp. Vui lòng kiểm tra quyền và thử lại.",
+      message: friendlyDatabaseError(error.message),
     };
   }
 
-  const isManager = roleNames.has("admin") || roleNames.has("staff");
-  if (
-    snapshot?.room?.room_types?.code === "nursing_skills" &&
-    !isManager
-  ) {
-    try {
-      const dedupeKeys = await enqueueScheduleEventEmails({
-        snapshot,
-        event: "skills_lab_deleted",
-        actorId: userId,
-      });
-      after(() => processEmailNotificationsByDedupeKeys(dedupeKeys));
-    } catch (emailError) {
-      console.error("Không thể xếp email xóa lớp Skills Lab:", emailError);
-    }
-  }
-
   revalidateScheduleViews();
+  after(processPendingScheduleEmails);
   return { ok: true, message: "Đã xóa lớp khỏi hệ thống." };
 }
 
@@ -333,7 +297,7 @@ async function requireClassManagerAction() {
     .from("user_roles")
     .select("role")
     .eq("user_id", userId)
-    .in("role", ["admin", "staff", "importer"]);
+    .in("role", ["admin", "staff", "teaching_assistant"]);
   return roles?.length ? { supabase, userId } : null;
 }
 
@@ -417,9 +381,6 @@ export async function updateClassSchedule(
     };
   }
   const supabase = await createClient();
-  const { data: claimsData } = await supabase.auth.getClaims();
-  const actorId = claimsData?.claims?.sub;
-  const beforeSnapshot = await loadScheduleEmailSnapshot(scheduleId);
   const { error } = await supabase.rpc("update_class_schedule_details", {
     target_schedule_id: scheduleId,
     target_schedule_date: values.scheduleDate,
@@ -431,21 +392,6 @@ export async function updateClassSchedule(
   });
   if (error)
     return { ok: false, message: friendlyDatabaseError(error.message) };
-  if (actorId && beforeSnapshot?.room?.room_types?.code === "basic_medical") {
-    try {
-      const updatedSnapshot = await loadScheduleEmailSnapshot(scheduleId);
-      if (updatedSnapshot) {
-        const dedupeKeys = await enqueueScheduleEventEmails({
-          snapshot: updatedSnapshot,
-          event: "basic_medical_updated",
-          actorId,
-        });
-        after(() => processEmailNotificationsByDedupeKeys(dedupeKeys));
-      }
-    } catch (emailError) {
-      console.error("Không thể xếp email điều chỉnh lịch Y cơ sở:", emailError);
-    }
-  }
   revalidateScheduleViews();
   after(processPendingScheduleEmails);
   return { ok: true, message: "Đã lưu thay đổi lớp học." };
@@ -456,32 +402,13 @@ export async function adminCancelClass(
 ): Promise<ActionResult> {
   const context = await requireAdminAction();
   if (!context) return { ok: false, message: "Chỉ Admin được hủy lớp." };
-  const snapshot = await loadScheduleEmailSnapshot(scheduleId);
-  const { data, error } = await context.supabase
-    .from("class_schedules")
-    .update({
-      schedule_status: "cancelled",
-      cancelled_by: context.userId,
-      cancelled_at: new Date().toISOString(),
-    })
-    .eq("id", scheduleId)
-    .neq("schedule_status", "cancelled")
-    .select("id")
-    .maybeSingle();
-  if (error || !data) return { ok: false, message: "Không thể hủy lớp này." };
-  if (snapshot?.room?.room_types?.code === "basic_medical") {
-    try {
-      const dedupeKeys = await enqueueScheduleEventEmails({
-        snapshot,
-        event: "basic_medical_cancelled",
-        actorId: context.userId,
-      });
-      after(() => processEmailNotificationsByDedupeKeys(dedupeKeys));
-    } catch (emailError) {
-      console.error("Không thể xếp email hủy lịch Y cơ sở:", emailError);
-    }
-  }
+  const { error } = await context.supabase.rpc("cancel_class_schedule", {
+    target_schedule_id: scheduleId,
+  });
+  if (error)
+    return { ok: false, message: friendlyDatabaseError(error.message) };
   revalidateScheduleViews();
+  after(processPendingScheduleEmails);
   return { ok: true, message: "Đã hủy lớp và lưu lại lịch sử thay đổi." };
 }
 

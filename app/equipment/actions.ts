@@ -2,11 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
-import { processEmailNotificationsByDedupeKeys } from "@/lib/email-notifications";
-import {
-  enqueueEquipmentRequestEmails,
-  loadEquipmentRequestEmailSnapshot,
-} from "@/lib/equipment-request-emails";
+import { processPendingEmailOutbox } from "@/lib/equipment-request-emails";
 import { businessTodayString } from "@/lib/business-time";
 import {
   equipmentLeadTime,
@@ -90,30 +86,12 @@ export async function addEquipmentRequestItem({
     return { ok: false, message: "Dòng thiết bị bổ sung không hợp lệ." };
   }
 
-  const [
-    { data: roleRows },
-    { data: request },
-    { data: skill },
-    { data: catalog },
-  ] = await Promise.all([
+  const [{ data: roleRows }, { data: request }] = await Promise.all([
     supabase.from("user_roles").select("role").eq("user_id", userId),
     supabase
       .from("equipment_requests")
       .select("id,status")
       .eq("id", requestId)
-      .maybeSingle(),
-    supabase
-      .from("equipment_request_items")
-      .select("id")
-      .eq("request_id", requestId)
-      .eq("skill_name", normalizedSkillName)
-      .limit(1)
-      .maybeSingle(),
-    supabase
-      .from("equipment_catalog")
-      .select("id")
-      .eq("id", catalogItemId)
-      .eq("is_active", true)
       .maybeSingle(),
   ]);
 
@@ -130,47 +108,42 @@ export async function addEquipmentRequestItem({
         "Chỉ được bổ sung thiết bị khi phiếu ở trạng thái Mới hoặc Đã soạn.",
     };
   }
-  if (!skill) {
-    return { ok: false, message: "Kỹ năng/bài thực hành không còn tồn tại." };
-  }
-  if (!catalog) {
-    return {
-      ok: false,
-      message: "Thiết bị không còn hoạt động trong Danh mục.",
-    };
-  }
 
-  const { data: inserted, error } = await supabase
-    .from("equipment_request_items")
-    .insert({
-      request_id: requestId,
-      skill_name: normalizedSkillName,
-      catalog_item_id: catalogItemId,
-      quantity,
-      note: normalizedNote,
-    })
-    .select(
-      "id,quantity,skill_name,note,equipment_catalog(id,item_name,commercial_name,item_type,country_of_origin,manufacturer,model,unit)",
-    )
-    .single();
-  if (error || !inserted) {
+  const { data: newItemId, error } = await supabase.rpc(
+    "add_equipment_request_item",
+    {
+      target_request_id: requestId,
+      target_skill_name: normalizedSkillName,
+      target_catalog_item_id: catalogItemId,
+      target_quantity: quantity,
+      target_note: normalizedNote,
+    },
+  );
+  if (error || !newItemId) {
+    if (error?.message?.includes("CATALOG_ITEM_INACTIVE_OR_MISSING")) {
+      return {
+        ok: false,
+        message: "Thiết bị không còn hoạt động trong Danh mục.",
+      };
+    }
+    if (error?.message?.includes("SKILL_NOT_FOUND_IN_REQUEST")) {
+      return { ok: false, message: "Kỹ năng/bài thực hành không còn tồn tại." };
+    }
     return {
       ok: false,
       message: error?.message || "Không thể bổ sung thiết bị vào phiếu.",
     };
   }
 
-  try {
-    const dedupeKeys = await enqueueEquipmentRequestEmails({
-      requestId,
-      event: "updated",
-      operationId: crypto.randomUUID(),
-      actorId: userId,
-    });
-    after(() => processEmailNotificationsByDedupeKeys(dedupeKeys));
-  } catch (emailError) {
-    console.error("Không thể xếp email bổ sung thiết bị:", emailError);
-  }
+  const { data: inserted } = await supabase
+    .from("equipment_request_items")
+    .select(
+      "id,quantity,skill_name,note,equipment_catalog(id,item_name,commercial_name,item_type,country_of_origin,manufacturer,model,unit)",
+    )
+    .eq("id", newItemId as string)
+    .single();
+
+  after(() => processPendingEmailOutbox());
 
   revalidatePath("/equipment/requests");
   revalidatePath("/equipment/mine");
@@ -195,57 +168,35 @@ export async function deleteEquipmentRequest(
     return { ok: false, message: "Phiếu thiết bị không hợp lệ." };
   }
 
-  const { data: roleRows } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId);
-  if (!(roleRows ?? []).some(({ role }) => ["admin", "staff"].includes(role))) {
-    return {
-      ok: false,
-      message: "Chỉ Admin hoặc Chuyên viên được xóa phiếu thiết bị.",
-    };
-  }
+  let actionMessage = "";
+  const { data: isHardDeleted, error: hardDeleteErr } = await supabase.rpc(
+    "hard_delete_equipment_request",
+    { target_request_id: requestId },
+  );
 
-  let emailSnapshot = null;
-  try {
-    emailSnapshot = await loadEquipmentRequestEmailSnapshot(requestId);
-  } catch (emailError) {
-    console.error("Không thể đọc phiếu thiết bị trước khi xóa:", emailError);
-  }
-
-  const { data, error } = await supabase
-    .from("equipment_requests")
-    .delete()
-    .eq("id", requestId)
-    .select("id")
-    .maybeSingle();
-  if (error || !data) {
-    return {
-      ok: false,
-      message: "Không thể xóa phiếu thiết bị. Phiếu có thể đã bị xóa.",
-    };
-  }
-
-  if (emailSnapshot) {
-    try {
-      const dedupeKeys = await enqueueEquipmentRequestEmails({
-        requestId,
-        event: "deleted",
-        operationId: crypto.randomUUID(),
-        snapshot: emailSnapshot,
-        actorId: userId,
-      });
-      after(() => processEmailNotificationsByDedupeKeys(dedupeKeys));
-    } catch (emailError) {
-      console.error("Không thể xếp email xóa phiếu thiết bị:", emailError);
+  if (!hardDeleteErr && isHardDeleted) {
+    actionMessage = "Đã xóa vĩnh viễn phiếu thiết bị.";
+  } else {
+    const { data: isCancelled, error: cancelErr } = await supabase.rpc(
+      "soft_cancel_equipment_request",
+      { target_request_id: requestId },
+    );
+    if (cancelErr || !isCancelled) {
+      return {
+        ok: false,
+        message: "Không thể hủy hoặc xóa phiếu thiết bị.",
+      };
     }
+    actionMessage = "Đã hủy phiếu thiết bị.";
   }
+
+  after(() => processPendingEmailOutbox());
 
   revalidatePath("/equipment/requests");
   revalidatePath("/equipment/mine");
   revalidatePath("/equipment/register");
   revalidatePath("/class-schedules");
-  return { ok: true, message: "Đã xóa phiếu thiết bị." };
+  return { ok: true, message: actionMessage };
 }
 
 export async function updateEquipmentRequestStatus(
@@ -322,20 +273,7 @@ export async function reviewLateEquipmentRequest(
     };
   }
 
-  try {
-    const dedupeKeys = await enqueueEquipmentRequestEmails({
-      requestId,
-      event:
-        decision === "approved"
-          ? "late_approval_approved"
-          : "late_approval_rejected",
-      operationId: crypto.randomUUID(),
-      actorId: claims.claims.sub,
-    });
-    after(() => processEmailNotificationsByDedupeKeys(dedupeKeys));
-  } catch (emailError) {
-    console.error("Không thể xếp email duyệt đăng ký trễ:", emailError);
-  }
+  after(() => processPendingEmailOutbox());
 
   return {
     ok: true,
@@ -598,18 +536,7 @@ export async function updateEquipmentRequest(
     };
   }
 
-  const emailOperationId = crypto.randomUUID();
-  try {
-    const dedupeKeys = await enqueueEquipmentRequestEmails({
-      requestId,
-      event: requiresLateReview ? "late_approval_requested" : "updated",
-      operationId: emailOperationId,
-      actorId: userId,
-    });
-    after(() => processEmailNotificationsByDedupeKeys(dedupeKeys));
-  } catch (emailError) {
-    console.error("Không thể xếp email điều chỉnh phiếu thiết bị:", emailError);
-  }
+  after(() => processPendingEmailOutbox());
 
   revalidatePath("/equipment/requests");
   revalidatePath("/equipment/mine");
@@ -710,7 +637,7 @@ export async function createEquipmentRequest(
   if (
     !profile?.is_active ||
     !(roleRows ?? []).some(({ role }) =>
-      ["admin", "staff", "importer", "lecturer"].includes(role),
+      ["admin", "staff", "teaching_assistant", "lecturer"].includes(role),
     )
   ) {
     return { ok: false, message: "Bạn không có quyền tạo phiếu thiết bị." };
@@ -775,24 +702,25 @@ export async function createEquipmentRequest(
   if ((catalogRows ?? []).length !== catalogIds.length) {
     return { ok: false, message: "Danh sách có thiết bị không còn hoạt động." };
   }
-  const { data: request, error } = await supabase
-    .from("equipment_requests")
-    .insert({
-      class_schedule_id: scheduleId,
-      semester,
-      registrant_id: userId,
-      responsible_lecturer_id: responsibleId,
-      phone_snapshot: profile.phone,
-      email_snapshot: profile.email ?? String(claims.claims.email ?? ""),
-      receive_at: receiveAt.toISOString(),
-      return_at: returnAt.toISOString(),
-      late_registration_reason: lateRegistrationReason || null,
-      note: note || null,
-      created_by: userId,
-    })
-    .select("id")
-    .single();
-  if (error || !request)
+  const { data: requestId, error } = await supabase.rpc(
+    "create_equipment_request_with_items",
+    {
+      target_class_schedule_id: scheduleId,
+      target_semester: semester,
+      target_responsible_lecturer_id: responsibleId,
+      target_receive_at: receiveAt.toISOString(),
+      target_return_at: returnAt.toISOString(),
+      target_late_registration_reason: lateRegistrationReason || null,
+      target_note: note || null,
+      target_items: items.map((item) => ({
+        skill_name: item.skillName.trim(),
+        catalog_item_id: item.catalogItemId,
+        quantity: item.quantity,
+        note: item.note?.trim() || null,
+      })),
+    },
+  );
+  if (error || !requestId)
     return {
       ok: false,
       message:
@@ -800,33 +728,7 @@ export async function createEquipmentRequest(
           ? "Lớp này đã có phiếu đăng ký thiết bị."
           : error?.message || "Không thể tạo phiếu thiết bị.",
     };
-  const { error: itemError } = await supabase
-    .from("equipment_request_items")
-    .insert(
-      items.map((item) => ({
-        request_id: request.id,
-        skill_name: item.skillName.trim(),
-        catalog_item_id: item.catalogItemId,
-        quantity: item.quantity,
-        note: item.note?.trim() || null,
-      })),
-    );
-  if (itemError) {
-    await supabase.from("equipment_requests").delete().eq("id", request.id);
-    return { ok: false, message: "Không thể lưu danh sách thiết bị." };
-  }
-  try {
-    const dedupeKeys = await enqueueEquipmentRequestEmails({
-      requestId: request.id,
-      event: leadTime.requiresLateApproval
-        ? "late_approval_requested"
-        : "created",
-      actorId: userId,
-    });
-    after(() => processEmailNotificationsByDedupeKeys(dedupeKeys));
-  } catch (emailError) {
-    console.error("Không thể xếp email xác nhận phiếu thiết bị:", emailError);
-  }
+  after(() => processPendingEmailOutbox());
   revalidatePath("/equipment/requests");
   revalidatePath("/equipment/mine");
   revalidatePath("/equipment/register");

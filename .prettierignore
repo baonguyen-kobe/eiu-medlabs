@@ -8,6 +8,7 @@ node_modules/
 .claude/
 .dev-logs/
 .tools/
+supabase/.temp/
 graphify-out/
 build/
 backups/

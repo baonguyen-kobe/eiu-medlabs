@@ -14,6 +14,12 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { isWithinOperatingHours } from "@/lib/business-time";
 import { roomTypeIdForScope, type ScheduleScope } from "@/lib/room-types";
+import { createImportScheduleHash } from "@/lib/import-schedule-hash";
+import {
+  classifyImportPreviewCandidate,
+  classifyImportPreviewCandidatesInOrder,
+  type ExistingScheduleForPreview,
+} from "@/lib/import-preview-conflicts";
 
 type ImportRow = Record<string, unknown>;
 type ImportLecturer = {
@@ -31,6 +37,7 @@ export type ImportResult = {
   errorRows?: number;
   warningRows?: number;
   duplicateRows?: number;
+  conflictRows?: number;
   durationMs?: number;
   issues?: Array<{
     rowNumber: number;
@@ -40,7 +47,7 @@ export type ImportResult = {
 };
 
 export type ImportValidationStatus =
-  "valid" | "warning" | "error" | "duplicate";
+  "valid" | "warning" | "error" | "duplicate" | "conflict";
 
 export type ImportValidationResult = {
   ok: boolean;
@@ -50,6 +57,7 @@ export type ImportValidationResult = {
   warningRows: number;
   errorRows: number;
   duplicateRows: number;
+  conflictRows: number;
   normalizedRows: ImportRow[];
   rows: Array<{
     rowNumber: number;
@@ -93,6 +101,7 @@ function invalidValidation(message: string): ImportValidationResult {
     warningRows: 0,
     errorRows: 0,
     duplicateRows: 0,
+    conflictRows: 0,
     normalizedRows: [],
     rows: [],
   };
@@ -138,11 +147,17 @@ export async function validateScheduleRows(
 
   const [
     { data: roleRows },
+    { data: importerProfile },
     { data: courses },
     { data: rooms },
     { data: lecturers },
   ] = await Promise.all([
     supabase.from("user_roles").select("role").eq("user_id", userId),
+    supabase
+      .from("profiles")
+      .select("can_import_schedules")
+      .eq("id", userId)
+      .single(),
     supabase
       .from("courses")
       .select("id, course_code, course_name")
@@ -159,7 +174,15 @@ export async function validateScheduleRows(
   ]);
 
   const roles = (roleRows ?? []).map(({ role }) => role);
-  if (!roles.some((role) => ["admin", "staff", "importer"].includes(role))) {
+  if (
+    !roles.includes("admin") &&
+    !(
+      importerProfile?.can_import_schedules &&
+      roles.some((role) =>
+        ["staff", "lecturer", "teaching_assistant"].includes(role),
+      )
+    )
+  ) {
     return invalidValidation("Bạn không có quyền import lịch.");
   }
 
@@ -188,7 +211,6 @@ export async function validateScheduleRows(
     lecturerNames.set(key, [...(lecturerNames.get(key) ?? []), profile]);
   }
 
-  const seenHashes = new Set<string>();
   const preparedRows = inputRows.map((row, index) => {
     const errors: string[] = [];
     const warnings: string[] = [];
@@ -263,46 +285,160 @@ export async function validateScheduleRows(
       student_count: studentCount,
       note: text(row, "note") || null,
     };
-    const rowHash = createHash("sha256")
-      .update(JSON.stringify(normalizedData))
-      .digest("hex");
-    const duplicateWithinFile = seenHashes.has(rowHash);
-    seenHashes.add(rowHash);
-    return { duplicateWithinFile, errors, index, rowHash, warnings };
+    const rowHash = room
+      ? createImportScheduleHash({
+          courseCode,
+          roomId: room.id,
+          scheduleDate: scheduleDate ?? "",
+          startTime: startTime ?? "",
+          endTime: endTime ?? "",
+        })
+      : createHash("sha256")
+          .update(JSON.stringify(normalizedData))
+          .digest("hex");
+    return {
+      courseCode,
+      duplicateWithinFile: false,
+      endTime,
+      errors,
+      index,
+      lecturerId: requestedLecturer?.id ?? null,
+      roomId: room?.id ?? null,
+      rowHash,
+      scheduleDate,
+      startTime,
+      warnings,
+    };
   });
 
-  const remoteDuplicates = await mapWithConcurrency(
-    preparedRows,
-    12,
-    async (prepared) => {
-      if (prepared.duplicateWithinFile) return true;
-      const { data, error } = await supabase.rpc("import_hash_exists", {
-        target_hash: prepared.rowHash,
-      });
-      if (error) {
-        prepared.errors.push("Không thể kiểm tra dữ liệu trùng");
-        return false;
-      }
-      return data === true;
-    },
+  const hashesToCheck = [
+    ...new Set(
+      preparedRows
+        .filter(({ duplicateWithinFile }) => !duplicateWithinFile)
+        .map(({ rowHash }) => rowHash),
+    ),
+  ];
+  const { data: existingHashes, error: duplicateCheckError } =
+    await supabase.rpc("find_existing_import_hashes", {
+      target_hashes: hashesToCheck,
+      target_room_type_id: roomTypeId,
+    });
+  const existingHashSet = new Set(
+    ((existingHashes ?? []) as Array<{ normalized_row_hash: string }>).map(
+      ({ normalized_row_hash }) => normalized_row_hash,
+    ),
+  );
+  if (duplicateCheckError) {
+    for (const prepared of preparedRows) {
+      prepared.errors.push("Không thể kiểm tra dữ liệu trùng");
+    }
+  }
+  const remoteDuplicates = preparedRows.map(
+    ({ rowHash }) => !duplicateCheckError && existingHashSet.has(rowHash),
+  );
+
+  const comparableRows = preparedRows.filter(
+    (row) => row.roomId && row.scheduleDate && row.startTime && row.endTime,
+  );
+  const roomIds = [
+    ...new Set(comparableRows.map(({ roomId }) => roomId as string)),
+  ];
+  const lecturerIds = [
+    ...new Set(
+      comparableRows
+        .map(({ lecturerId }) => lecturerId)
+        .filter((lecturerId): lecturerId is string => Boolean(lecturerId)),
+    ),
+  ];
+  const scheduleDates = comparableRows
+    .map(({ scheduleDate }) => scheduleDate as string)
+    .sort();
+  let existingSchedules: ExistingScheduleForPreview[] = [];
+  let scheduleCheckFailed = false;
+  if (roomIds.length && scheduleDates.length) {
+    const select =
+      "course_code_snapshot,room_id,schedule_date,start_time,end_time,lecturer_id,lecturer_2_id";
+    const roomQuery = supabase
+      .from("class_schedules")
+      .select(select)
+      .in("room_id", roomIds)
+      .gte("schedule_date", scheduleDates[0])
+      .lte("schedule_date", scheduleDates.at(-1) as string)
+      .neq("schedule_status", "cancelled");
+    const lecturerQuery = lecturerIds.length
+      ? supabase
+          .from("class_schedules")
+          .select(select)
+          .or(
+            `lecturer_id.in.(${lecturerIds.join(",")}),lecturer_2_id.in.(${lecturerIds.join(",")})`,
+          )
+          .gte("schedule_date", scheduleDates[0])
+          .lte("schedule_date", scheduleDates.at(-1) as string)
+          .neq("schedule_status", "cancelled")
+      : null;
+    const [roomResult, lecturerResult] = await Promise.all([
+      roomQuery,
+      lecturerQuery,
+    ]);
+    scheduleCheckFailed = Boolean(roomResult.error || lecturerResult?.error);
+    existingSchedules = [
+      ...(roomResult.data ?? []),
+      ...(lecturerResult?.data ?? []),
+    ] as ExistingScheduleForPreview[];
+  }
+
+  const scheduleChecks = preparedRows.map((prepared) =>
+    scheduleCheckFailed
+      ? { conflict: false, duplicate: false }
+      : classifyImportPreviewCandidate(prepared, existingSchedules),
+  );
+  if (scheduleCheckFailed) {
+    for (const prepared of preparedRows) {
+      prepared.errors.push("Không thể kiểm tra lịch tạo tay và lịch đang mở");
+    }
+  }
+
+  const intraFileChecks = classifyImportPreviewCandidatesInOrder(
+    preparedRows.map((prepared, index) => ({
+      ...prepared,
+      eligible:
+        prepared.errors.length === 0 &&
+        !remoteDuplicates[index] &&
+        !scheduleChecks[index].duplicate &&
+        !scheduleChecks[index].conflict,
+    })),
   );
 
   const validationRows = preparedRows.map((prepared, index) => {
-    const duplicate = prepared.duplicateWithinFile || remoteDuplicates[index];
+    const duplicate =
+      intraFileChecks[index].duplicate ||
+      remoteDuplicates[index] ||
+      scheduleChecks[index].duplicate;
+    const conflict =
+      !duplicate &&
+      (scheduleChecks[index].conflict || intraFileChecks[index].conflict);
     if (duplicate) {
       prepared.errors.push(
-        prepared.duplicateWithinFile
+        intraFileChecks[index].duplicate
           ? "Dòng trùng với một dòng khác trong cùng file"
-          : "Lịch này đã được import trước đó",
+          : "Lịch trùng với lịch đã có (tạo tay hoặc import)",
+      );
+    } else if (conflict) {
+      prepared.errors.push(
+        intraFileChecks[index].conflict
+          ? "Lịch xung đột phòng hoặc giảng viên với dòng trước trong cùng file"
+          : "Lịch xung đột phòng hoặc giảng viên với lịch đã có",
       );
     }
     const status: ImportValidationStatus = duplicate
       ? "duplicate"
-      : prepared.errors.length > 0
-        ? "error"
-        : prepared.warnings.length > 0
-          ? "warning"
-          : "valid";
+      : conflict
+        ? "conflict"
+        : prepared.errors.length > 0
+          ? "error"
+          : prepared.warnings.length > 0
+            ? "warning"
+            : "valid";
     return {
       rowNumber: prepared.index + 2,
       status,
@@ -323,6 +459,9 @@ export async function validateScheduleRows(
   const duplicateRows = validationRows.filter(
     ({ status }) => status === "duplicate",
   ).length;
+  const conflictRows = validationRows.filter(
+    ({ status }) => status === "conflict",
+  ).length;
   return {
     ok: true,
     message: `Đã kiểm tra ${inputRows.length} dòng. Có ${validRows + warningRows} dòng có thể tạo lịch.`,
@@ -331,6 +470,7 @@ export async function validateScheduleRows(
     warningRows,
     errorRows,
     duplicateRows,
+    conflictRows,
     normalizedRows: inputRows,
     rows: validationRows,
   };
@@ -376,11 +516,17 @@ export async function importScheduleRows(
 
   const [
     { data: roleRows },
+    { data: importerProfile },
     { data: courses },
     { data: rooms },
     { data: lecturers },
   ] = await Promise.all([
     supabase.from("user_roles").select("role").eq("user_id", userId),
+    supabase
+      .from("profiles")
+      .select("can_import_schedules")
+      .eq("id", userId)
+      .single(),
     supabase
       .from("courses")
       .select("id, course_code, course_name")
@@ -397,7 +543,15 @@ export async function importScheduleRows(
   ]);
 
   const roles = (roleRows ?? []).map(({ role }) => role);
-  if (!roles.some((role) => ["admin", "staff", "importer"].includes(role))) {
+  if (
+    !roles.includes("admin") &&
+    !(
+      importerProfile?.can_import_schedules &&
+      roles.some((role) =>
+        ["staff", "lecturer", "teaching_assistant"].includes(role),
+      )
+    )
+  ) {
     return { ok: false, message: "Bạn không có quyền import lịch." };
   }
 
@@ -519,9 +673,17 @@ export async function importScheduleRows(
       student_count: studentCount,
       note: text(row, "note") || null,
     };
-    const rowHash = createHash("sha256")
-      .update(JSON.stringify(normalizedData))
-      .digest("hex");
+    const rowHash = room
+      ? createImportScheduleHash({
+          courseCode,
+          roomId: room.id,
+          scheduleDate: scheduleDate ?? "",
+          startTime: startTime ?? "",
+          endTime: endTime ?? "",
+        })
+      : createHash("sha256")
+          .update(JSON.stringify(normalizedData))
+          .digest("hex");
     const duplicateWithinFile = seenHashes.has(rowHash);
     seenHashes.add(rowHash);
 
@@ -545,20 +707,30 @@ export async function importScheduleRows(
     };
   });
 
-  const remoteDuplicateChecks = await mapWithConcurrency(
-    preparedRows,
-    12,
-    async (prepared) => {
-      if (prepared.duplicateWithinFile) return true;
-      const { data, error } = await supabase.rpc("import_hash_exists", {
-        target_hash: prepared.rowHash,
-      });
-      if (error) {
-        prepared.errors.push("Không thể kiểm tra dữ liệu trùng");
-        return false;
-      }
-      return data === true;
-    },
+  const hashesToCheck = [
+    ...new Set(
+      preparedRows
+        .filter(({ duplicateWithinFile }) => !duplicateWithinFile)
+        .map(({ rowHash }) => rowHash),
+    ),
+  ];
+  const { data: existingHashes, error: duplicateCheckError } =
+    await supabase.rpc("find_existing_import_hashes", {
+      target_hashes: hashesToCheck,
+      target_room_type_id: roomTypeId,
+    });
+  const existingHashSet = new Set(
+    ((existingHashes ?? []) as Array<{ normalized_row_hash: string }>).map(
+      ({ normalized_row_hash }) => normalized_row_hash,
+    ),
+  );
+  if (duplicateCheckError) {
+    for (const prepared of preparedRows) {
+      prepared.errors.push("Không thể kiểm tra dữ liệu trùng");
+    }
+  }
+  const remoteDuplicateChecks = preparedRows.map(
+    ({ rowHash }) => !duplicateCheckError && existingHashSet.has(rowHash),
   );
 
   const outcomes = await mapWithConcurrency(
@@ -585,7 +757,13 @@ export async function importScheduleRows(
         prepared.duplicateWithinFile || remoteDuplicateChecks[index];
 
       let scheduleId: string | null = null;
-      let validationStatus: "imported" | "warning" | "error" | "duplicate";
+      let validationStatus:
+        | "imported"
+        | "warning"
+        | "error"
+        | "duplicate"
+        | "conflict"
+        | "system_error";
       if (duplicate) {
         validationStatus = "duplicate";
         errors.push(
@@ -626,14 +804,19 @@ export async function importScheduleRows(
           });
 
         if (scheduleError || !createdScheduleId) {
-          errors.push(
-            scheduleError?.code === "23P01"
-              ? "Trùng phòng hoặc trùng lịch giảng viên"
-              : scheduleError?.code === "23514"
-                ? "Thời gian nằm ngoài khung hoạt động"
-                : "Không thể tạo lịch",
-          );
-          validationStatus = "error";
+          if (scheduleError?.code === "23505") {
+            errors.push("Lịch trùng business key với dữ liệu đã có");
+            validationStatus = "duplicate";
+          } else if (scheduleError?.code === "23P01") {
+            errors.push("Xung đột phòng hoặc lịch giảng viên");
+            validationStatus = "conflict";
+          } else if (scheduleError?.code === "23514") {
+            errors.push("Thời gian nằm ngoài khung hoạt động");
+            validationStatus = "error";
+          } else {
+            errors.push("Không thể tạo lịch");
+            validationStatus = "system_error";
+          }
         } else {
           scheduleId = String(createdScheduleId);
           validationStatus = requestedStatus;
@@ -680,16 +863,21 @@ export async function importScheduleRows(
   const duplicateRows = outcomes.filter(
     ({ status }) => status === "duplicate",
   ).length;
+  const conflictRows = outcomes.filter(
+    ({ status }) => status === "conflict",
+  ).length;
+  const systemErrorRows = outcomes.filter(
+    ({ status }) => status === "system_error",
+  ).length;
   const issues = outcomes
     .filter(({ errors, warnings }) => errors.length > 0 || warnings.length > 0)
     .map(({ rowNumber, errors, warnings }) => ({ rowNumber, errors, warnings }))
     .sort((left, right) => left.rowNumber - right.rowNumber);
 
   if (outcomes.some(({ fatal }) => fatal)) {
-    await supabase
-      .from("import_batches")
-      .update({ status: "failed", completed_at: new Date().toISOString() })
-      .eq("id", batch.id);
+    await supabase.rpc("finalize_import_batch", {
+      target_batch_id: batch.id,
+    });
     return {
       ok: false,
       message:
@@ -697,26 +885,19 @@ export async function importScheduleRows(
       batchId: batch.id,
       totalRows: inputRows.length,
       importedRows,
-      errorRows,
+      errorRows: errorRows + systemErrorRows,
       warningRows,
       duplicateRows,
+      conflictRows,
       durationMs: Date.now() - startedAt,
       issues,
     };
   }
 
-  const { error: finishError } = await supabase
-    .from("import_batches")
-    .update({
-      status: "completed",
-      valid_rows: importedRows - warningRows,
-      warning_rows: warningRows,
-      error_rows: errorRows,
-      imported_rows: importedRows,
-      duplicate_rows: duplicateRows,
-      completed_at: new Date().toISOString(),
-    })
-    .eq("id", batch.id);
+  const { data: finishData, error: finishError } = await supabase.rpc(
+    "finalize_import_batch",
+    { target_batch_id: batch.id },
+  );
 
   if (finishError) {
     return {
@@ -728,6 +909,17 @@ export async function importScheduleRows(
     };
   }
 
+  // Use DB-computed counts from the RPC; fall back to application counts if
+  // the response shape is unexpected (e.g. during a schema migration window).
+  const dbCounts = finishData as Record<string, number> | null;
+  const finalImported = dbCounts?.imported ?? importedRows;
+  const finalErrors = dbCounts
+    ? (dbCounts.errors ?? 0) + (dbCounts.system_errors ?? 0)
+    : errorRows + systemErrorRows;
+  const finalWarnings = dbCounts?.warnings ?? warningRows;
+  const finalDuplicates = dbCounts?.duplicates ?? duplicateRows;
+  const finalConflicts = dbCounts?.conflicts ?? conflictRows;
+
   revalidatePath("/dashboard");
   revalidatePath("/class-schedules");
   revalidatePath("/imports");
@@ -736,13 +928,14 @@ export async function importScheduleRows(
   after(processPendingScheduleEmails);
   return {
     ok: true,
-    message: `Đã tạo ${importedRows} lịch từ ${inputRows.length} dòng.`,
+    message: `Đã tạo ${finalImported} lịch từ ${inputRows.length} dòng.`,
     batchId: batch.id,
     totalRows: inputRows.length,
-    importedRows,
-    errorRows,
-    warningRows,
-    duplicateRows,
+    importedRows: finalImported,
+    errorRows: finalErrors,
+    warningRows: finalWarnings,
+    duplicateRows: finalDuplicates,
+    conflictRows: finalConflicts,
     durationMs: Date.now() - startedAt,
     issues,
   };

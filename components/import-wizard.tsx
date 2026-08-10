@@ -60,6 +60,7 @@ function validationMessage(review: ValidationRow) {
 
 function statusLabel(status: ValidationRow["status"]) {
   if (status === "duplicate") return "Trùng";
+  if (status === "conflict") return "Xung đột";
   if (status === "error") return "Cần sửa";
   if (status === "warning") return "Hợp lệ, có lưu ý";
   return "Hợp lệ";
@@ -110,7 +111,9 @@ function ImportRowsTable({
               const rowNumber = index + 2;
               const review = validationByRow?.get(rowNumber);
               const rowInvalid =
-                review?.status === "error" || review?.status === "duplicate";
+                review?.status === "error" ||
+                review?.status === "duplicate" ||
+                review?.status === "conflict";
               return (
                 <tr className={rowInvalid ? "row-error" : ""} key={index}>
                   <td>{rowNumber}</td>
@@ -419,10 +422,16 @@ export function ImportWizard({
               <strong>{result.warningRows}</strong>
             </article>
             <article className="danger">
-              <span>Lỗi / trùng</span>
-              <strong>
-                {(result.errorRows ?? 0) + (result.duplicateRows ?? 0)}
-              </strong>
+              <span>Lỗi</span>
+              <strong>{result.errorRows ?? 0}</strong>
+            </article>
+            <article>
+              <span>Trùng</span>
+              <strong>{result.duplicateRows ?? 0}</strong>
+            </article>
+            <article className="danger">
+              <span>Xung đột</span>
+              <strong>{result.conflictRows ?? 0}</strong>
             </article>
           </div>
           {result.issues?.length ? (
@@ -459,12 +468,15 @@ export function ImportWizard({
           ) : null}
           <div className="import-footer centered">
             {result.batchId &&
-            (result.errorRows ?? 0) + (result.duplicateRows ?? 0) > 0 ? (
+            (result.errorRows ?? 0) +
+              (result.duplicateRows ?? 0) +
+              (result.conflictRows ?? 0) >
+              0 ? (
               <Link
                 className="button button-secondary"
                 href={`/api/import-errors/${result.batchId}`}
               >
-                <Download size={16} /> Tải file lỗi / trùng
+                <Download size={16} /> Tải file lỗi / trùng / xung đột
               </Link>
             ) : null}
             <button className="button button-secondary" onClick={resetImport}>
@@ -559,10 +571,15 @@ export function ImportWizard({
                   <span>Trùng, không tạo</span>
                   <strong>{validation.duplicateRows}</strong>
                 </article>
+                <article className="danger">
+                  <span>Xung đột</span>
+                  <strong>{validation.conflictRows}</strong>
+                </article>
               </div>
               <p className="import-step-note">
                 Kiểm tra từng dòng trong cột <b>Kiểm tra</b>. Bạn vẫn có thể
-                tiếp tục; các dòng lỗi và trùng sẽ bị loại ở bước xác nhận.
+                tiếp tục; các dòng lỗi, trùng và xung đột sẽ bị loại ở bước xác
+                nhận.
               </p>
               <ImportRowsTable
                 key="validation-table"
@@ -591,6 +608,10 @@ export function ImportWizard({
                 <article className="warning">
                   <span>Đã loại do trùng</span>
                   <strong>{validation.duplicateRows}</strong>
+                </article>
+                <article className="danger">
+                  <span>Đã loại do xung đột</span>
+                  <strong>{validation.conflictRows}</strong>
                 </article>
               </div>
               <p className="import-step-note">

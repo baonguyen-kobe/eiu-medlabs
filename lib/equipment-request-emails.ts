@@ -134,7 +134,8 @@ export async function enqueueEquipmentRequestEmails({
   actorId?: string;
 }) {
   const supabase = createAdminClient();
-  const request = snapshot ?? (await loadEquipmentRequestEmailSnapshot(requestId));
+  const request =
+    snapshot ?? (await loadEquipmentRequestEmailSnapshot(requestId));
   if (!request) throw new Error("Không tìm thấy phiếu để tạo email.");
   if (!request.registrant || !request.class_schedules) {
     throw new Error("Phiếu thiếu thông tin người đăng ký hoặc lớp học.");
@@ -291,4 +292,21 @@ export async function enqueueEquipmentRequestEmails({
   if (insertError) throw new Error(insertError.message);
 
   return notifications.map(({ dedupe_key }) => dedupe_key);
+}
+
+export async function processPendingEmailOutbox() {
+  const supabase = createAdminClient();
+  const { data: processedCount, error } = await supabase.rpc(
+    "process_email_outbox_events",
+    { batch_size: 25 },
+  );
+  if (error) {
+    console.error("Không thể xử lý hàng đợi outbox email:", error.message);
+    return;
+  }
+  if (processedCount && processedCount > 0) {
+    const { processPendingScheduleEmails } =
+      await import("./email-notifications");
+    await processPendingScheduleEmails();
+  }
 }

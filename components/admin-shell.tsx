@@ -14,14 +14,22 @@ export async function AdminShell({
   actions?: React.ReactNode;
   children: React.ReactNode;
 }) {
-  const { fullName, roles, roomTypes, allowBasicMedicalAccess } =
-    await getViewer();
+  const {
+    fullName,
+    roles,
+    roomTypes,
+    allowBasicMedicalAccess,
+    canImportSchedules,
+    canManagePersonnel,
+  } = await getViewer();
   return (
     <WorkspaceShell
       fullName={fullName}
       roles={roles}
       roomTypeCodes={roomTypes.map(({ code }) => code)}
       allowBasicMedicalAccess={allowBasicMedicalAccess}
+      canImportSchedules={canImportSchedules}
+      canManagePersonnel={canManagePersonnel}
       title={title}
       description={description}
       actions={actions}

@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Use lockfile npm version
+        run: npm install --global npm@11.17.0
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: Audit dependencies
+        run: npm audit
+
+      - name: Start local Supabase
+        run: npx supabase start
+
+      - name: Reset schema from migrations
+        run: npx supabase db reset
+
+      - name: Create local test environment
+        shell: bash
+        run: |
+          eval "$(npx supabase status -o env)"
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=$API_URL"
+            echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$PUBLISHABLE_KEY"
+            echo "SUPABASE_SECRET_KEY=$SECRET_KEY"
+            echo "NEXT_PUBLIC_APP_URL=http://127.0.0.1:3000"
+            echo "EMAIL_DELIVERY_MODE=off"
+          } > .env.local
+
+      - name: Seed isolated test users and fixtures
+        shell: pwsh
+        run: ./scripts/seed-local-users.ps1
+
+      - name: Lint database
+        run: npx supabase db lint --local --level error
+
+      - name: Lint application
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Run unit and database tests
+        run: npm test
+
+      - name: Run database history tests
+        run: npm run test:db
+
+      - name: Restore E2E fixtures after database tests
+        shell: pwsh
+        run: ./scripts/seed-local-users.ps1
+
+      - name: Install browser for accessibility smoke tests
+        run: npx playwright install --with-deps chromium
+
+      - name: Run critical end-to-end suite
+        run: npm run test:e2e:critical
+
+      - name: Build production bundle
+        run: npm run build

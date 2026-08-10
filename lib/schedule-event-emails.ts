@@ -5,9 +5,7 @@ import { BASIC_MEDICAL_ROOM_TYPE_CODE } from "@/lib/room-types";
 import { formatTimestampRecordCode } from "@/lib/timestamp-record-code";
 
 export type ScheduleEmailEvent =
-  | "skills_lab_deleted"
-  | "basic_medical_updated"
-  | "basic_medical_cancelled";
+  "skills_lab_deleted" | "basic_medical_updated" | "basic_medical_cancelled";
 
 export type ScheduleEmailSnapshot = {
   id: string;

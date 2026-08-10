@@ -59,8 +59,8 @@ const roleMap = new Map([
   ["nhân viên", "staff"],
   ["quản trị viên", "admin"],
   ["admin", "admin"],
-  ["người tạo phiếu", "importer"],
-  ["importer", "importer"],
+  ["trợ giảng", "teaching_assistant"],
+  ["teaching assistant", "teaching_assistant"],
 ]);
 
 const courses = rowsFromSheet("Môn")

@@ -2,6 +2,7 @@
   "name": "lich-truc-app",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "npm@11.17.0",
   "engines": {
     "node": ">=22.13.0"
   },
@@ -14,6 +15,8 @@
     "lint": "eslint . --ignore-pattern .next",
     "typecheck": "tsc --noEmit",
     "test": "node --test tests/*.test.mjs",
+    "test:db": "supabase test db",
+    "test:e2e:critical": "playwright test tests/e2e/accessibility-smoke.spec.ts tests/e2e/manual-create.spec.ts tests/e2e/skills-import-export-tkb.spec.ts tests/e2e/equipment-request-management.spec.ts tests/e2e/basic-medical-equipment-confirmation.spec.ts tests/e2e/mobile-responsive.spec.ts tests/e2e/personnel-management.spec.ts",
     "test:e2e": "playwright test",
     "check": "npm run lint && npm run typecheck && npm test",
     "react-doctor:audit": "react-doctor . --verbose -y --project . --scope full --no-telemetry --blocking none --max-duration 180",
@@ -21,7 +24,8 @@
     "supabase:start": "supabase start",
     "supabase:stop": "supabase stop",
     "supabase:reset": "supabase db reset",
-    "supabase:types": "supabase gen types typescript --local > lib/database.types.ts"
+    "supabase:types": "supabase gen types typescript --local > lib/database.types.ts",
+    "personnel:bootstrap": "node scripts/bootstrap-personnel-security.mjs"
   },
   "dependencies": {
     "@e965/xlsx": "0.20.3",
@@ -45,6 +49,7 @@
     "zod": "4.1.11"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.11.1",
     "@fission-ai/openspec": "^1.7.0",
     "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "4.2.1",
@@ -65,7 +70,7 @@
     "@babel/core": "7.29.7",
     "js-yaml": "5.2.2",
     "minimatch@3.1.5": {
-      "brace-expansion": "1.1.16"
+      "brace-expansion": "1.1.18"
     },
     "minimatch@10.2.5": {
       "brace-expansion": "5.0.9"

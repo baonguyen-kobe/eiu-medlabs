@@ -2,12 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
-import {
-  enqueueBasicMedicalRegistrationEmails,
-  loadBasicMedicalEmailSnapshot,
-} from "@/lib/basic-medical-emails";
+import { processPendingScheduleEmails } from "@/lib/email-notifications";
 import { isValidBasicMedicalSessionTime } from "@/lib/business-time";
-import { processEmailNotificationsByDedupeKeys } from "@/lib/email-notifications";
 import { BASIC_MEDICAL_ROOM_TYPE_ID } from "@/lib/room-types";
 import { createClient } from "@/lib/supabase/server";
 
@@ -151,7 +147,7 @@ async function saveBasicMedicalRegistration(
       supabase.from("user_roles").select("role").eq("user_id", userId),
     ]);
   const hasRole = (rolesResult.data ?? []).some(({ role }) =>
-    ["admin", "staff", "importer"].includes(role),
+    ["admin", "staff", "teaching_assistant", "lecturer"].includes(role),
   );
   const allowedLecturerIds = new Set(
     ((lecturersResult.data ?? []) as Array<{ id: string }>).map(({ id }) => id),
@@ -203,19 +199,7 @@ async function saveBasicMedicalRegistration(
           : error?.message || "Không thể lưu phiếu Y cơ sở.",
     };
 
-  try {
-    const snapshot = await loadBasicMedicalEmailSnapshot(savedId);
-    if (snapshot) {
-      const dedupeKeys = await enqueueBasicMedicalRegistrationEmails({
-        snapshot,
-        event: registrationId ? "updated" : "created",
-        actorId: userId,
-      });
-      after(() => processEmailNotificationsByDedupeKeys(dedupeKeys));
-    }
-  } catch (emailError) {
-    console.error("Không thể xếp email phiếu Y cơ sở:", emailError);
-  }
+  after(processPendingScheduleEmails);
 
   revalidatePath("/basic-medical/new");
   revalidatePath("/basic-medical/schedules");

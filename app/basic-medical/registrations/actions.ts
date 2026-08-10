@@ -4,21 +4,13 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import {
-  enqueueBasicMedicalRegistrationEmails,
-  loadBasicMedicalEmailSnapshot,
-} from "@/lib/basic-medical-emails";
-import {
-  enqueueBasicMedicalEquipmentDamageEmails,
-  type BasicMedicalDamagedEmailItem,
-} from "@/lib/basic-medical-equipment-emails";
-import { processEmailNotificationsByDedupeKeys } from "@/lib/email-notifications";
+import { processPendingScheduleEmails } from "@/lib/email-notifications";
 
 function registrationsUrl(kind: "notice" | "error", message: string) {
   return `/basic-medical/registrations?${kind}=${encodeURIComponent(message)}`;
 }
 
-export async function deleteBasicMedicalRegistration(formData: FormData) {
+export async function cancelBasicMedicalRegistration(formData: FormData) {
   const registrationId = String(formData.get("id") ?? "");
   if (!/^[0-9a-f-]{36}$/i.test(registrationId)) {
     redirect(registrationsUrl("error", "Phiếu Y cơ sở không hợp lệ."));
@@ -31,59 +23,46 @@ export async function deleteBasicMedicalRegistration(formData: FormData) {
     redirect(registrationsUrl("error", "Phiên đăng nhập đã hết hạn."));
   }
 
-  const { data: roleRows } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId);
-  if (!(roleRows ?? []).some(({ role }) => ["admin", "staff"].includes(role))) {
+  const { data: authority, error: authorityError } = await supabase.rpc(
+    "get_basic_medical_authority_context",
+  );
+  if (
+    authorityError ||
+    !(authority as { can_manage_basic_medical?: boolean } | null)
+      ?.can_manage_basic_medical
+  ) {
     redirect(
       registrationsUrl(
         "error",
-        "Chỉ Admin hoặc Chuyên viên được xóa phiếu Y cơ sở.",
+        "Chỉ Admin hoặc Chuyên viên được hủy phiếu Y cơ sở.",
       ),
     );
   }
 
-  let emailSnapshot = null;
-  try {
-    emailSnapshot = await loadBasicMedicalEmailSnapshot(registrationId);
-  } catch (emailError) {
-    console.error("Không thể đọc phiếu Y cơ sở trước khi xóa:", emailError);
-  }
-
-  const { data, error } = await supabase
-    .from("basic_medical_registrations")
-    .delete()
-    .eq("id", registrationId)
-    .select("id")
-    .maybeSingle();
+  const reason = String(formData.get("reason") ?? "").trim();
+  const { data, error } = await supabase.rpc(
+    "cancel_basic_medical_registration",
+    {
+      target_registration_id: registrationId,
+      target_reason: reason || null,
+    },
+  );
 
   if (error || !data) {
     redirect(
       registrationsUrl(
         "error",
-        "Không thể xóa phiếu Y cơ sở. Phiếu có thể đã bị xóa.",
+        "Không thể hủy phiếu Y cơ sở. Phiếu có thể đã được hủy.",
       ),
     );
   }
 
-  if (emailSnapshot) {
-    try {
-      const dedupeKeys = await enqueueBasicMedicalRegistrationEmails({
-        snapshot: emailSnapshot,
-        event: "deleted",
-        actorId: userId,
-      });
-      after(() => processEmailNotificationsByDedupeKeys(dedupeKeys));
-    } catch (emailError) {
-      console.error("Không thể xếp email xóa phiếu Y cơ sở:", emailError);
-    }
-  }
+  after(processPendingScheduleEmails);
 
   revalidatePath("/basic-medical/registrations");
   revalidatePath("/basic-medical/schedules");
   revalidatePath("/class-schedules");
-  redirect(registrationsUrl("notice", "Đã xóa phiếu Y cơ sở."));
+  redirect(registrationsUrl("notice", "Đã hủy phiếu Y cơ sở."));
 }
 
 export type ConfirmBasicMedicalSessionResult = {
@@ -137,26 +116,10 @@ export async function confirmBasicMedicalSession({
   const result = data as unknown as {
     confirmation_id: string;
     signed_at: string;
-    room_code: string;
-    room_name?: string | null;
-    building_code: string;
-    damaged_items?: BasicMedicalDamagedEmailItem[];
+    damaged_items?: unknown[];
   };
   const damagedItems = result.damaged_items ?? [];
-  if (damagedItems.length) {
-    try {
-      const dedupeKeys = await enqueueBasicMedicalEquipmentDamageEmails({
-        confirmationId: result.confirmation_id,
-        roomCode: result.room_code,
-        roomName: result.room_name,
-        buildingCode: result.building_code,
-        damagedItems,
-      });
-      after(() => processEmailNotificationsByDedupeKeys(dedupeKeys));
-    } catch (emailError) {
-      console.error("Không thể xếp email báo thiết bị phòng hư:", emailError);
-    }
-  }
+  after(processPendingScheduleEmails);
   revalidatePath("/basic-medical/registrations");
   revalidatePath("/basic-medical/equipment");
   return {

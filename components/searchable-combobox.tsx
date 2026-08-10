@@ -24,6 +24,7 @@ export function SearchableCombobox({
   value,
   defaultValue = "",
   onChange,
+  onQueryChange,
   placeholder = "Chọn hoặc nhập để tìm…",
   emptyLabel,
   required = false,
@@ -35,6 +36,7 @@ export function SearchableCombobox({
   value?: string;
   defaultValue?: string;
   onChange?: (value: string) => void;
+  onQueryChange?: (query: string) => void;
   placeholder?: string;
   emptyLabel?: string;
   required?: boolean;
@@ -126,6 +128,7 @@ export function SearchableCombobox({
           value={displayQuery}
           onChange={(event) => {
             setQuery(event.target.value);
+            onQueryChange?.(event.target.value);
             if (selectedValue) {
               if (!controlled) setInternalValue("");
               onChange?.("");

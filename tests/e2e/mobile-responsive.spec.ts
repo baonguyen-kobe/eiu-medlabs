@@ -51,7 +51,7 @@ test("mobile workspace uses a drawer and keeps dashboard content inside the view
   expect(drawerSize.width).toBeLessThan(mobileViewport.width);
   expect(drawerSize.height).toBeLessThanOrEqual(mobileViewport.height);
   await expect(
-    drawer.getByRole("link", { name: "Lịch Skills lab" }),
+    drawer.getByRole("link", { name: "Lịch Skills lab", exact: true }),
   ).toBeVisible();
 
   await page.keyboard.press("Escape");

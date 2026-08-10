@@ -1,16 +1,20 @@
 create extension if not exists btree_gist with schema extensions;
 create extension if not exists unaccent with schema extensions;
 create extension if not exists pg_cron with schema pg_catalog;
+create extension if not exists pgcrypto with schema extensions;
 
 create schema if not exists private;
 
-create type public.app_role as enum ('admin', 'lecturer', 'staff', 'importer', 'viewer');
+-- `importer` is retained only as a deprecated enum value so existing migration
+-- history can be replayed. Runtime code and new writes use the separate
+-- profiles.can_import_schedules permission instead.
+create type public.app_role as enum ('admin', 'lecturer', 'staff', 'teaching_assistant', 'importer', 'viewer');
 create type public.schedule_source as enum ('manual', 'import', 'google_sheet');
 create type public.schedule_status as enum ('draft', 'published', 'cancelled', 'completed');
 create type public.shift_status as enum ('scheduled', 'cancelled', 'completed');
 create type public.shift_registration_source as enum ('self_registered', 'admin_assigned', 'generated');
-create type public.import_status as enum ('uploaded', 'validating', 'ready', 'importing', 'completed', 'failed');
-create type public.import_row_status as enum ('valid', 'warning', 'error', 'duplicate', 'imported', 'skipped');
+create type public.import_status as enum ('uploaded', 'validating', 'ready', 'importing', 'completed', 'completed_with_errors', 'failed');
+create type public.import_row_status as enum ('valid', 'warning', 'error', 'duplicate', 'conflict', 'system_error', 'imported', 'skipped');
 
 create table public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
@@ -20,11 +24,32 @@ create table public.profiles (
   title text,
   employee_code text,
   is_active boolean not null default true,
+  can_import_schedules boolean not null default false,
+  allow_basic_medical_access boolean not null default false,
+  access_version integer not null default 1,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint profiles_email_not_blank check (btrim(email) <> ''),
-  constraint profiles_name_not_blank check (btrim(full_name) <> '')
+  constraint profiles_name_not_blank check (btrim(full_name) <> ''),
+  constraint profiles_access_version_positive check (access_version >= 1)
 );
+
+create table public.personnel_auth_reconciliation_logs (
+  id uuid primary key default gen_random_uuid(),
+  profile_id uuid references public.profiles(id) on delete set null,
+  previous_email text not null,
+  requested_email text not null,
+  failure_stage text not null,
+  error_message text,
+  created_by uuid references public.profiles(id) on delete set null,
+  created_at timestamptz not null default now(),
+  resolved_at timestamptz,
+  constraint personnel_auth_reconciliation_stage_not_blank check (btrim(failure_stage) <> '')
+);
+
+create index personnel_auth_reconciliation_open_idx
+  on public.personnel_auth_reconciliation_logs (created_at desc)
+  where resolved_at is null;
 
 create unique index profiles_email_unique_idx on public.profiles (lower(email));
 create unique index profiles_employee_code_unique_idx
@@ -86,12 +111,13 @@ create table public.import_batches (
   error_rows integer not null default 0,
   imported_rows integer not null default 0,
   duplicate_rows integer not null default 0,
+  conflict_rows integer not null default 0,
   created_by uuid not null references public.profiles(id) on delete restrict,
   created_at timestamptz not null default now(),
   completed_at timestamptz,
   constraint import_batches_counts_non_negative check (
     total_rows >= 0 and valid_rows >= 0 and warning_rows >= 0 and
-    error_rows >= 0 and imported_rows >= 0 and duplicate_rows >= 0
+    error_rows >= 0 and imported_rows >= 0 and duplicate_rows >= 0 and conflict_rows >= 0
   )
 );
 
@@ -319,12 +345,18 @@ create table public.email_notifications (
   created_at timestamptz not null default now(),
   processing_started_at timestamptz,
   sent_at timestamptz,
+  delivery_mode_at_enqueue text not null default 'off',
+  provider_succeeded_at timestamptz,
+  acknowledgement_error text,
   constraint email_notifications_type_not_blank check (btrim(notification_type) <> ''),
   constraint email_notifications_recipient_not_blank check (btrim(recipient_email) <> ''),
   constraint email_notifications_subject_not_blank check (btrim(subject) <> ''),
   constraint email_notifications_attempts_non_negative check (attempts >= 0),
   constraint email_notifications_status_valid check (
-    status in ('pending', 'processing', 'sent', 'simulated', 'suppressed', 'failed')
+    status in ('pending', 'processing', 'sent', 'sent_unconfirmed', 'simulated', 'suppressed', 'failed')
+  ),
+  constraint email_notifications_delivery_mode_snapshot_valid check (
+    delivery_mode_at_enqueue in ('off', 'test', 'live')
   )
 );
 
@@ -349,6 +381,53 @@ create table public.email_delivery_settings (
 
 insert into public.email_delivery_settings (setting_key, delivery_mode)
 values ('primary', 'off');
+
+create or replace function private.snapshot_email_delivery_mode()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare selected_mode text;
+begin
+  select settings.delivery_mode into selected_mode
+  from public.email_delivery_settings settings where settings.setting_key = 'primary';
+  new.delivery_mode_at_enqueue := case when selected_mode in ('test', 'live') then selected_mode else 'off' end;
+  if new.delivery_mode_at_enqueue = 'off' then
+    new.status := 'suppressed';
+    new.last_error := 'Đã bỏ qua vì hệ thống đang tắt gửi email tại thời điểm tạo.';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger email_notifications_snapshot_delivery_mode
+before insert on public.email_notifications
+for each row execute function private.snapshot_email_delivery_mode();
+
+create or replace function public.set_email_delivery_mode(target_mode text)
+returns public.email_delivery_settings
+language plpgsql security definer set search_path = '' as $$
+declare changed public.email_delivery_settings;
+begin
+  if not (select private.has_role('admin')) then
+    raise exception 'ADMIN_ROLE_REQUIRED' using errcode = '42501';
+  end if;
+  if target_mode not in ('off', 'test', 'live') then
+    raise exception 'INVALID_EMAIL_DELIVERY_MODE' using errcode = '22023';
+  end if;
+  update public.email_delivery_settings
+  set delivery_mode = target_mode, updated_by = (select auth.uid()), updated_at = clock_timestamp()
+  where setting_key = 'primary' returning * into changed;
+  if target_mode = 'off' then
+    update public.email_notifications
+    set status = 'suppressed', processing_started_at = null,
+        last_error = 'Đã bỏ qua vì hệ thống đang tắt gửi email.'
+    where status = 'pending';
+  end if;
+  return changed;
+end;
+$$;
 
 create or replace function private.set_updated_at()
 returns trigger
@@ -476,7 +555,7 @@ as $$
       select 1
       from public.user_roles
       where user_id = (select auth.uid())
-        and role in ('admin', 'staff', 'importer')
+        and role in ('admin', 'staff', 'lecturer', 'teaching_assistant')
     );
 $$;
 
@@ -838,6 +917,33 @@ exception
 end;
 $$;
 
+create or replace function public.find_existing_import_hashes(target_hashes text[])
+returns table(normalized_row_hash text)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  if not (select private.can_create_schedule_entries()) then
+    raise exception 'SCHEDULE_CREATOR_ROLE_REQUIRED' using errcode = '42501';
+  end if;
+  if target_hashes is null or cardinality(target_hashes) > 500 then
+    raise exception 'INVALID_IMPORT_HASHES' using errcode = '22023';
+  end if;
+  return query
+  select distinct rows.normalized_row_hash
+  from public.import_rows as rows
+  join public.class_schedules schedules on schedules.id = rows.class_schedule_id
+  where rows.normalized_row_hash = any(target_hashes)
+    and rows.validation_status in ('imported', 'warning')
+    and schedules.schedule_status <> 'cancelled';
+end;
+$$;
+
+revoke all on function public.find_existing_import_hashes(text[]) from public, anon;
+grant execute on function public.find_existing_import_hashes(text[]) to authenticated;
+
 create or replace function public.withdraw_class(target_schedule_id uuid)
 returns public.class_schedules
 language plpgsql
@@ -977,9 +1083,14 @@ set search_path = ''
 as $$
 declare
   pattern public.staff_shift_patterns;
+  materialize_from date;
   materialize_to date;
   occurrence_date date;
+  business_now timestamp := now() at time zone 'Asia/Ho_Chi_Minh';
 begin
+  perform pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended('medlabs:shift-pattern:' || target_pattern_id::text, 0)
+  );
   select * into pattern
   from public.staff_shift_patterns
   where id = target_pattern_id
@@ -996,39 +1107,41 @@ begin
       pattern.effective_to
     )
   );
-
-  delete from public.staff_shifts
-  where shift_pattern_id = pattern.id;
+  materialize_from := greatest(
+    pattern.effective_from,
+    business_now::date
+  );
+  if materialize_from > materialize_to then return; end if;
 
   for occurrence_date in
     select generated.day_value::date
     from generate_series(
-      pattern.effective_from::timestamp,
+      materialize_from::timestamp,
       materialize_to::timestamp,
       interval '1 day'
     ) as generated(day_value)
     where extract(isodow from generated.day_value)::smallint = pattern.weekday
+      and generated.day_value::date + pattern.start_time > business_now
     order by generated.day_value
   loop
-    delete from public.staff_shifts
-    where staff_id = pattern.staff_id
-      and shift_date = occurrence_date
-      and status <> 'cancelled'
-      and time_range && tsrange(
-        occurrence_date + pattern.start_time,
-        occurrence_date + pattern.end_time,
-        '[)'
-      );
-
-    insert into public.staff_shifts (
-      staff_id, shift_date, start_time, end_time, shift_type,
-      shift_template_id, shift_pattern_id, note, status,
-      registration_source, created_by
-    ) values (
-      pattern.staff_id, occurrence_date, pattern.start_time, pattern.end_time,
-      pattern.shift_type, null, pattern.id, pattern.note, 'scheduled',
-      'generated', pattern.created_by
-    );
+    begin
+      insert into public.staff_shifts (
+        staff_id, shift_date, start_time, end_time, shift_type,
+        shift_template_id, shift_pattern_id, note, status,
+        registration_source, created_by
+      ) values (
+        pattern.staff_id, occurrence_date, pattern.start_time, pattern.end_time,
+        pattern.shift_type, null, pattern.id, pattern.note, 'scheduled',
+        'generated', pattern.created_by
+      )
+      on conflict (shift_pattern_id, shift_date) where shift_pattern_id is not null
+      do update set staff_id = excluded.staff_id, start_time = excluded.start_time,
+        end_time = excluded.end_time, shift_type = excluded.shift_type,
+        note = excluded.note, updated_at = now()
+      where staff_shifts.registration_source = 'generated'
+        and staff_shifts.status = 'scheduled';
+    exception when exclusion_violation then null;
+    end;
   end loop;
 end;
 $$;
@@ -1043,6 +1156,11 @@ declare
   pattern_id uuid;
   business_today date := (now() at time zone 'Asia/Ho_Chi_Minh')::date;
 begin
+  if not pg_catalog.pg_try_advisory_xact_lock(
+    pg_catalog.hashtextextended('medlabs:refresh-open-shift-patterns', 0)
+  ) then
+    return;
+  end if;
   for pattern_id in
     select patterns.id
     from public.staff_shift_patterns as patterns
@@ -1061,6 +1179,22 @@ select cron.schedule(
   '15 17 * * *',
   'select private.refresh_open_shift_patterns();'
 );
+
+create or replace function private.preserve_staff_shift_history()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  if old.registration_source <> 'generated'
+    or old.status in ('completed', 'cancelled')
+    or (old.shift_date + old.start_time)
+      <= (now() at time zone 'Asia/Ho_Chi_Minh') then
+    return null;
+  end if;
+  return old;
+end;
+$$;
+create trigger staff_shifts_preserve_history
+before delete on public.staff_shifts
+for each row execute function private.preserve_staff_shift_history();
 
 create or replace function public.register_own_shift_pattern(
   target_weekday smallint,
@@ -1372,6 +1506,9 @@ grant execute on function public.cancel_own_shift(uuid) to authenticated;
 grant execute on function public.register_own_shift_pattern(smallint, text, date, date, text) to authenticated;
 grant execute on function public.cancel_own_shift_pattern(uuid) to authenticated;
 grant execute on function public.claim_email_notifications(integer) to service_role;
+revoke all on function private.snapshot_email_delivery_mode() from public, anon, authenticated;
+revoke all on function private.preserve_staff_shift_history() from public, anon, authenticated;
+revoke all on function private.materialize_shift_pattern(uuid, date) from public, anon, authenticated;
 revoke execute on function public.create_import_schedule_row(
   uuid, integer, text, jsonb, jsonb, public.import_row_status, jsonb, jsonb,
   uuid, text, text, uuid, uuid, date, time, time, text
@@ -1394,10 +1531,14 @@ alter table public.staff_shifts enable row level security;
 alter table public.audit_logs enable row level security;
 alter table public.email_notifications enable row level security;
 alter table public.email_delivery_settings enable row level security;
+alter table public.personnel_auth_reconciliation_logs enable row level security;
 
-create policy profiles_select_active_users on public.profiles
+create policy profiles_select_self_or_admin on public.profiles
 for select to authenticated
-using ((select private.is_active_user()));
+using (
+  id = (select auth.uid())
+  or (select private.has_role('admin'))
+);
 
 create policy profiles_admin_all on public.profiles
 for all to authenticated
@@ -1412,6 +1553,14 @@ create policy user_roles_admin_all on public.user_roles
 for all to authenticated
 using ((select private.has_role('admin')))
 with check ((select private.has_role('admin')));
+
+create policy personnel_auth_reconciliation_admin_select
+on public.personnel_auth_reconciliation_logs
+for select to authenticated
+using ((select private.has_role('admin')));
+
+grant select on public.personnel_auth_reconciliation_logs to authenticated;
+grant all on public.personnel_auth_reconciliation_logs to service_role;
 
 create policy courses_select_active_users on public.courses
 for select to authenticated
@@ -1564,3 +1713,5 @@ grant select, insert, update on public.profiles, public.user_roles, public.cours
   to service_role;
 grant select, insert, update, delete on public.email_notifications to service_role;
 grant select, update on public.email_delivery_settings to service_role;
+revoke all on function public.set_email_delivery_mode(text) from public, anon;
+grant execute on function public.set_email_delivery_mode(text) to authenticated;

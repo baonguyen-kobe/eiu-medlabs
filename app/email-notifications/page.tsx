@@ -49,6 +49,8 @@ export default async function EmailNotificationsPage({
       roles={viewer.roles}
       roomTypeCodes={viewer.roomTypes.map(({ code }) => code)}
       allowBasicMedicalAccess={viewer.allowBasicMedicalAccess}
+      canImportSchedules={viewer.canImportSchedules}
+      canManagePersonnel={viewer.canManagePersonnel}
       title="Email thông báo"
       description={
         deliveryMode === "off"

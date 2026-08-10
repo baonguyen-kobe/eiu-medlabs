@@ -115,10 +115,10 @@ export function ClassRegistrationList({
   const [pending, startTransition] = useTransition();
   const canClaim = roles.includes("lecturer") || roles.includes("admin");
   const canDelete = roles.some((role) =>
-    ["staff", "admin", "importer"].includes(role),
+    ["staff", "admin", "teaching_assistant"].includes(role),
   );
   const canAssign = roles.some((role) =>
-    ["staff", "admin", "importer"].includes(role),
+    ["staff", "admin", "teaching_assistant"].includes(role),
   );
 
   const filtered = useMemo(() => {

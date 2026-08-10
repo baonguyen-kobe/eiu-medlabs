@@ -4,7 +4,9 @@ import { createClient } from "@/lib/supabase/server";
 
 function csvCell(value: unknown) {
   const text = typeof value === "string" ? value : JSON.stringify(value ?? "");
-  return `"${text.replaceAll('"', '""')}"`;
+  // Neutralize formula-injection prefixes before quoting (OWASP CSV injection)
+  const safe = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+  return `"${safe.replaceAll('"', '""')}"`;
 }
 
 export async function GET(
@@ -22,7 +24,7 @@ export async function GET(
     .from("import_rows")
     .select("row_number, validation_status, raw_data, errors, warnings")
     .eq("import_batch_id", batchId)
-    .in("validation_status", ["error", "duplicate"])
+    .in("validation_status", ["error", "duplicate", "conflict", "system_error"])
     .order("row_number");
 
   if (error) {
@@ -46,7 +48,13 @@ export async function GET(
       return [
         row.row_number,
         ...importHeaders.map((header) => raw[header] ?? ""),
-        row.validation_status === "duplicate" ? "Trùng" : "Lỗi",
+        row.validation_status === "duplicate"
+          ? "Trùng"
+          : row.validation_status === "conflict"
+            ? "Xung đột"
+            : row.validation_status === "system_error"
+              ? "Lỗi hệ thống"
+              : "Lỗi dữ liệu",
         (row.errors as string[]).join("; "),
         (row.warnings as string[]).join("; "),
       ]

@@ -75,15 +75,9 @@ export async function setEmailDeliveryMode(formData: FormData) {
     );
   }
 
-  const admin = createAdminClient();
-  const { error } = await admin
-    .from("email_delivery_settings")
-    .update({
-      delivery_mode: deliveryMode,
-      updated_by: userId,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("setting_key", "primary");
+  const { error } = await supabase.rpc("set_email_delivery_mode", {
+    target_mode: deliveryMode,
+  });
   if (error) {
     redirect(resultUrl("error", "Không thể cập nhật chế độ gửi email."));
   }

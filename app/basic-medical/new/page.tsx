@@ -6,8 +6,8 @@ import {
 } from "@/components/basic-medical-registration-form";
 import { WorkspaceShell } from "@/components/workspace-shell";
 import {
-  basicMedicalRegistrationCodeBounds,
   formatBasicMedicalRegistrationCode,
+  normalizeBasicMedicalRegistrationCode,
 } from "@/lib/basic-medical-registration-code";
 import { businessTodayString } from "@/lib/business-time";
 import { BASIC_MEDICAL_ROOM_TYPE_ID } from "@/lib/room-types";
@@ -23,6 +23,7 @@ type RegistrationMode = "copy" | "edit";
 
 type RegistrationOption = {
   id: string;
+  registration_code: string;
   created_at: string;
   created_by: string;
   start_date: string;
@@ -34,6 +35,7 @@ type RegistrationOption = {
 
 type SourceRegistration = {
   id: string;
+  registration_code: string;
   created_at: string;
   created_by: string;
   registrant_id: string;
@@ -60,12 +62,12 @@ type SourceRegistration = {
 };
 
 const sourceRegistrationSelect =
-  "id,created_at,created_by,registrant_id,responsible_lecturer_id,academic_year,semester,start_date,end_date,course_id,room_id,student_count,note,registrant:profiles!basic_medical_registrations_registrant_id_fkey(full_name,email),sessions:basic_medical_registration_sessions(session_number,lesson_title,teaching_lecturer_id,schedule:class_schedules(schedule_date,start_time,end_time))";
+  "id,registration_code,created_at,created_by,registrant_id,responsible_lecturer_id,academic_year,semester,start_date,end_date,course_id,room_id,student_count,note,registrant:profiles!basic_medical_registrations_registrant_id_fkey(full_name,email),sessions:basic_medical_registration_sessions(session_number,lesson_title,teaching_lecturer_id,schedule:class_schedules(schedule_date,start_time,end_time))";
 
 function registrationOptionLabel(option: RegistrationOption) {
   const dateRange = `${option.start_date.split("-").reverse().join("/")}–${option.end_date.split("-").reverse().join("/")}`;
   return [
-    `#${formatBasicMedicalRegistrationCode(option.created_at)}`,
+    `#${formatBasicMedicalRegistrationCode(option.registration_code)}`,
     option.course?.course_code,
     dateRange,
     option.room
@@ -145,7 +147,7 @@ function RegistrationModePicker({
                 name="registration"
                 required
                 defaultValue={mode === "copy" ? activeRegistrationKey : ""}
-                placeholder="Nhập mã phiếu, ví dụ: 123465789356"
+                placeholder="Nhập mã phiếu, ví dụ: YC-260806-000123"
                 autoComplete="off"
                 spellCheck={false}
               />
@@ -178,9 +180,7 @@ function buildInitialData(
   return {
     mode,
     sourceRegistrationId: source.id,
-    sourceRegistrationCode: formatBasicMedicalRegistrationCode(
-      source.created_at,
-    ),
+    sourceRegistrationCode: source.registration_code,
     academicYear: source.academic_year,
     semester: source.semester,
     startDate: mode === "copy" ? "" : source.start_date,
@@ -210,6 +210,8 @@ export default async function NewBasicMedicalSchedulePage({
     roles,
     roomTypes,
     allowBasicMedicalAccess,
+    canImportSchedules,
+    canManagePersonnel,
   } = viewer;
   const roomTypeCodes = roomTypes.map(({ code }) => code);
   if (
@@ -232,10 +234,10 @@ export default async function NewBasicMedicalSchedulePage({
   const requestedId = /^[0-9a-f-]{36}$/i.test(rawRegistrationKey)
     ? rawRegistrationKey
     : "";
-  const requestedCodeBounds = !requestedId
-    ? basicMedicalRegistrationCodeBounds(rawRegistrationKey)
+  const requestedCode = !requestedId
+    ? normalizeBasicMedicalRegistrationCode(rawRegistrationKey)
     : null;
-  const hasValidRegistrationKey = Boolean(requestedId || requestedCodeBounds);
+  const hasValidRegistrationKey = Boolean(requestedId || requestedCode);
   const sourcePromise =
     mode && hasValidRegistrationKey
       ? (() => {
@@ -244,9 +246,7 @@ export default async function NewBasicMedicalSchedulePage({
             .select(sourceRegistrationSelect);
           sourceQuery = requestedId
             ? sourceQuery.eq("id", requestedId)
-            : sourceQuery
-                .gte("created_at", requestedCodeBounds!.from)
-                .lt("created_at", requestedCodeBounds!.to);
+            : sourceQuery.eq("registration_code", requestedCode!);
           return sourceQuery.maybeSingle();
         })()
       : Promise.resolve({ data: null, error: null });
@@ -277,7 +277,7 @@ export default async function NewBasicMedicalSchedulePage({
     supabase
       .from("basic_medical_registrations")
       .select(
-        "id,created_at,created_by,start_date,end_date,registrant:profiles!basic_medical_registrations_registrant_id_fkey(full_name),course:courses(course_code),room:rooms(room_code,building_code)",
+        "id,registration_code,created_at,created_by,start_date,end_date,registrant:profiles!basic_medical_registrations_registrant_id_fkey(full_name),course:courses(course_code),room:rooms(room_code,building_code)",
       )
       .order("created_at", { ascending: false })
       .limit(200),
@@ -296,7 +296,7 @@ export default async function NewBasicMedicalSchedulePage({
   );
   const loadError =
     mode && rawRegistrationKey && !hasValidRegistrationKey
-      ? "Mã phiếu không hợp lệ. Vui lòng nhập mã phiếu gồm 12 chữ số."
+      ? "Mã phiếu không hợp lệ. Ví dụ đúng: YC-260806-000123."
       : mode && hasValidRegistrationKey && !canUseSource
         ? mode === "edit"
           ? "Không tìm thấy phiếu hoặc bạn không có quyền điều chỉnh phiếu này."
@@ -324,6 +324,8 @@ export default async function NewBasicMedicalSchedulePage({
       roles={roles}
       roomTypeCodes={roomTypeCodes}
       allowBasicMedicalAccess={allowBasicMedicalAccess}
+      canImportSchedules={canImportSchedules}
+      canManagePersonnel={canManagePersonnel}
       title="Tạo lịch Y cơ sở"
       description="Phiếu đăng ký nhiều buổi thực hành Y cơ sở."
     >

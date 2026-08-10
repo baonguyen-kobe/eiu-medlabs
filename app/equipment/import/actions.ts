@@ -64,7 +64,7 @@ export type EquipmentImportResult = {
 type Profile = {
   id: string;
   full_name: string;
-  email: string;
+  email: string | null;
   phone: string | null;
 };
 
@@ -301,9 +301,13 @@ async function prepareEquipmentImport(
   const lecturers = (lecturerRows ?? []) as Profile[];
   const schedules = (scheduleRows ?? []) as unknown as Schedule[];
   const catalog = (catalogRows ?? []) as CatalogItem[];
-  const profileByEmail = new Map(
-    profiles.map((profile) => [profile.email.trim().toLowerCase(), profile]),
-  );
+  const profileByEmail = new Map<string, Profile>();
+  for (const profile of profiles) {
+    const normalized = profile.email?.trim().toLowerCase();
+    if (normalized) {
+      profileByEmail.set(normalized, profile);
+    }
+  }
   const profileByName = new Map<string, Profile[]>();
   for (const profile of profiles) {
     addToDirectory(
@@ -312,9 +316,13 @@ async function prepareEquipmentImport(
       profile,
     );
   }
-  const lecturerByEmail = new Map(
-    lecturers.map((profile) => [profile.email.trim().toLowerCase(), profile]),
-  );
+  const lecturerByEmail = new Map<string, Profile>();
+  for (const profile of lecturers) {
+    const normalized = profile.email?.trim().toLowerCase();
+    if (normalized) {
+      lecturerByEmail.set(normalized, profile);
+    }
+  }
   const lecturerByName = new Map<string, Profile[]>();
   for (const profile of lecturers) {
     addToDirectory(
@@ -423,6 +431,8 @@ async function prepareEquipmentImport(
           ? "Tên người đăng ký trùng nhiều nhân sự; hãy nhập email"
           : "Không tìm thấy người đăng ký trong Nhân sự",
       );
+    } else if (!registrantMatch.profile.email?.trim()) {
+      groupErrors.push("Người đăng ký chưa có email trong hồ sơ Nhân sự");
     }
     const responsibleMatch = resolveProfile(
       first.responsible_email,
@@ -431,12 +441,16 @@ async function prepareEquipmentImport(
       lecturerByName,
     );
     let responsible = responsibleMatch.profile;
+    const registrantEmail = registrantMatch.profile?.email
+      ?.trim()
+      .toLowerCase();
     if (
       !responsible &&
       registrantMatch.profile &&
       ((first.responsible_email &&
-        String(first.responsible_email).toLowerCase() ===
-          registrantMatch.profile.email.toLowerCase()) ||
+        registrantEmail &&
+        String(first.responsible_email).trim().toLowerCase() ===
+          registrantEmail) ||
         (!first.responsible_email &&
           normalizeEquipmentLookupKey(first.responsible_name) ===
             normalizeEquipmentLookupKey(registrantMatch.profile.full_name)))
@@ -552,7 +566,7 @@ async function prepareEquipmentImport(
             registrant_id: registrantMatch.profile.id,
             responsible_lecturer_id: responsible.id,
             phone_snapshot: phone,
-            email_snapshot: registrantMatch.profile.email,
+            email_snapshot: registrantMatch.profile.email?.trim() ?? "",
             receive_at: receiveAt,
             return_at: returnAt,
             status,

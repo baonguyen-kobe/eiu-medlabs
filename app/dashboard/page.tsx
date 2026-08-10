@@ -28,6 +28,8 @@ export default async function DashboardPage() {
     roles,
     roomTypes,
     allowBasicMedicalAccess,
+    canImportSchedules,
+    canManagePersonnel,
   } = await getViewer();
   const roomTypeCodes = roomTypes.map(({ code }) => code);
   if (
@@ -104,7 +106,7 @@ export default async function DashboardPage() {
       lecturer_id === userId || lecturer_2_id === userId,
   );
   const canImport = roles.some((role) =>
-    ["admin", "staff", "importer"].includes(role),
+    ["admin", "staff", "teaching_assistant"].includes(role),
   );
   const canCreate =
     canImport ||
@@ -116,8 +118,8 @@ export default async function DashboardPage() {
       ? "staff"
       : roles.includes("lecturer")
         ? "lecturer"
-        : roles.includes("importer")
-          ? "importer"
+        : roles.includes("teaching_assistant")
+          ? "teaching_assistant"
           : "viewer";
   const lecturerView = displayRole === "lecturer";
 
@@ -127,6 +129,8 @@ export default async function DashboardPage() {
       roles={roles}
       roomTypeCodes={roomTypeCodes}
       allowBasicMedicalAccess={allowBasicMedicalAccess}
+      canImportSchedules={canImportSchedules}
+      canManagePersonnel={canManagePersonnel}
       title="Tổng quan"
       description={`Hôm nay ${formatBusinessDate(todayText)} · Xin chào ${fullName}`}
       actions={

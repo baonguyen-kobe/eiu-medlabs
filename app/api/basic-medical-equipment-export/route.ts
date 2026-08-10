@@ -7,34 +7,37 @@ export async function GET() {
   const userId = claims?.claims?.sub;
   if (!userId)
     return NextResponse.json({ error: "Chưa đăng nhập." }, { status: 401 });
-  const { data: roles } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId)
-    .in("role", ["admin", "staff"]);
-  if (!roles?.length)
+  const { data: authority, error: authorityError } = await supabase.rpc(
+    "get_basic_medical_authority_context",
+  );
+  if (
+    authorityError ||
+    !(authority as { can_manage_basic_medical?: boolean } | null)
+      ?.can_manage_basic_medical
+  )
     return NextResponse.json(
       { error: "Không có quyền export." },
       { status: 403 },
     );
   const [catalogResult, inventoryResult] = await Promise.all([
-    supabase
-      .from("basic_medical_equipment_catalog")
-      .select(
-        "item_name,commercial_name,item_type,country_of_origin,manufacturer,model,unit,is_active",
-      )
-      .order("item_name")
-      .limit(10000),
-    supabase
-      .from("basic_medical_room_inventory")
-      .select(
-        "total_quantity,good_quantity,damaged_quantity,is_active,room:rooms(room_code,building_code,room_name),catalog:basic_medical_equipment_catalog(item_name,commercial_name,unit)",
-      )
-      .order("created_at")
-      .limit(10000),
+    readAllRows(() =>
+      supabase
+        .from("basic_medical_equipment_catalog")
+        .select(
+          "item_name,commercial_name,item_type,country_of_origin,manufacturer,model,unit,is_active",
+        )
+        .order("item_name"),
+    ),
+    readAllRows(() =>
+      supabase
+        .from("basic_medical_room_inventory")
+        .select(
+          "total_quantity,good_quantity,damaged_quantity,is_active,room:rooms(room_code,building_code,room_name),catalog:basic_medical_equipment_catalog(item_name,commercial_name,unit)",
+        )
+        .order("created_at"),
+    ),
   ]);
-  const error = catalogResult.error ?? inventoryResult.error;
-  if (error)
+  if (catalogResult.error || inventoryResult.error)
     return NextResponse.json(
       { error: "Không thể đọc danh sách thiết bị." },
       { status: 500 },
@@ -42,7 +45,7 @@ export async function GET() {
   const XLSX = await import("@e965/xlsx");
   const workbook = XLSX.utils.book_new();
   const catalogSheet = XLSX.utils.json_to_sheet(
-    (catalogResult.data ?? []).map((item) => ({
+    catalogResult.data.map((item) => ({
       "Tên thiết bị và vật tư": item.item_name,
       "Tên thương mại": item.commercial_name ?? "",
       Loại: item.item_type ?? "",
@@ -54,7 +57,7 @@ export async function GET() {
     })),
   );
   const inventorySheet = XLSX.utils.json_to_sheet(
-    (inventoryResult.data ?? []).map((item) => {
+    inventoryResult.data.map((item) => {
       const room = item.room as unknown as {
         room_code: string;
         building_code: string;
@@ -81,6 +84,17 @@ export async function GET() {
   );
   XLSX.utils.book_append_sheet(workbook, catalogSheet, "Danh mục thiết bị");
   XLSX.utils.book_append_sheet(workbook, inventorySheet, "Thiết bị theo phòng");
+  const { error: auditError } = await supabase.rpc(
+    "audit_basic_medical_equipment_export",
+    {
+      target_row_count: catalogResult.data.length + inventoryResult.data.length,
+    },
+  );
+  if (auditError)
+    return NextResponse.json(
+      { error: "Không thể ghi nhận audit export thiết bị." },
+      { status: 500 },
+    );
   const output = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
   return new NextResponse(new Uint8Array(output), {
     headers: {
@@ -90,4 +104,25 @@ export async function GET() {
       "Cache-Control": "no-store",
     },
   });
+}
+
+async function readAllRows<T>(
+  buildQuery: () => {
+    range: (
+      from: number,
+      to: number,
+    ) => PromiseLike<{
+      data: T[] | null;
+      error: { message: string } | null;
+    }>;
+  },
+) {
+  const data: T[] = [];
+  for (let from = 0; ; from += 1000) {
+    const result = await buildQuery().range(from, from + 999);
+    if (result.error) return { data, error: result.error };
+    const rows = result.data ?? [];
+    data.push(...rows);
+    if (rows.length < 1000) return { data, error: null };
+  }
 }

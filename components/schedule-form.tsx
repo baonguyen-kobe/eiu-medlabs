@@ -34,6 +34,7 @@ export function ScheduleForm({
   rooms,
   lecturers,
   canAssignLecturer,
+  defaultLecturerId,
   scope,
   returnTo,
 }: {
@@ -41,6 +42,7 @@ export function ScheduleForm({
   rooms: Room[];
   lecturers: Lecturer[];
   canAssignLecturer: boolean;
+  defaultLecturerId?: string;
   scope: "skills_lab" | "basic_medical";
   returnTo?: string;
 }) {
@@ -104,6 +106,7 @@ export function ScheduleForm({
                 ariaLabel="Tìm và chọn giảng viên thứ nhất"
                 emptyLabel="Chưa chọn giảng viên"
                 name="lecturer_ids"
+                defaultValue={defaultLecturerId}
                 options={lecturers.map((lecturer) => ({
                   value: lecturer.id,
                   label: lecturer.full_name,

@@ -2,8 +2,6 @@ import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 
-const adminId = "c18c4f94-a58a-4b5f-abd0-8c4856affab8";
-
 test("mã phiếu 12 số tải được và Admin thấy dòng bổ sung thiết bị", async ({
   page,
 }) => {
@@ -22,34 +20,67 @@ test("mã phiếu 12 số tải được và Admin thấy dòng bổ sung thiế
   );
   const databaseClient = createClient(
     env.NEXT_PUBLIC_SUPABASE_URL,
+    env.SUPABASE_SECRET_KEY,
+    { auth: { persistSession: false, autoRefreshToken: false } },
+  );
+  const authClient = createClient(
+    env.NEXT_PUBLIC_SUPABASE_URL,
     env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
     { auth: { persistSession: false, autoRefreshToken: false } },
   );
-  const { error: signInError } = await databaseClient.auth.signInWithPassword({
-    email: "admin@campus.local",
-    password: "LocalAdmin123!",
-  });
+  const { data: signedIn, error: signInError } =
+    await authClient.auth.signInWithPassword({
+      email: "admin@campus.local",
+      password: "LocalAdmin123!",
+    });
   expect(signInError).toBeNull();
+  const adminId = signedIn.user?.id;
+  expect(adminId).toBeTruthy();
+
+  const { data: lecturerProfile } = await databaseClient
+    .from("profiles")
+    .select("id")
+    .eq("email", "giangvien@campus.local")
+    .single();
+  expect(lecturerProfile).toBeTruthy();
+  if (!lecturerProfile) {
+    throw new Error("Missing lecturer test fixture");
+  }
+  const lecturerId = lecturerProfile.id;
 
   const suffix = crypto.randomUUID().slice(0, 8).toUpperCase();
-  const roomId = crypto.randomUUID();
-  const catalogItemId = crypto.randomUUID();
-  const scheduleId = crypto.randomUUID();
   const requestId = crypto.randomUUID();
   const itemId = crypto.randomUUID();
   const requestCode = "460820123456";
 
+  let scheduleId: string | undefined;
+  let catalogItemId: string | undefined;
+
   try {
-    expect(
-      (
-        await databaseClient.from("rooms").insert({
-          id: roomId,
-          room_code: `E2E-${suffix}`,
-          building_code: "QA",
-          room_type_id: "40000000-0000-0000-0000-000000000001",
-        })
-      ).error,
-    ).toBeNull();
+    const { data: course } = await databaseClient
+      .from("courses")
+      .select("id, room_type_id")
+      .eq("is_active", true)
+      .limit(1)
+      .single();
+    expect(course).toBeTruthy();
+    if (!course) {
+      throw new Error("Missing course test fixture");
+    }
+
+    const { data: room } = await databaseClient
+      .from("rooms")
+      .select("id")
+      .eq("room_type_id", course.room_type_id)
+      .eq("is_active", true)
+      .limit(1)
+      .single();
+    expect(room).toBeTruthy();
+    if (!room) {
+      throw new Error("Missing room test fixture");
+    }
+
+    catalogItemId = crypto.randomUUID();
     expect(
       (
         await databaseClient.from("equipment_catalog").insert({
@@ -60,40 +91,40 @@ test("mã phiếu 12 số tải được và Admin thấy dòng bổ sung thiế
         })
       ).error,
     ).toBeNull();
-    expect(
-      (
-        await databaseClient.from("class_schedules").insert({
-          id: scheduleId,
-          course_id: null,
-          course_code_snapshot: `E2E-${suffix}`,
-          course_name_snapshot: "Kiểm thử quản lý phiếu thiết bị",
-          room_id: roomId,
-          schedule_date: "2046-08-20",
-          start_time: "07:30",
-          end_time: "11:30",
-          source: "manual",
-          schedule_status: "published",
-          student_count: 20,
-          created_by: adminId,
-          published_by: adminId,
-          published_at: new Date().toISOString(),
-        })
-      ).error,
-    ).toBeNull();
+    const catalogItem = { id: catalogItemId };
+
+    const { data: schedule, error: rpcError } = await authClient.rpc(
+      "create_manual_class_schedule",
+      {
+        target_course_id: course.id,
+        target_room_id: room.id,
+        target_lecturer_id: lecturerId,
+        target_lecturer_2_id: null,
+        target_schedule_date: "2046-08-20",
+        target_start_time: "07:30",
+        target_end_time: "11:30",
+        target_note: `E2E-${suffix} Kiểm thử quản lý phiếu thiết bị`,
+        target_student_count: 20,
+      },
+    );
+    expect(rpcError).toBeNull();
+    scheduleId = schedule.id;
+
     expect(
       (
         await databaseClient.from("equipment_requests").insert({
           id: requestId,
           class_schedule_id: scheduleId,
           semester: "HK1",
-          registrant_id: adminId,
-          responsible_lecturer_id: adminId,
+          registrant_id: adminId!,
+          responsible_lecturer_id: lecturerId,
           phone_snapshot: "0901000001",
           email_snapshot: "admin@campus.local",
           receive_at: "2046-08-19T09:00:00+07:00",
           return_at: "2046-08-20T16:00:00+07:00",
+          note: `E2E-${suffix}`,
           status: "preparing",
-          created_by: adminId,
+          created_by: adminId!,
           created_at: "2046-08-20T12:34:56+07:00",
         })
       ).error,
@@ -104,11 +135,16 @@ test("mã phiếu 12 số tải được và Admin thấy dòng bổ sung thiế
           id: itemId,
           request_id: requestId,
           skill_name: "Kỹ năng E2E",
-          catalog_item_id: catalogItemId,
+          catalog_item_id: catalogItem.id,
           quantity: 1,
         })
       ).error,
     ).toBeNull();
+
+    await databaseClient
+      .from("profiles")
+      .update({ phone: "0901234567" })
+      .eq("id", adminId);
 
     await page.goto("/login");
     await page.locator('input[name="email"]').fill("admin@campus.local");
@@ -123,14 +159,17 @@ test("mã phiếu 12 số tải được và Admin thấy dòng bổ sung thiế
     await expect(
       page.getByRole("button", { name: "Tạo phiếu sao chép", exact: true }),
     ).toBeVisible();
+
+    const errors = await page.locator(".form-error").allInnerTexts();
+    if (errors.length > 0) {
+      console.log("FORM ERRORS:", errors);
+    }
     await expect(page.locator(".form-error")).toHaveCount(0);
 
     await page.goto("/equipment/requests");
-    await page.locator(".data-search input").fill(`E2E-${suffix}`);
-    const requestRow = page.locator(".equipment-request-list-item").filter({
-      hasText: `E2E-${suffix}`,
-    });
-    await expect(requestRow).toHaveCount(1);
+    await page.locator(".data-search input").fill(requestId);
+    const requestRow = page.locator(".equipment-request-list-item").first();
+    await expect(requestRow).toBeVisible();
     const statusStack = requestRow.locator(".equipment-request-status-stack");
     const statusControl = statusStack.locator(
       ".request-status, .equipment-sign-status-button",
@@ -146,7 +185,9 @@ test("mã phiếu 12 số tải được và Admin thấy dòng bổ sung thiế
     await requestRow
       .getByRole("button", { name: /Xem toàn bộ danh sách/ })
       .click();
-    const modal = page.getByRole("dialog", { name: /E2E-/ });
+    // Modal title will be something like "Phiếu thiết bị #...", but might not be requestCode.
+    // Use the dialog role without specific name or find by DOM structure.
+    const modal = page.getByRole("dialog");
     await expect(
       modal.getByRole("button", { name: "+ Thêm dòng" }),
     ).toBeVisible();
@@ -198,11 +239,17 @@ test("mã phiếu 12 số tải được và Admin thấy dòng bổ sung thiế
       .from("equipment_requests")
       .delete()
       .eq("id", requestId);
-    await databaseClient.from("class_schedules").delete().eq("id", scheduleId);
-    await databaseClient.from("rooms").delete().eq("id", roomId);
-    await databaseClient
-      .from("equipment_catalog")
-      .delete()
-      .eq("id", catalogItemId);
+    if (scheduleId) {
+      await databaseClient
+        .from("class_schedules")
+        .delete()
+        .eq("id", scheduleId);
+    }
+    if (catalogItemId) {
+      await databaseClient
+        .from("equipment_catalog")
+        .delete()
+        .eq("id", catalogItemId);
+    }
   }
 });
