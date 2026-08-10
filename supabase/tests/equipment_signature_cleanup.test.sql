@@ -22,7 +22,7 @@ select ok(to_regprocedure('public.ack_equipment_signature_cleanup(uuid,uuid,text
 select is((select pronargs from pg_proc where oid='public.claim_equipment_signature_cleanup_candidates(timestamptz,timestamptz,timestamptz,integer,uuid)'::regprocedure),5::smallint,'16 claim takes cutoffs limit token');
 select is((select pronargs from pg_proc where oid='public.ack_equipment_signature_cleanup(uuid,uuid,text,text)'::regprocedure),4::smallint,'17 ack takes operation token outcome error');
 select ok(lower(pg_get_functiondef('public.claim_equipment_signature_cleanup_candidates(timestamptz,timestamptz,timestamptz,integer,uuid)'::regprocedure)) like '%for update skip locked%','18 claim locks with skip locked');
-select ok(pg_get_functiondef('public.claim_equipment_signature_cleanup_candidates(timestamptz,timestamptz,timestamptz,integer,uuid)'::regprocedure) like '%state in (''pending'',''rejected'')%','19 only pending rejected are candidates');
+select ok(regexp_replace(lower(pg_get_functiondef('public.claim_equipment_signature_cleanup_candidates(timestamptz,timestamptz,timestamptz,integer,uuid)'::regprocedure)), '\s+', '', 'g') like '%statein(''pending'',''rejected'')%','19 only pending rejected are candidates');
 select ok(pg_get_functiondef('public.claim_equipment_signature_cleanup_candidates(timestamptz,timestamptz,timestamptz,integer,uuid)'::regprocedure) like '%handover_recipient_signature_storage_path%','20 handover reference blocks claim');
 select ok(pg_get_functiondef('public.claim_equipment_signature_cleanup_candidates(timestamptz,timestamptz,timestamptz,integer,uuid)'::regprocedure) like '%return_recipient_signature_storage_path%','21 return reference blocks claim');
 select ok(pg_get_functiondef('public.claim_equipment_signature_cleanup_candidates(timestamptz,timestamptz,timestamptz,integer,uuid)'::regprocedure) like '%target_claimed_before%','22 expired claims use caller cutoff');
@@ -30,8 +30,8 @@ select ok(lower(pg_get_functiondef('public.claim_equipment_signature_cleanup_can
 select ok(lower(pg_get_functiondef('public.reserve_equipment_signature(uuid,text)'::regprocedure)) like '%last_reserved_at%clock_timestamp()%','22b reused reservations renew the lease');
 select ok(pg_get_functiondef('public.claim_equipment_signature_cleanup_candidates(timestamptz,timestamptz,timestamptz,integer,uuid)'::regprocedure) like '%target_limit not between 1 and 100%','23 claim limit is bounded');
 select ok(pg_get_functiondef('public.ack_equipment_signature_cleanup(uuid,uuid,text,text)'::regprocedure) like '%cleanup_claim_token <> target_claim_token%','24 ack token is bound');
-select ok(pg_get_functiondef('public.ack_equipment_signature_cleanup(uuid,uuid,text,text)'::regprocedure) like '%''deleted'',''missing'',''retry''%','25 ack outcomes are constrained');
-select ok(pg_get_functiondef('public.ack_equipment_signature_cleanup(uuid,uuid,text,text)'::regprocedure) like '%length(coalesce(target_error,'''')) > 500%','26 retry error is bounded');
+select ok(regexp_replace(lower(pg_get_functiondef('public.ack_equipment_signature_cleanup(uuid,uuid,text,text)'::regprocedure)), '\s+', '', 'g') like '%target_outcomenotin(''deleted'',''missing'',''retry'')%','25 ack outcomes are constrained');
+select ok(regexp_replace(lower(pg_get_functiondef('public.ack_equipment_signature_cleanup(uuid,uuid,text,text)'::regprocedure)), '\s+', '', 'g') like '%length(coalesce(target_error,''''))>500%','26 retry error is bounded');
 select ok(to_regprocedure('private.guard_equipment_signature_cleanup_fence()') is not null,'27 finalize fence trigger function exists');
 select ok(regexp_replace(lower(pg_get_functiondef('private.guard_equipment_signature_cleanup_fence()'::regprocedure)), '\s+', '', 'g') like '%old.cleanup_state<>''none''%','28 cleanup lifecycle fences adoption');
 select ok(pg_get_functiondef('public.finalize_equipment_signature(uuid)'::regprocedure) like '%EQUIPMENT_SIGNATURE_CLEANUP_OWNED%','28a finalize returns a stable cleanup-owned error');
@@ -147,6 +147,7 @@ where id = (select operation_id from reservation_a);
 create temp table reservation_a_stale_lease as
 select last_reserved_at from public.equipment_signature_operations
 where id = (select operation_id from reservation_a);
+grant select on table reservation_a_stale_lease to service_role;
 set local role authenticated;
 create temp table reservation_a_reuse as
 select * from public.reserve_equipment_signature('e2000000-0000-0000-0000-000000000101', 'handover');
