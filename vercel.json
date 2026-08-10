@@ -2,11 +2,11 @@
   "crons": [
     {
       "path": "/api/internal/personnel-reconciliation",
-      "schedule": "0 * * * *"
+      "schedule": "0 0 * * *"
     },
     {
       "path": "/api/internal/email-recovery",
-      "schedule": "15 * * * *"
+      "schedule": "0 1 * * *"
     }
   ]
 }
