@@ -10,6 +10,38 @@ function Invoke-Git {
   return $output
 }
 
+function Invoke-Vercel {
+  param(
+    [Parameter(Mandatory)][string]$CommandPath,
+    [Parameter(Mandatory)][string[]]$Arguments
+  )
+
+  $quotedArguments = ($Arguments | ForEach-Object {
+    '"' + $_.Replace('"', '\"') + '"'
+  }) -join ' '
+  $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+  $startInfo.FileName = $env:ComSpec
+  $startInfo.Arguments = "/d /s /c `"`"$($CommandPath.Replace('"', '\"'))`" $quotedArguments`""
+  $startInfo.UseShellExecute = $false
+  $startInfo.RedirectStandardOutput = $true
+  $startInfo.RedirectStandardError = $true
+
+  $process = [System.Diagnostics.Process]::new()
+  $process.StartInfo = $startInfo
+  if (-not $process.Start()) {
+    throw "Failed to start Vercel CLI."
+  }
+  $standardOutput = $process.StandardOutput.ReadToEnd()
+  $standardError = $process.StandardError.ReadToEnd()
+  $process.WaitForExit()
+  $output = @($standardOutput, $standardError) | Where-Object { $_ }
+
+  if ($process.ExitCode -ne 0) {
+    throw "Vercel command failed: $CommandPath $($Arguments -join ' ')`n$($output -join [Environment]::NewLine)"
+  }
+  return $output
+}
+
 function Assert-VersionEndpoint {
   param(
     [Parameter(Mandatory)][string]$Url,
@@ -55,13 +87,12 @@ try {
     throw "Vercel project link is missing at .vercel/project.json."
   }
 
-  $deployOutput = & $vercelPath deploy --prod --yes `
-    --meta "appGitSha=$sha" `
-    --env "APP_GIT_SHA=$sha" `
-    --build-env "APP_GIT_SHA=$sha" 2>&1
-  if ($LASTEXITCODE -ne 0) {
-    throw "Vercel production deployment failed."
-  }
+  $deployOutput = Invoke-Vercel -CommandPath $vercelPath -Arguments @(
+    "deploy", "--prod", "--yes",
+    "--meta", "appGitSha=$sha",
+    "--env", "APP_GIT_SHA=$sha",
+    "--build-env", "APP_GIT_SHA=$sha"
+  )
 
   $deploymentUrls = [regex]::Matches(
     ($deployOutput | Out-String),
@@ -78,8 +109,10 @@ try {
     -ExpectedSha $sha `
     -Label "Production alias"
 
-  $metadataOutput = & $vercelPath ls --meta "appGitSha=$sha" 2>&1
-  if ($LASTEXITCODE -ne 0 -or ($metadataOutput | Out-String) -notmatch [regex]::Escape($sha)) {
+  $metadataOutput = Invoke-Vercel -CommandPath $vercelPath -Arguments @(
+    "ls", "--meta", "appGitSha=$sha"
+  )
+  if (($metadataOutput | Out-String) -notmatch [regex]::Escape($sha)) {
     throw "Vercel metadata lookup did not find the deployed appGitSha."
   }
 
