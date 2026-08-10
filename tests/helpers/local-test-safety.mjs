@@ -42,3 +42,14 @@ export function assertLocalDestructiveTestTarget({
   assertLocalSupabaseTarget(supabaseUrl);
   assertLocalPlaywrightTarget(playwrightBaseUrl);
 }
+
+export function resolveEffectiveSupabaseTestConfig(runtimeEnv, fileEnv) {
+  return {
+    supabaseUrl:
+      runtimeEnv.NEXT_PUBLIC_SUPABASE_URL ?? fileEnv.NEXT_PUBLIC_SUPABASE_URL,
+    publishableKey:
+      runtimeEnv.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
+      fileEnv.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+    secretKey: runtimeEnv.SUPABASE_SECRET_KEY ?? fileEnv.SUPABASE_SECRET_KEY,
+  };
+}
