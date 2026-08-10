@@ -97,12 +97,13 @@ try {
   $metadataOutput = Invoke-Vercel -CommandPath $vercelPath -Arguments @(
     "ls", "--meta", "appGitSha=$sha"
   )
-  if (($metadataOutput | Out-String) -notmatch [regex]::Escape($sha)) {
-    throw "Vercel metadata lookup did not find the deployed appGitSha."
+  $metadataText = $metadataOutput | Out-String
+  if ($metadataText -notmatch "https://[A-Za-z0-9.-]+\\.vercel\\.app") {
+    throw "Vercel metadata lookup did not return a deployment for the deployed appGitSha."
   }
 
   $deploymentUrls = [regex]::Matches(
-    ($metadataOutput | Out-String),
+    $metadataText,
     "https://[A-Za-z0-9.-]+\\.vercel\\.app(?:[^\\s]*)?"
   ) | ForEach-Object { $_.Value.TrimEnd("/", ".") }
   $deploymentUrl = $deploymentUrls | Select-Object -Last 1
