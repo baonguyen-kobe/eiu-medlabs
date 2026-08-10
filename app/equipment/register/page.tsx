@@ -9,6 +9,10 @@ import {
   equipmentRequestCodeBounds,
   formatEquipmentRequestCode,
 } from "@/lib/equipment-request-code";
+import {
+  EQUIPMENT_REGISTER_SELECTOR_LIMIT,
+  prependSelectedOption,
+} from "@/lib/equipment-registration-selector";
 import { NURSING_SKILLS_ROOM_TYPE_ID } from "@/lib/room-types";
 import { getViewer } from "@/lib/viewer";
 import type { EquipmentLateApprovalStatus } from "@/lib/equipment-requests";
@@ -55,10 +59,11 @@ type SourceRequest = {
     note: string | null;
     equipment_catalog: { id: string; item_name: string } | null;
   }>;
+  class_schedules: RequestOption["class_schedules"];
 };
 
 const requestDraftSelect =
-  "id,created_at,status,semester,class_schedule_id,registrant_id,responsible_lecturer_id,phone_snapshot,email_snapshot,receive_at,return_at,note,late_approval_status,late_registration_reason,registrant:profiles!equipment_requests_registrant_id_fkey(full_name),responsible:profiles!equipment_requests_responsible_lecturer_id_fkey(full_name),equipment_request_items(skill_name,quantity,note,equipment_catalog(id,item_name))";
+  "id,created_at,status,semester,class_schedule_id,registrant_id,responsible_lecturer_id,phone_snapshot,email_snapshot,receive_at,return_at,note,late_approval_status,late_registration_reason,registrant:profiles!equipment_requests_registrant_id_fkey(full_name),responsible:profiles!equipment_requests_responsible_lecturer_id_fkey(full_name),class_schedules(schedule_date,course_code_snapshot,rooms(room_code,building_code)),equipment_request_items(skill_name,quantity,note,equipment_catalog(id,item_name))";
 
 const dateTimeInputFormatter = new Intl.DateTimeFormat("en-CA", {
   timeZone: "Asia/Ho_Chi_Minh",
@@ -108,6 +113,9 @@ function RequestModePicker({
   activeRequestId: string;
   editOptions: RequestOption[];
 }) {
+  const activeRequestIsListed = editOptions.some(
+    ({ id }) => id === activeRequestId,
+  );
   return (
     <section
       className="equipment-registration-tools"
@@ -129,11 +137,14 @@ function RequestModePicker({
           <form action="/equipment/register" method="get">
             <input type="hidden" name="mode" value="edit" />
             <label>
-              Chọn phiếu cần điều chỉnh
+              Chọn phiếu cần điều chỉnh gần đây
               <select
-                name="request"
-                required
-                defaultValue={mode === "edit" ? activeRequestId : ""}
+                name="request_option"
+                defaultValue={
+                  mode === "edit" && activeRequestIsListed
+                    ? activeRequestId
+                    : ""
+                }
               >
                 <option value="" disabled>
                   Chọn phiếu của bạn
@@ -145,10 +156,21 @@ function RequestModePicker({
                 ))}
               </select>
             </label>
-            <button
-              className="button button-primary"
-              disabled={!editOptions.length}
-            >
+            <label>
+              Hoặc nhập mã phiếu cần điều chỉnh
+              <input
+                name="request"
+                defaultValue={
+                  mode === "edit" && !activeRequestIsListed
+                    ? activeRequestId
+                    : ""
+                }
+                placeholder="Nhập mã phiếu, ví dụ: 123465789356"
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </label>
+            <button className="button button-primary">
               Tải phiếu để điều chỉnh
             </button>
           </form>
@@ -230,7 +252,12 @@ function buildInitialData(
 export default async function EquipmentRegisterPage({
   searchParams,
 }: {
-  searchParams: Promise<{ schedule?: string; mode?: string; request?: string }>;
+  searchParams: Promise<{
+    schedule?: string;
+    mode?: string;
+    request?: string;
+    request_option?: string;
+  }>;
 }) {
   const [viewer, query] = await Promise.all([getViewer(), searchParams]);
   const {
@@ -257,7 +284,12 @@ export default async function EquipmentRegisterPage({
 
   const mode: RequestMode | null =
     query.mode === "copy" || query.mode === "edit" ? query.mode : null;
-  const rawRequestId = String(query.request ?? "").trim();
+  const rawRequestId = String(
+    query.request || query.request_option || "",
+  ).trim();
+  const requestedScheduleId = /^[0-9a-f-]{36}$/i.test(query.schedule ?? "")
+    ? query.schedule!
+    : "";
   const requestedId = /^[0-9a-f-]{36}$/i.test(rawRequestId) ? rawRequestId : "";
   const requestedCodeBounds = !requestedId
     ? equipmentRequestCodeBounds(rawRequestId)
@@ -300,7 +332,7 @@ export default async function EquipmentRegisterPage({
       .gte("schedule_date", businessTodayString())
       .neq("schedule_status", "cancelled")
       .order("schedule_date")
-      .limit(200),
+      .limit(EQUIPMENT_REGISTER_SELECTOR_LIMIT),
     supabase
       .from("equipment_catalog")
       .select(
@@ -328,21 +360,33 @@ export default async function EquipmentRegisterPage({
       )
       .in("status", ["new", "preparing"])
       .order("created_at", { ascending: false })
-      .limit(200),
+      .limit(EQUIPMENT_REGISTER_SELECTOR_LIMIT),
     sourcePromise,
   ]);
 
   const canManageAll = roles.some((role) => ["admin", "staff"].includes(role));
   const requestOptions = (requestOptionRows ??
     []) as unknown as RequestOption[];
-  const editOptions = requestOptions.filter(
-    (request) => canManageAll || request.registrant_id === userId,
-  );
   const source = sourceResult.data as unknown as SourceRequest | null;
   const canUseSource = Boolean(
     source &&
     (mode !== "edit" || ["new", "preparing"].includes(source.status)) &&
     (mode !== "edit" || canManageAll || source.registrant_id === userId),
+  );
+  const editOptions = prependSelectedOption(
+    requestOptions.filter(
+      (request) => canManageAll || request.registrant_id === userId,
+    ),
+    mode === "edit" && canUseSource && source
+      ? {
+          id: source.id,
+          created_at: source.created_at,
+          status: source.status,
+          registrant_id: source.registrant_id,
+          registrant: source.registrant,
+          class_schedules: source.class_schedules,
+        }
+      : null,
   );
   const loadError =
     mode && rawRequestId && !hasValidRequestKey
@@ -359,6 +403,22 @@ export default async function EquipmentRegisterPage({
 
   let scheduleRows = schedules ?? [];
   if (
+    requestedScheduleId &&
+    !scheduleRows.some(({ id }) => id === requestedScheduleId)
+  ) {
+    const { data: selectedSchedule } = await supabase
+      .from("class_schedules")
+      .select(
+        "id,schedule_date,start_time,end_time,course_code_snapshot,course_name_snapshot,student_count,rooms!inner(room_code,building_code,room_type_id)",
+      )
+      .eq("id", requestedScheduleId)
+      .eq("rooms.room_type_id", NURSING_SKILLS_ROOM_TYPE_ID)
+      .gte("schedule_date", businessTodayString())
+      .neq("schedule_status", "cancelled")
+      .maybeSingle();
+    scheduleRows = prependSelectedOption(scheduleRows, selectedSchedule);
+  }
+  if (
     mode === "edit" &&
     canUseSource &&
     source &&
@@ -373,7 +433,7 @@ export default async function EquipmentRegisterPage({
       .eq("rooms.room_type_id", NURSING_SKILLS_ROOM_TYPE_ID)
       .neq("schedule_status", "cancelled")
       .maybeSingle();
-    if (currentSchedule) scheduleRows = [currentSchedule, ...scheduleRows];
+    scheduleRows = prependSelectedOption(scheduleRows, currentSchedule);
   }
 
   const classes = scheduleRows.map((schedule) => {
@@ -396,7 +456,7 @@ export default async function EquipmentRegisterPage({
 
   const initialData =
     mode && canUseSource && source
-      ? buildInitialData(source, mode, userId, query.schedule ?? "")
+      ? buildInitialData(source, mode, userId, requestedScheduleId)
       : undefined;
   const editingAnotherRegistrant =
     initialData?.mode === "edit" && source?.registrant_id !== userId;
@@ -446,7 +506,7 @@ export default async function EquipmentRegisterPage({
         catalog={catalog ?? []}
         lecturers={lecturers ?? []}
         defaultPhone={formPhone}
-        defaultClassId={initialData?.classId ?? query.schedule ?? ""}
+        defaultClassId={initialData?.classId ?? requestedScheduleId}
         registrantId={formRegistrantId}
         registrantName={formRegistrantName}
         registrantEmail={formRegistrantEmail}
