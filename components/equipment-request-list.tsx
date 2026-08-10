@@ -9,6 +9,7 @@ import {
   useTransition,
 } from "react";
 import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
 import {
   addEquipmentRequestItem,
   confirmEquipmentRequestHandoff,
@@ -104,6 +105,7 @@ function EquipmentItemsModal({
   canAddItems: boolean;
   onClose: () => void;
 }) {
+  const router = useRouter();
   const [localItems, setLocalItems] = useState(request.equipment_request_items);
   const nextDraftKey = useRef(1);
   const [draftsBySkill, setDraftsBySkill] = useState<
@@ -253,11 +255,17 @@ function EquipmentItemsModal({
       if (addedItems.length) {
         setLocalItems((current) => [...current, ...addedItems]);
       }
-      if (addedItems.length === drafts.length) {
+      const savedCount = results.filter((result) => result.ok).length;
+      const needsRefresh = savedCount > addedItems.length;
+      if (needsRefresh) router.refresh();
+      if (savedCount === drafts.length) {
         clearDrafts(skillName);
         setNotice({
           ok: true,
-          message: `Đã bổ sung ${addedItems.length} dòng thiết bị.`,
+          message:
+            addedItems.length === savedCount
+              ? `Đã bổ sung ${savedCount} dòng thiết bị.`
+              : "Đã bổ sung thiết bị. Danh sách đang được làm mới.",
         });
         return;
       }

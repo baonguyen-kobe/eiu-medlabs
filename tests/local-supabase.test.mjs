@@ -2226,16 +2226,17 @@ test("người đăng ký được điều chỉnh nội dung nhưng không đư
     { target_request_id: requestId, target_status: "handed_over" },
   );
   assert.ifError(warehouseHandoverError);
-  const { error: recipientHandoverError } = await lecturer.supabase.rpc(
-    "registrant_confirm_equipment_handoff",
-    {
-      target_request_id: requestId,
-      target_phase: "handover",
-      target_signature:
-        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
-    },
+  const handoverReservation = await lecturer.supabase.rpc(
+    "reserve_equipment_signature",
+    { target_request_id: requestId, target_phase: "handover" },
   );
+  assert.ifError(handoverReservation.error);
+  const { error: recipientHandoverError, data: handedOverRequest } =
+    await lecturer.supabase.rpc("finalize_equipment_signature", {
+      target_operation_id: handoverReservation.data[0].operation_id,
+    });
   assert.ifError(recipientHandoverError);
+  assert.equal(handedOverRequest.status, "handed_over");
 
   const { error: lockedRpcError } = await lecturer.supabase.rpc(
     "update_equipment_request_content",
@@ -3550,24 +3551,21 @@ test("Admin và Staff xóa phiếu thiết bị, phiếu Y cơ sở chỉ hủy 
   }
 });
 
-test("Phiếu thiết bị chỉ cho ký giao sau khi kho xác nhận và GV phụ trách có thể ký", async () => {
+test("C2 equipment signature reservations bind evidence to authorized lifecycle operations", async () => {
   const admin = await signIn("admin@campus.local", "LocalAdmin123!");
   const staff = await signIn("staff@campus.local", "LocalStaff123!");
   const lecturer = await signIn("giangvien@campus.local", "LocalLecturer123!");
   const roomId = crypto.randomUUID();
   const scheduleId = crypto.randomUUID();
   const requestId = crypto.randomUUID();
-  const invalidRequestId = crypto.randomUUID();
   const catalogItemId = crypto.randomUUID();
-  const signature =
-    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 
   try {
     assert.ifError(
       (
         await admin.supabase.from("rooms").insert({
           id: roomId,
-          room_code: `WF-${crypto.randomUUID().slice(0, 8)}`,
+          room_code: `C2-${crypto.randomUUID().slice(0, 8)}`,
           building_code: "QA",
           room_type_id: "40000000-0000-0000-0000-000000000001",
         })
@@ -3578,8 +3576,8 @@ test("Phiếu thiết bị chỉ cho ký giao sau khi kho xác nhận và GV ph�
         await serviceClient().from("class_schedules").insert({
           id: scheduleId,
           course_id: null,
-          course_code_snapshot: "WF 101",
-          course_name_snapshot: "Kiểm thử luồng phiếu thiết bị",
+          course_code_snapshot: "C2 101",
+          course_name_snapshot: "C2 signature lifecycle",
           room_id: roomId,
           schedule_date: "2045-08-20",
           start_time: "07:30",
@@ -3590,16 +3588,6 @@ test("Phiếu thiết bị chỉ cho ký giao sau khi kho xác nhận và GV ph�
           created_by: admin.user.id,
           published_by: admin.user.id,
           published_at: new Date().toISOString(),
-        })
-      ).error,
-    );
-    assert.ifError(
-      (
-        await admin.supabase.from("equipment_catalog").insert({
-          id: catalogItemId,
-          item_name: `Thiết bị workflow ${catalogItemId.slice(0, 8)}`,
-          commercial_name: "Workflow QA",
-          unit: "Cái",
         })
       ).error,
     );
@@ -3620,76 +3608,134 @@ test("Phiếu thiết bị chỉ cho ký giao sau khi kho xác nhận và GV ph�
         })
       ).error,
     );
-
-    const invalidTiming = await admin.supabase
-      .from("equipment_requests")
-      .insert({
-        id: invalidRequestId,
-        class_schedule_id: scheduleId,
-        semester: "HK1",
-        registrant_id: admin.user.id,
-        responsible_lecturer_id: lecturer.user.id,
-        phone_snapshot: "0901000001",
-        email_snapshot: "admin@campus.local",
-        receive_at: "2045-08-18T02:00:00.000Z",
-        return_at: "2045-08-19T09:00:00.000Z",
-        status: "new",
-        created_by: admin.user.id,
-      });
-    assert.ok(invalidTiming.error);
-    assert.match(invalidTiming.error.message, /Ngày trả.*ngày học/i);
-
-    const lecturerTooEarly = await lecturer.supabase.rpc(
-      "registrant_confirm_equipment_handoff",
-      {
-        target_request_id: requestId,
-        target_phase: "handover",
-        target_signature: signature,
-      },
+    assert.ifError(
+      (
+        await admin.supabase.from("equipment_catalog").insert({
+          id: catalogItemId,
+          item_name: `C2 workflow ${catalogItemId.slice(0, 8)}`,
+          commercial_name: "C2 workflow QA",
+          unit: "Cái",
+        })
+      ).error,
     );
-    assert.ok(lecturerTooEarly.error);
-    assert.match(lecturerTooEarly.error.message, /Kho.*Đã giao/i);
 
-    const staffTooEarly = await staff.supabase.rpc(
+    const beforeWarehouse = await admin.supabase.rpc(
+      "reserve_equipment_signature",
+      { target_request_id: requestId, target_phase: "handover" },
+    );
+    assert.ok(beforeWarehouse.error);
+
+    const managerTooEarly = await staff.supabase.rpc(
       "manager_confirm_equipment_status",
       { target_request_id: requestId, target_status: "handed_over" },
     );
-    assert.ok(staffTooEarly.error);
-    assert.match(staffTooEarly.error.message, /Đã soạn/i);
-
-    const adminEarly = await admin.supabase.rpc(
-      "manager_confirm_equipment_status",
-      { target_request_id: requestId, target_status: "handed_over" },
-    );
-    assert.ok(adminEarly.error);
-    assert.match(adminEarly.error.message, /Đã soạn/i);
-
-    const preparing = await admin.supabase.rpc(
-      "manager_confirm_equipment_status",
-      { target_request_id: requestId, target_status: "preparing" },
-    );
-    assert.ifError(preparing.error);
-    const adminHandover = await admin.supabase.rpc(
-      "manager_confirm_equipment_status",
-      { target_request_id: requestId, target_status: "handed_over" },
-    );
-    assert.ifError(adminHandover.error);
-    assert.ok(adminHandover.data.handover_staff_confirmed_at);
-
-    const responsibleEarlySign = await lecturer.supabase.rpc(
-      "registrant_confirm_equipment_handoff",
-      {
-        target_request_id: requestId,
-        target_phase: "handover",
-        target_signature: signature,
-      },
-    );
-    assert.ifError(responsibleEarlySign.error);
-    assert.equal(responsibleEarlySign.data.status, "handed_over");
+    assert.ok(managerTooEarly.error);
 
     assert.ifError(
       (
-        await admin.supabase.rpc("manager_confirm_equipment_status", {
+        await staff.supabase.rpc("manager_confirm_equipment_status", {
+          target_request_id: requestId,
+          target_status: "preparing",
+        })
+      ).error,
+    );
+    const editableWhilePreparing = await admin.supabase.rpc(
+      "update_equipment_request_content",
+      {
+        target_request_id: requestId,
+        target_class_schedule_id: scheduleId,
+        target_semester: "HK2",
+        target_responsible_lecturer_id: lecturer.user.id,
+        target_receive_at: "2045-08-19T02:00:00.000Z",
+        target_return_at: "2045-08-20T09:00:00.000Z",
+        target_note: "Editable while preparing",
+        target_items: [
+          {
+            skill_name: "C2 editable item",
+            catalog_item_id: catalogItemId,
+            quantity: 1,
+            note: null,
+          },
+        ],
+      },
+    );
+    assert.ifError(editableWhilePreparing.error);
+    const managerItemWhilePreparing = await staff.supabase
+      .from("equipment_request_items")
+      .insert({
+        request_id: requestId,
+        catalog_item_id: catalogItemId,
+        skill_name: "C2 preparing item",
+        quantity: 1,
+      });
+    assert.ifError(managerItemWhilePreparing.error);
+    assert.ifError(
+      (
+        await staff.supabase.rpc("manager_confirm_equipment_status", {
+          target_request_id: requestId,
+          target_status: "handed_over",
+        })
+      ).error,
+    );
+
+    const unrelated = await staff.supabase.rpc("reserve_equipment_signature", {
+      target_request_id: requestId,
+      target_phase: "handover",
+    });
+    assert.ok(unrelated.error);
+
+    const registrantReservation = await admin.supabase.rpc(
+      "reserve_equipment_signature",
+      { target_request_id: requestId, target_phase: "handover" },
+    );
+    assert.ifError(registrantReservation.error);
+    const registrantOperation = registrantReservation.data[0];
+    assert.match(
+      registrantOperation.object_path,
+      new RegExp(
+        `^equipment-requests/${requestId}/handover/${registrantOperation.operation_id}\\.png$`,
+      ),
+    );
+
+    const registrantFinalize = await admin.supabase.rpc(
+      "finalize_equipment_signature",
+      { target_operation_id: registrantOperation.operation_id },
+    );
+    assert.ifError(registrantFinalize.error);
+    assert.equal(
+      registrantFinalize.data.handover_recipient_signature_storage_path,
+      registrantOperation.object_path,
+    );
+
+    const adoptedRetry = await admin.supabase.rpc(
+      "finalize_equipment_signature",
+      { target_operation_id: registrantOperation.operation_id },
+    );
+    assert.ifError(adoptedRetry.error);
+    assert.equal(
+      adoptedRetry.data.handover_recipient_signature_storage_path,
+      registrantOperation.object_path,
+    );
+
+    const competingHandover = await lecturer.supabase.rpc(
+      "reserve_equipment_signature",
+      { target_request_id: requestId, target_phase: "handover" },
+    );
+    assert.ok(competingHandover.error);
+
+    const legacyBase64Write = await lecturer.supabase.rpc(
+      "registrant_confirm_equipment_handoff",
+      {
+        target_request_id: requestId,
+        target_phase: "handover",
+        target_signature: "data:image/png;base64,legacy",
+      },
+    );
+    assert.ok(legacyBase64Write.error);
+
+    assert.ifError(
+      (
+        await staff.supabase.rpc("manager_confirm_equipment_status", {
           target_request_id: requestId,
           target_status: "new",
         })
@@ -3703,8 +3749,90 @@ test("Phiếu thiết bị chỉ cho ký giao sau khi kho xác nhận và GV ph�
         })
       ).error,
     );
+    assert.ifError(
+      (
+        await staff.supabase.rpc("manager_confirm_equipment_status", {
+          target_request_id: requestId,
+          target_status: "handed_over",
+        })
+      ).error,
+    );
 
-    const editWhilePreparing = await admin.supabase.rpc(
+    const lecturerReservation = await lecturer.supabase.rpc(
+      "reserve_equipment_signature",
+      { target_request_id: requestId, target_phase: "handover" },
+    );
+    assert.ifError(lecturerReservation.error);
+    const lecturerOperation = lecturerReservation.data[0];
+    const lecturerFinalize = await lecturer.supabase.rpc(
+      "finalize_equipment_signature",
+      { target_operation_id: lecturerOperation.operation_id },
+    );
+    assert.ifError(lecturerFinalize.error);
+    assert.equal(
+      lecturerFinalize.data.handover_recipient_signature_storage_path,
+      lecturerOperation.object_path,
+    );
+
+    const returnReservation = await lecturer.supabase.rpc(
+      "reserve_equipment_signature",
+      { target_request_id: requestId, target_phase: "return" },
+    );
+    assert.ifError(returnReservation.error);
+    const returnOperation = returnReservation.data[0];
+    const returnFinalize = await lecturer.supabase.rpc(
+      "finalize_equipment_signature",
+      { target_operation_id: returnOperation.operation_id },
+    );
+    assert.ifError(returnFinalize.error);
+    assert.equal(
+      returnFinalize.data.return_recipient_signature_storage_path,
+      returnOperation.object_path,
+    );
+
+    const managerReturn = await staff.supabase.rpc(
+      "manager_confirm_equipment_status",
+      { target_request_id: requestId, target_status: "returned" },
+    );
+    assert.ifError(managerReturn.error);
+    assert.equal(managerReturn.data.status, "completed");
+
+    const rewind = await staff.supabase.rpc(
+      "manager_confirm_equipment_status",
+      {
+        target_request_id: requestId,
+        target_status: "handed_over",
+      },
+    );
+    assert.ifError(rewind.error);
+    assert.equal(rewind.data.status, "handed_over");
+    assert.ok(rewind.data.handover_recipient_signature_storage_path);
+    assert.equal(rewind.data.return_recipient_signature_storage_path, null);
+    assert.equal(rewind.data.return_recipient_signed_at, null);
+
+    const returnFirst = await staff.supabase.rpc(
+      "manager_confirm_equipment_status",
+      { target_request_id: requestId, target_status: "returned" },
+    );
+    assert.ifError(returnFirst.error);
+    assert.equal(returnFirst.data.status, "handed_over");
+    const retriedReturnReservation = await lecturer.supabase.rpc(
+      "reserve_equipment_signature",
+      { target_request_id: requestId, target_phase: "return" },
+    );
+    assert.ifError(retriedReturnReservation.error);
+    assert.notEqual(
+      retriedReturnReservation.data[0].operation_id,
+      returnOperation.operation_id,
+    );
+    const retriedReturn = await lecturer.supabase.rpc(
+      "finalize_equipment_signature",
+      { target_operation_id: retriedReturnReservation.data[0].operation_id },
+    );
+    assert.ifError(retriedReturn.error);
+    assert.equal(retriedReturn.data.status, "completed");
+
+    const lockedContent = await admin.supabase.rpc(
       "update_equipment_request_content",
       {
         target_request_id: requestId,
@@ -3713,133 +3841,16 @@ test("Phiếu thiết bị chỉ cho ký giao sau khi kho xác nhận và GV ph�
         target_responsible_lecturer_id: lecturer.user.id,
         target_receive_at: "2045-08-19T02:00:00.000Z",
         target_return_at: "2045-08-20T09:00:00.000Z",
-        target_note: "Điều chỉnh khi Đã soạn",
-        target_items: [
-          {
-            skill_name: "Kỹ năng workflow",
-            catalog_item_id: catalogItemId,
-            quantity: 1,
-            note: null,
-          },
-        ],
+        target_note: "Locked after handover",
+        target_items: [],
       },
     );
-    assert.ifError(editWhilePreparing.error);
-    assert.equal(editWhilePreparing.data, requestId);
-
-    const managerAddsWhilePreparing = await staff.supabase
-      .from("equipment_request_items")
-      .insert({
-        request_id: requestId,
-        skill_name: "Kỹ năng workflow",
-        catalog_item_id: catalogItemId,
-        quantity: 2,
-        note: "Bổ sung trước khi giao",
-      });
-    assert.ifError(managerAddsWhilePreparing.error);
-
-    const responsibleSignsBeforeWarehouse = await lecturer.supabase.rpc(
-      "registrant_confirm_equipment_handoff",
-      {
-        target_request_id: requestId,
-        target_phase: "handover",
-        target_signature: signature,
-      },
-    );
-    assert.ok(responsibleSignsBeforeWarehouse.error);
-    assert.match(
-      responsibleSignsBeforeWarehouse.error.message,
-      /Kho.*Đã giao/i,
-    );
-
-    const staffConfirmsHandover = await staff.supabase.rpc(
-      "manager_confirm_equipment_status",
-      { target_request_id: requestId, target_status: "handed_over" },
-    );
-    assert.ifError(staffConfirmsHandover.error);
-    assert.equal(staffConfirmsHandover.data.status, "preparing");
-    assert.ok(staffConfirmsHandover.data.handover_staff_confirmed_at);
-
-    const responsibleSignsHandover = await lecturer.supabase.rpc(
-      "registrant_confirm_equipment_handoff",
-      {
-        target_request_id: requestId,
-        target_phase: "handover",
-        target_signature: signature,
-      },
-    );
-    assert.ifError(responsibleSignsHandover.error);
-    assert.equal(responsibleSignsHandover.data.status, "handed_over");
-
-    const managerAddsAfterHandover = await staff.supabase
-      .from("equipment_request_items")
-      .insert({
-        request_id: requestId,
-        skill_name: "Kỹ năng workflow",
-        catalog_item_id: catalogItemId,
-        quantity: 1,
-      });
-    assert.ok(managerAddsAfterHandover.error);
-
-    const responsibleSignsReturn = await lecturer.supabase.rpc(
-      "registrant_confirm_equipment_handoff",
-      {
-        target_request_id: requestId,
-        target_phase: "return",
-        target_signature: signature,
-      },
-    );
-    assert.ifError(responsibleSignsReturn.error);
-    assert.equal(responsibleSignsReturn.data.status, "handed_over");
-
-    const staffConfirmsReturn = await staff.supabase.rpc(
-      "manager_confirm_equipment_status",
-      { target_request_id: requestId, target_status: "returned" },
-    );
-    assert.ifError(staffConfirmsReturn.error);
-    assert.equal(staffConfirmsReturn.data.status, "completed");
-
-    const adminRollsBackToHandover = await admin.supabase.rpc(
-      "manager_confirm_equipment_status",
-      { target_request_id: requestId, target_status: "handed_over" },
-    );
-    assert.ifError(adminRollsBackToHandover.error);
-    assert.equal(adminRollsBackToHandover.data.status, "handed_over");
-    assert.ok(adminRollsBackToHandover.data.handover_recipient_signed_at);
-    assert.equal(adminRollsBackToHandover.data.return_staff_confirmed_at, null);
-    assert.equal(
-      adminRollsBackToHandover.data.return_recipient_signed_at,
-      null,
-    );
-
-    const staffConfirmsReturnFirst = await staff.supabase.rpc(
-      "manager_confirm_equipment_status",
-      { target_request_id: requestId, target_status: "returned" },
-    );
-    assert.ifError(staffConfirmsReturnFirst.error);
-    assert.equal(staffConfirmsReturnFirst.data.status, "handed_over");
-    assert.ok(staffConfirmsReturnFirst.data.return_staff_confirmed_at);
-    assert.equal(
-      staffConfirmsReturnFirst.data.return_recipient_signed_at,
-      null,
-    );
-
-    const responsibleSignsReturnLast = await lecturer.supabase.rpc(
-      "registrant_confirm_equipment_handoff",
-      {
-        target_request_id: requestId,
-        target_phase: "return",
-        target_signature: signature,
-      },
-    );
-    assert.ifError(responsibleSignsReturnLast.error);
-    assert.equal(responsibleSignsReturnLast.data.status, "completed");
+    assert.ok(lockedContent.error);
   } finally {
-    // Use serviceClient() since DELETE privilege is revoked from authenticated role
     await serviceClient()
       .from("equipment_requests")
       .delete()
-      .in("id", [requestId, invalidRequestId]);
+      .eq("id", requestId);
     await serviceClient().from("class_schedules").delete().eq("id", scheduleId);
     await admin.supabase.from("rooms").delete().eq("id", roomId);
     await admin.supabase

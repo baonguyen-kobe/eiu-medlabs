@@ -5,6 +5,7 @@ import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { processPendingScheduleEmails } from "@/lib/email-notifications";
+import { parseBasicMedicalSessionConfirmation } from "@/lib/basic-medical-session-confirmation";
 
 function registrationsUrl(kind: "notice" | "error", message: string) {
   return `/basic-medical/registrations?${kind}=${encodeURIComponent(message)}`;
@@ -111,23 +112,23 @@ export async function confirmBasicMedicalSession({
       newly_damaged_quantity: newlyDamagedQuantity,
     })),
   });
-  if (error) return { ok: false, message: error.message };
+  if (error) {
+    return { ok: false, message: "Không thể ký xác nhận buổi học." };
+  }
 
-  const result = data as unknown as {
-    confirmation_id: string;
-    signed_at: string;
-    damaged_items?: unknown[];
-  };
-  const damagedItems = result.damaged_items ?? [];
+  const result = parseBasicMedicalSessionConfirmation(data);
+  if (!result) {
+    return { ok: false, message: "Không thể xác nhận kết quả ký buổi học." };
+  }
   after(processPendingScheduleEmails);
   revalidatePath("/basic-medical/registrations");
   revalidatePath("/basic-medical/equipment");
   return {
     ok: true,
-    message: damagedItems.length
+    message: result.damagedItemCount
       ? "Đã ký xác nhận và ghi nhận thiết bị hư."
       : "Đã ký xác nhận buổi học.",
-    confirmationId: result.confirmation_id,
-    signedAt: result.signed_at,
+    confirmationId: result.confirmationId,
+    signedAt: result.signedAt,
   };
 }

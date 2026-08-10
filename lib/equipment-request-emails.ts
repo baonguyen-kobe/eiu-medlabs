@@ -141,14 +141,36 @@ export async function enqueueEquipmentRequestEmails({
     throw new Error("Phiếu thiếu thông tin người đăng ký hoặc lớp học.");
   }
 
-  const schedule = request.class_schedules;
-  const { data: actor } = actorId
-    ? await supabase
+  const sendsToManagers = ![
+    "late_approval_approved",
+    "late_approval_rejected",
+    "deleted",
+  ].includes(event);
+  const actorQuery = actorId
+    ? supabase
         .from("profiles")
         .select("full_name")
         .eq("id", actorId)
         .maybeSingle()
-    : { data: null };
+    : Promise.resolve({ data: null, error: null });
+  const managerQuery = sendsToManagers
+    ? supabase
+        .from("user_roles")
+        .select(
+          "user_id,role,profile:profiles!user_roles_user_id_fkey(email,is_active,profile_room_types(room_type_id))",
+        )
+        .in("role", ["admin", "staff"])
+        .eq("profile.is_active", true)
+    : Promise.resolve({ data: [], error: null });
+
+  const schedule = request.class_schedules;
+  const [actorResult, managerResult] = await Promise.all([
+    actorQuery,
+    managerQuery,
+  ]);
+  const { data: actor } = actorResult;
+  const { data: managerRows, error: managerError } = managerResult;
+  if (managerError) throw new Error(managerError.message);
   const requestCode = formatEquipmentRequestCode(request.created_at);
   const room = schedule.rooms;
   const roomLabel = room
@@ -202,12 +224,6 @@ export async function enqueueEquipmentRequestEmails({
     subject: string;
     payload: Record<string, unknown>;
   }> = [];
-  const sendsToManagers = ![
-    "late_approval_approved",
-    "late_approval_rejected",
-    "deleted",
-  ].includes(event);
-
   notifications.push({
     notification_type: `equipment_request_${event}`,
     recipient_id: request.registrant_id,
@@ -240,17 +256,6 @@ export async function enqueueEquipmentRequestEmails({
       payload: { ...payload, audience: "responsible" },
     });
   }
-
-  const { data: managerRows, error: managerError } = sendsToManagers
-    ? await supabase
-        .from("user_roles")
-        .select(
-          "user_id,role,profile:profiles!user_roles_user_id_fkey(email,is_active,profile_room_types(room_type_id))",
-        )
-        .in("role", ["admin", "staff"])
-        .eq("profile.is_active", true)
-    : { data: [], error: null };
-  if (managerError) throw new Error(managerError.message);
 
   const seenAdminEmails = new Set(
     notifications.map(({ recipient_email }) => recipient_email),

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { basicMedicalInventoryErrorMessage } from "@/lib/basic-medical-inventory-errors";
 import { createClient } from "@/lib/supabase/server";
 
 export type BasicMedicalCatalogInput = {
@@ -209,7 +210,15 @@ export async function saveBasicMedicalRoomInventory(input: {
     target_is_active: true,
     target_note: cleanText(input.note),
   });
-  if (error) return { ok: false, message: error.message };
+  if (error) {
+    return {
+      ok: false,
+      message: basicMedicalInventoryErrorMessage(
+        error.message,
+        "Không thể cập nhật thiết bị trong phòng.",
+      ),
+    };
+  }
   revalidatePath("/basic-medical/equipment");
   revalidatePath("/basic-medical/registrations");
   return { ok: true, message: "Đã cập nhật thiết bị trong phòng." };
@@ -246,7 +255,15 @@ export async function adjustBasicMedicalInventoryCondition(input: {
       target_note: input.note.trim(),
     },
   );
-  if (error) return { ok: false, message: error.message };
+  if (error) {
+    return {
+      ok: false,
+      message: basicMedicalInventoryErrorMessage(
+        error.message,
+        "Không thể điều chỉnh tình trạng thiết bị.",
+      ),
+    };
+  }
   revalidatePath("/basic-medical/equipment");
   revalidatePath("/basic-medical/registrations");
   return { ok: true, message: "Đã điều chỉnh số lượng Tốt/Hư." };

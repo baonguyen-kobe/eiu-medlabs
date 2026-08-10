@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { parsePersonnelUpdateOperation } from "@/lib/personnel-update-operation";
 import { personnelRoleDisplayNames } from "@/lib/admin-catalog-template";
 import {
   assertUniquePersonnelImportIdentities,
@@ -1243,7 +1244,10 @@ function personnelRpcMessage(message: string) {
       "Quyền tạo lịch Y cơ sở không phù hợp với vai trò hoặc phạm vi.",
     ],
   ];
-  return mappings.find(([code]) => message.includes(code))?.[1] ?? message;
+  return (
+    mappings.find(([code]) => message.includes(code))?.[1] ??
+    "Không thể cập nhật nhân sự. Vui lòng thử lại."
+  );
 }
 
 export async function savePersonnelChanges(
@@ -1340,12 +1344,17 @@ export async function savePersonnelChanges(
       message: personnelRpcMessage(beginError.message),
     };
   }
-  const operation = operationData as {
-    operation_id: string;
-    previous_email: string;
-    requested_email: string;
-    expected_version: number;
-  };
+  const operation = parsePersonnelUpdateOperation(operationData, {
+    previousEmail: current.email,
+    requestedEmail: email,
+    expectedVersion,
+  });
+  if (!operation) {
+    return {
+      ok: false,
+      message: "Không thể khởi tạo phiên cập nhật nhân sự an toàn.",
+    };
+  }
 
   const authStartedAt = performance.now();
   const emailChanged = current.email.trim().toLowerCase() !== email;
@@ -1358,7 +1367,10 @@ export async function savePersonnelChanges(
       await supabase.rpc("cancel_personnel_update", {
         target_operation_id: operation.operation_id,
       });
-      return { ok: false, message: authError.message };
+      return {
+        ok: false,
+        message: "Không thể cập nhật tài khoản đăng nhập. Vui lòng thử lại.",
+      };
     }
   }
   const { error: markAuthError } = await supabase.rpc(
