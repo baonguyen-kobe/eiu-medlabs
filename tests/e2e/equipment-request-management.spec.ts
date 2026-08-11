@@ -5,6 +5,7 @@ import {
   assertLocalDestructiveTestTarget,
   resolveEffectiveSupabaseTestConfig,
 } from "../helpers/local-test-safety.mjs";
+import { NURSING_SKILLS_ROOM_TYPE_ID } from "../../lib/room-types";
 
 test("mã phiếu 12 số tải được và Admin thấy dòng bổ sung thiết bị", async ({
   page,
@@ -70,6 +71,7 @@ test("mã phiếu 12 số tải được và Admin thấy dòng bổ sung thiế
       .from("courses")
       .select("id, room_type_id")
       .eq("is_active", true)
+      .eq("room_type_id", NURSING_SKILLS_ROOM_TYPE_ID)
       .limit(1)
       .single();
     expect(course).toBeTruthy();

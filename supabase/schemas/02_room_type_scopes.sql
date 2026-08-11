@@ -1668,7 +1668,7 @@ with check (
   )
 );
 
--- Declarative mirror of the M2-01 Teaching Assistant manual-schedule contract.
+-- Declarative mirror of the Skills-only manual-schedule contract.
 create or replace function public.create_manual_class_schedule(
   target_course_id uuid,
   target_room_id uuid,
@@ -1690,18 +1690,35 @@ declare
   created_row public.class_schedules;
   course_code_val text;
   course_name_val text;
-  room_type_val uuid;
+  course_room_type_id uuid;
+  room_room_type_id uuid;
+  nursing_skills_room_type_id constant uuid := '40000000-0000-0000-0000-000000000001'::uuid;
 begin
   if actor_id is null or not (select private.is_active_user()) then
     raise exception 'AUTHENTICATION_REQUIRED' using errcode = '42501';
   end if;
 
   select courses.course_code, courses.course_name, courses.room_type_id
-  into course_code_val, course_name_val, room_type_val
+  into course_code_val, course_name_val, course_room_type_id
   from public.courses as courses
-  where courses.id = target_course_id;
+  where courses.id = target_course_id
+    and courses.is_active;
 
-  if not (select private.has_room_type(room_type_val)) then
+  if course_room_type_id is distinct from nursing_skills_room_type_id then
+    raise exception 'SKILLS_MANUAL_SCHEDULE_REQUIRED' using errcode = '42501';
+  end if;
+
+  select rooms.room_type_id
+  into room_room_type_id
+  from public.rooms as rooms
+  where rooms.id = target_room_id
+    and rooms.is_active;
+
+  if room_room_type_id is distinct from nursing_skills_room_type_id then
+    raise exception 'SKILLS_MANUAL_SCHEDULE_REQUIRED' using errcode = '42501';
+  end if;
+
+  if not (select private.has_room_type(course_room_type_id)) then
     raise exception 'ROOM_TYPE_SCOPE_REQUIRED' using errcode = '42501';
   end if;
 

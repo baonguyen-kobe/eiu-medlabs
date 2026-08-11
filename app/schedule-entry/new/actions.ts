@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { processPendingScheduleEmails } from "@/lib/email-notifications";
 import { createClient } from "@/lib/supabase/server";
 import { isWithinOperatingHours } from "@/lib/business-time";
-import { roomTypeIdForScope, type ScheduleScope } from "@/lib/room-types";
+import { NURSING_SKILLS_ROOM_TYPE_ID } from "@/lib/room-types";
 
 export type CreateScheduleState = {
   ok: boolean;
@@ -58,7 +58,6 @@ export async function createScheduleDraft(
   const startTime = String(formData.get("start_time") ?? "");
   const endTime = String(formData.get("end_time") ?? "");
   const note = String(formData.get("note") ?? "").trim();
-  const scope = String(formData.get("scope") ?? "skills_lab") as ScheduleScope;
   const studentCount = Number(formData.get("student_count"));
   const requestedLecturerIds = [
     ...new Set(
@@ -78,13 +77,13 @@ export async function createScheduleDraft(
       message: "Số sinh viên phải là số nguyên từ 1 trở lên.",
     };
   }
-  if (room.room_type_id !== roomTypeIdForScope(scope)) {
-    return { ok: false, message: "Phòng không thuộc phạm vi lịch đang tạo." };
-  }
-  if (course.room_type_id !== room.room_type_id) {
+  if (
+    course.room_type_id !== NURSING_SKILLS_ROOM_TYPE_ID ||
+    room.room_type_id !== NURSING_SKILLS_ROOM_TYPE_ID
+  ) {
     return {
       ok: false,
-      message: "Môn học không thuộc Loại của lịch đang tạo.",
+      message: "Môn học và phòng phải thuộc Kỹ năng Điều dưỡng.",
     };
   }
   if (endTime <= startTime) {
@@ -130,7 +129,7 @@ export async function createScheduleDraft(
     const { data: eligibleLecturers } = await supabase.rpc(
       "list_scoped_lecturers",
       {
-        target_room_type_id: room.room_type_id,
+        target_room_type_id: NURSING_SKILLS_ROOM_TYPE_ID,
       },
     );
     const eligibleIds = new Set(
