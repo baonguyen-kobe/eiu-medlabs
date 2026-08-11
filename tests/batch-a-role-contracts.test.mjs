@@ -39,6 +39,9 @@ test("Batch A: Teaching Assistant RPCs enforce scoped role contracts", async () 
     return `09${digits.slice(0, 7).padEnd(7, "0")}${index}`;
   };
   const outOfScopeTargetNote = `M2-01 out-of-scope target room ${suffix}`;
+  const skillsCourseBasicRoomNote = `M2-01 Skills course Basic room ${suffix}`;
+  const basicCourseSkillsRoomNote = `M2-01 Basic course Skills room ${suffix}`;
+  const basicManualScheduleNote = `M2-01 Basic manual schedule ${suffix}`;
   const invalidLecturerNote = `M2-01 invalid lecturer assignment ${suffix}`;
   const basicCourseId = crypto.randomUUID();
   const basicRoomId = crypto.randomUUID();
@@ -101,6 +104,20 @@ test("Batch A: Teaching Assistant RPCs enforce scoped role contracts", async () 
     }
     testUserIds.push(id);
     return { id, email, password };
+  }
+
+  async function assertManualDomainDenied(result, note) {
+    if (result.data?.id) {
+      manualScheduleIds.push(result.data.id);
+      batchAAggregateIds.add(result.data.id);
+    }
+    assert.equal(result.error?.code, "42501");
+    const schedules = await service
+      .from("class_schedules")
+      .select("id")
+      .eq("note", note);
+    assert.ifError(schedules.error);
+    assert.equal(schedules.data.length, 0);
   }
 
   try {
@@ -238,6 +255,51 @@ test("Batch A: Teaching Assistant RPCs enforce scoped role contracts", async () 
       manualScheduleIds.push(manual.data.id);
       batchAAggregateIds.add(manual.data.id);
     }
+
+    await assertManualDomainDenied(
+      await lecturer.supabase.rpc("create_manual_class_schedule", {
+        target_course_id: "10000000-0000-0000-0000-000000000001",
+        target_room_id: basicRoomId,
+        target_lecturer_id: lecturerId,
+        target_lecturer_2_id: null,
+        target_schedule_date: "2051-11-19",
+        target_start_time: "07:30",
+        target_end_time: "09:30",
+        target_note: skillsCourseBasicRoomNote,
+        target_student_count: 20,
+      }),
+      skillsCourseBasicRoomNote,
+    );
+
+    await assertManualDomainDenied(
+      await lecturer.supabase.rpc("create_manual_class_schedule", {
+        target_course_id: basicCourseId,
+        target_room_id: "20000000-0000-0000-0000-000000000001",
+        target_lecturer_id: lecturerId,
+        target_lecturer_2_id: null,
+        target_schedule_date: "2051-11-20",
+        target_start_time: "07:30",
+        target_end_time: "09:30",
+        target_note: basicCourseSkillsRoomNote,
+        target_student_count: 20,
+      }),
+      basicCourseSkillsRoomNote,
+    );
+
+    await assertManualDomainDenied(
+      await lecturer.supabase.rpc("create_manual_class_schedule", {
+        target_course_id: basicCourseId,
+        target_room_id: basicRoomId,
+        target_lecturer_id: lecturerId,
+        target_lecturer_2_id: null,
+        target_schedule_date: "2051-11-21",
+        target_start_time: "07:30",
+        target_end_time: "09:30",
+        target_note: basicManualScheduleNote,
+        target_student_count: 20,
+      }),
+      basicManualScheduleNote,
+    );
 
     const manualOutOfScope = await assistant.supabase.rpc(
       "create_manual_class_schedule",

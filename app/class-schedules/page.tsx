@@ -13,10 +13,7 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import type { ScheduleEvent } from "@/lib/demo-data";
 import { businessToday, businessTodayString } from "@/lib/business-time";
-import {
-  BASIC_MEDICAL_ROOM_TYPE_ID,
-  NURSING_SKILLS_ROOM_TYPE_ID,
-} from "@/lib/room-types";
+import { NURSING_SKILLS_ROOM_TYPE_ID } from "@/lib/room-types";
 import {
   canUseSkillsWorkspace,
   defaultWorkspacePath,
@@ -87,7 +84,7 @@ export default async function ClassSchedulesPage({
         equipment_requests (id, status)
       `,
       )
-      .neq("rooms.room_type_id", BASIC_MEDICAL_ROOM_TYPE_ID)
+      .eq("rooms.room_type_id", NURSING_SKILLS_ROOM_TYPE_ID)
       .gte("schedule_date", periodStartText)
       .lte("schedule_date", periodEndText)
       .neq("schedule_status", "cancelled")
