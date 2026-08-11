@@ -2,9 +2,14 @@ import { redirect } from "next/navigation";
 import { EquipmentRequestList } from "@/components/equipment-request-list";
 import { WorkspaceShell } from "@/components/workspace-shell";
 import { equipmentRequestSelect } from "@/lib/equipment-requests";
+import { isEquipmentRequestId } from "@/lib/equipment-calendar-request";
 import { getViewer } from "@/lib/viewer";
 
-export default async function EquipmentRequestsPage() {
+export default async function EquipmentRequestsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ request?: string }>;
+}) {
   const {
     supabase,
     userId,
@@ -20,7 +25,8 @@ export default async function EquipmentRequestsPage() {
     redirect("/equipment/mine");
   }
 
-  const [{ data }, { data: catalog }] = await Promise.all([
+  const [query, { data }, { data: catalog }] = await Promise.all([
+    searchParams,
     supabase
       .from("equipment_requests")
       .select(equipmentRequestSelect)
@@ -54,6 +60,9 @@ export default async function EquipmentRequestsPage() {
         viewerId={userId}
         viewerEmail={email}
         viewerRoles={roles}
+        initialRequestId={
+          isEquipmentRequestId(query.request) ? query.request : undefined
+        }
       />
     </WorkspaceShell>
   );

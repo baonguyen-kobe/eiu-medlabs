@@ -34,6 +34,8 @@ import {
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { WorkspaceShell } from "@/components/workspace-shell";
 import { type ScheduleEvent } from "@/lib/demo-data";
+import { equipmentRequestDeepLink } from "@/lib/equipment-calendar-request";
+import { equipmentStatusMeta } from "@/lib/equipment-requests";
 import { useScheduleRealtime } from "@/lib/use-schedule-realtime";
 
 type Role = "admin" | "lecturer" | "staff" | "teaching_assistant" | "viewer";
@@ -1033,19 +1035,18 @@ export function Dashboard({
                   <dt>Đăng ký TTB</dt>
                   <dd>
                     {selectedEvent.equipmentRequest ? (
-                      <Link href="/equipment/requests">
+                      <Link
+                        href={equipmentRequestDeepLink(
+                          roles,
+                          selectedEvent.equipmentRequest.id,
+                        )}
+                      >
                         <strong>
-                          {(
-                            {
-                              new: "Mới",
-                              preparing: "Đang chuẩn bị",
-                              ready: "Sẵn sàng",
-                              handed_over: "Đã bàn giao",
-                              returned: "Đã trả",
-                              cancelled: "Đã hủy",
-                            } as Record<string, string>
-                          )[selectedEvent.equipmentRequest.status] ??
-                            selectedEvent.equipmentRequest.status}
+                          {
+                            equipmentStatusMeta(
+                              selectedEvent.equipmentRequest.status,
+                            ).label
+                          }
                         </strong>
                       </Link>
                     ) : (
