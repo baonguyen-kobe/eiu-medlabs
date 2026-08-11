@@ -1667,3 +1667,68 @@ with check (
       and (select private.can_import_schedules(batches.room_type_id))
   )
 );
+
+-- Declarative mirror of the M2-01 Teaching Assistant manual-schedule contract.
+create or replace function public.create_manual_class_schedule(
+  target_course_id uuid,
+  target_room_id uuid,
+  target_lecturer_id uuid,
+  target_lecturer_2_id uuid,
+  target_schedule_date date,
+  target_start_time time,
+  target_end_time time,
+  target_note text,
+  target_student_count integer
+)
+returns public.class_schedules
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  actor_id uuid := (select auth.uid());
+  created_row public.class_schedules;
+  course_code_val text;
+  course_name_val text;
+  room_type_val uuid;
+begin
+  if actor_id is null or not (select private.is_active_user()) then
+    raise exception 'AUTHENTICATION_REQUIRED' using errcode = '42501';
+  end if;
+
+  select courses.course_code, courses.course_name, courses.room_type_id
+  into course_code_val, course_name_val, room_type_val
+  from public.courses as courses
+  where courses.id = target_course_id;
+
+  if not (
+    (select private.has_role('admin'))
+    or (select private.has_role('staff'))
+    or (select private.has_role('teaching_assistant'))
+    or (
+      (select private.has_role('lecturer'))
+      and actor_id in (target_lecturer_id, target_lecturer_2_id)
+    )
+  ) then
+    raise exception 'PERMISSION_DENIED' using errcode = '42501';
+  end if;
+
+  if not (select private.has_room_type(room_type_val)) then
+    raise exception 'ROOM_TYPE_SCOPE_REQUIRED' using errcode = '42501';
+  end if;
+
+  insert into public.class_schedules (
+    course_id, course_code_snapshot, course_name_snapshot, room_id,
+    lecturer_id, lecturer_2_id, schedule_date, start_time, end_time,
+    source, schedule_status, note, student_count, created_by, published_by, published_at
+  ) values (
+    target_course_id, course_code_val, course_name_val, target_room_id,
+    target_lecturer_id, target_lecturer_2_id, target_schedule_date, target_start_time, target_end_time,
+    'manual', 'published', target_note, target_student_count, actor_id, actor_id, clock_timestamp()
+  ) returning * into created_row;
+
+  return created_row;
+end;
+$$;
+revoke all on function public.create_manual_class_schedule(uuid,uuid,uuid,uuid,date,time,time,text,integer) from public, anon;
+grant execute on function public.create_manual_class_schedule(uuid,uuid,uuid,uuid,date,time,time,text,integer) to authenticated;
