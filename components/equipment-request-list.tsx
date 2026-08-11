@@ -30,6 +30,7 @@ import {
   type EquipmentRequestListItem,
   type EquipmentRequestStatus,
 } from "@/lib/equipment-requests";
+import { equipmentRequestTargetPage } from "@/lib/equipment-calendar-request";
 import { TABLE_PAGE_SIZE, totalPagesFor } from "@/lib/pagination";
 import type { AppRole } from "@/lib/viewer";
 
@@ -700,6 +701,7 @@ export function EquipmentRequestList({
   viewerId,
   viewerEmail = "",
   viewerRoles = [],
+  initialRequestId,
 }: {
   requests: unknown[];
   emptyMessage: string;
@@ -709,16 +711,30 @@ export function EquipmentRequestList({
   viewerId?: string;
   viewerEmail?: string;
   viewerRoles?: AppRole[];
+  initialRequestId?: string;
 }) {
   const items = requests as EquipmentRequestListItem[];
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(
+    () =>
+      new Set(
+        initialRequestId && items.some((item) => item.id === initialRequestId)
+          ? [initialRequestId]
+          : [],
+      ),
+  );
   const [modalRequest, setModalRequest] =
     useState<EquipmentRequestListItem | null>(null);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(() =>
+    equipmentRequestTargetPage(
+      items.map((item) => item.id),
+      initialRequestId,
+      TABLE_PAGE_SIZE,
+    ),
+  );
   const [statusNotice, setStatusNotice] = useState<{
     ok: boolean;
     message: string;

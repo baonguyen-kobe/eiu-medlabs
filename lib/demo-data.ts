@@ -1,3 +1,5 @@
+import type { EquipmentRequestStatus } from "@/lib/equipment-requests";
+
 export type ScheduleEvent = {
   id: string;
   type: "class" | "shift";
@@ -19,7 +21,7 @@ export type ScheduleEvent = {
   studentCount?: number;
   roomTypeId?: string;
   basicMedicalRegistrationId?: string;
-  equipmentRequest?: { id: string; status: string };
+  equipmentRequest?: { id: string; status: EquipmentRequestStatus };
 };
 
 export const demoEvents: ScheduleEvent[] = [

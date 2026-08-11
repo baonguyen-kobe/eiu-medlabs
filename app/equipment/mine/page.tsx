@@ -1,6 +1,7 @@
 import { EquipmentRequestList } from "@/components/equipment-request-list";
 import { WorkspaceShell } from "@/components/workspace-shell";
 import { equipmentRequestSelect } from "@/lib/equipment-requests";
+import { isEquipmentRequestId } from "@/lib/equipment-calendar-request";
 import { getViewer } from "@/lib/viewer";
 import { redirect } from "next/navigation";
 import {
@@ -8,7 +9,11 @@ import {
   defaultWorkspacePath,
 } from "@/lib/workspace-access";
 
-export default async function MyEquipmentRequestsPage() {
+export default async function MyEquipmentRequestsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ request?: string }>;
+}) {
   const {
     supabase,
     userId,
@@ -25,11 +30,14 @@ export default async function MyEquipmentRequestsPage() {
     redirect(defaultWorkspacePath(roles, roomTypeCodes));
   }
 
-  const { data } = await supabase
-    .from("equipment_requests")
-    .select(equipmentRequestSelect)
-    .or(`registrant_id.eq.${userId},responsible_lecturer_id.eq.${userId}`)
-    .order("created_at", { ascending: false });
+  const [query, { data }] = await Promise.all([
+    searchParams,
+    supabase
+      .from("equipment_requests")
+      .select(equipmentRequestSelect)
+      .or(`registrant_id.eq.${userId},responsible_lecturer_id.eq.${userId}`)
+      .order("created_at", { ascending: false }),
+  ]);
 
   return (
     <WorkspaceShell
@@ -51,6 +59,9 @@ export default async function MyEquipmentRequestsPage() {
         viewerId={userId}
         viewerEmail={email}
         viewerRoles={roles}
+        initialRequestId={
+          isEquipmentRequestId(query.request) ? query.request : undefined
+        }
       />
     </WorkspaceShell>
   );

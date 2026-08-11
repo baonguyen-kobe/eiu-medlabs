@@ -13,6 +13,7 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import type { ScheduleEvent } from "@/lib/demo-data";
 import { businessToday, businessTodayString } from "@/lib/business-time";
+import { normalizeCalendarEquipmentRequest } from "@/lib/equipment-calendar-request";
 import { NURSING_SKILLS_ROOM_TYPE_ID } from "@/lib/room-types";
 import {
   canUseSkillsWorkspace,
@@ -195,12 +196,9 @@ export default async function ClassSchedulesPage({
       owned: lecturerIds.includes(claimsData.claims.sub),
       studentCount: schedule.student_count,
       roomTypeId: room?.room_type_id,
-      equipmentRequest: (
-        schedule.equipment_requests as unknown as Array<{
-          id: string;
-          status: string;
-        }> | null
-      )?.[0],
+      equipmentRequest: normalizeCalendarEquipmentRequest<
+        NonNullable<ScheduleEvent["equipmentRequest"]>["status"]
+      >(schedule.equipment_requests),
     };
   });
   const shiftEvents: ScheduleEvent[] = (shifts ?? []).map((shift) => {
