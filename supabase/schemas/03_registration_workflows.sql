@@ -71,11 +71,13 @@ create table if not exists public.basic_medical_registration_sessions (
   session_number integer not null check (session_number > 0), unique (registration_id, session_number)
 );
 create table if not exists public.equipment_catalog (
-  id uuid primary key default gen_random_uuid(), item_name text not null check (btrim(item_name) <> ''), commercial_name text,
+  id uuid primary key default gen_random_uuid(), item_name text not null check (btrim(item_name) <> ''),
+  commercial_name text not null check (btrim(commercial_name) <> ''),
   item_type text, country_of_origin text, manufacturer text, model text, unit text not null check (btrim(unit) <> ''),
-  is_active boolean not null default true, created_at timestamptz not null default now(), updated_at timestamptz not null default now(),
-  unique nulls not distinct (item_name, commercial_name, model)
+  is_active boolean not null default true, created_at timestamptz not null default now(), updated_at timestamptz not null default now()
 );
+create unique index if not exists equipment_catalog_commercial_name_normalized_key
+  on public.equipment_catalog (lower(btrim(commercial_name)));
 create table if not exists public.equipment_requests (
   id uuid primary key default gen_random_uuid(), class_schedule_id uuid not null unique references public.class_schedules(id) on delete cascade,
   registrant_id uuid not null references public.profiles(id) on delete restrict,

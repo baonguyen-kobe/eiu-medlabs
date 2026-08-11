@@ -73,8 +73,8 @@ export default async function EquipmentCatalogPage({
             <input name="item_name" required />
           </label>
           <label>
-            Tên thương mại
-            <input name="commercial_name" />
+            Tên thương mại *
+            <input name="commercial_name" required />
           </label>
           <label>
             Loại

@@ -406,6 +406,7 @@ test("Batch A: Teaching Assistant RPCs enforce scoped role contracts", async () 
         await service.from("equipment_catalog").insert({
           id: catalogItemId,
           item_name: `M2 equipment ${suffix}`,
+          commercial_name: `M2 commercial ${suffix}`,
           unit: "Cái",
         })
       ).error,

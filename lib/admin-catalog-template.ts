@@ -172,7 +172,11 @@ export const adminCatalogTemplates: Record<
     widths: [38, 30, 18, 16, 22, 22, 12],
     instructions: [
       ["Tên thiết bị và vật tư", "Có", "Tên dùng để tìm và phân loại thiết bị"],
-      ["Tên thương mại", "Không", "Tên sản phẩm/thương mại"],
+      [
+        "Tên thương mại",
+        "Có",
+        "Tên sản phẩm/thương mại, dùng làm mã định danh duy nhất",
+      ],
       ["Loại", "Không", "Ví dụ: Mô hình, Vật tư, Dụng cụ"],
       ["Nước SX", "Không", "Nước sản xuất"],
       ["Hãng", "Không", "Hãng sản xuất"],

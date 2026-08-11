@@ -592,7 +592,11 @@ export function EquipmentCatalogManager({
                         ) : mode === "edit" ? (
                           <input
                             aria-label={`${label} của ${item.item_name}`}
-                            required={key === "item_name" || key === "unit"}
+                            required={
+                              key === "item_name" ||
+                              key === "commercial_name" ||
+                              key === "unit"
+                            }
                             value={editableValue(draft[key])}
                             onChange={(event) =>
                               updateDraft(item.id, key, event.target.value)

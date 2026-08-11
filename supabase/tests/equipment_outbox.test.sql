@@ -71,8 +71,8 @@ on conflict do nothing;
 update public.profiles set phone = '0901234567' where id = '10000000-0000-0000-0000-000000000001'::uuid or lower(email) = 'admin@campus.local';
 update public.profiles set phone = '0907654321' where id = '10000000-0000-0000-0000-000000000002'::uuid or lower(email) = 'bao.nguyen@eiu.edu.vn';
 
-insert into public.equipment_catalog (id, item_name, unit, is_active)
-values ('50000000-0000-0000-0000-000000000001'::uuid, 'Mô hình tiêm', 'cái', true)
+insert into public.equipment_catalog (id, item_name, commercial_name, unit, is_active)
+values ('50000000-0000-0000-0000-000000000001'::uuid, 'Mô hình tiêm', 'Mô hình tiêm fixture outbox', 'cái', true)
 on conflict (id) do nothing;
 
 -- 2. Create test class schedules

@@ -2134,7 +2134,7 @@ test("người đăng ký được điều chỉnh nội dung nhưng không đư
     .insert({
       id: catalogItemId,
       item_name: `Thiết bị test ${catalogItemId}`,
-      commercial_name: "Thiết bị test",
+      commercial_name: `Thiết bị test ${catalogItemId}`,
       unit: "Cái",
     })
     .select("id")
@@ -2706,6 +2706,7 @@ test("direct equipment RPC luôn xác minh giảng viên phụ trách và độ 
         await admin.supabase.from("equipment_catalog").insert({
           id: catalogId,
           item_name: `Thiết bị ${catalogId}`,
+          commercial_name: `Thương mại ${catalogId}`,
           unit: "Cái",
         })
       ).error,
@@ -3282,7 +3283,7 @@ test("Admin và Staff xóa phiếu thiết bị, phiếu Y cơ sở chỉ hủy 
       .insert({
         id: equipmentCatalogItemId,
         item_name: `Thiết bị xóa ${equipmentCatalogItemId}`,
-        commercial_name: "Thiết bị xóa",
+        commercial_name: `Thiết bị xóa ${equipmentCatalogItemId}`,
         unit: "Cái",
       })
       .select("id")
@@ -3598,7 +3599,7 @@ test("Phiếu thiết bị chỉ cho ký giao sau khi kho xác nhận và GV ph�
         await admin.supabase.from("equipment_catalog").insert({
           id: catalogItemId,
           item_name: `Thiết bị workflow ${catalogItemId.slice(0, 8)}`,
-          commercial_name: "Workflow QA",
+          commercial_name: `Workflow QA ${catalogItemId}`,
           unit: "Cái",
         })
       ).error,
