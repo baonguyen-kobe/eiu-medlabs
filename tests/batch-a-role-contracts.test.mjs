@@ -48,8 +48,14 @@ test("Batch A: Teaching Assistant RPCs enforce scoped role contracts", async () 
   const manualScheduleIds = [];
   const equipmentRequestIds = [];
   const registrationIds = [];
+  const basicMedicalScheduleIds = [];
+  const batchAAggregateIds = new Set([
+    equipmentScheduleId,
+    equipmentRegressionScheduleId,
+  ]);
   const testUserIds = [];
   let lecturerId;
+  let testFailure;
 
   async function createLocalUser({
     role,
@@ -230,6 +236,7 @@ test("Batch A: Teaching Assistant RPCs enforce scoped role contracts", async () 
       });
       assert.ifError(manual.error);
       manualScheduleIds.push(manual.data.id);
+      batchAAggregateIds.add(manual.data.id);
     }
 
     const manualOutOfScope = await assistant.supabase.rpc(
@@ -363,6 +370,7 @@ test("Batch A: Teaching Assistant RPCs enforce scoped role contracts", async () 
     );
     assert.ifError(equipment.error);
     equipmentRequestIds.push(equipment.data);
+    batchAAggregateIds.add(equipment.data);
 
     const equipmentNoScope = await equipmentNoScopeAssistant.supabase.rpc(
       "create_equipment_request_with_items",
@@ -408,6 +416,7 @@ test("Batch A: Teaching Assistant RPCs enforce scoped role contracts", async () 
     );
     assert.ifError(equipmentLecturerRegression.error);
     equipmentRequestIds.push(equipmentLecturerRegression.data);
+    batchAAggregateIds.add(equipmentLecturerRegression.data);
 
     const basicNoScope = await unscopedAssistant.supabase.rpc(
       "save_basic_medical_registration",
@@ -433,6 +442,7 @@ test("Batch A: Teaching Assistant RPCs enforce scoped role contracts", async () 
     );
     assert.ifError(basicManager.error);
     registrationIds.push(basicManager.data);
+    batchAAggregateIds.add(basicManager.data);
 
     assert.ifError(
       (
@@ -448,6 +458,7 @@ test("Batch A: Teaching Assistant RPCs enforce scoped role contracts", async () 
     );
     assert.ifError(basicLecturer.error);
     registrationIds.push(basicLecturer.data);
+    batchAAggregateIds.add(basicLecturer.data);
 
     assert.ifError(
       (
@@ -471,46 +482,103 @@ test("Batch A: Teaching Assistant RPCs enforce scoped role contracts", async () 
     );
     assert.ifError(basicAllowed.error);
     registrationIds.push(basicAllowed.data);
+    batchAAggregateIds.add(basicAllowed.data);
+  } catch (error) {
+    testFailure = error;
+    throw error;
   } finally {
-    if (registrationIds.length) {
-      await service
-        .from("basic_medical_registration_sessions")
-        .delete()
-        .in("registration_id", registrationIds);
+    try {
+      if (registrationIds.length) {
+        const linkedSchedules = await service
+          .from("class_schedules")
+          .select("id")
+          .in("basic_medical_registration_id", registrationIds);
+        assert.ifError(linkedSchedules.error);
+        for (const { id } of linkedSchedules.data) {
+          basicMedicalScheduleIds.push(id);
+          batchAAggregateIds.add(id);
+        }
+        await service
+          .from("basic_medical_registration_sessions")
+          .delete()
+          .in("registration_id", registrationIds);
+        await service
+          .from("class_schedules")
+          .delete()
+          .in("basic_medical_registration_id", registrationIds);
+        await service
+          .from("basic_medical_registrations")
+          .delete()
+          .in("id", registrationIds);
+      }
+      if (equipmentRequestIds.length) {
+        await service
+          .from("equipment_requests")
+          .delete()
+          .in("id", equipmentRequestIds);
+      }
+      if (manualScheduleIds.length) {
+        await service
+          .from("class_schedules")
+          .delete()
+          .in("id", manualScheduleIds);
+      }
       await service
         .from("class_schedules")
         .delete()
-        .in("basic_medical_registration_id", registrationIds);
-      await service
-        .from("basic_medical_registrations")
-        .delete()
-        .in("id", registrationIds);
-    }
-    if (equipmentRequestIds.length) {
-      await service
-        .from("equipment_requests")
-        .delete()
-        .in("id", equipmentRequestIds);
-    }
-    if (manualScheduleIds.length) {
+        .eq("id", equipmentScheduleId);
       await service
         .from("class_schedules")
         .delete()
-        .in("id", manualScheduleIds);
-    }
-    await service
-      .from("class_schedules")
-      .delete()
-      .eq("id", equipmentScheduleId);
-    await service
-      .from("class_schedules")
-      .delete()
-      .eq("id", equipmentRegressionScheduleId);
-    await service.from("equipment_catalog").delete().eq("id", catalogItemId);
-    await service.from("courses").delete().eq("id", basicCourseId);
-    await service.from("rooms").delete().eq("id", basicRoomId);
-    for (const userId of testUserIds) {
-      await service.auth.admin.deleteUser(userId);
+        .eq("id", equipmentRegressionScheduleId);
+      await service.from("equipment_catalog").delete().eq("id", catalogItemId);
+      await service.from("courses").delete().eq("id", basicCourseId);
+      await service.from("rooms").delete().eq("id", basicRoomId);
+      for (const userId of testUserIds) {
+        await service.auth.admin.deleteUser(userId);
+      }
+
+      const outboxEventIds = new Set();
+      const aggregateOutboxEvents = await service
+        .from("email_outbox_events")
+        .select("id")
+        .in("aggregate_id", [...batchAAggregateIds]);
+      assert.ifError(aggregateOutboxEvents.error);
+      for (const { id } of aggregateOutboxEvents.data) {
+        outboxEventIds.add(id);
+      }
+      for (const registrationId of registrationIds) {
+        const registrationOutboxEvents = await service
+          .from("email_outbox_events")
+          .select("id")
+          .like("event_key", `basic_medical:registration:${registrationId}:%`);
+        assert.ifError(registrationOutboxEvents.error);
+        for (const { id } of registrationOutboxEvents.data) {
+          outboxEventIds.add(id);
+        }
+      }
+      if (outboxEventIds.size) {
+        for (const eventId of outboxEventIds) {
+          const notificationCleanup = await service
+            .from("email_notifications")
+            .delete()
+            .like("dedupe_key", `outbox_notif:${eventId}:%`);
+          assert.ifError(notificationCleanup.error);
+        }
+        const outboxCleanup = await service
+          .from("email_outbox_events")
+          .delete()
+          .in("id", [...outboxEventIds]);
+        assert.ifError(outboxCleanup.error);
+        const remainingOutboxEvents = await service
+          .from("email_outbox_events")
+          .select("id")
+          .in("id", [...outboxEventIds]);
+        assert.ifError(remainingOutboxEvents.error);
+        assert.equal(remainingOutboxEvents.data.length, 0);
+      }
+    } catch (cleanupError) {
+      if (!testFailure) throw cleanupError;
     }
   }
 });
