@@ -14,7 +14,7 @@
     "format:check": "prettier --check --ignore-unknown .",
     "lint": "eslint . --ignore-pattern .next",
     "typecheck": "tsc --noEmit",
-    "test": "node --test tests/*.test.mjs",
+    "test": "node --test --test-concurrency=1 tests/*.test.mjs",
     "test:db": "supabase test db",
     "test:e2e:critical": "playwright test tests/e2e/accessibility-smoke.spec.ts tests/e2e/manual-create.spec.ts tests/e2e/ta-create-paths.spec.ts tests/e2e/skills-import-export-tkb.spec.ts tests/e2e/equipment-request-management.spec.ts tests/e2e/basic-medical-equipment-confirmation.spec.ts tests/e2e/mobile-responsive.spec.ts tests/e2e/personnel-management.spec.ts",
     "test:e2e": "playwright test",

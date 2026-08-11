@@ -34,6 +34,10 @@ test("Batch A: Teaching Assistant RPCs enforce scoped role contracts", async () 
   assertLocalSupabaseTarget(localEnv.NEXT_PUBLIC_SUPABASE_URL);
   const service = client(localEnv.SUPABASE_SECRET_KEY);
   const suffix = crypto.randomUUID();
+  const fixturePhone = (index) => {
+    const digits = suffix.replace(/[^0-9]/g, "");
+    return `09${digits.slice(0, 7).padEnd(7, "0")}${index}`;
+  };
   const outOfScopeTargetNote = `M2-01 out-of-scope target room ${suffix}`;
   const invalidLecturerNote = `M2-01 invalid lecturer assignment ${suffix}`;
   const basicCourseId = crypto.randomUUID();
@@ -101,7 +105,7 @@ test("Batch A: Teaching Assistant RPCs enforce scoped role contracts", async () 
     const assistantFixture = await createLocalUser({
       role: "teaching_assistant",
       scopes: ["40000000-0000-0000-0000-000000000001"],
-      phone: "0901234567",
+      phone: fixturePhone(1),
     });
     const staffFixture = await createLocalUser({
       role: "staff",
@@ -126,7 +130,7 @@ test("Batch A: Teaching Assistant RPCs enforce scoped role contracts", async () 
         "40000000-0000-0000-0000-000000000001",
         "40000000-0000-0000-0000-000000000002",
       ],
-      phone: "0901234568",
+      phone: fixturePhone(2),
     });
     lecturerId = lecturerFixture.id;
     const admin = await signIn(adminFixture.email, adminFixture.password);
