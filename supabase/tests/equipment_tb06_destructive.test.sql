@@ -14,8 +14,8 @@ update public.profiles set phone = '0901234567' where id = '10000000-0000-0000-0
 update public.profiles set phone = '0907654321' where id = '10000000-0000-0000-0000-000000000002'::uuid or lower(email) in ('bao.nguyen@eiu.edu.vn');
 update public.profiles set phone = '0905555555' where lower(email) = 'staff@campus.local';
 
-insert into public.equipment_catalog (id, item_name, unit, is_active)
-values ('50000000-0000-0000-0000-000000000002'::uuid, 'Mô hình TB06', 'cái', true)
+insert into public.equipment_catalog (id, item_name, commercial_name, unit, is_active)
+values ('50000000-0000-0000-0000-000000000002'::uuid, 'Mô hình TB06', 'Mô hình TB06 fixture destructive', 'cái', true)
 on conflict (id) do nothing;
 
 -- Create schedule 1 & 2

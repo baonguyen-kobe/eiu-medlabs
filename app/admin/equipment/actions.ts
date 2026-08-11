@@ -2,6 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import {
+  findDuplicateCommercialName,
+  matchCatalogImportRows,
+  normalizedCommercialName,
+} from "@/lib/equipment-catalog-identity";
 import { createClient } from "@/lib/supabase/server";
 
 export type EquipmentCatalogInput = {
@@ -28,7 +33,7 @@ function cleanText(value: unknown) {
   return text || null;
 }
 
-function normalizeKey(value: unknown) {
+function normalizeHeaderKey(value: unknown) {
   return String(value ?? "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -37,10 +42,21 @@ function normalizeKey(value: unknown) {
     .replace(/[^a-z0-9]+/g, "");
 }
 
-function catalogFingerprint(item: EquipmentCatalogInput) {
-  return [item.item_name, item.commercial_name, item.model]
-    .map((value) => normalizeKey(value))
-    .join("|");
+const missingCommercialNameMessage = "Vui lòng nhập Tên thương mại.";
+const duplicateCommercialNameMessage =
+  "Tên thương mại đã tồn tại trong danh mục.";
+const duplicateImportCommercialNameMessage =
+  "File import có Tên thương mại bị trùng. Vui lòng kiểm tra lại file.";
+
+function catalogErrorMessage(error: unknown, fallback: string) {
+  return (
+    (typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "23505" &&
+      duplicateCommercialNameMessage) ||
+    fallback
+  );
 }
 
 async function requireCatalogManager() {
@@ -82,7 +98,7 @@ function parseCatalogRow(
   raw: Record<string, unknown>,
 ): EquipmentCatalogInput | null {
   const normalized = new Map(
-    Object.entries(raw).map(([key, value]) => [normalizeKey(key), value]),
+    Object.entries(raw).map(([key, value]) => [normalizeHeaderKey(key), value]),
   );
   const pick = (...keys: string[]) => {
     for (const key of keys) {
@@ -91,6 +107,7 @@ function parseCatalogRow(
     return null;
   };
   const itemName = pick("tenthietbivavattu", "tenthietbi", "itemname");
+  const commercialName = pick("tenthuongmai", "commercialname");
   const unit = pick("dvt", "donvitinh", "unit");
   if (
     !itemName &&
@@ -99,12 +116,14 @@ function parseCatalogRow(
   ) {
     return null;
   }
-  if (!itemName || !unit) {
-    throw new Error("Mỗi dòng phải có Tên thiết bị và vật tư cùng ĐVT.");
+  if (!itemName || !commercialName || !unit) {
+    throw new Error(
+      "Mỗi dòng phải có Tên thiết bị và vật tư, Tên thương mại cùng ĐVT.",
+    );
   }
   return {
     item_name: itemName,
-    commercial_name: pick("tenthuongmai", "commercialname"),
+    commercial_name: commercialName,
     item_type: pick("loai", "itemtype"),
     country_of_origin: pick("nuocsx", "nuocsanxuat", "countryoforigin"),
     manufacturer: pick("hang", "hangsanxuat", "manufacturer"),
@@ -116,15 +135,20 @@ function parseCatalogRow(
 export async function createEquipmentCatalogItem(formData: FormData) {
   const supabase = await requireCatalogManager();
   const itemName = cleanText(formData.get("item_name"));
+  const commercialName = cleanText(formData.get("commercial_name"));
   const unit = cleanText(formData.get("unit"));
-  if (!itemName || !unit) {
+  if (!itemName || !commercialName || !unit) {
     redirect(
-      "/admin/equipment?error=Vui+l%C3%B2ng+nh%E1%BA%ADp+t%C3%AAn+thi%E1%BA%BFt+b%E1%BB%8B+v%C3%A0+%C4%90VT",
+      `/admin/equipment?error=${encodeURIComponent(
+        !commercialName
+          ? missingCommercialNameMessage
+          : "Vui lòng nhập Tên thiết bị và vật tư cùng ĐVT.",
+      )}`,
     );
   }
   const { error } = await supabase.from("equipment_catalog").insert({
     item_name: itemName,
-    commercial_name: cleanText(formData.get("commercial_name")),
+    commercial_name: commercialName,
     item_type: cleanText(formData.get("item_type")),
     country_of_origin: cleanText(formData.get("country_of_origin")),
     manufacturer: cleanText(formData.get("manufacturer")),
@@ -135,7 +159,9 @@ export async function createEquipmentCatalogItem(formData: FormData) {
   redirect(
     `/admin/equipment?${
       error
-        ? "error=Kh%C3%B4ng+th%E1%BB%83+th%C3%AAm+thi%E1%BA%BFt+b%E1%BB%8B"
+        ? `error=${encodeURIComponent(
+            catalogErrorMessage(error, "Không thể thêm thiết bị."),
+          )}`
         : "notice=%C4%90%C3%A3+th%C3%AAm+thi%E1%BA%BFt+b%E1%BB%8B"
     }`,
   );
@@ -159,26 +185,61 @@ export async function updateEquipmentCatalogItems(
     unit: cleanText(row.unit),
   }));
   if (
-    rows.some((row) => !uuidPattern.test(row.id) || !row.item_name || !row.unit)
+    rows.some(
+      (row) =>
+        !uuidPattern.test(row.id) ||
+        !row.item_name ||
+        !row.commercial_name ||
+        !row.unit,
+    )
   ) {
     return {
       ok: false,
-      message: "Tên thiết bị, ĐVT hoặc mã dòng chỉnh sửa không hợp lệ.",
+      message:
+        "Tên thiết bị, Tên thương mại, ĐVT hoặc mã dòng chỉnh sửa không hợp lệ.",
     };
   }
   const ids = [...new Set(rows.map(({ id }) => id))];
   if (ids.length !== rows.length) {
     return { ok: false, message: "Danh sách chỉnh sửa bị trùng dòng." };
   }
+  if (findDuplicateCommercialName(rows)) {
+    return { ok: false, message: duplicateCommercialNameMessage };
+  }
   const { data: existing, error: existingError } = await supabase
     .from("equipment_catalog")
-    .select("id")
+    .select("id,commercial_name")
     .in("id", ids);
   if (existingError || existing?.length !== ids.length) {
     return {
       ok: false,
       message: "Có thiết bị không còn tồn tại trong danh mục.",
     };
+  }
+  let catalogRows: Awaited<ReturnType<typeof readAllCatalogRows>>;
+  try {
+    catalogRows = await readAllCatalogRows(supabase);
+  } catch {
+    return { ok: false, message: "Không thể kiểm tra danh mục thiết bị." };
+  }
+  const existingByCommercialName = new Map(
+    catalogRows.map((row) => [
+      normalizedCommercialName(row.commercial_name),
+      row.id,
+    ]),
+  );
+  if (
+    rows.some(
+      (row) =>
+        existingByCommercialName.has(
+          normalizedCommercialName(row.commercial_name),
+        ) &&
+        existingByCommercialName.get(
+          normalizedCommercialName(row.commercial_name),
+        ) !== row.id,
+    )
+  ) {
+    return { ok: false, message: duplicateCommercialNameMessage };
   }
   const { error } = await supabase
     .from("equipment_catalog")
@@ -188,7 +249,7 @@ export async function updateEquipmentCatalogItems(
       ok: false,
       message:
         error.code === "23505"
-          ? "Thông tin thiết bị bị trùng với một dòng khác."
+          ? duplicateCommercialNameMessage
           : "Không thể lưu chỉnh sửa danh mục.",
     };
   }
@@ -247,7 +308,7 @@ export async function deleteEquipmentCatalogItems(
 
 export async function importEquipmentCatalog(formData: FormData) {
   const supabase = await requireCatalogManager();
-  const mode = String(formData.get("mode") ?? "");
+  const requestedMode = String(formData.get("mode") ?? "");
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) {
     redirect("/admin/equipment?error=Vui+l%C3%B2ng+ch%E1%BB%8Dn+file+import");
@@ -257,11 +318,15 @@ export async function importEquipmentCatalog(formData: FormData) {
       "/admin/equipment?error=File+import+kh%C3%B4ng+%C4%91%C6%B0%E1%BB%A3c+v%C6%B0%E1%BB%A3t+qu%C3%A1+10+MB",
     );
   }
-  if (!/\.(csv|xlsx)$/i.test(file.name) || !["all", "new"].includes(mode)) {
+  if (
+    !/\.(csv|xlsx)$/i.test(file.name) ||
+    !["all", "new"].includes(requestedMode)
+  ) {
     redirect(
       "/admin/equipment?error=Ch%E1%BB%89+h%E1%BB%97+tr%E1%BB%A3+file+CSV+ho%E1%BA%B7c+XLSX",
     );
   }
+  const mode: "all" | "new" = requestedMode === "all" ? "all" : "new";
 
   try {
     const XLSX = await import("@e965/xlsx");
@@ -288,24 +353,16 @@ export async function importEquipmentCatalog(formData: FormData) {
       .filter((row): row is EquipmentCatalogInput => Boolean(row));
     if (!parsed.length) throw new Error("File không có dòng thiết bị hợp lệ.");
 
-    const deduplicated = new Map<string, EquipmentCatalogInput>();
-    for (const row of parsed) deduplicated.set(catalogFingerprint(row), row);
-    const existing = await readAllCatalogRows(supabase);
-    const existingByFingerprint = new Map(
-      existing.map((row) => [catalogFingerprint(row), row]),
-    );
-    const payload = [...deduplicated.entries()]
-      .filter(
-        ([fingerprint]) =>
-          mode === "all" || !existingByFingerprint.has(fingerprint),
-      )
-      .map(([fingerprint, row]) => {
-        const matched = existingByFingerprint.get(fingerprint);
-        return {
-          ...(matched ? { id: matched.id, is_active: matched.is_active } : {}),
-          ...row,
-        };
-      });
+    if (findDuplicateCommercialName(parsed)) {
+      throw new Error(duplicateImportCommercialNameMessage);
+    }
+    let existing: Awaited<ReturnType<typeof readAllCatalogRows>>;
+    try {
+      existing = await readAllCatalogRows(supabase);
+    } catch {
+      throw new Error("Không thể kiểm tra danh mục thiết bị.");
+    }
+    const payload = matchCatalogImportRows(parsed, existing, mode);
     if (!payload.length) {
       redirect(
         "/admin/equipment?notice=Kh%C3%B4ng+c%C3%B3+thi%E1%BA%BFt+b%E1%BB%8B+m%E1%BB%9Bi+%C4%91%E1%BB%83+import",
@@ -329,13 +386,19 @@ export async function importEquipmentCatalog(formData: FormData) {
       const { error } = await supabase
         .from("equipment_catalog")
         .upsert(rowsToUpdate, { onConflict: "id" });
-      if (error) throw error;
+      if (error) {
+        throw new Error(
+          catalogErrorMessage(error, "Không thể cập nhật danh mục."),
+        );
+      }
     }
     if (rowsToInsert.length) {
       const { error } = await supabase
         .from("equipment_catalog")
         .insert(rowsToInsert);
-      if (error) throw error;
+      if (error) {
+        throw new Error(catalogErrorMessage(error, "Không thể thêm thiết bị."));
+      }
     }
     revalidatePath("/admin/equipment");
     const label = mode === "all" ? "cập nhật/thêm" : "thêm mới";
