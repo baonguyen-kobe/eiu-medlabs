@@ -34,6 +34,8 @@ test("Batch A: Teaching Assistant RPCs enforce scoped role contracts", async () 
   assertLocalSupabaseTarget(localEnv.NEXT_PUBLIC_SUPABASE_URL);
   const service = client(localEnv.SUPABASE_SECRET_KEY);
   const suffix = crypto.randomUUID();
+  const outOfScopeTargetNote = `M2-01 out-of-scope target room ${suffix}`;
+  const invalidLecturerNote = `M2-01 invalid lecturer assignment ${suffix}`;
   const basicCourseId = crypto.randomUUID();
   const basicRoomId = crypto.randomUUID();
   const equipmentScheduleId = crypto.randomUUID();
@@ -241,6 +243,50 @@ test("Batch A: Teaching Assistant RPCs enforce scoped role contracts", async () 
       },
     );
     assert.equal(manualOutOfScope.error?.code, "42501");
+
+    const manualOutOfScopeTarget = await assistant.supabase.rpc(
+      "create_manual_class_schedule",
+      {
+        target_course_id: "10000000-0000-0000-0000-000000000001",
+        target_room_id: basicRoomId,
+        target_lecturer_id: lecturerId,
+        target_lecturer_2_id: null,
+        target_schedule_date: "2051-11-12",
+        target_start_time: "07:30",
+        target_end_time: "09:30",
+        target_note: outOfScopeTargetNote,
+        target_student_count: 20,
+      },
+    );
+    assert.equal(manualOutOfScopeTarget.error?.code, "42501");
+    const outOfScopeTargetSchedule = await service
+      .from("class_schedules")
+      .select("id")
+      .eq("note", outOfScopeTargetNote);
+    assert.ifError(outOfScopeTargetSchedule.error);
+    assert.equal(outOfScopeTargetSchedule.data.length, 0);
+
+    const manualInvalidLecturer = await assistant.supabase.rpc(
+      "create_manual_class_schedule",
+      {
+        target_course_id: "10000000-0000-0000-0000-000000000001",
+        target_room_id: "20000000-0000-0000-0000-000000000001",
+        target_lecturer_id: assistantFixture.id,
+        target_lecturer_2_id: null,
+        target_schedule_date: "2051-11-13",
+        target_start_time: "07:30",
+        target_end_time: "09:30",
+        target_note: invalidLecturerNote,
+        target_student_count: 20,
+      },
+    );
+    assert.equal(manualInvalidLecturer.error?.code, "42501");
+    const invalidLecturerSchedule = await service
+      .from("class_schedules")
+      .select("id")
+      .eq("note", invalidLecturerNote);
+    assert.ifError(invalidLecturerSchedule.error);
+    assert.equal(invalidLecturerSchedule.data.length, 0);
 
     assert.ifError(
       (

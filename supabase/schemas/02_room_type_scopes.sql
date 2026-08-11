@@ -1701,20 +1701,18 @@ begin
   from public.courses as courses
   where courses.id = target_course_id;
 
-  if not (
-    (select private.has_role('admin'))
-    or (select private.has_role('staff'))
-    or (select private.has_role('teaching_assistant'))
-    or (
-      (select private.has_role('lecturer'))
-      and actor_id in (target_lecturer_id, target_lecturer_2_id)
-    )
-  ) then
-    raise exception 'PERMISSION_DENIED' using errcode = '42501';
-  end if;
-
   if not (select private.has_room_type(room_type_val)) then
     raise exception 'ROOM_TYPE_SCOPE_REQUIRED' using errcode = '42501';
+  end if;
+
+  if not (select private.can_create_manual_schedule_for(
+    target_room_id,
+    array_remove(
+      array[target_lecturer_id, target_lecturer_2_id]::uuid[],
+      null
+    )
+  )) then
+    raise exception 'PERMISSION_DENIED' using errcode = '42501';
   end if;
 
   insert into public.class_schedules (
