@@ -1,6 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
+import {
+  assertLocalDestructiveTestTarget,
+  resolveEffectiveSupabaseTestConfig,
+} from "../helpers/local-test-safety.mjs";
 
 test("mã phiếu 12 số tải được và Admin thấy dòng bổ sung thiết bị", async ({
   page,
@@ -18,14 +22,19 @@ test("mã phiếu 12 số tải được và Admin thấy dòng bổ sung thiế
         return [key, value.join("=")];
       }),
   );
+  const supabaseConfig = resolveEffectiveSupabaseTestConfig(process.env, env);
+  assertLocalDestructiveTestTarget({
+    supabaseUrl: supabaseConfig.supabaseUrl,
+    playwrightBaseUrl: process.env.PLAYWRIGHT_BASE_URL,
+  });
   const databaseClient = createClient(
-    env.NEXT_PUBLIC_SUPABASE_URL,
-    env.SUPABASE_SECRET_KEY,
+    supabaseConfig.supabaseUrl,
+    supabaseConfig.secretKey,
     { auth: { persistSession: false, autoRefreshToken: false } },
   );
   const authClient = createClient(
-    env.NEXT_PUBLIC_SUPABASE_URL,
-    env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+    supabaseConfig.supabaseUrl,
+    supabaseConfig.publishableKey,
     { auth: { persistSession: false, autoRefreshToken: false } },
   );
   const { data: signedIn, error: signInError } =

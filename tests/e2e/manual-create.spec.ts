@@ -1,6 +1,12 @@
 import { readFile } from "node:fs/promises";
 import { expect, test, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
+import {
+  assertLocalDestructiveTestTarget,
+  assertLocalSupabaseTarget,
+} from "../helpers/local-test-safety.mjs";
+
+type LocalServiceConfig = { url: string; serviceKey: string };
 
 async function loginAsAdmin(page: Page) {
   await page.goto("/login");
@@ -10,7 +16,7 @@ async function loginAsAdmin(page: Page) {
   await expect(page).toHaveURL(/\/dashboard$/);
 }
 
-async function removeClassesForDate(date: string) {
+async function loadLocalServiceConfig(): Promise<LocalServiceConfig> {
   let url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   let serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   try {
@@ -36,6 +42,14 @@ async function removeClassesForDate(date: string) {
   serviceKey =
     serviceKey ||
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU";
+  return { url: url!, serviceKey: serviceKey! };
+}
+
+async function removeClassesForDate(
+  date: string,
+  { url, serviceKey }: LocalServiceConfig,
+) {
+  assertLocalSupabaseTarget(url);
   const client = createClient(url, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
@@ -73,16 +87,21 @@ async function createManualClass(
 }
 
 test("admin creates and removes a manual class schedule", async ({ page }) => {
+  const serviceConfig = await loadLocalServiceConfig();
+  assertLocalDestructiveTestTarget({
+    supabaseUrl: serviceConfig.url,
+    playwrightBaseUrl: process.env.PLAYWRIGHT_BASE_URL,
+  });
   await loginAsAdmin(page);
 
-  await removeClassesForDate("2035-12-15");
+  await removeClassesForDate("2035-12-15", serviceConfig);
   await createManualClass(page, "2035-12-15");
 
   await page.goto("/classes/open?period=day&date=2035-12-15");
   await expect(page.locator('tbody tr input[type="date"]').first()).toHaveValue(
     "2035-12-15",
   );
-  await removeClassesForDate("2035-12-15");
+  await removeClassesForDate("2035-12-15", serviceConfig);
 });
 
 test("manual form fields and section headings share the approved desktop layout", async ({
@@ -186,8 +205,13 @@ test("manual form fields and section headings share the approved desktop layout"
 test("calendar stacks classes in one session and opens every class directly", async ({
   page,
 }) => {
+  const serviceConfig = await loadLocalServiceConfig();
+  assertLocalDestructiveTestTarget({
+    supabaseUrl: serviceConfig.url,
+    playwrightBaseUrl: process.env.PLAYWRIGHT_BASE_URL,
+  });
   await loginAsAdmin(page);
-  await removeClassesForDate("2035-12-16");
+  await removeClassesForDate("2035-12-16", serviceConfig);
 
   try {
     await createManualClass(page, "2035-12-16", 1, 1);
@@ -208,6 +232,6 @@ test("calendar stacks classes in one session and opens every class directly", as
       await expect(detailDrawer).toHaveCount(0);
     }
   } finally {
-    await removeClassesForDate("2035-12-16");
+    await removeClassesForDate("2035-12-16", serviceConfig);
   }
 });
