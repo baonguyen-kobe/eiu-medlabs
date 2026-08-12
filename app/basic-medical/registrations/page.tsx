@@ -6,6 +6,7 @@ import type {
   BasicMedicalRegistrationListItem,
   BasicMedicalRoomInventoryItem,
 } from "@/lib/basic-medical-equipment";
+import { isBasicMedicalConfirmationEvidenceEnabled } from "@/lib/basic-medical-confirmation-evidence";
 import { normalizePage, paginationRange } from "@/lib/pagination";
 import { getViewer } from "@/lib/viewer";
 import {
@@ -106,10 +107,11 @@ export default async function BasicMedicalRegistrationsPage({
     ? await supabase
         .from("basic_medical_room_inventory")
         .select(
-          "id,room_id,catalog_item_id,total_quantity,good_quantity,damaged_quantity,is_active,last_damage_reported_at,room:rooms(id,room_code,building_code,room_name),catalog:basic_medical_equipment_catalog(id,item_name,commercial_name,item_type,country_of_origin,manufacturer,model,unit,is_active),last_damage_reporter:profiles!basic_medical_room_inventory_last_damage_reporter_id_fkey(full_name)",
+          "id,room_id,catalog_item_id,total_quantity,good_quantity,damaged_quantity,is_active,last_damage_reported_at,room:rooms(id,room_code,building_code,room_name),catalog:basic_medical_equipment_catalog!inner(id,item_name,commercial_name,item_type,country_of_origin,manufacturer,model,unit,is_active),last_damage_reporter:profiles!basic_medical_room_inventory_last_damage_reporter_id_fkey(full_name)",
         )
         .in("room_id", roomIds)
         .eq("is_active", true)
+        .eq("catalog.is_active", true)
         .order("created_at")
     : { data: [], error: null };
 
@@ -194,6 +196,7 @@ export default async function BasicMedicalRegistrationsPage({
         }
         viewerId={userId}
         canDelete={canDelete}
+        evidenceEnabled={isBasicMedicalConfirmationEvidenceEnabled()}
       />
       <PaginationLinks
         currentPage={currentPage}

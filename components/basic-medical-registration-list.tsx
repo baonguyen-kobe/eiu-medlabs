@@ -9,6 +9,7 @@ import {
   useTransition,
 } from "react";
 import { createPortal } from "react-dom";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   confirmBasicMedicalSession,
@@ -149,6 +150,13 @@ function BasicMedicalConfirmationModal({
         checks: inventories.map((inventory) => ({
           inventoryId: inventory.id,
           newlyDamagedQuantity: damageByInventory[inventory.id] ?? 0,
+          expectedCatalogItemId: inventory.catalog_item_id,
+          expectedTotalQuantity: inventory.total_quantity,
+          expectedGoodQuantity: inventory.good_quantity,
+          expectedDamagedQuantity: inventory.damaged_quantity,
+          expectedItemName: inventory.catalog?.item_name ?? "",
+          expectedCommercialName: inventory.catalog?.commercial_name ?? null,
+          expectedUnit: inventory.catalog?.unit ?? "",
         })),
       });
       if (!result.ok || !result.confirmationId || !result.signedAt) {
@@ -418,11 +426,13 @@ function BasicMedicalConfirmationModal({
 function SessionStatus({
   session,
   confirmation,
+  evidenceEnabled,
   viewerId,
   onOpen,
 }: {
   session: BasicMedicalRegistrationSessionItem;
   confirmation?: { id: string; signed_at: string };
+  evidenceEnabled: boolean;
   viewerId: string;
   onOpen: () => void;
 }) {
@@ -434,6 +444,14 @@ function SessionStatus({
         <small>
           {dateTimeFormatter.format(new Date(confirmation.signed_at))}
         </small>
+        {evidenceEnabled ? (
+          <Link
+            className="button button-secondary basic-medical-confirm-button"
+            href={`/basic-medical/registrations/confirmations/${confirmation.id}`}
+          >
+            Xem bằng chứng
+          </Link>
+        ) : null}
       </div>
     );
   }
@@ -467,11 +485,13 @@ export function BasicMedicalRegistrationList({
   inventories,
   viewerId,
   canDelete,
+  evidenceEnabled,
 }: {
   registrations: BasicMedicalRegistrationListItem[];
   inventories: BasicMedicalRoomInventoryItem[];
   viewerId: string;
   canDelete: boolean;
+  evidenceEnabled: boolean;
 }) {
   const router = useRouter();
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
@@ -704,6 +724,7 @@ export function BasicMedicalRegistrationList({
                                         <SessionStatus
                                           session={session}
                                           confirmation={confirmation}
+                                          evidenceEnabled={evidenceEnabled}
                                           viewerId={viewerId}
                                           onOpen={() =>
                                             setActive({ registration, session })

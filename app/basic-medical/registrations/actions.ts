@@ -79,7 +79,17 @@ export async function confirmBasicMedicalSession({
 }: {
   sessionId: string;
   signatureData: string;
-  checks: Array<{ inventoryId: string; newlyDamagedQuantity: number }>;
+  checks: Array<{
+    inventoryId: string;
+    newlyDamagedQuantity: number;
+    expectedCatalogItemId: string;
+    expectedTotalQuantity: number;
+    expectedGoodQuantity: number;
+    expectedDamagedQuantity: number;
+    expectedItemName: string;
+    expectedCommercialName: string | null;
+    expectedUnit: string;
+  }>;
 }): Promise<ConfirmBasicMedicalSessionResult> {
   if (!/^[0-9a-f-]{36}$/i.test(sessionId)) {
     return { ok: false, message: "Buổi học không hợp lệ." };
@@ -93,10 +103,36 @@ export async function confirmBasicMedicalSession({
   }
   if (
     checks.some(
-      ({ inventoryId, newlyDamagedQuantity }) =>
+      ({
+        inventoryId,
+        newlyDamagedQuantity,
+        expectedCatalogItemId,
+        expectedTotalQuantity,
+        expectedGoodQuantity,
+        expectedDamagedQuantity,
+        expectedItemName,
+        expectedCommercialName,
+        expectedUnit,
+      }) =>
         !/^[0-9a-f-]{36}$/i.test(inventoryId) ||
+        !/^[0-9a-f-]{36}$/i.test(expectedCatalogItemId) ||
         !Number.isInteger(newlyDamagedQuantity) ||
-        newlyDamagedQuantity < 0,
+        newlyDamagedQuantity < 0 ||
+        newlyDamagedQuantity > 2_147_483_647 ||
+        !Number.isInteger(expectedTotalQuantity) ||
+        !Number.isInteger(expectedGoodQuantity) ||
+        !Number.isInteger(expectedDamagedQuantity) ||
+        expectedTotalQuantity < 0 ||
+        expectedTotalQuantity > 2_147_483_647 ||
+        expectedGoodQuantity < 0 ||
+        expectedGoodQuantity > 2_147_483_647 ||
+        expectedDamagedQuantity < 0 ||
+        expectedDamagedQuantity > 2_147_483_647 ||
+        newlyDamagedQuantity > expectedGoodQuantity ||
+        !expectedItemName ||
+        (expectedCommercialName !== null &&
+          typeof expectedCommercialName !== "string") ||
+        !expectedUnit,
     )
   ) {
     return { ok: false, message: "Tình trạng thiết bị không hợp lệ." };
@@ -106,9 +142,16 @@ export async function confirmBasicMedicalSession({
   const { data, error } = await supabase.rpc("confirm_basic_medical_session", {
     target_session_id: sessionId,
     target_signature_data: signatureData,
-    target_checks: checks.map(({ inventoryId, newlyDamagedQuantity }) => ({
-      inventory_id: inventoryId,
-      newly_damaged_quantity: newlyDamagedQuantity,
+    target_checks: checks.map((check) => ({
+      inventory_id: check.inventoryId,
+      newly_damaged_quantity: check.newlyDamagedQuantity,
+      expected_catalog_item_id: check.expectedCatalogItemId,
+      expected_total_quantity: check.expectedTotalQuantity,
+      expected_good_quantity: check.expectedGoodQuantity,
+      expected_damaged_quantity: check.expectedDamagedQuantity,
+      expected_item_name: check.expectedItemName,
+      expected_commercial_name: check.expectedCommercialName,
+      expected_unit: check.expectedUnit,
     })),
   });
   if (error) return { ok: false, message: error.message };

@@ -37,6 +37,37 @@ export type BasicMedicalSessionConfirmation = {
   signer: { full_name: string } | null;
 };
 
+export type BasicMedicalConfirmationEquipmentEvidence = {
+  inventory_id: string;
+  item_name_snapshot: string;
+  commercial_name_snapshot: string | null;
+  unit_snapshot: string;
+  total_before: number;
+  good_before: number;
+  damaged_before: number;
+  newly_damaged_quantity: number;
+  total_after: number;
+  good_after: number;
+  damaged_after: number;
+};
+
+export type BasicMedicalConfirmationEvidence = {
+  confirmation_id: string;
+  registration_id_snapshot: string;
+  class_schedule_id_snapshot: string;
+  signer_id: string;
+  signature_data: string;
+  schedule_date_snapshot: string;
+  start_time_snapshot: string;
+  end_time_snapshot: string;
+  room_id_snapshot: string;
+  teaching_lecturer_id_snapshot: string;
+  signed_at: string;
+  invalidated_at: string | null;
+  invalidated_reason: string | null;
+  equipment_checks: BasicMedicalConfirmationEquipmentEvidence[];
+};
+
 export type BasicMedicalRegistrationSessionItem = {
   id: string;
   session_number: number;
