@@ -7,7 +7,11 @@ const readinessOptions = {
   timeout: 15_000,
 };
 
-export async function clickUntilState(trigger: Locator, ready: ReadyAssertion) {
+export async function clickUntilState(
+  trigger: Locator,
+  ready: ReadyAssertion,
+  prepare?: ReadyAssertion,
+) {
   await expect(async () => {
     try {
       await ready();
@@ -16,6 +20,7 @@ export async function clickUntilState(trigger: Locator, ready: ReadyAssertion) {
       // The server-rendered control can be visible before React owns the event.
     }
 
+    await prepare?.();
     await trigger.click();
     await ready();
   }).toPass(readinessOptions);
