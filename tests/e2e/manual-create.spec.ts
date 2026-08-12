@@ -5,6 +5,7 @@ import {
   assertLocalDestructiveTestTarget,
   assertLocalSupabaseTarget,
 } from "../helpers/local-test-safety.mjs";
+import { clickUntilState, openCombobox } from "./helpers/interaction-readiness";
 
 type LocalServiceConfig = { url: string; serviceKey: string };
 
@@ -70,7 +71,7 @@ async function createManualClass(
   const courseCombobox = page.getByRole("combobox", {
     name: "Tìm và chọn môn học",
   });
-  await courseCombobox.click();
+  await openCombobox(courseCombobox);
   await page
     .getByRole("listbox")
     .getByRole("option")
@@ -223,9 +224,10 @@ test("calendar stacks classes in one session and opens every class directly", as
     await expect(classCards).toHaveCount(3);
 
     for (let index = 0; index < 3; index += 1) {
-      await classCards.nth(index).click();
       const detailDrawer = page.getByLabel("Chi tiết lịch");
-      await expect(detailDrawer).toBeVisible();
+      await clickUntilState(classCards.nth(index), () =>
+        expect(detailDrawer).toBeVisible({ timeout: 1_000 }),
+      );
       await detailDrawer
         .getByRole("button", { name: "Đóng", exact: true })
         .click();

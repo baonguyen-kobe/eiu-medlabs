@@ -1,6 +1,7 @@
 import nextEnv from "@next/env";
 import { expect, test, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
+import { clickUntilState } from "./helpers/interaction-readiness";
 
 nextEnv.loadEnvConfig(process.cwd());
 
@@ -47,7 +48,7 @@ async function deletePersonnel(email: string) {
 test("personnel drawer saves role, import capability and lock atomically", async ({
   page,
 }) => {
-  const email = `personnel-e2e-${Date.now()}@campus.local`;
+  const email = `personnel-e2e-${crypto.randomUUID()}@campus.local`;
   await loginAsAdmin(page);
   try {
     await page.goto("/admin/personnel");
@@ -68,9 +69,10 @@ test("personnel drawer saves role, import capability and lock atomically", async
       .filter({ hasText: email });
     await expect(row).toContainText("Trợ giảng");
     await expect(row).toContainText("Nhập lịch");
-    await row.getByRole("button", { name: "Sửa" }).click();
-
     const drawer = page.getByRole("dialog", { name: "Chỉnh sửa nhân sự" });
+    await clickUntilState(row.getByRole("button", { name: "Sửa" }), () =>
+      expect(drawer).toBeVisible({ timeout: 1_000 }),
+    );
     await drawer.getByLabel("Cho phép nhập lịch").uncheck();
     await drawer.getByLabel("Đang hoạt động").uncheck();
     page.once("dialog", (dialog) => dialog.accept());

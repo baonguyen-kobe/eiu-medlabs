@@ -22,7 +22,7 @@ export type EquipmentLateApprovalStatus =
 export const equipmentRequestSelect =
   "id,registrant_id,responsible_lecturer_id,status,semester,phone_snapshot,email_snapshot,receive_at,return_at,note,handover_file_url,created_at,updated_at,late_approval_status,late_registration_reason,late_requested_at,late_reviewed_at,late_review_note,handover_staff_confirmed_at,handover_recipient_signed_at,handover_effective_at,return_staff_confirmed_at,return_recipient_signed_at,return_effective_at,profiles!equipment_requests_registrant_id_fkey(full_name),responsible:profiles!equipment_requests_responsible_lecturer_id_fkey(full_name,email),class_schedules(id,schedule_date,start_time,end_time,course_code_snapshot,course_name_snapshot,student_count,rooms(room_code,building_code,room_name)),equipment_request_items(id,quantity,skill_name,note,equipment_catalog(id,item_name,commercial_name,item_type,country_of_origin,manufacturer,model,unit))";
 
-export const equipmentHandoverSelect = `${equipmentRequestSelect},handover_recipient_signature,return_recipient_signature,handover_staff:profiles!equipment_requests_handover_staff_confirmed_by_fkey(full_name),return_staff:profiles!equipment_requests_return_staff_confirmed_by_fkey(full_name)`;
+export const equipmentHandoverSelect = `${equipmentRequestSelect},handover_recipient_signature:handover_signature_path,return_recipient_signature:return_signature_path,handover_staff:profiles!equipment_requests_handover_staff_confirmed_by_fkey(full_name),return_staff:profiles!equipment_requests_return_staff_confirmed_by_fkey(full_name)`;
 
 export type EquipmentConfirmationState = {
   status: EquipmentRequestStatus;
@@ -108,6 +108,26 @@ export type EquipmentCatalogListItem = {
   model: string | null;
   unit: string;
 };
+
+const equipmentRequestItemManagerRoles = new Set(["admin", "staff"]);
+const equipmentRequestItemEditableStatuses = new Set<EquipmentRequestStatus>([
+  "new",
+  "preparing",
+]);
+
+export function canManageEquipmentRequestItems(roles: readonly string[]) {
+  return roles.some((role) => equipmentRequestItemManagerRoles.has(role));
+}
+
+export function canAddEquipmentRequestItems(
+  roles: readonly string[],
+  status: EquipmentRequestStatus,
+) {
+  return (
+    canManageEquipmentRequestItems(roles) &&
+    equipmentRequestItemEditableStatuses.has(status)
+  );
+}
 
 export function equipmentStatusMeta(status: EquipmentRequestStatus) {
   return (

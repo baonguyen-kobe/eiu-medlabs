@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { clickUntilState } from "./helpers/interaction-readiness";
 
 const mobileViewport = { width: 390, height: 844 };
 
@@ -40,9 +41,10 @@ test("mobile workspace uses a drawer and keeps dashboard content inside the view
     );
   expect(kpiColumns).toBe(2);
 
-  await menuButton.click();
   const drawer = page.getByRole("dialog", { name: "Menu chính" });
-  await expect(drawer).toBeVisible();
+  await clickUntilState(menuButton, () =>
+    expect(drawer).toBeVisible({ timeout: 1_000 }),
+  );
   await expect(menuButton).toHaveAttribute("aria-expanded", "true");
   const drawerSize = await drawer.evaluate((element) => {
     const rect = element.getBoundingClientRect();
@@ -79,9 +81,11 @@ test("mobile calendars scroll inside their card and dialogs remain usable", asyn
     "sticky",
   );
 
-  await page.locator(".slot-event-class").first().click();
+  const event = page.locator(".slot-event-class").first();
   const detail = page.getByRole("dialog", { name: "Chi tiết lịch" });
-  await expect(detail).toBeVisible();
+  await clickUntilState(event, () =>
+    expect(detail).toBeVisible({ timeout: 1_000 }),
+  );
   const detailSize = await detail.evaluate((element) => {
     const rect = element.getBoundingClientRect();
     return { height: rect.height, width: rect.width };
@@ -103,10 +107,10 @@ test("mobile calendars scroll inside their card and dialogs remain usable", asyn
   const emptyShift = page.locator(".empty-shift-action").first();
   await expect(emptyShift).toBeVisible();
   await expect(emptyShift).toHaveCSS("opacity", "1");
-  await emptyShift.click();
-  await expect(
-    page.getByRole("dialog", { name: "Tạo lịch trực" }),
-  ).toBeVisible();
+  const shiftDialog = page.getByRole("dialog", { name: "Tạo lịch trực" });
+  await clickUntilState(emptyShift, () =>
+    expect(shiftDialog).toBeVisible({ timeout: 1_000 }),
+  );
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "Tạo lịch trực" })).toHaveCount(
     0,
@@ -175,8 +179,11 @@ test("iPad portrait uses the drawer and a two-column information layout", async 
     );
   expect(kpiColumns).toBe(2);
 
-  await page.locator(".menu-button").click();
-  await expect(page.locator(".workspace-sidebar.sidebar-open")).toBeVisible();
+  const menuButton = page.locator(".menu-button");
+  const openSidebar = page.locator(".workspace-sidebar.sidebar-open");
+  await clickUntilState(menuButton, () =>
+    expect(openSidebar).toBeVisible({ timeout: 1_000 }),
+  );
   await page.keyboard.press("Escape");
   await expect(page.locator(".workspace-sidebar")).not.toHaveClass(
     /sidebar-open/,

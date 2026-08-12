@@ -10,6 +10,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   confirmBasicMedicalSession,
   cancelBasicMedicalRegistration,
@@ -19,6 +20,8 @@ import { Trash2 } from "@/components/icons";
 import { formatBasicMedicalRegistrationCode } from "@/lib/basic-medical-registration-code";
 import {
   activeSessionConfirmation,
+  createBasicMedicalConfirmationTimerLifecycle,
+  isBasicMedicalConfirmationTooEarly,
   type BasicMedicalRegistrationListItem,
   type BasicMedicalRegistrationSessionItem,
   type BasicMedicalRoomInventoryItem,
@@ -149,6 +152,13 @@ function BasicMedicalConfirmationModal({
         checks: inventories.map((inventory) => ({
           inventoryId: inventory.id,
           newlyDamagedQuantity: damageByInventory[inventory.id] ?? 0,
+          expectedCatalogItemId: inventory.catalog_item_id,
+          expectedTotalQuantity: inventory.total_quantity,
+          expectedGoodQuantity: inventory.good_quantity,
+          expectedDamagedQuantity: inventory.damaged_quantity,
+          expectedItemName: inventory.catalog?.item_name ?? "",
+          expectedCommercialName: inventory.catalog?.commercial_name ?? null,
+          expectedUnit: inventory.catalog?.unit ?? "",
         })),
       });
       if (!result.ok || !result.confirmationId || !result.signedAt) {
@@ -418,15 +428,18 @@ function BasicMedicalConfirmationModal({
 function SessionStatus({
   session,
   confirmation,
+  historicalConfirmations,
   viewerId,
+  now,
   onOpen,
 }: {
   session: BasicMedicalRegistrationSessionItem;
   confirmation?: { id: string; signed_at: string };
+  historicalConfirmations: BasicMedicalRegistrationSessionItem["confirmations"];
   viewerId: string;
+  now: number;
   onOpen: () => void;
 }) {
-  const [renderedAt] = useState(() => Date.now());
   if (confirmation) {
     return (
       <div className="basic-medical-session-status">
@@ -434,12 +447,62 @@ function SessionStatus({
         <small>
           {dateTimeFormatter.format(new Date(confirmation.signed_at))}
         </small>
+        <Link
+          className="button button-secondary basic-medical-confirm-button"
+          href={`/basic-medical/registrations/confirmations/${confirmation.id}`}
+        >
+          Xem bằng chứng
+        </Link>
+        {historicalConfirmations
+          .filter(
+            (historical) =>
+              historical.invalidated_at !== null &&
+              historical.id !== confirmation.id,
+          )
+          .map((historical) => (
+            <Link
+              key={historical.id}
+              className="button button-secondary basic-medical-confirm-button"
+              href={`/basic-medical/registrations/confirmations/${historical.id}`}
+            >
+              Bằng chứng đã vô hiệu
+            </Link>
+          ))}
       </div>
+    );
+  }
+  const invalidatedConfirmations = historicalConfirmations.filter(
+    (historical) => historical.invalidated_at !== null,
+  );
+  if (invalidatedConfirmations.length) {
+    return (
+      <div className="basic-medical-session-status">
+        <span className="request-status request-status-gray">
+          Xác nhận đã vô hiệu
+        </span>
+        {invalidatedConfirmations.map((historical) => (
+          <Link
+            key={historical.id}
+            className="button button-secondary basic-medical-confirm-button"
+            href={`/basic-medical/registrations/confirmations/${historical.id}`}
+          >
+            Xem bằng chứng
+          </Link>
+        ))}
+      </div>
+    );
+  }
+  if (session.class_schedules?.schedule_status === "cancelled") {
+    return (
+      <span className="request-status request-status-gray">ÄÃ£ há»§y</span>
     );
   }
   const isTeachingLecturer = session.teaching_lecturer_id === viewerId;
   const earliest = earliestConfirmationDate(session);
-  const tooEarly = earliest ? renderedAt < earliest.getTime() : true;
+  const tooEarly = isBasicMedicalConfirmationTooEarly(
+    earliest?.getTime() ?? null,
+    now,
+  );
   if (!isTeachingLecturer) {
     return (
       <span className="request-status request-status-red">Chưa xác nhận</span>
@@ -475,6 +538,7 @@ export function BasicMedicalRegistrationList({
 }) {
   const router = useRouter();
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const [confirmationNow, setConfirmationNow] = useState(() => Date.now());
   const [confirmationBySession, setConfirmationBySession] = useState(() => {
     const entries = registrations.flatMap((registration) =>
       registration.basic_medical_registration_sessions.flatMap((session) => {
@@ -498,6 +562,35 @@ export function BasicMedicalRegistrationList({
     }
     return map;
   }, [inventories]);
+
+  useEffect(() => {
+    const nextEligibilityAt = registrations
+      .flatMap(
+        (registration) => registration.basic_medical_registration_sessions,
+      )
+      .filter(
+        (session) => session.class_schedules?.schedule_status !== "cancelled",
+      )
+      .map((session) => earliestConfirmationDate(session)?.getTime() ?? null)
+      .filter(
+        (value): value is number => value !== null && value > confirmationNow,
+      )
+      .reduce<number | null>(
+        (earliest, value) =>
+          earliest === null || value < earliest ? value : earliest,
+        null,
+      );
+    const timerLifecycle = createBasicMedicalConfirmationTimerLifecycle({
+      setTimer: window.setTimeout,
+      clearTimer: window.clearTimeout,
+      onWake: () => setConfirmationNow(Date.now()),
+    });
+    timerLifecycle.update({
+      eligibilityAt: nextEligibilityAt,
+      now: Date.now(),
+    });
+    return timerLifecycle.dispose;
+  }, [confirmationNow, registrations]);
 
   return (
     <>
@@ -704,7 +797,11 @@ export function BasicMedicalRegistrationList({
                                         <SessionStatus
                                           session={session}
                                           confirmation={confirmation}
+                                          historicalConfirmations={
+                                            session.confirmations
+                                          }
                                           viewerId={viewerId}
+                                          now={confirmationNow}
                                           onOpen={() =>
                                             setActive({ registration, session })
                                           }
@@ -745,6 +842,7 @@ export function BasicMedicalRegistrationList({
                 ...confirmation,
                 signer_id: viewerId,
                 invalidated_at: null,
+                invalidated_reason: null,
                 signer: null,
               }),
             );

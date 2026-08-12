@@ -4,12 +4,15 @@ Tài liệu này giúp reviewer hiểu nhanh hệ thống mà không cần lịc
 
 ## 1. Mục tiêu
 
-MedLabs Calendar là web app nội bộ quản lý hai quy trình độc lập:
+MedLabs Calendar là web app nội bộ quản lý bốn nhóm quy trình:
 
 1. Lịch học và giảng viên tự nhận lớp.
 2. Lịch trực kho và staff tự đăng ký ca của chính mình.
+3. Phiếu mượn thiết bị, bàn giao và hoàn trả.
+4. Đăng ký phòng Basic Medical, phân bổ/kiểm tra thiết bị và bằng chứng xác nhận.
 
-Hai loại lịch được xem chung theo ngày nhưng không có quan hệ bắt buộc.
+Lịch học và lịch trực được xem chung theo ngày nhưng không có
+quan hệ bắt buộc. Các luồng thiết bị có authorization và history riêng.
 
 ## 2. Stack
 
@@ -17,22 +20,24 @@ Hai loại lịch được xem chung theo ngày nhưng không có quan hệ bắ
 - Supabase Auth, PostgreSQL, RLS và RPC.
 - PostgreSQL exclusion constraint chống trùng/race condition.
 - CSV/XLSX import bằng `papaparse` và `@e965/xlsx`.
-- Font toàn hệ thống: Be Vietnam Pro qua `next/font/google`.
+- Font toàn hệ thống: Be Vietnam Pro qua `@fontsource/be-vietnam-pro`.
 - Chạy local bằng Docker Desktop và Supabase CLI.
 
 ## 3. Vai trò
 
 Một tài khoản có thể có nhiều vai trò.
 
-| Vai trò    | Quyền chính                                                |
-| ---------- | ---------------------------------------------------------- |
-| `admin`    | Quản trị danh mục, nhân sự, lịch, vai trò, import và audit |
-| `lecturer` | Xem lịch published, nhận/rút lớp của mình                  |
-| `staff`    | Xem lịch, tạo/import draft, tự đăng ký/hủy ca              |
-| `importer` | “Người tạo phiếu”; tạo thủ công/import draft               |
+| Vai trò              | Quyền chính                                                        |
+| -------------------- | ------------------------------------------------------------------ |
+| `admin`              | Quản trị danh mục, nhân sự, lịch, vai trò, import và audit         |
+| `staff`              | Thao tác theo room-type scope, tạo phiếu và tự đăng ký/hủy ca      |
+| `teaching_assistant` | Tạo phiếu/làm việc trong room-type scope được gán                  |
+| `lecturer`           | Xem lịch, nhận/rút lớp và dùng các luồng được cấp scope/capability |
+| `viewer`             | Quyền xem theo scope, không có quyền mutation mặc định             |
 
-Admin và staff mặc định có quyền tạo phiếu. Lecturer chỉ có quyền này khi đồng
-thời mang role `importer`.
+Import là capability `profiles.can_import_schedules`, không phải primary role trong
+runtime UI. Quyền Basic Medical còn phụ thuộc cờ truy cập, room-type scope và
+authority context phía server.
 
 ## 4. Luồng quan trọng cần review
 
@@ -51,8 +56,8 @@ thời mang role `importer`.
 
 ### Tạo lịch thủ công
 
-- Admin/staff/importer có quyền truy cập.
-- Lịch mới luôn là draft.
+- Admin/staff/teaching assistant/lecturer truy cập theo room-type scope; lecturer-only chỉ tạo phiếu gắn với chính mình.
+- Lịch hợp lệ được tạo/import ở trạng thái `published`; enum `draft` được giữ cho tương thích schema.
 - `class_code` được giữ nullable trong schema để tương thích nhưng Version 1
   luôn ghi `null` và không hiển thị.
 
@@ -84,10 +89,11 @@ trạng thái tài khoản. Chỉ admin được đọc `audit_logs`.
 
 ## 5. Database và bảo mật
 
-Nguồn schema:
+Nguồn database:
 
-- `supabase/schemas/01_app.sql`
-- `supabase/migrations/20260731054717_initial_schema.sql`
+- Declarative schema: tất cả `supabase/schemas/*.sql`, nạp theo `supabase/config.toml`.
+- Lịch sử versioned: toàn bộ `supabase/migrations/*.sql`.
+- pgTAP: `supabase/tests/*.sql`; Node contracts: `tests/*.test.mjs`.
 
 Điểm review quan trọng:
 
@@ -96,7 +102,12 @@ Nguồn schema:
 - Quyền execute/grant không mở rộng quá mức.
 - Exclusion constraint dùng khoảng `[)` để hai lịch tiếp giáp không bị coi là
   chồng lấn.
-- Staff/importer không thể publish hoặc sửa dữ liệu của người khác.
+- Giá trị enum `importer` chỉ còn để tương thích dữ liệu cũ; quyền import runtime phải
+  dựa trên `profiles.can_import_schedules`, vai trò được hỗ trợ và room-type scope.
+- RPC import tạo lịch ở trạng thái `published`. Người dùng có capability import chỉ
+  được ghi/finalize batch `importing` do chính mình tạo; RLS đọc batch vẫn cho phép
+  admin và staff có room-type scope tương ứng xem batch theo
+  `import_batches_scoped_select`.
 - Không có service-role key trong frontend.
 
 ## 6. Routes chính
@@ -111,15 +122,19 @@ Nguồn schema:
 - `/admin/personnel`
 - `/admin/shift-templates`
 - `/admin/audit`
+- `/equipment/register`, `/equipment/mine`, `/equipment/requests`
+- `/basic-medical/new`, `/basic-medical/registrations`, `/basic-medical/equipment`
 
 ## 7. Tài khoản local
 
-| Email                    | Password            | Vai trò                          |
-| ------------------------ | ------------------- | -------------------------------- |
-| `admin@campus.local`     | `LocalAdmin123!`    | admin, staff, lecturer, importer |
-| `giangvien@campus.local` | `LocalLecturer123!` | lecturer                         |
-| `staff@campus.local`     | `LocalStaff123!`    | staff                            |
-| `importer@campus.local`  | `LocalImporter123!` | lecturer, importer               |
+| Email                          | Password                   | Vai trò/capability                        |
+| ------------------------------ | -------------------------- | ----------------------------------------- |
+| `admin@campus.local`           | `LocalAdmin123!`           | admin, staff, lecturer, import capability |
+| `giangvien@campus.local`       | `LocalLecturer123!`        | lecturer                                  |
+| `staff@campus.local`           | `LocalStaff123!`           | staff                                     |
+| `importer@campus.local`        | `LocalImporter123!`        | lecturer, import capability               |
+| `trogiang@campus.local`        | `LocalAssistant123!`       | teaching_assistant                        |
+| `trogiang.import@campus.local` | `LocalAssistantImport123!` | teaching_assistant, import capability     |
 
 Chỉ dùng trong local development.
 
@@ -143,6 +158,8 @@ Supabase Studio: `http://127.0.0.1:54323`
 npm.cmd run lint
 npm.cmd run typecheck
 npm.cmd test
+npm.cmd run test:db
+npm.cmd run test:e2e:critical
 npm.cmd run build
 npm.cmd audit --omit=dev
 ```
@@ -150,10 +167,12 @@ npm.cmd audit --omit=dev
 Test tích hợp hiện kiểm tra:
 
 - Chỉ một giảng viên thắng khi nhận lớp đồng thời.
-- Importer chỉ tạo draft của chính mình.
+- RPC import tạo lịch `published`; người dùng import không phải admin chỉ ghi vào
+  batch `importing` do chính mình tạo và phải có capability/scope phù hợp.
 - Staff không thể đăng ký ca chồng lấn.
 - Audit được ghi.
-- Import batch của importer không lộ cho staff khác.
+- RLS cho phép admin và staff có room-type scope tương ứng đọc import batch; quyền
+  ghi qua RPC vẫn bị giới hạn vào batch đang `importing` của chính người gọi.
 
 ## 10. Phạm vi review đề xuất
 

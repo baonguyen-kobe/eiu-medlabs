@@ -1,6 +1,9 @@
 import { EquipmentRequestList } from "@/components/equipment-request-list";
 import { WorkspaceShell } from "@/components/workspace-shell";
-import { equipmentRequestSelect } from "@/lib/equipment-requests";
+import {
+  canManageEquipmentRequestItems,
+  equipmentRequestSelect,
+} from "@/lib/equipment-requests";
 import { isEquipmentRequestId } from "@/lib/equipment-calendar-request";
 import { getViewer } from "@/lib/viewer";
 import { redirect } from "next/navigation";
@@ -29,14 +32,24 @@ export default async function MyEquipmentRequestsPage({
   if (!canUseSkillsWorkspace(roles, roomTypeCodes)) {
     redirect(defaultWorkspacePath(roles, roomTypeCodes));
   }
+  const canAddItems = canManageEquipmentRequestItems(roles);
 
-  const [query, { data }] = await Promise.all([
+  const [query, { data }, { data: catalog }] = await Promise.all([
     searchParams,
     supabase
       .from("equipment_requests")
       .select(equipmentRequestSelect)
       .or(`registrant_id.eq.${userId},responsible_lecturer_id.eq.${userId}`)
       .order("created_at", { ascending: false }),
+    canAddItems
+      ? supabase
+          .from("equipment_catalog")
+          .select(
+            "id,item_name,commercial_name,item_type,country_of_origin,manufacturer,model,unit",
+          )
+          .eq("is_active", true)
+          .order("item_name")
+      : Promise.resolve({ data: [] }),
   ]);
 
   return (
@@ -56,6 +69,8 @@ export default async function MyEquipmentRequestsPage({
         canManageStatus={roles.some((role) =>
           ["admin", "staff"].includes(role),
         )}
+        canAddItems={canAddItems}
+        catalog={catalog ?? []}
         viewerId={userId}
         viewerEmail={email}
         viewerRoles={roles}

@@ -22,6 +22,7 @@ import { PaginationControls } from "@/components/pagination-controls";
 import { SearchableCombobox } from "@/components/searchable-combobox";
 import { formatEquipmentRequestCode } from "@/lib/equipment-request-code";
 import {
+  canAddEquipmentRequestItems,
   equipmentRequestStatuses,
   equipmentStatusMeta,
   type EquipmentCatalogListItem,
@@ -1532,7 +1533,8 @@ export function EquipmentRequestList({
           catalog={catalog}
           canAddItems={
             canAddItems &&
-            ["new", "preparing"].includes(
+            canAddEquipmentRequestItems(
+              viewerRoles,
               getWarehouseStatus(
                 currentStatuses[modalRequest.id] ?? modalRequest.status,
                 confirmationStates[modalRequest.id],

@@ -10,6 +10,75 @@ export type BasicMedicalEquipmentCatalogItem = {
   is_active: boolean;
 };
 
+export const MAX_BASIC_MEDICAL_CONFIRMATION_TIMER_DELAY = 2_147_000_000;
+
+export function isBasicMedicalConfirmationTooEarly(
+  eligibilityAt: number | null,
+  now: number,
+) {
+  return eligibilityAt === null || now < eligibilityAt;
+}
+
+export function scheduleBasicMedicalConfirmationWake({
+  eligibilityAt,
+  now,
+  setTimer,
+  onWake,
+}: {
+  eligibilityAt: number | null;
+  now: number;
+  setTimer: (callback: () => void, delay: number) => number;
+  onWake: () => void;
+}) {
+  if (eligibilityAt === null) return null;
+  const delay = Math.min(
+    MAX_BASIC_MEDICAL_CONFIRMATION_TIMER_DELAY,
+    Math.max(1, eligibilityAt - now + 1),
+  );
+  return setTimer(onWake, delay);
+}
+
+export function createBasicMedicalConfirmationTimerLifecycle({
+  setTimer,
+  clearTimer,
+  onWake,
+}: {
+  setTimer: (callback: () => void, delay: number) => number;
+  clearTimer: (timer: number) => void;
+  onWake: () => void;
+}) {
+  let timer: number | null = null;
+
+  const dispose = () => {
+    if (timer === null) return;
+    clearTimer(timer);
+    timer = null;
+  };
+
+  return {
+    update({
+      eligibilityAt,
+      now,
+    }: {
+      eligibilityAt: number | null;
+      now: number;
+    }) {
+      dispose();
+      timer = scheduleBasicMedicalConfirmationWake({
+        eligibilityAt,
+        now,
+        setTimer,
+        onWake: () => {
+          timer = null;
+          onWake();
+        },
+      });
+      return timer;
+    },
+    dispose,
+  };
+}
+
 export type BasicMedicalRoomInventoryItem = {
   id: string;
   room_id: string;
@@ -34,7 +103,39 @@ export type BasicMedicalSessionConfirmation = {
   signer_id: string;
   signed_at: string;
   invalidated_at: string | null;
+  invalidated_reason: string | null;
   signer: { full_name: string } | null;
+};
+
+export type BasicMedicalConfirmationEquipmentEvidence = {
+  inventory_id: string;
+  item_name_snapshot: string;
+  commercial_name_snapshot: string | null;
+  unit_snapshot: string;
+  total_before: number;
+  good_before: number;
+  damaged_before: number;
+  newly_damaged_quantity: number;
+  total_after: number;
+  good_after: number;
+  damaged_after: number;
+};
+
+export type BasicMedicalConfirmationEvidence = {
+  confirmation_id: string;
+  registration_id_snapshot: string;
+  class_schedule_id_snapshot: string;
+  signer_id: string;
+  signature_data: string;
+  schedule_date_snapshot: string;
+  start_time_snapshot: string;
+  end_time_snapshot: string;
+  room_id_snapshot: string;
+  teaching_lecturer_id_snapshot: string;
+  signed_at: string;
+  invalidated_at: string | null;
+  invalidated_reason: string | null;
+  equipment_checks: BasicMedicalConfirmationEquipmentEvidence[];
 };
 
 export type BasicMedicalRegistrationSessionItem = {
@@ -47,6 +148,7 @@ export type BasicMedicalRegistrationSessionItem = {
     schedule_date: string;
     start_time: string;
     end_time: string;
+    schedule_status: string;
   } | null;
   confirmations: BasicMedicalSessionConfirmation[];
 };

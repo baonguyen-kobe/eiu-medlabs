@@ -4,8 +4,9 @@
   hoặc lịch qua nửa đêm.
 - Lịch hợp lệ do Admin, Staff hoặc Người tạo phiếu tạo/import được sử dụng và
   hiển thị ngay; không còn luồng Bản nháp → Công bố → Hoàn thành.
-- Staff/Người tạo phiếu không gán giảng viên. Dữ liệu giảng viên trong file
-  import được giữ để cảnh báo; chỉ khi admin import thì hệ thống mới gán tự động.
+- Admin, Staff và Trợ giảng có thể gán giảng viên trong room-type scope;
+  tài khoản chỉ có vai trò Giảng viên phải tự gán chính mình. Import chỉ gán
+  giảng viên khi actor có capability/scope phù hợp và không tự tạo nhân sự.
 - Môn học chưa có trong danh mục vẫn có thể được giữ bằng snapshot với
   `course_id = null` và cảnh báo để admin xác nhận sau.
 - Không tự tạo nhân sự từ file import.

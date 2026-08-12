@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { setInputFilesUntilState } from "./helpers/interaction-readiness";
 import * as XLSX from "@e965/xlsx";
 
 test("Skills Lab normalizes LAB room codes, accepts no email and resolves lecturer email", async ({
@@ -33,12 +34,18 @@ test("Skills Lab normalizes LAB room codes, accepts no email and resolves lectur
   );
 
   await page.goto("/schedule-entry/import");
-  await page.locator("#schedule-import-file").setInputFiles({
-    name: "Export_TKB.xlsx",
-    mimeType:
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    buffer: XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }),
-  });
+  const fileInput = page.locator("#schedule-import-file");
+  const stepTwo = page.locator(".stepper li").nth(1);
+  await setInputFilesUntilState(
+    fileInput,
+    {
+      name: "Export_TKB.xlsx",
+      mimeType:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      buffer: XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }),
+    },
+    () => expect(stepTwo).toHaveClass(/active/, { timeout: 2_000 }),
+  );
 
   const continueButton = page.getByRole("button", { name: /Tiếp tục/ });
   await expect(continueButton).toBeEnabled();
@@ -97,12 +104,18 @@ test("Skills Lab preview displays and excludes an intra-file conflict", async ({
   );
 
   await page.goto("/schedule-entry/import");
-  await page.locator("#schedule-import-file").setInputFiles({
-    name: "Export_TKB-conflict.xlsx",
-    mimeType:
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    buffer: XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }),
-  });
+  const fileInput = page.locator("#schedule-import-file");
+  const stepTwo = page.locator(".stepper li").nth(1);
+  await setInputFilesUntilState(
+    fileInput,
+    {
+      name: "Export_TKB-conflict.xlsx",
+      mimeType:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      buffer: XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }),
+    },
+    () => expect(stepTwo).toHaveClass(/active/, { timeout: 2_000 }),
+  );
   await page.getByRole("button", { name: /Tiếp tục/ }).click();
 
   const conflict = page.locator(".preview-status-conflict");

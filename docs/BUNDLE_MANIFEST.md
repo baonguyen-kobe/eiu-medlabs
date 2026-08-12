@@ -6,13 +6,13 @@ Gói review bao gồm:
 - `components/`: dashboard, calendar, form, import và admin UI.
 - `lib/`: Supabase client/server helpers và model dùng chung.
 - `supabase/`: config, schema, migration, seed và dữ liệu demo.
-- `tests/`: kiểm thử tích hợp Supabase.
-- `scripts/`: script tạo tài khoản local.
+- `tests/`: Node contract/integration tests và Playwright E2E.
+- `scripts/`: local bootstrap, operational helpers và Apps Script source.
 - `docs/`: review brief, UI spec, assumptions và prompt reviewer.
 - `public/`: static assets.
 - `graphify-out/`: graph, báo cáo và HTML explorer; không gồm cache/backups.
-- `project-brief/AI Prompt 2 - Revised.txt`: yêu cầu nghiệp vụ đầy đủ.
-- `project-brief/AGENTS.md`: hướng dẫn dùng Graphify.
+- `openspec/`: các proposal/spec/task đã được lưu trong repository.
+- `AGENTS.md`, `NEXTJS_AGENTS.md`: hướng dẫn agent và Next.js khớp version.
 - Các file cấu hình/build quan trọng ở root dự án.
 
 Gói không bao gồm:
