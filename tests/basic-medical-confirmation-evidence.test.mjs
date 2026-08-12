@@ -53,7 +53,7 @@ test("evidence RPC is least-privilege and snapshot-only", () => {
   );
 });
 
-test("list query never serializes signature and exposes invalidated evidence links", () => {
+test("list query never serializes signature and gates invalidated evidence links", () => {
   const selectStart = registrationsPage.indexOf(
     '"id,registration_code,created_at',
   );
@@ -66,6 +66,10 @@ test("list query never serializes signature and exposes invalidated evidence lin
   assert.match(
     registrationList,
     /basic-medical\/registrations\/confirmations\/\$\{historical\.id\}/,
+  );
+  assert.match(
+    registrationList,
+    /evidenceEnabled\s*\? invalidatedConfirmations\.map/,
   );
 });
 
