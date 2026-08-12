@@ -112,7 +112,7 @@ select
   'MORNING', clock.business_now::date - 1, clock.business_now::date - 1,
   'pgtap-today-started', profiles.id
 from public.profiles profiles cross join third_followup_clock clock
-where profiles.email = 'admin@campus.local';
+where profiles.email = 'admin.other@campus.local';
 
 insert into public.staff_shift_patterns (
   id, staff_id, weekday, start_time, end_time, shift_type,
@@ -151,7 +151,7 @@ select profiles.id, clock.business_now::date - 1,
   'MORNING', '90000000-0000-0000-0000-000000000010'::uuid,
   'started occurrence', 'scheduled', 'generated', profiles.id
 from public.profiles profiles cross join third_followup_clock clock
-where profiles.email = 'admin@campus.local';
+where profiles.email = 'admin.other@campus.local';
 
 select private.materialize_shift_pattern('90000000-0000-0000-0000-000000000010'::uuid);
 select is(
@@ -163,7 +163,7 @@ select is(
 select set_config(
   'request.jwt.claims',
   json_build_object(
-    'sub', (select id from public.profiles where email = 'admin@campus.local'),
+    'sub', (select id from public.profiles where email = 'admin.other@campus.local'),
     'role', 'authenticated'
   )::text,
   true

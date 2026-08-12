@@ -62,7 +62,7 @@ values (
   '55555555-0000-0000-0000-000000000005'::uuid, 
   (select id from public.profiles where email = 'staff@campus.local'), 
   '88888888-0000-0000-0000-000000000001'::uuid, 
-  (now() at time zone 'Asia/Ho_Chi_Minh')::date, '00:01:00', '23:59:00', 'MORNING', 'generated', 
+  (now() at time zone 'Asia/Ho_Chi_Minh')::date, '00:00:00', '23:59:00', 'MORNING', 'generated',
   (select id from public.profiles where email = 'staff@campus.local'), 'scheduled'
 );
 
