@@ -10,7 +10,13 @@ const workflow = await readFile(
   "utf8",
 );
 
-const expectedVersions = [
+const approvedPrePr19Versions = [
+  "20260810160016",
+  "20260811133000",
+  "20260811150000",
+];
+
+const pr19Versions = [
   "20260811230000",
   "20260812000000",
   "20260812010000",
@@ -18,7 +24,10 @@ const expectedVersions = [
   "20260812030000",
 ];
 
-const expectedBlobHashes = [
+const approvedBlobHashes = [
+  "e8baacbe085b25bbbf5c1c011a2436a8e089b620",
+  "48e1870bcbe7738490c5fe5c1b3bdff07bc2e453",
+  "adfad9ef58ac319e661eb474f904b5fa67717882",
   "76e7cfc0cee323cee98724bd292fc4084457d383",
   "f1f52f980db36080bfd6fbbbd01f7f9a5d0466cb",
   "67a346fe9b00c4688bb1c874365309a530352c48",
@@ -53,8 +62,8 @@ test("production migration workflow has no dispatcher-controlled release inputs"
   assert.doesNotMatch(workflow, /(?:--db-url|workflow\.inputs|inputs\.)/);
 });
 
-test("dry-run mechanically gates a normal Supabase push to the reviewed five", () => {
-  for (const version of expectedVersions) {
+test("dry-run mechanically gates a normal Supabase push to the approved pending set", () => {
+  for (const version of [...approvedPrePr19Versions, ...pr19Versions]) {
     assert.match(workflow, new RegExp(`"${version}"`, "g"));
   }
   for (const version of forbiddenVersions) {
@@ -63,7 +72,7 @@ test("dry-run mechanically gates a normal Supabase push to the reviewed five", (
 
   const dryRunIndex = workflow.indexOf("supabase db push --linked --dry-run");
   const allowlistIndex = workflow.indexOf(
-    "Dry-run allowlist: EXACT FIVE / PASS",
+    "Dry-run allowlist: APPROVED PENDING SET / PASS",
   );
   const pushIndex = workflow.indexOf("supabase db push --linked\n");
   const postVerificationIndex = workflow.indexOf(
@@ -78,10 +87,14 @@ test("dry-run mechanically gates a normal Supabase push to the reviewed five", (
   assert.match(workflow, /POST_PUSH_MIGRATION_VERIFICATION_FAILED/);
   assert.match(workflow, /migration list --linked --output-format json/g);
   assert.match(workflow, /grep -oE '20\[0-9\]\{12\}'/);
+  assert.match(
+    workflow,
+    /mapfile -t expected_pending_versions < "\$RUNNER_TEMP\/pr19-approved-pending-versions\.txt"/,
+  );
 });
 
-test("release identity pins reviewed migration content and rejects frozen history before dry-run", () => {
-  for (const hash of expectedBlobHashes) {
+test("release identity pins every approved migration and computes only approved local-only versions", () => {
+  for (const hash of approvedBlobHashes) {
     assert.match(workflow, new RegExp(hash));
   }
   assert.match(
@@ -110,9 +123,12 @@ test("release identity pins reviewed migration content and rejects frozen histor
     workflow,
     /production migration history is missing a required baseline version/,
   );
+  assert.match(workflow, /approved_pending_versions=\(\)/);
+  assert.match(workflow, /approved_pre_pr19_versions/);
+  assert.match(workflow, /pr19_versions/);
   assert.match(
     workflow,
-    /a reviewed target is already applied before this controlled rollout/,
+    /no approved pending migrations remain for this rollout/,
   );
 });
 

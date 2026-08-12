@@ -42,6 +42,9 @@ jobs:
           fi
 
           readonly expected_files=(
+            "20260810160016_teaching_assistant_role_contracts.sql"
+            "20260811133000_skills_manual_schedule_domain_isolation.sql"
+            "20260811150000_equipment_catalog_commercial_name_identity.sql"
             "20260811230000_require_active_inventory_targets.sql"
             "20260812000000_fix_basic_medical_cancellation_time_boundary.sql"
             "20260812010000_guard_basic_medical_confirmation_inventory_snapshot.sql"
@@ -49,6 +52,9 @@ jobs:
             "20260812030000_snapshot_basic_medical_condition_log_catalog.sql"
           )
           readonly expected_blob_hashes=(
+            "e8baacbe085b25bbbf5c1c011a2436a8e089b620"
+            "48e1870bcbe7738490c5fe5c1b3bdff07bc2e453"
+            "adfad9ef58ac319e661eb474f904b5fa67717882"
             "76e7cfc0cee323cee98724bd292fc4084457d383"
             "f1f52f980db36080bfd6fbbbd01f7f9a5d0466cb"
             "67a346fe9b00c4688bb1c874365309a530352c48"
@@ -108,12 +114,21 @@ jobs:
               | grep -E '^[0-9]{14}$' \
               | sort -u
           )
-          readonly expected_versions=(
+          readonly approved_pre_pr19_versions=(
+            "20260810160016"
+            "20260811133000"
+            "20260811150000"
+          )
+          readonly pr19_versions=(
             "20260811230000"
             "20260812000000"
             "20260812010000"
             "20260812022922"
             "20260812030000"
+          )
+          readonly allowed_versions=(
+            "${approved_pre_pr19_versions[@]}"
+            "${pr19_versions[@]}"
           )
           readonly forbidden_versions=(
             "20260809120000"
@@ -141,11 +156,11 @@ jobs:
             fi
           done
 
+          approved_pending_versions=()
           for version in "${local_versions[@]}"; do
-            if printf '%s\n' "${expected_versions[@]}" | grep -Fxq "$version"; then
-              if printf '%s\n' "${remote_versions[@]}" | grep -Fxq "$version"; then
-                echo "MIGRATION_ALLOWLIST_MISMATCH: a reviewed target is already applied before this controlled rollout."
-                exit 1
+            if printf '%s\n' "${allowed_versions[@]}" | grep -Fxq "$version"; then
+              if ! printf '%s\n' "${remote_versions[@]}" | grep -Fxq "$version"; then
+                approved_pending_versions+=("$version")
               fi
             elif ! printf '%s\n' "${remote_versions[@]}" | grep -Fxq "$version"; then
               echo "MIGRATION_ALLOWLIST_MISMATCH: production migration history is missing a required baseline version."
@@ -153,20 +168,22 @@ jobs:
             fi
           done
 
+          if [[ "${#approved_pending_versions[@]}" -eq 0 ]]; then
+            echo "MIGRATION_ALLOWLIST_MISMATCH: no approved pending migrations remain for this rollout."
+            exit 1
+          fi
+
           echo "Production migration versions observed before push:"
           printf '%s\n' "${remote_versions[@]}"
+          echo "Approved pending versions observed before push:"
+          printf '%s\n' "${approved_pending_versions[@]}"
+          printf '%s\n' "${approved_pending_versions[@]}" > "$RUNNER_TEMP/pr19-approved-pending-versions.txt"
 
       - name: Dry-run and assert the exact reviewed pending set
         shell: bash
         run: |
           set -euo pipefail
-          readonly expected_versions=(
-            "20260811230000"
-            "20260812000000"
-            "20260812010000"
-            "20260812022922"
-            "20260812030000"
-          )
+          mapfile -t expected_pending_versions < "$RUNNER_TEMP/pr19-approved-pending-versions.txt"
           readonly forbidden_versions=(
             "20260809120000"
             "20260809130000"
@@ -189,13 +206,13 @@ jobs:
             grep -oE '20[0-9]{12}' "$RUNNER_TEMP/pr19-migrations-dry-run.txt"
           )
 
-          if [[ "${#pending_versions[@]}" -ne "${#expected_versions[@]}" ]]; then
+          if [[ "${#pending_versions[@]}" -ne "${#expected_pending_versions[@]}" ]]; then
             echo "MIGRATION_ALLOWLIST_MISMATCH: unexpected pending migration count."
             exit 1
           fi
 
-          for index in "${!expected_versions[@]}"; do
-            if [[ "${pending_versions[$index]}" != "${expected_versions[$index]}" ]]; then
+          for index in "${!expected_pending_versions[@]}"; do
+            if [[ "${pending_versions[$index]}" != "${expected_pending_versions[$index]}" ]]; then
               echo "MIGRATION_ALLOWLIST_MISMATCH: pending migrations differ from the reviewed ordered set."
               exit 1
             fi
@@ -208,8 +225,7 @@ jobs:
             fi
           done
 
-          printf '%s\n' "${pending_versions[@]}" > "$RUNNER_TEMP/pr19-approved-pending-versions.txt"
-          echo "Dry-run allowlist: EXACT FIVE / PASS"
+          echo "Dry-run allowlist: APPROVED PENDING SET / PASS"
 
       - name: Apply the exact reviewed pending migrations
         shell: bash
@@ -222,6 +238,9 @@ jobs:
         run: |
           set -euo pipefail
           readonly expected_versions=(
+            "20260810160016"
+            "20260811133000"
+            "20260811150000"
             "20260811230000"
             "20260812000000"
             "20260812010000"
