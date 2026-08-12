@@ -1,5 +1,5 @@
 begin;
-select plan(30);
+select plan(44);
 
 -- Setup test fixtures
 create temp table _test_context (
@@ -406,7 +406,14 @@ begin
     jsonb_build_array(
       jsonb_build_object(
         'inventory_id', v_ctx.inventory_id,
-        'newly_damaged_quantity', 0
+        'newly_damaged_quantity', 0,
+        'expected_catalog_item_id', (select catalog_item_id from public.basic_medical_room_inventory where id = v_ctx.inventory_id),
+        'expected_total_quantity', (select total_quantity from public.basic_medical_room_inventory where id = v_ctx.inventory_id),
+        'expected_good_quantity', (select good_quantity from public.basic_medical_room_inventory where id = v_ctx.inventory_id),
+        'expected_damaged_quantity', (select damaged_quantity from public.basic_medical_room_inventory where id = v_ctx.inventory_id),
+        'expected_item_name', (select catalog.item_name from public.basic_medical_room_inventory inventory join public.basic_medical_equipment_catalog catalog on catalog.id = inventory.catalog_item_id where inventory.id = v_ctx.inventory_id),
+        'expected_commercial_name', (select catalog.commercial_name from public.basic_medical_room_inventory inventory join public.basic_medical_equipment_catalog catalog on catalog.id = inventory.catalog_item_id where inventory.id = v_ctx.inventory_id),
+        'expected_unit', (select catalog.unit from public.basic_medical_room_inventory inventory join public.basic_medical_equipment_catalog catalog on catalog.id = inventory.catalog_item_id where inventory.id = v_ctx.inventory_id)
       )
     )
   );
@@ -449,7 +456,14 @@ begin
     jsonb_build_array(
       jsonb_build_object(
         'inventory_id', v_ctx.inventory_id,
-        'newly_damaged_quantity', 2
+        'newly_damaged_quantity', 2,
+        'expected_catalog_item_id', (select catalog_item_id from public.basic_medical_room_inventory where id = v_ctx.inventory_id),
+        'expected_total_quantity', (select total_quantity from public.basic_medical_room_inventory where id = v_ctx.inventory_id),
+        'expected_good_quantity', (select good_quantity from public.basic_medical_room_inventory where id = v_ctx.inventory_id),
+        'expected_damaged_quantity', (select damaged_quantity from public.basic_medical_room_inventory where id = v_ctx.inventory_id),
+        'expected_item_name', (select catalog.item_name from public.basic_medical_room_inventory inventory join public.basic_medical_equipment_catalog catalog on catalog.id = inventory.catalog_item_id where inventory.id = v_ctx.inventory_id),
+        'expected_commercial_name', (select catalog.commercial_name from public.basic_medical_room_inventory inventory join public.basic_medical_equipment_catalog catalog on catalog.id = inventory.catalog_item_id where inventory.id = v_ctx.inventory_id),
+        'expected_unit', (select catalog.unit from public.basic_medical_room_inventory inventory join public.basic_medical_equipment_catalog catalog on catalog.id = inventory.catalog_item_id where inventory.id = v_ctx.inventory_id)
       )
     )
   );
@@ -640,6 +654,383 @@ select results_eq(
   $$ select count(*)::integer from public.email_outbox_events where domain not in ('basic_medical_registration', 'basic_medical_damage') $$,
   array[0],
   'Regression: No corrupted outbox domains present'
+);
+
+--------------------------------------------------------------------------------
+-- TEST GROUP 7: Y-05 displayed equipment snapshot guard
+--------------------------------------------------------------------------------
+
+create temp table _y05_stale_session (id uuid primary key);
+grant select on table _y05_stale_session to authenticated;
+
+do $$
+declare
+  v_ctx record;
+  v_schedule_id uuid;
+  v_session_id uuid;
+begin
+  select * into v_ctx from _test_context;
+  insert into public.class_schedules (
+    course_id, course_code_snapshot, course_name_snapshot, room_id, lecturer_id,
+    schedule_date, start_time, end_time, schedule_status, published_by,
+    published_at, student_count, created_by, basic_medical_registration_id
+  ) values (
+    v_ctx.course_id, 'BM-101', 'Giải phẫu cơ bản', v_ctx.room_id, v_ctx.lecturer_id,
+    (clock_timestamp() at time zone 'Asia/Ho_Chi_Minh')::date - 1,
+    '13:00', '15:00', 'published', v_ctx.lecturer_id, clock_timestamp(), 20,
+    v_ctx.lecturer_id, v_ctx.registration_id
+  ) returning id into v_schedule_id;
+
+  insert into public.basic_medical_registration_sessions (
+    registration_id, class_schedule_id, lesson_title, teaching_lecturer_id, session_number
+  ) values (
+    v_ctx.registration_id, v_schedule_id, 'Buổi thử nghiệm trạng thái hiển thị cũ',
+    v_ctx.lecturer_id, 3
+  ) returning id into v_session_id;
+
+  insert into _y05_stale_session values (v_session_id);
+
+  -- The signer saw 8 good / 2 damaged; an Admin changes it before the signature RPC.
+  update public.basic_medical_room_inventory
+  set good_quantity = 7, damaged_quantity = 3
+  where id = v_ctx.inventory_id;
+end;
+$$;
+
+select set_config('role', 'authenticated', true);
+select set_config('request.jwt.claims', json_build_object('sub', (select lecturer_id from _test_context))::text, true);
+
+select throws_ok(
+  $$ select public.confirm_basic_medical_session(
+       (select id from _y05_stale_session),
+       'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+       jsonb_build_array(jsonb_build_object(
+         'inventory_id', (select inventory_id from _test_context),
+         'newly_damaged_quantity', 0,
+         'expected_catalog_item_id', (select catalog_item_id from public.basic_medical_room_inventory where id = (select inventory_id from _test_context)),
+         'expected_total_quantity', 10,
+         'expected_good_quantity', 8,
+         'expected_damaged_quantity', 2,
+         'expected_item_name', 'Mô hình tim 3D',
+         'expected_commercial_name', null,
+         'expected_unit', 'Bộ'
+       ))
+     ) $$,
+  '40001',
+  null,
+  'Y-05: stale displayed quantity is rejected by the public confirmation RPC'
+);
+
+select set_config('role', 'postgres', true);
+
+select results_eq(
+  $$ select count(*)::integer from public.basic_medical_session_confirmations confirmations
+     join public.basic_medical_registration_sessions sessions on sessions.id = confirmations.session_id
+     where sessions.id = (select id from _y05_stale_session) $$,
+  array[0],
+  'Y-05: stale snapshot rejection writes no confirmation history'
+);
+
+--------------------------------------------------------------------------------
+-- TEST GROUP 8: Y-05 exact stale-state matrix and validation ordering
+--------------------------------------------------------------------------------
+
+select set_config('role', 'postgres', true);
+
+-- Restore the display snapshot used by the remaining matrix and retain it in a
+-- temp row so every rejection submits exactly the same signer-visible state.
+update public.basic_medical_room_inventory
+set good_quantity = 8, damaged_quantity = 2
+where id = (select inventory_id from _test_context);
+
+create temp table _y05_expected_snapshot as
+select inventory.id as inventory_id,
+       inventory.catalog_item_id,
+       inventory.total_quantity,
+       inventory.good_quantity,
+       inventory.damaged_quantity,
+       catalog.item_name,
+       catalog.commercial_name,
+       catalog.unit
+from public.basic_medical_room_inventory as inventory
+join public.basic_medical_equipment_catalog as catalog
+  on catalog.id = inventory.catalog_item_id
+where inventory.id = (select inventory_id from _test_context);
+grant select on table _y05_expected_snapshot to authenticated;
+
+create or replace function pg_temp.y05_expected_checks()
+returns jsonb
+language sql
+stable
+set search_path = ''
+as $$
+  select jsonb_build_array(jsonb_build_object(
+    'inventory_id', inventory_id,
+    'newly_damaged_quantity', 0,
+    'expected_catalog_item_id', catalog_item_id,
+    'expected_total_quantity', total_quantity,
+    'expected_good_quantity', good_quantity,
+    'expected_damaged_quantity', damaged_quantity,
+    'expected_item_name', item_name,
+    'expected_commercial_name', commercial_name,
+    'expected_unit', unit
+  ))
+  from pg_temp._y05_expected_snapshot
+$$;
+
+create temp table _y05_effect_baseline as
+select concat_ws(':',
+  (select count(*) from public.basic_medical_session_confirmations confirmations
+    join public.basic_medical_registration_sessions sessions on sessions.id = confirmations.session_id
+    where sessions.id = (select id from _y05_stale_session)),
+  (select count(*) from public.basic_medical_session_equipment_checks checks
+    join public.basic_medical_session_confirmations confirmations on confirmations.id = checks.confirmation_id
+    join public.basic_medical_registration_sessions sessions on sessions.id = confirmations.session_id
+    where sessions.id = (select id from _y05_stale_session)),
+  (select count(*) from public.basic_medical_equipment_condition_logs
+    where inventory_id = (select inventory_id from _test_context)),
+  (select count(*) from public.email_outbox_events
+    where domain = 'basic_medical_damage'
+      and payload::text like '%' || (select id::text from _y05_stale_session) || '%')
+) as counts;
+
+select set_config('role', 'authenticated', true);
+select set_config('request.jwt.claims', json_build_object('sub', (select lecturer_id from _test_context))::text, true);
+
+select throws_ok(
+  $$ select public.confirm_basic_medical_session(
+       (select id from _y05_stale_session),
+       'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+       jsonb_build_array(jsonb_build_object(
+         'inventory_id', 'not-a-uuid',
+         'newly_damaged_quantity', 0,
+         'expected_catalog_item_id', (select catalog_item_id from _y05_expected_snapshot),
+         'expected_total_quantity', 10,
+         'expected_good_quantity', 8,
+         'expected_damaged_quantity', 2,
+         'expected_item_name', (select item_name from _y05_expected_snapshot),
+         'expected_commercial_name', (select commercial_name from _y05_expected_snapshot),
+         'expected_unit', (select unit from _y05_expected_snapshot)
+       ))
+     ) $$,
+  '22023',
+  null,
+  'Y-05: malformed UUID is rejected syntactically before helper casts or inventory locks'
+);
+
+select throws_ok(
+  $$ select public.confirm_basic_medical_session(
+       (select id from _y05_stale_session),
+       'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+       jsonb_build_array(pg_temp.y05_expected_checks()->0 || jsonb_build_object('expected_total_quantity', 2147483648))
+     ) $$,
+  '22023', null,
+  'Y-05: integer overflow is rejected as invalid payload before helper casts'
+);
+
+select throws_ok(
+  $$ select public.confirm_basic_medical_session(
+       (select id from _y05_stale_session),
+       'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+       jsonb_build_array(pg_temp.y05_expected_checks()->0 || jsonb_build_object(
+         'expected_total_quantity', 999999999999999999999999999999999999::numeric
+       ))
+     ) $$,
+  '22023', null,
+  'Y-05: arbitrarily long integer digits are rejected before helper casts'
+);
+
+select throws_ok(
+  $$ select public.confirm_basic_medical_session(
+       (select id from _y05_stale_session),
+       'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+       jsonb_build_array(pg_temp.y05_expected_checks()->0 || jsonb_build_object('expected_total_quantity', -1))
+     ) $$,
+  '22023', null,
+  'Y-05: negative integer input is rejected before helper casts'
+);
+
+select set_config('role', 'postgres', true);
+update public.basic_medical_equipment_catalog
+set item_name = item_name || ' changed', commercial_name = 'changed', unit = unit || ' changed'
+where id = (select catalog_item_id from _y05_expected_snapshot);
+select set_config('role', 'authenticated', true);
+select throws_ok(
+  $$ select public.confirm_basic_medical_session(
+       (select id from _y05_stale_session),
+       'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+       pg_temp.y05_expected_checks()
+     ) $$,
+  '40001', null,
+  'Y-05: changed catalog-visible fields reject the displayed snapshot'
+);
+select set_config('role', 'postgres', true);
+update public.basic_medical_equipment_catalog as catalog
+set item_name = expected.item_name,
+    commercial_name = expected.commercial_name,
+    unit = expected.unit
+from _y05_expected_snapshot as expected
+where catalog.id = expected.catalog_item_id;
+
+create temp table _y05_alternate_catalog (id uuid primary key);
+do $$
+declare alternate_catalog_id uuid;
+begin
+  insert into public.basic_medical_equipment_catalog (item_name, commercial_name, unit, is_active)
+  values ('Y-05 alternate identity', null, 'Bá»™', true)
+  returning id into alternate_catalog_id;
+  insert into _y05_alternate_catalog values (alternate_catalog_id);
+end $$;
+update public.basic_medical_room_inventory
+set catalog_item_id = (select id from _y05_alternate_catalog)
+where id = (select inventory_id from _y05_expected_snapshot);
+select set_config('role', 'authenticated', true);
+select throws_ok(
+  $$ select public.confirm_basic_medical_session(
+       (select id from _y05_stale_session),
+       'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+       pg_temp.y05_expected_checks()
+     ) $$,
+  '40001', null,
+  'Y-05: changed catalog identity rejects the displayed snapshot'
+);
+select set_config('role', 'postgres', true);
+update public.basic_medical_room_inventory
+set catalog_item_id = (select catalog_item_id from _y05_expected_snapshot)
+where id = (select inventory_id from _y05_expected_snapshot);
+delete from public.basic_medical_equipment_catalog where id = (select id from _y05_alternate_catalog);
+
+update public.basic_medical_room_inventory set is_active = false
+where id = (select inventory_id from _y05_expected_snapshot);
+select set_config('role', 'authenticated', true);
+select throws_ok(
+  $$ select public.confirm_basic_medical_session(
+       (select id from _y05_stale_session),
+       'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+       pg_temp.y05_expected_checks()
+     ) $$,
+  '40001', null,
+  'Y-05: deactivated allocation rejects the displayed snapshot'
+);
+select set_config('role', 'postgres', true);
+update public.basic_medical_room_inventory set is_active = true
+where id = (select inventory_id from _y05_expected_snapshot);
+
+update public.basic_medical_equipment_catalog set is_active = false
+where id = (select catalog_item_id from _y05_expected_snapshot);
+select set_config('role', 'authenticated', true);
+select throws_ok(
+  $$ select public.confirm_basic_medical_session(
+       (select id from _y05_stale_session),
+       'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+       pg_temp.y05_expected_checks()
+     ) $$,
+  '40001', null,
+  'Y-05: deactivated catalog rejects the displayed snapshot'
+);
+select set_config('role', 'postgres', true);
+update public.basic_medical_equipment_catalog set is_active = true
+where id = (select catalog_item_id from _y05_expected_snapshot);
+
+create temp table _y05_other_room (id uuid primary key);
+do $$
+declare other_room_id uuid;
+begin
+  insert into public.rooms (room_code, building_code, room_name, room_type_id, capacity, is_active)
+  select 'Y05-MOVED-' || substr(gen_random_uuid()::text, 1, 6), 'Y05', 'Y-05 moved room', room_type_id, 10, true
+  from public.rooms where id = (select room_id from _test_context)
+  returning id into other_room_id;
+  insert into _y05_other_room values (other_room_id);
+end $$;
+update public.basic_medical_room_inventory
+set room_id = (select id from _y05_other_room)
+where id = (select inventory_id from _y05_expected_snapshot);
+select set_config('role', 'authenticated', true);
+select throws_ok(
+  $$ select public.confirm_basic_medical_session(
+       (select id from _y05_stale_session),
+       'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+       pg_temp.y05_expected_checks()
+     ) $$,
+  '40001', null,
+  'Y-05: allocation removed from the room rejects the displayed snapshot'
+);
+select set_config('role', 'postgres', true);
+update public.basic_medical_room_inventory set room_id = (select room_id from _test_context)
+where id = (select inventory_id from _y05_expected_snapshot);
+delete from public.rooms where id = (select id from _y05_other_room);
+
+create temp table _y05_added_inventory (catalog_id uuid, inventory_id uuid);
+do $$
+declare added_catalog_id uuid; added_inventory_id uuid;
+begin
+  insert into public.basic_medical_equipment_catalog (item_name, unit, is_active)
+  values ('Y-05 newly added eligible item', 'Bá»™', true) returning id into added_catalog_id;
+  insert into public.basic_medical_room_inventory
+    (room_id, catalog_item_id, total_quantity, good_quantity, damaged_quantity, is_active)
+  values ((select room_id from _test_context), added_catalog_id, 1, 1, 0, true)
+  returning id into added_inventory_id;
+  insert into _y05_added_inventory values (added_catalog_id, added_inventory_id);
+end $$;
+select set_config('role', 'authenticated', true);
+select throws_ok(
+  $$ select public.confirm_basic_medical_session(
+       (select id from _y05_stale_session),
+       'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+       pg_temp.y05_expected_checks()
+     ) $$,
+  '40001', null,
+  'Y-05: newly added eligible allocation rejects the prior displayed set'
+);
+select set_config('role', 'postgres', true);
+delete from public.basic_medical_room_inventory where id = (select inventory_id from _y05_added_inventory);
+delete from public.basic_medical_equipment_catalog where id = (select catalog_id from _y05_added_inventory);
+
+truncate _y05_added_inventory;
+do $$
+declare added_catalog_id uuid; added_inventory_id uuid;
+begin
+  insert into public.basic_medical_equipment_catalog (item_name, unit, is_active)
+  values ('Y-05 reactivated item', 'Bá»™', false) returning id into added_catalog_id;
+  insert into public.basic_medical_room_inventory
+    (room_id, catalog_item_id, total_quantity, good_quantity, damaged_quantity, is_active)
+  values ((select room_id from _test_context), added_catalog_id, 1, 1, 0, false)
+  returning id into added_inventory_id;
+  insert into _y05_added_inventory values (added_catalog_id, added_inventory_id);
+  update public.basic_medical_equipment_catalog set is_active = true where id = added_catalog_id;
+  update public.basic_medical_room_inventory set is_active = true where id = added_inventory_id;
+end $$;
+select set_config('role', 'authenticated', true);
+select throws_ok(
+  $$ select public.confirm_basic_medical_session(
+       (select id from _y05_stale_session),
+       'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+       pg_temp.y05_expected_checks()
+     ) $$,
+  '40001', null,
+  'Y-05: reactivated allocation and catalog reject the prior displayed set'
+);
+select set_config('role', 'postgres', true);
+delete from public.basic_medical_room_inventory where id = (select inventory_id from _y05_added_inventory);
+delete from public.basic_medical_equipment_catalog where id = (select catalog_id from _y05_added_inventory);
+
+select results_eq(
+  $$ select concat_ws(':',
+    (select count(*) from public.basic_medical_session_confirmations confirmations
+      join public.basic_medical_registration_sessions sessions on sessions.id = confirmations.session_id
+      where sessions.id = (select id from _y05_stale_session)),
+    (select count(*) from public.basic_medical_session_equipment_checks checks
+      join public.basic_medical_session_confirmations confirmations on confirmations.id = checks.confirmation_id
+      join public.basic_medical_registration_sessions sessions on sessions.id = confirmations.session_id
+      where sessions.id = (select id from _y05_stale_session)),
+    (select count(*) from public.basic_medical_equipment_condition_logs
+      where inventory_id = (select inventory_id from _test_context)),
+    (select count(*) from public.email_outbox_events
+      where domain = 'basic_medical_damage'
+        and payload::text like '%' || (select id::text from _y05_stale_session) || '%')
+  ) $$,
+  $$ select counts from _y05_effect_baseline $$,
+  'Y-05: every stale or malformed rejection leaves confirmation/check/log/outbox state unchanged'
 );
 
 select * from finish();

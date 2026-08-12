@@ -5,10 +5,14 @@ import {
   type BasicMedicalRegistrationInitialData,
 } from "@/components/basic-medical-registration-form";
 import { WorkspaceShell } from "@/components/workspace-shell";
+import { formatBasicMedicalRegistrationCode } from "@/lib/basic-medical-registration-code";
 import {
-  formatBasicMedicalRegistrationCode,
-  normalizeBasicMedicalRegistrationCode,
-} from "@/lib/basic-medical-registration-code";
+  BASIC_MEDICAL_EDIT_OPTION_LIMIT,
+  boundBasicMedicalEditOptions,
+  buildBasicMedicalEditLookupHref,
+  parseBasicMedicalRegistrationLookupKey,
+  resolveEditableBasicMedicalRegistration,
+} from "@/lib/basic-medical-registration-edit";
 import { businessTodayString } from "@/lib/business-time";
 import { BASIC_MEDICAL_ROOM_TYPE_ID } from "@/lib/room-types";
 import { getViewer } from "@/lib/viewer";
@@ -133,6 +137,23 @@ function RegistrationModePicker({
               Tải phiếu để điều chỉnh
             </button>
           </form>
+          <form action="/basic-medical/new" method="get">
+            <input type="hidden" name="mode" value="edit" />
+            <label>
+              Không thấy phiếu? Nhập mã phiếu
+              <input
+                name="registration"
+                required
+                defaultValue={mode === "edit" ? activeRegistrationKey : ""}
+                placeholder="Ví dụ: YC-260806-000123"
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </label>
+            <button type="submit" className="button button-secondary">
+              Tìm phiếu để điều chỉnh
+            </button>
+          </form>
         </details>
 
         <details className="equipment-registration-mode" open={mode === "copy"}>
@@ -231,25 +252,49 @@ export default async function NewBasicMedicalSchedulePage({
   const mode: RegistrationMode | null =
     query.mode === "copy" || query.mode === "edit" ? query.mode : null;
   const rawRegistrationKey = String(query.registration ?? "").trim();
-  const requestedId = /^[0-9a-f-]{36}$/i.test(rawRegistrationKey)
-    ? rawRegistrationKey
-    : "";
-  const requestedCode = !requestedId
-    ? normalizeBasicMedicalRegistrationCode(rawRegistrationKey)
-    : null;
-  const hasValidRegistrationKey = Boolean(requestedId || requestedCode);
+  const requestedLookupKey =
+    parseBasicMedicalRegistrationLookupKey(rawRegistrationKey);
+  const hasValidRegistrationKey = Boolean(requestedLookupKey);
+  const canonicalEditLookupHref =
+    mode === "edit"
+      ? buildBasicMedicalEditLookupHref(rawRegistrationKey)
+      : null;
+  if (
+    canonicalEditLookupHref &&
+    requestedLookupKey &&
+    rawRegistrationKey !== requestedLookupKey.value
+  ) {
+    redirect(canonicalEditLookupHref);
+  }
+  const canManageAll = roles.some((role) => ["admin", "staff"].includes(role));
   const sourcePromise =
     mode && hasValidRegistrationKey
       ? (() => {
           let sourceQuery = supabase
             .from("basic_medical_registrations")
             .select(sourceRegistrationSelect);
-          sourceQuery = requestedId
-            ? sourceQuery.eq("id", requestedId)
-            : sourceQuery.eq("registration_code", requestedCode!);
-          return sourceQuery.maybeSingle();
+          sourceQuery =
+            requestedLookupKey!.kind === "id"
+              ? sourceQuery.eq("id", requestedLookupKey!.value)
+              : sourceQuery.eq("registration_code", requestedLookupKey!.value);
+          if (mode === "edit" && !canManageAll) {
+            sourceQuery = sourceQuery.eq("created_by", userId);
+          }
+          return sourceQuery.limit(1).maybeSingle();
         })()
       : Promise.resolve({ data: null, error: null });
+
+  let optionQuery = supabase
+    .from("basic_medical_registrations")
+    .select(
+      "id,registration_code,created_at,created_by,start_date,end_date,registrant:profiles!basic_medical_registrations_registrant_id_fkey(full_name),course:courses(course_code),room:rooms(room_code,building_code)",
+    );
+  if (!canManageAll) {
+    optionQuery = optionQuery.eq("created_by", userId);
+  }
+  const editOptionPromise = optionQuery
+    .order("created_at", { ascending: false })
+    .limit(BASIC_MEDICAL_EDIT_OPTION_LIMIT);
 
   const [
     { data: courses },
@@ -274,23 +319,19 @@ export default async function NewBasicMedicalSchedulePage({
       .order("room_code"),
     supabase.rpc("list_basic_medical_instructors"),
     supabase.from("profiles").select("email").eq("id", userId).single(),
-    supabase
-      .from("basic_medical_registrations")
-      .select(
-        "id,registration_code,created_at,created_by,start_date,end_date,registrant:profiles!basic_medical_registrations_registrant_id_fkey(full_name),course:courses(course_code),room:rooms(room_code,building_code)",
-      )
-      .order("created_at", { ascending: false })
-      .limit(200),
+    editOptionPromise,
     sourcePromise,
   ]);
 
-  const canManageAll = roles.some((role) => ["admin", "staff"].includes(role));
   const registrationOptions = (optionRows ??
     []) as unknown as RegistrationOption[];
-  const editOptions = registrationOptions.filter(
-    (option) => canManageAll || option.created_by === userId,
-  );
-  const source = sourceResult.data as unknown as SourceRegistration | null;
+  const editOptions = boundBasicMedicalEditOptions(registrationOptions);
+  const queriedSource =
+    sourceResult.data as unknown as SourceRegistration | null;
+  const source =
+    mode === "edit"
+      ? resolveEditableBasicMedicalRegistration(queriedSource, userId, roles)
+      : queriedSource;
   const canUseSource = Boolean(
     source && (mode !== "edit" || canManageAll || source.created_by === userId),
   );

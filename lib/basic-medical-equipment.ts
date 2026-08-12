@@ -10,6 +10,75 @@ export type BasicMedicalEquipmentCatalogItem = {
   is_active: boolean;
 };
 
+export const MAX_BASIC_MEDICAL_CONFIRMATION_TIMER_DELAY = 2_147_000_000;
+
+export function isBasicMedicalConfirmationTooEarly(
+  eligibilityAt: number | null,
+  now: number,
+) {
+  return eligibilityAt === null || now < eligibilityAt;
+}
+
+export function scheduleBasicMedicalConfirmationWake({
+  eligibilityAt,
+  now,
+  setTimer,
+  onWake,
+}: {
+  eligibilityAt: number | null;
+  now: number;
+  setTimer: (callback: () => void, delay: number) => number;
+  onWake: () => void;
+}) {
+  if (eligibilityAt === null) return null;
+  const delay = Math.min(
+    MAX_BASIC_MEDICAL_CONFIRMATION_TIMER_DELAY,
+    Math.max(1, eligibilityAt - now + 1),
+  );
+  return setTimer(onWake, delay);
+}
+
+export function createBasicMedicalConfirmationTimerLifecycle({
+  setTimer,
+  clearTimer,
+  onWake,
+}: {
+  setTimer: (callback: () => void, delay: number) => number;
+  clearTimer: (timer: number) => void;
+  onWake: () => void;
+}) {
+  let timer: number | null = null;
+
+  const dispose = () => {
+    if (timer === null) return;
+    clearTimer(timer);
+    timer = null;
+  };
+
+  return {
+    update({
+      eligibilityAt,
+      now,
+    }: {
+      eligibilityAt: number | null;
+      now: number;
+    }) {
+      dispose();
+      timer = scheduleBasicMedicalConfirmationWake({
+        eligibilityAt,
+        now,
+        setTimer,
+        onWake: () => {
+          timer = null;
+          onWake();
+        },
+      });
+      return timer;
+    },
+    dispose,
+  };
+}
+
 export type BasicMedicalRoomInventoryItem = {
   id: string;
   room_id: string;
@@ -34,6 +103,7 @@ export type BasicMedicalSessionConfirmation = {
   signer_id: string;
   signed_at: string;
   invalidated_at: string | null;
+  invalidated_reason: string | null;
   signer: { full_name: string } | null;
 };
 
@@ -78,6 +148,7 @@ export type BasicMedicalRegistrationSessionItem = {
     schedule_date: string;
     start_time: string;
     end_time: string;
+    schedule_status: string;
   } | null;
   confirmations: BasicMedicalSessionConfirmation[];
 };

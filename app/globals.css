@@ -8703,6 +8703,17 @@ body,
   font-size: 11px;
 }
 
+.basic-medical-signature-image {
+  display: block;
+  width: min(100%, 36rem);
+  min-height: 10rem;
+  margin: 0.75rem 0 1.5rem;
+  object-fit: contain;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+}
+
 .basic-medical-confirm-button {
   min-width: 132px;
 }

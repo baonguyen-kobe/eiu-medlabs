@@ -25,29 +25,26 @@ Mở:
 
 ## Tài khoản mẫu
 
-| Vai trò                      | Email                  | Mật khẩu             |
-| ---------------------------- | ---------------------- | -------------------- |
-| Admin + mọi vai trò          | admin@campus.local     | LocalAdmin123!       |
-| Giảng viên                   | giangvien@campus.local | LocalLecturer123!    |
-| Staff                        | staff@campus.local     | LocalStaff123!       |
-| Giảng viên + quyền nhập lịch | importer@campus.local  | LocalImporter123!    |
-| Nhân viên + Người tạo phiếu  | dieuphoi@eiu.edu.vn    | LocalCoordinator123! |
+| Vai trò/capability                     | Email                        | Mật khẩu                  |
+| -------------------------------------- | ---------------------------- | ------------------------- |
+| Admin + Staff + Giảng viên + import    | admin@campus.local           | LocalAdmin123!            |
+| Giảng viên                             | giangvien@campus.local       | LocalLecturer123!         |
+| Staff                                  | staff@campus.local           | LocalStaff123!            |
+| Giảng viên + `can_import_schedules`    | importer@campus.local        | LocalImporter123!         |
+| Staff + `can_import_schedules`         | dieuphoi@eiu.edu.vn          | LocalCoordinator123!      |
+| Trợ giảng                              | trogiang@campus.local        | LocalAssistant123!        |
+| Trợ giảng + `can_import_schedules`     | trogiang.import@campus.local | LocalAssistantImport123!  |
+| Personnel Manager local                | bao.nguyen@eiu.edu.vn        | LocalPersonnelManager123! |
+| Admin thường (test phân quyền nhân sự) | admin.other@campus.local     | LocalOtherAdmin123!       |
 
 Các mật khẩu trên chỉ dùng cho local development.
 
 ## Database
 
-Nguồn schema:
-
-```text
-supabase/schemas/01_app.sql
-```
-
-Migration có thể tái tạo:
-
-```text
-supabase/migrations/20260731054717_initial_schema.sql
-```
+Declarative schema được nạp theo `supabase/config.toml` từ toàn bộ file
+`supabase/schemas/*.sql` theo thứ tự tên. Lịch sử triển khai versioned nằm trong
+`supabase/migrations/`; không xem riêng `01_app.sql` hoặc initial migration là
+trạng thái database hiện hành.
 
 Kiểm tra toàn bộ migration và seed từ đầu:
 
@@ -62,21 +59,24 @@ powershell.exe -ExecutionPolicy Bypass -File scripts/seed-local-users.ps1
 npm.cmd run typecheck
 npm.cmd run lint
 npm.cmd test
+npm.cmd run test:db
+npm.cmd run test:e2e:critical
 npm.cmd run test:e2e
 npm.cmd run build
 npm.cmd audit --omit=dev
 ```
 
-`npm.cmd test` chạy kiểm thử tích hợp trên Supabase local, gồm nhận lớp đồng
-thời, RLS hồ sơ/người tạo phiếu, giờ hoạt động, import nguyên tử, xung đột ca
-trực và audit log. `npm.cmd run test:e2e` kiểm tra giao diện và quyền điều hướng
-cho Admin, Giảng viên và Staff.
+`npm.cmd test` chạy tuần tự các Node/integration contract tests trên Supabase
+local. `npm.cmd run test:db` chạy pgTAP; không chạy hai bộ database-mutating
+song song trên cùng local stack. `test:e2e:critical` là smoke set cho CI, còn
+`test:e2e` chạy toàn bộ Playwright suite.
 
 ## Biến môi trường
 
-Sao chép `.env.example` thành `.env.local`, điền publishable key và
-`SUPABASE_SECRET_KEY` do `supabase status` cung cấp. Secret key chỉ được đọc ở
-server để Admin tạo tài khoản hoặc đổi email đăng nhập.
+Tạo `.env.local` với `NEXT_PUBLIC_SUPABASE_URL`,
+`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` và `SUPABASE_SECRET_KEY` do
+`supabase status` cung cấp. Secret key chỉ được đọc ở server để Admin
+tạo tài khoản hoặc đổi email đăng nhập.
 
 Không đưa secret key hoặc service role key vào biến `NEXT_PUBLIC_*`.
 

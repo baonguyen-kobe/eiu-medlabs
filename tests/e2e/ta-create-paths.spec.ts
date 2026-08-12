@@ -5,6 +5,7 @@ import {
   assertLocalDestructiveTestTarget,
   resolveEffectiveSupabaseTestConfig,
 } from "../helpers/local-test-safety.mjs";
+import { clickUntilState, openCombobox } from "./helpers/interaction-readiness";
 
 type LocalServiceConfig = {
   supabaseUrl: string;
@@ -49,12 +50,17 @@ function serviceClient(config: LocalServiceConfig) {
   });
 }
 
-async function login(page: Page, email: string, password: string) {
+async function login(
+  page: Page,
+  email: string,
+  password: string,
+  expectedLanding = /\/dashboard$/,
+) {
   await page.goto("/login");
   await page.locator('input[name="email"]').fill(email);
   await page.locator('input[name="password"]').fill(password);
   await page.getByRole("button", { name: "Đăng nhập", exact: true }).click();
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page).toHaveURL(expectedLanding);
 }
 
 async function createManualSchedule(
@@ -65,12 +71,16 @@ async function createManualSchedule(
   selectLecturer: boolean,
 ) {
   await page.goto("/schedule-entry/new");
-  await page.getByRole("combobox", { name: "Tìm và chọn môn học" }).click();
+  await openCombobox(
+    page.getByRole("combobox", { name: "Tìm và chọn môn học" }),
+  );
   await page.getByRole("listbox").getByRole("option").first().click();
   if (selectLecturer) {
-    await page
-      .getByRole("combobox", { name: "Tìm và chọn giảng viên thứ nhất" })
-      .click();
+    await openCombobox(
+      page.getByRole("combobox", {
+        name: "Tìm và chọn giảng viên thứ nhất",
+      }),
+    );
     await page
       .getByRole("listbox")
       .getByRole("option")
@@ -106,6 +116,16 @@ async function createEquipmentRequest(
   date: string,
 ) {
   await page.goto(`/equipment/register?schedule=${schedule.id}`);
+  await clickUntilState(
+    page.getByRole("button", {
+      name: "+ Tạo bảng thiết bị",
+      exact: true,
+    }),
+    () =>
+      expect(page.locator(".equipment-skill-card")).toBeVisible({
+        timeout: 1_000,
+      }),
+  );
   await page
     .locator('select[name="class_schedule_id"]')
     .selectOption(schedule.id);
@@ -117,9 +137,6 @@ async function createEquipmentRequest(
   await page.locator('select[name="receive_time"]').selectOption("09:00");
   await page.locator('input[name="return_date"]').fill(date);
   await page.locator('select[name="return_time"]').selectOption("16:00");
-  await page
-    .getByRole("button", { name: "+ Tạo bảng thiết bị", exact: true })
-    .click();
   await page.getByRole("button", { name: "Xóa", exact: true }).last().click();
   await page.getByRole("button", { name: "Xóa", exact: true }).last().click();
   await page
@@ -332,7 +349,12 @@ test("Teaching Assistant without Skills scope is redirected from both create pat
 
   try {
     fixture = await createUnscopedTeachingAssistant(service);
-    await login(page, fixture.email, fixture.password);
+    await login(
+      page,
+      fixture.email,
+      fixture.password,
+      /\/basic-medical\/schedules$/,
+    );
 
     await page.goto("/schedule-entry/new");
     await page.waitForURL((url) => url.pathname !== "/schedule-entry/new");

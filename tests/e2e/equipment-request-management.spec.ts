@@ -6,6 +6,7 @@ import {
   resolveEffectiveSupabaseTestConfig,
 } from "../helpers/local-test-safety.mjs";
 import { NURSING_SKILLS_ROOM_TYPE_ID } from "../../lib/room-types";
+import { clickUntilState } from "./helpers/interaction-readiness";
 
 test("mã phiếu 12 số tải được và Admin thấy dòng bổ sung thiết bị", async ({
   page,
@@ -192,10 +193,16 @@ test("mã phiếu 12 số tải được và Admin thấy dòng bổ sung thiế
     ]);
     expect(Math.abs(headingBox!.x - controlBox!.x)).toBeLessThan(1);
 
-    await requestRow.locator(".equipment-request-summary").click();
-    await requestRow
-      .getByRole("button", { name: /Xem toàn bộ danh sách/ })
-      .click();
+    const detailsButton = requestRow.getByRole("button", {
+      name: "Mở chi tiết phiếu",
+    });
+    const fullListButton = requestRow.getByRole("button", {
+      name: /Xem toàn bộ danh sách/,
+    });
+    await clickUntilState(detailsButton, () =>
+      expect(fullListButton).toBeVisible({ timeout: 1_000 }),
+    );
+    await fullListButton.click();
     // Modal title will be something like "Phiếu thiết bị #...", but might not be requestCode.
     // Use the dialog role without specific name or find by DOM structure.
     const modal = page.getByRole("dialog");

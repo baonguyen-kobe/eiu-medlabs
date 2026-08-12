@@ -19,7 +19,7 @@ Bố cục:
 
 ```text
 ┌──────────── Sidebar ────────────┬──────────── Topbar ───────────────┐
-│ Logo, navigation, account       │ Tiêu đề, trạng thái, role switch │
+│ Logo, navigation, account       │ Tiêu đề, trạng thái, actions     │
 ├─────────────────────────────────┼───────────────────────────────────┤
 │                                 │ Hero và quick actions             │
 │                                 ├───────────────────────────────────┤
@@ -33,9 +33,12 @@ Bố cục:
 └─────────────────────────────────┴────────────────────┴──────────────┘
 ```
 
+Khu vực account hiển thị nhãn vai trò chính được suy ra từ các vai trò đã lưu.
+`WorkspaceShell` không có control chuyển đổi hoặc thay đổi vai trò tài khoản.
+
 ## 3. Calendar
 
-Calendar có bốn chế độ: Tháng, Tuần, Ngày và Danh sách. Trạng thái chế độ và
+Calendar có ba chế độ: Tháng, Tuần và Danh sách. Trạng thái chế độ và
 ngày neo nằm trên URL (`view`, `date`).
 
 Mỗi ngày luôn có đúng bốn vùng, không trộn hai loại lịch:
@@ -61,18 +64,16 @@ Quy tắc phân buổi hiện tại:
 
 Chế độ Tháng:
 
-- Grid 7 cột × 6 tuần.
-- Hiện tối đa một event trong mỗi vùng, phần còn lại dùng chỉ báo `+N lịch khác`.
+- Grid cố định 7 cột × 6 tuần, luôn dựng 42 ngày để bao phủ tháng và các ngày đệm.
+- Hiện toàn bộ event khớp trong đúng vùng học/trực và sáng/chiều. `SlotEvents`
+  không cắt số lượng; nội dung mở rộng/overflow theo CSS hiện tại và cell không có
+  cuộn dọc riêng.
 - Ngày ngoài tháng giảm opacity.
 
 Chế độ Tuần:
 
 - 7 cột.
-- Mỗi vùng hiện tối đa ba event.
-
-Chế độ Ngày:
-
-- Một card rộng với bốn vùng.
+- Hiện các event trong bảy ngày của tuần đang chọn.
 
 Chế độ Danh sách:
 
@@ -92,14 +93,13 @@ không bị thay đổi.
 
 ## 5. Import UI
 
-Stepper sáu bước:
+Stepper năm bước:
 
 1. Chọn file.
-2. Mapping.
-3. Xem trước.
-4. Kiểm tra.
-5. Xác nhận.
-6. Kết quả.
+2. Xem trước.
+3. Kiểm tra.
+4. Xác nhận.
+5. Kết quả.
 
 Yêu cầu review:
 

@@ -442,10 +442,10 @@ begin
     'or not (select private.can_manage_basic_medical())');
   definition := replace(definition,
     'where id = target_room_id and room_type_id = basic_medical_room_type_id',
-    E'where id = target_room_id and room_type_id = basic_medical_room_type_id\n      and (target_inventory_id is not null or is_active)');
+    E'where id = target_room_id and room_type_id = basic_medical_room_type_id\n      and is_active');
   definition := replace(definition,
     'where id = target_catalog_item_id',
-    E'where id = target_catalog_item_id\n      and (target_inventory_id is not null or is_active)');
+    E'where id = target_catalog_item_id\n      and is_active');
   execute definition;
 
   select pg_get_functiondef('public.adjust_basic_medical_inventory_condition(uuid,integer,integer,text)'::regprocedure) into definition;

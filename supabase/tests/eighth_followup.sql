@@ -33,10 +33,19 @@ select ok(
 );
 
 select ok(
-  position('schedules.schedule_status = ''cancelled''' in pg_get_functiondef(
+  position('private.is_basic_medical_schedule_start_after(' in pg_get_functiondef(
+    'public.cancel_basic_medical_registration(uuid,text)'::regprocedure
+  )) > 0
+  and position('schedules.schedule_date,' in pg_get_functiondef(
+    'public.cancel_basic_medical_registration(uuid,text)'::regprocedure
+  )) > 0
+  and position('schedules.start_time,' in pg_get_functiondef(
+    'public.cancel_basic_medical_registration(uuid,text)'::regprocedure
+  )) > 0
+  and position('sessions.class_schedule_id = any(cancelled_schedule_ids)' in pg_get_functiondef(
     'public.cancel_basic_medical_registration(uuid,text)'::regprocedure
   )) > 0,
-  'cancellation invalidates confirmations only for cancelled sessions'
+  'cancellation uses the strict future-start predicate and invalidates only transitioned sessions'
 );
 
 select * from finish();

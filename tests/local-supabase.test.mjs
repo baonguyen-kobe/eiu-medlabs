@@ -1458,7 +1458,6 @@ test("tối đa hai giảng viên nhận được lớp khi đăng ký đồng t
 });
 
 test("giảng viên có quyền import vẫn chỉ tạo lịch manual khi tự phân công", async () => {
-  const admin = await signIn("admin@campus.local", "LocalAdmin123!");
   const importer = await signIn("importer@campus.local", "LocalImporter123!");
   const scheduleId = crypto.randomUUID();
   const assignedScheduleId = crypto.randomUUID();
@@ -1778,25 +1777,11 @@ test("tạo lịch thủ công xếp đúng một email cho mỗi Staff hoặc A
   const scheduleId = createdSchedule.id;
 
   await serviceClient().rpc("process_email_outbox_events", { batch_size: 50 });
-  const [
-    { data: roleRows },
-    { data: viewerRows },
-    { data: queued, error: queueError },
-  ] = await Promise.all([
-    admin.supabase
-      .from("user_roles")
-      .select("user_id")
-      .in("role", ["staff", "admin"]),
-    admin.supabase
-      .from("profile_room_types")
-      .select("profile_id")
-      .eq("room_type_id", "40000000-0000-0000-0000-000000000001"),
-    serviceClient()
-      .from("email_notifications")
-      .select("recipient_id, dedupe_key, payload")
-      .eq("notification_type", "class_schedule_created")
-      .contains("payload", { schedule_id: scheduleId }),
-  ]);
+  const { data: queued, error: queueError } = await serviceClient()
+    .from("email_notifications")
+    .select("recipient_id, dedupe_key, payload")
+    .eq("notification_type", "class_schedule_created")
+    .contains("payload", { schedule_id: scheduleId });
   assert.ifError(queueError);
   const scheduleEmails = (queued ?? []).filter(({ payload }) => {
     const p = typeof payload === "string" ? JSON.parse(payload) : payload;
@@ -1920,7 +1905,6 @@ test("database chặn lịch vượt giờ hoạt động", async () => {
 
 test("giảng viên được tạo lớp Skills lab mới trong loại phòng của mình", async () => {
   const lecturer = await signIn("giangvien@campus.local", "LocalLecturer123!");
-  const admin = await signIn("admin@campus.local", "LocalAdmin123!");
   const scheduleId = crypto.randomUUID();
 
   const { error } = await serviceClient().from("class_schedules").insert({

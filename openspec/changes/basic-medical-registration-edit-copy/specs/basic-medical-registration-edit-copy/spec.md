@@ -18,6 +18,16 @@ Hệ thống SHALL cho người tạo phiếu hoặc admin/staff nạp và đi�
 - **WHEN** người dùng không phải người tạo, admin hoặc staff gửi yêu cầu điều chỉnh
 - **THEN** hệ thống từ chối mà không thay đổi phiếu hoặc lịch con
 
+#### Scenario: Tìm phiếu cũ ngoài danh sách gần đây
+
+- **WHEN** phiếu được phép điều chỉnh không còn nằm trong danh sách 200 phiếu gần nhất và người dùng nhập mã phiếu chính xác
+- **THEN** hệ thống nạp đúng phiếu đó trong chế độ điều chỉnh mà không mở rộng danh sách không giới hạn
+
+#### Scenario: Lookup không tiết lộ sự tồn tại
+
+- **WHEN** người dùng nhập mã phiếu không tồn tại hoặc mã phiếu tồn tại nhưng không thuộc quyền điều chỉnh
+- **THEN** hệ thống trả cùng một kết quả không tìm thấy hoặc không có quyền và không nạp dữ liệu phiếu
+
 ### Requirement: Sao chép tạo phiếu độc lập
 
 Hệ thống SHALL cho phép nhập mã phiếu 12 chữ số để nạp dữ liệu nguồn và MUST tạo một phiếu mới khi gửi.

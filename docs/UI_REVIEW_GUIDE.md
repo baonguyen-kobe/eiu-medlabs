@@ -9,7 +9,7 @@ MedLabs Calendar là hệ thống nội bộ quản lý lịch học và lịch 
 - Giảng viên: Tổng quan, Lịch tổng hợp, Lớp đang mở, Lớp của tôi.
 - Staff: Tổng quan, Lịch tổng hợp, Lớp đang mở, Lịch trực, nhóm Tạo phiếu.
 - Admin: toàn bộ chức năng quản lý lớp, lịch trực, tạo phiếu và quản trị.
-- Importer là quyền cộng thêm; tài khoản có quyền này được dùng Tạo lịch thủ công, Import lịch và Lịch sử import.
+- `can_import_schedules` là capability cộng thêm cho tài khoản có role và room-type scope phù hợp; capability này mở Import lịch và Lịch sử import.
 
 Không còn module hoặc mục sidebar riêng mang tên **Lịch phòng**. Dữ liệu lớp học xuất hiện dưới tên **Lịch học** trong Lịch tổng hợp và trong danh sách lớp.
 
@@ -57,8 +57,7 @@ Hãy đánh giá và đề xuất cụ thể về:
 - `components/`: component giao diện dùng chung.
 - `lib/`: dữ liệu mẫu và tiện ích liên quan đến hiển thị.
 - `public/`: tài nguyên tĩnh.
-- `requirements/Gop y 2.md`: yêu cầu đã chốt từ người dùng.
-- `screenshots/`: ảnh giao diện sinh từ kiểm thử Playwright.
+- `openspec/`: yêu cầu/spec đã lưu cùng mã nguồn.
 - `tests/e2e/feedback-workflow.spec.ts`: các kỳ vọng giao diện và phân quyền đã được kiểm thử.
 
 Gói này cố ý không chứa `.env`, khóa Supabase, `node_modules`, build cache hoặc dữ liệu Docker.

@@ -62,7 +62,11 @@ test("evidence flag is server-only and defaults fail-closed", () => {
     /process\.env\.BASIC_MEDICAL_CONFIRMATION_EVIDENCE_ENABLED === "true"/,
   );
   assert.doesNotMatch(evidenceFlag, /NEXT_PUBLIC_/);
-  assert.match(list, /evidenceEnabled \? \(/);
+  assert.match(
+    list,
+    /evidenceEnabled \? \(\s*<>[\s\S]*historicalConfirmations[\s\S]*<\/>\s*\) : null/,
+  );
+  assert.match(list, /evidenceEnabled\s*\? invalidatedConfirmations\.map/);
   assert.match(
     page,
     /evidenceEnabled=\{isBasicMedicalConfirmationEvidenceEnabled\(\)\}/,

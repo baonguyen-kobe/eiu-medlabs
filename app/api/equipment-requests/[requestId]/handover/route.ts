@@ -39,7 +39,17 @@ export async function GET(
     .select(equipmentHandoverSelect)
     .eq("id", requestId)
     .maybeSingle();
-  if (error || !data) {
+  if (error) {
+    console.error("Không thể tải phiếu giao nhận thiết bị", {
+      requestId,
+      error,
+    });
+    return NextResponse.json(
+      { error: "Không thể tải phiếu giao nhận thiết bị." },
+      { status: 500 },
+    );
+  }
+  if (!data) {
     return NextResponse.json(
       { error: "Không tìm thấy phiếu thiết bị." },
       { status: 404 },

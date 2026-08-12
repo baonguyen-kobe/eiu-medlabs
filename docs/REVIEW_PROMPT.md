@@ -6,20 +6,20 @@ Hãy review toàn diện dự án MedLabs Calendar trong archive này.
 
 1. `docs/AI_REVIEW_BRIEF.md`
 2. `docs/UI_LAYOUT_SPEC.md`
-3. `project-brief/AI Prompt 2 - Revised.txt`
-4. `supabase/schemas/01_app.sql`
+3. `AGENTS.md` và `openspec/config.yaml`
+4. Toàn bộ `supabase/schemas/*.sql` liên quan đến finding; không coi riêng `01_app.sql` là schema hiện hành.
 5. `components/dashboard.tsx`
 6. `app/schedule-entry/import/actions.ts`
-7. Các file còn lại theo phạm vi finding.
+7. Các OpenSpec, route, migration và test liên quan theo phạm vi finding.
 
 Phạm vi review:
 
 - Nghiệp vụ và phân quyền đa vai trò.
 - Supabase RLS, RPC, grants, trigger và race condition.
 - Import CSV/XLSX, validation, duplicate handling và transaction consistency.
-- Vòng đời draft/published/cancelled/completed.
+- Vòng đời published/cancelled/completed và các enum legacy còn giữ cho tương thích.
 - React/Next.js Server Action, hydration và performance.
-- Giao diện tháng/tuần/ngày/danh sách.
+- Giao diện tháng/tuần/danh sách.
 - Bố cục bốn vùng học/trực sáng/chiều trong từng ngày.
 - Responsive, accessibility, focus, keyboard và color contrast.
 - Test coverage và các trường hợp còn thiếu.

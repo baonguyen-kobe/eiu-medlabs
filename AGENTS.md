@@ -11,7 +11,7 @@ The project knowledge graph lives in `graphify-out/`. Run Graphify commands from
 - Keep generated, temporary, backup, and tool-index files out of the graph via `.graphifyignore`.
 - After modifying code or project instructions, run `graphify update .`.
 
-GitNexus is optional. Use it only when a large or high-risk refactor needs a second impact-analysis view. Do not require both graph systems for routine work. Refresh its index with `node .gitnexus/run.cjs analyze --force --index-only` so generated GitNexus instructions do not overwrite this guide.
+GitNexus is optional and is not currently configured in this checkout. Use it only when it is available and a large or high-risk refactor benefits from a second impact-analysis view. Do not require it for routine work, and do not let generated GitNexus instructions override this guide.
 
 ## Version-matched Next.js guidance
 
