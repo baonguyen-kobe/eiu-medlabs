@@ -95,13 +95,25 @@ test("release identity pins reviewed migration content and rejects frozen histor
   const remoteForbiddenIndex = workflow.indexOf(
     "frozen PR #2 migration is already applied remotely",
   );
+  const historyDivergenceIndex = workflow.indexOf(
+    "production migration history contains an unknown remote version",
+  );
   const dryRunIndex = workflow.indexOf("supabase db push --linked --dry-run");
   const actualPushIndex = workflow.indexOf("supabase db push --linked\n");
 
   assert.ok(preflightIndex >= 0);
   assert.ok(remoteForbiddenIndex > preflightIndex);
-  assert.ok(dryRunIndex > remoteForbiddenIndex);
+  assert.ok(historyDivergenceIndex > remoteForbiddenIndex);
+  assert.ok(dryRunIndex > historyDivergenceIndex);
   assert.ok(actualPushIndex > dryRunIndex);
+  assert.match(
+    workflow,
+    /production migration history is missing a required baseline version/,
+  );
+  assert.match(
+    workflow,
+    /a reviewed target is already applied before this controlled rollout/,
+  );
 });
 
 test("workflow excludes unsafe migration, seed, SQL, and secret-handling paths", () => {

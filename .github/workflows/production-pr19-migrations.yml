@@ -103,6 +103,18 @@ jobs:
               | grep -E '^[0-9]{14}$' \
               | sort -u
           )
+          mapfile -t local_versions < <(
+            jq -r '.migrations[] | (.local // empty)' "$RUNNER_TEMP/pr19-migrations-before.json" \
+              | grep -E '^[0-9]{14}$' \
+              | sort -u
+          )
+          readonly expected_versions=(
+            "20260811230000"
+            "20260812000000"
+            "20260812010000"
+            "20260812022922"
+            "20260812030000"
+          )
           readonly forbidden_versions=(
             "20260809120000"
             "20260809130000"
@@ -118,6 +130,25 @@ jobs:
           for version in "${forbidden_versions[@]}"; do
             if printf '%s\n' "${remote_versions[@]}" | grep -Fxq "$version"; then
               echo "MIGRATION_ALLOWLIST_MISMATCH: frozen PR #2 migration is already applied remotely."
+              exit 1
+            fi
+          done
+
+          for version in "${remote_versions[@]}"; do
+            if ! printf '%s\n' "${local_versions[@]}" | grep -Fxq "$version"; then
+              echo "MIGRATION_ALLOWLIST_MISMATCH: production migration history contains an unknown remote version."
+              exit 1
+            fi
+          done
+
+          for version in "${local_versions[@]}"; do
+            if printf '%s\n' "${expected_versions[@]}" | grep -Fxq "$version"; then
+              if printf '%s\n' "${remote_versions[@]}" | grep -Fxq "$version"; then
+                echo "MIGRATION_ALLOWLIST_MISMATCH: a reviewed target is already applied before this controlled rollout."
+                exit 1
+              fi
+            elif ! printf '%s\n' "${remote_versions[@]}" | grep -Fxq "$version"; then
+              echo "MIGRATION_ALLOWLIST_MISMATCH: production migration history is missing a required baseline version."
               exit 1
             fi
           done
