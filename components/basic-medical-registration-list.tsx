@@ -9,8 +9,8 @@ import {
   useTransition,
 } from "react";
 import { createPortal } from "react-dom";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   confirmBasicMedicalSession,
   cancelBasicMedicalRegistration,
@@ -429,6 +429,7 @@ function SessionStatus({
   session,
   confirmation,
   historicalConfirmations,
+  evidenceEnabled,
   viewerId,
   now,
   onOpen,
@@ -436,6 +437,7 @@ function SessionStatus({
   session: BasicMedicalRegistrationSessionItem;
   confirmation?: { id: string; signed_at: string };
   historicalConfirmations: BasicMedicalRegistrationSessionItem["confirmations"];
+  evidenceEnabled: boolean;
   viewerId: string;
   now: number;
   onOpen: () => void;
@@ -447,27 +449,31 @@ function SessionStatus({
         <small>
           {dateTimeFormatter.format(new Date(confirmation.signed_at))}
         </small>
-        <Link
-          className="button button-secondary basic-medical-confirm-button"
-          href={`/basic-medical/registrations/confirmations/${confirmation.id}`}
-        >
-          Xem bằng chứng
-        </Link>
-        {historicalConfirmations
-          .filter(
-            (historical) =>
-              historical.invalidated_at !== null &&
-              historical.id !== confirmation.id,
-          )
-          .map((historical) => (
+        {evidenceEnabled ? (
+          <>
             <Link
-              key={historical.id}
               className="button button-secondary basic-medical-confirm-button"
-              href={`/basic-medical/registrations/confirmations/${historical.id}`}
+              href={`/basic-medical/registrations/confirmations/${confirmation.id}`}
             >
-              Bằng chứng đã vô hiệu
+              Xem bằng chứng
             </Link>
-          ))}
+            {historicalConfirmations
+              .filter(
+                (historical) =>
+                  historical.invalidated_at !== null &&
+                  historical.id !== confirmation.id,
+              )
+              .map((historical) => (
+                <Link
+                  key={historical.id}
+                  className="button button-secondary basic-medical-confirm-button"
+                  href={`/basic-medical/registrations/confirmations/${historical.id}`}
+                >
+                  Bằng chứng đã vô hiệu
+                </Link>
+              ))}
+          </>
+        ) : null}
       </div>
     );
   }
@@ -480,22 +486,22 @@ function SessionStatus({
         <span className="request-status request-status-gray">
           Xác nhận đã vô hiệu
         </span>
-        {invalidatedConfirmations.map((historical) => (
-          <Link
-            key={historical.id}
-            className="button button-secondary basic-medical-confirm-button"
-            href={`/basic-medical/registrations/confirmations/${historical.id}`}
-          >
-            Xem bằng chứng
-          </Link>
-        ))}
+        {evidenceEnabled
+          ? invalidatedConfirmations.map((historical) => (
+              <Link
+                key={historical.id}
+                className="button button-secondary basic-medical-confirm-button"
+                href={`/basic-medical/registrations/confirmations/${historical.id}`}
+              >
+                Xem bằng chứng
+              </Link>
+            ))
+          : null}
       </div>
     );
   }
   if (session.class_schedules?.schedule_status === "cancelled") {
-    return (
-      <span className="request-status request-status-gray">ÄÃ£ há»§y</span>
-    );
+    return <span className="request-status request-status-gray">Đã hủy</span>;
   }
   const isTeachingLecturer = session.teaching_lecturer_id === viewerId;
   const earliest = earliestConfirmationDate(session);
@@ -530,11 +536,13 @@ export function BasicMedicalRegistrationList({
   inventories,
   viewerId,
   canDelete,
+  evidenceEnabled,
 }: {
   registrations: BasicMedicalRegistrationListItem[];
   inventories: BasicMedicalRoomInventoryItem[];
   viewerId: string;
   canDelete: boolean;
+  evidenceEnabled: boolean;
 }) {
   const router = useRouter();
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
@@ -800,6 +808,7 @@ export function BasicMedicalRegistrationList({
                                           historicalConfirmations={
                                             session.confirmations
                                           }
+                                          evidenceEnabled={evidenceEnabled}
                                           viewerId={viewerId}
                                           now={confirmationNow}
                                           onOpen={() =>

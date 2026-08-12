@@ -6,6 +6,7 @@ import type {
   BasicMedicalRegistrationListItem,
   BasicMedicalRoomInventoryItem,
 } from "@/lib/basic-medical-equipment";
+import { isBasicMedicalConfirmationEvidenceEnabled } from "@/lib/basic-medical-confirmation-evidence";
 import { normalizePage, paginationRange } from "@/lib/pagination";
 import { getViewer } from "@/lib/viewer";
 import {
@@ -195,6 +196,7 @@ export default async function BasicMedicalRegistrationsPage({
         }
         viewerId={userId}
         canDelete={canDelete}
+        evidenceEnabled={isBasicMedicalConfirmationEvidenceEnabled()}
       />
       <PaginationLinks
         currentPage={currentPage}

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { WorkspaceShell } from "@/components/workspace-shell";
+import { isBasicMedicalConfirmationEvidenceEnabled } from "@/lib/basic-medical-confirmation-evidence";
 import type { BasicMedicalConfirmationEvidence } from "@/lib/basic-medical-equipment";
 import { getViewer } from "@/lib/viewer";
 import { canViewBasicMedicalRegistrations } from "@/lib/workspace-access";
@@ -28,6 +29,8 @@ export default async function BasicMedicalConfirmationEvidencePage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  if (!isBasicMedicalConfirmationEvidenceEnabled()) notFound();
+
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
 
