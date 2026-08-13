@@ -161,6 +161,7 @@ jobs:
 
           const result = JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP, 'pr23-commercial-name-audit.json'), 'utf8'));
           const candidates = [
+            result?.[0]?.audit,
             result?.rows?.[0]?.audit,
             result?.data?.[0]?.audit,
             result?.result?.[0]?.audit,
