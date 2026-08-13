@@ -1,0 +1,359 @@
+name: Production PR #23 authorized test catalog cleanup
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: production-pr23-test-catalog-cleanup
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    name: Delete only the authorized PR #23 test catalog graph
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PROJECT_REF: bwhiivfhezoozrzvchmm
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.PRODUCTION_DB_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install the locked Supabase CLI
+        run: npm ci --ignore-scripts
+
+      - name: Verify the fixed cleanup release contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          readonly workflow_file=".github/workflows/production-pr23-test-catalog-cleanup.yml"
+
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || {
+            echo "RELEASE_IDENTITY_CHANGED: cleanup may run only from main."
+            exit 1
+          }
+          grep -Fxq '      PROJECT_REF: bwhiivfhezoozrzvchmm' "$workflow_file" || {
+            echo "TEST_CATALOG_CLEANUP_CONTRACT_INVALID: fixed production project is missing."
+            exit 1
+          }
+          grep -Fq 'catalog_count <> 3' "$workflow_file" || exit 1
+          grep -Fq 'TEST_CATALOG_HAS_HISTORICAL_REFERENCES' "$workflow_file" || exit 1
+          grep -Fq 'TEST_CATALOG_HAS_UNEXPECTED_DEPENDENCIES' "$workflow_file" || exit 1
+          grep -Fq 'app.basic_medical_registration_mutation' "$workflow_file" || exit 1
+
+      - name: Link the fixed production project
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --no-install supabase link --project-ref "$PROJECT_REF" --yes
+
+      - name: Capture the locked cleanup preflight summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/pr23-test-catalog-preflight.sql" <<'SQL'
+          with target_catalog as (
+            select id from public.basic_medical_equipment_catalog
+          ),
+          target_inventory as (
+            select id, room_id
+            from public.basic_medical_room_inventory
+            where catalog_item_id in (select id from target_catalog)
+          ),
+          target_rooms as (
+            select distinct room_id as id from target_inventory
+          ),
+          target_registrations as (
+            select id from public.basic_medical_registrations
+            where room_id in (select id from target_rooms)
+          ),
+          target_schedules as (
+            select id from public.class_schedules
+            where basic_medical_registration_id in (select id from target_registrations)
+          ),
+          target_sessions as (
+            select id from public.basic_medical_registration_sessions
+            where registration_id in (select id from target_registrations)
+          )
+          select jsonb_build_object(
+            'catalog_rows', (select count(*) from target_catalog),
+            'inventory_rows', (select count(*) from target_inventory),
+            'room_rows', (select count(*) from target_rooms),
+            'registration_rows', (select count(*) from target_registrations),
+            'schedule_rows', (select count(*) from target_schedules),
+            'session_rows', (select count(*) from target_sessions),
+            'equipment_check_rows', (
+              select count(*) from public.basic_medical_session_equipment_checks
+              where inventory_id in (select id from target_inventory)
+            ),
+            'condition_log_rows', (
+              select count(*) from public.basic_medical_equipment_condition_logs
+              where inventory_id in (select id from target_inventory)
+            ),
+            'confirmation_rows', (
+              select count(*) from public.basic_medical_session_confirmations
+              where session_id in (select id from target_sessions)
+                 or room_id_snapshot in (select id from target_rooms)
+            ),
+            'migration_20260813130000_applied', exists (
+              select 1 from supabase_migrations.schema_migrations where version = '20260813130000'
+            ),
+            'migration_20260813150000_applied', exists (
+              select 1 from supabase_migrations.schema_migrations where version = '20260813150000'
+            )
+          ) as preflight;
+          SQL
+          npx --no-install supabase db query --linked --output-format json --file "$RUNNER_TEMP/pr23-test-catalog-preflight.sql" > "$RUNNER_TEMP/pr23-test-catalog-preflight.json"
+          RUNNER_TEMP="$RUNNER_TEMP" node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const result = JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP, 'pr23-test-catalog-preflight.json'), 'utf8'));
+          const raw = result?.[0]?.preflight ?? result?.rows?.[0]?.preflight ?? result?.preflight;
+          const preflight = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          if (!preflight || preflight.catalog_rows !== 3) throw new Error('TEST_CATALOG_STATE_CHANGED');
+          if (preflight.migration_20260813130000_applied || preflight.migration_20260813150000_applied) {
+            throw new Error('TEST_CATALOG_CLEANUP_RELEASE_STATE_CHANGED');
+          }
+          fs.writeFileSync(path.join(process.env.RUNNER_TEMP, 'pr23-test-catalog-preflight-summary.json'), JSON.stringify(preflight));
+          console.log(`Authorized catalog rows observed: ${preflight.catalog_rows}`);
+          console.log(`Direct room inventory rows observed: ${preflight.inventory_rows}`);
+          NODE
+
+      - name: Atomically delete only the authorized test catalog graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          # `supabase db query` accepts exactly one prepared statement. A single DO
+          # block is one atomic server transaction: any failed preflight assertion
+          # rolls back every deletion before the statement can commit.
+          cat > "$RUNNER_TEMP/pr23-test-catalog-cleanup.sql" <<'SQL'
+          do $$
+          declare
+            target_catalog_ids uuid[];
+            target_inventory_ids uuid[];
+            target_room_ids uuid[];
+            target_registration_ids uuid[];
+            target_schedule_ids uuid[];
+            target_session_ids uuid[];
+            catalog_count integer;
+            expected_count integer;
+            deleted_count integer;
+            historical_count bigint;
+            ref_count bigint;
+            ref record;
+            referenced_ids uuid[];
+          begin
+            lock table public.basic_medical_equipment_catalog,
+              public.basic_medical_room_inventory,
+              public.rooms,
+              public.basic_medical_registrations,
+              public.basic_medical_registration_sessions,
+              public.class_schedules in share row exclusive mode;
+
+            select array_agg(id order by id), count(*)
+            into target_catalog_ids, catalog_count
+            from public.basic_medical_equipment_catalog;
+            if catalog_count <> 3 then
+              raise exception 'TEST_CATALOG_STATE_CHANGED' using errcode = 'P0001';
+            end if;
+
+            select array_agg(id order by id), array_agg(room_id order by id)
+            into target_inventory_ids, target_room_ids
+            from public.basic_medical_room_inventory
+            where catalog_item_id = any(target_catalog_ids);
+            select coalesce(array_agg(id order by id), '{}'::uuid[])
+            into target_room_ids
+            from (select distinct unnest(coalesce(target_room_ids, '{}'::uuid[])) as id) as rooms;
+
+            select coalesce(array_agg(id order by id), '{}'::uuid[])
+            into target_registration_ids
+            from public.basic_medical_registrations
+            where room_id = any(target_room_ids);
+            select coalesce(array_agg(id order by id), '{}'::uuid[])
+            into target_schedule_ids
+            from public.class_schedules
+            where basic_medical_registration_id = any(target_registration_ids);
+            select coalesce(array_agg(id order by id), '{}'::uuid[])
+            into target_session_ids
+            from public.basic_medical_registration_sessions
+            where registration_id = any(target_registration_ids);
+
+            if exists (
+              select 1 from public.class_schedules
+              where room_id = any(target_room_ids)
+                and id <> all(target_schedule_ids)
+            ) then
+              raise exception 'TEST_CATALOG_HAS_UNEXPECTED_DEPENDENCIES' using errcode = 'P0001';
+            end if;
+
+            select count(*) into historical_count
+            from public.basic_medical_session_equipment_checks
+            where inventory_id = any(coalesce(target_inventory_ids, '{}'::uuid[]));
+            historical_count := historical_count + (
+              select count(*) from public.basic_medical_equipment_condition_logs
+              where inventory_id = any(coalesce(target_inventory_ids, '{}'::uuid[]))
+            ) + (
+              select count(*) from public.basic_medical_session_confirmations
+              where session_id = any(target_session_ids)
+                 or room_id_snapshot = any(target_room_ids)
+            );
+            if historical_count <> 0 then
+              raise exception 'TEST_CATALOG_HAS_HISTORICAL_REFERENCES' using errcode = 'P0001';
+            end if;
+
+            for ref in
+              select namespace.nspname as schema_name, relation.relname as table_name,
+                attribute.attname as column_name, constraint_row.confrelid
+              from pg_constraint as constraint_row
+              join pg_class as relation on relation.oid = constraint_row.conrelid
+              join pg_namespace as namespace on namespace.oid = relation.relnamespace
+              join unnest(constraint_row.conkey) as key(attnum) on true
+              join pg_attribute as attribute on attribute.attrelid = constraint_row.conrelid and attribute.attnum = key.attnum
+              where constraint_row.contype = 'f'
+                and constraint_row.confrelid in (
+                  'public.basic_medical_equipment_catalog'::regclass,
+                  'public.basic_medical_room_inventory'::regclass,
+                  'public.rooms'::regclass,
+                  'public.basic_medical_registrations'::regclass,
+                  'public.basic_medical_registration_sessions'::regclass,
+                  'public.class_schedules'::regclass
+                )
+            loop
+              referenced_ids := case ref.confrelid
+                when 'public.basic_medical_equipment_catalog'::regclass then target_catalog_ids
+                when 'public.basic_medical_room_inventory'::regclass then coalesce(target_inventory_ids, '{}'::uuid[])
+                when 'public.rooms'::regclass then target_room_ids
+                when 'public.basic_medical_registrations'::regclass then target_registration_ids
+                when 'public.basic_medical_registration_sessions'::regclass then target_session_ids
+                when 'public.class_schedules'::regclass then target_schedule_ids
+              end;
+              execute format('select count(*) from %I.%I where %I = any ($1)', ref.schema_name, ref.table_name, ref.column_name)
+              using referenced_ids into ref_count;
+
+              if (ref.table_name, ref.column_name, ref.confrelid) in (
+                ('basic_medical_room_inventory', 'catalog_item_id', 'public.basic_medical_equipment_catalog'::regclass),
+                ('basic_medical_room_inventory', 'room_id', 'public.rooms'::regclass),
+                ('basic_medical_registrations', 'room_id', 'public.rooms'::regclass),
+                ('class_schedules', 'room_id', 'public.rooms'::regclass),
+                ('class_schedules', 'basic_medical_registration_id', 'public.basic_medical_registrations'::regclass),
+                ('basic_medical_registration_sessions', 'registration_id', 'public.basic_medical_registrations'::regclass),
+                ('basic_medical_registration_sessions', 'class_schedule_id', 'public.class_schedules'::regclass)
+              ) then
+                continue;
+              end if;
+
+              if ref_count <> 0 then
+                raise exception 'TEST_CATALOG_HAS_UNEXPECTED_DEPENDENCIES' using errcode = 'P0001';
+              end if;
+            end loop;
+
+            perform set_config('app.basic_medical_registration_mutation', 'true', true);
+
+            expected_count := coalesce(array_length(target_session_ids, 1), 0);
+            delete from public.basic_medical_registration_sessions where id = any(target_session_ids);
+            get diagnostics deleted_count = row_count;
+            if deleted_count <> expected_count then raise exception 'TEST_CATALOG_STATE_CHANGED' using errcode = 'P0001'; end if;
+
+            expected_count := coalesce(array_length(target_schedule_ids, 1), 0);
+            delete from public.class_schedules where id = any(target_schedule_ids);
+            get diagnostics deleted_count = row_count;
+            if deleted_count <> expected_count then raise exception 'TEST_CATALOG_STATE_CHANGED' using errcode = 'P0001'; end if;
+
+            expected_count := coalesce(array_length(target_registration_ids, 1), 0);
+            delete from public.basic_medical_registrations where id = any(target_registration_ids);
+            get diagnostics deleted_count = row_count;
+            if deleted_count <> expected_count then raise exception 'TEST_CATALOG_STATE_CHANGED' using errcode = 'P0001'; end if;
+
+            expected_count := coalesce(array_length(target_inventory_ids, 1), 0);
+            delete from public.basic_medical_room_inventory where id = any(coalesce(target_inventory_ids, '{}'::uuid[]));
+            get diagnostics deleted_count = row_count;
+            if deleted_count <> expected_count then raise exception 'TEST_CATALOG_STATE_CHANGED' using errcode = 'P0001'; end if;
+
+            expected_count := coalesce(array_length(target_room_ids, 1), 0);
+            delete from public.rooms where id = any(target_room_ids);
+            get diagnostics deleted_count = row_count;
+            if deleted_count <> expected_count then raise exception 'TEST_CATALOG_STATE_CHANGED' using errcode = 'P0001'; end if;
+
+            delete from public.basic_medical_equipment_catalog where id = any(target_catalog_ids);
+            get diagnostics deleted_count = row_count;
+            if deleted_count <> 3 then raise exception 'TEST_CATALOG_STATE_CHANGED' using errcode = 'P0001'; end if;
+
+            if exists (select 1 from public.basic_medical_equipment_catalog) then
+              raise exception 'TEST_CATALOG_STATE_CHANGED' using errcode = 'P0001';
+            end if;
+          end $$;
+          SQL
+          npx --no-install supabase db query --linked --output-format json --file "$RUNNER_TEMP/pr23-test-catalog-cleanup.sql"
+
+      - name: Verify cleanup result and write private artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/pr23-test-catalog-postcheck.sql" <<'SQL'
+          select jsonb_build_object(
+            'catalog_rows_remaining', (select count(*) from public.basic_medical_equipment_catalog),
+            'inventory_rows_joining_catalog', (
+              select count(*) from public.basic_medical_room_inventory as inventory
+              join public.basic_medical_equipment_catalog as catalog on catalog.id = inventory.catalog_item_id
+            ),
+            'migration_20260813130000_applied', exists (
+              select 1 from supabase_migrations.schema_migrations where version = '20260813130000'
+            ),
+            'migration_20260813150000_applied', exists (
+              select 1 from supabase_migrations.schema_migrations where version = '20260813150000'
+            )
+          ) as postcheck;
+          SQL
+          npx --no-install supabase db query --linked --output-format json --file "$RUNNER_TEMP/pr23-test-catalog-postcheck.sql" > "$RUNNER_TEMP/pr23-test-catalog-postcheck.json"
+          RUNNER_TEMP="$RUNNER_TEMP" node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const temp = process.env.RUNNER_TEMP;
+          const parseObject = (file, key) => {
+            const result = JSON.parse(fs.readFileSync(path.join(temp, file), 'utf8'));
+            const raw = result?.[0]?.[key] ?? result?.rows?.[0]?.[key] ?? result?.[key];
+            return typeof raw === 'string' ? JSON.parse(raw) : raw;
+          };
+          const preflight = JSON.parse(fs.readFileSync(path.join(temp, 'pr23-test-catalog-preflight-summary.json'), 'utf8'));
+          const postcheck = parseObject('pr23-test-catalog-postcheck.json', 'postcheck');
+          if (!postcheck || postcheck.catalog_rows_remaining !== 0 || postcheck.inventory_rows_joining_catalog !== 0) {
+            throw new Error('TEST_CATALOG_CLEANUP_POSTCHECK_FAILED');
+          }
+          if (postcheck.migration_20260813130000_applied || postcheck.migration_20260813150000_applied) {
+            throw new Error('TEST_CATALOG_CLEANUP_POSTCHECK_FAILED');
+          }
+          const output = path.join(temp, 'pr23-test-catalog-cleanup');
+          fs.mkdirSync(output, { recursive: true });
+          fs.writeFileSync(path.join(output, 'summary.txt'), [
+            'Authorized test catalog cleanup: PASS',
+            'Catalog rows deleted: 3',
+            `Room inventory rows deleted: ${preflight.inventory_rows}`,
+            `Rooms deleted: ${preflight.room_rows}`,
+            `Basic Medical registrations deleted: ${preflight.registration_rows}`,
+            `Linked class schedules deleted: ${preflight.schedule_rows}`,
+            `Linked registration sessions deleted: ${preflight.session_rows}`,
+            'Historical/equipment-check/condition-log/confirmation rows deleted: 0',
+            `Catalog rows remaining: ${postcheck.catalog_rows_remaining}`,
+            `Catalog-joined inventory rows remaining: ${postcheck.inventory_rows_joining_catalog}`,
+            'Blocked migrations remain absent: PASS',
+          ].join('\n') + '\n');
+          NODE
+
+      - name: Upload private cleanup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr23-authorized-test-catalog-cleanup
+          path: ${{ runner.temp }}/pr23-test-catalog-cleanup
+          if-no-files-found: error
+          retention-days: 14
