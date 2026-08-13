@@ -1,7 +1,7 @@
 export type BasicMedicalEquipmentCatalogItem = {
   id: string;
   item_name: string;
-  commercial_name: string | null;
+  commercial_name: string;
   item_type: string | null;
   country_of_origin: string | null;
   manufacturer: string | null;
@@ -132,6 +132,14 @@ export type BasicMedicalConfirmationEvidence = {
   end_time_snapshot: string;
   room_id_snapshot: string;
   teaching_lecturer_id_snapshot: string;
+  course_code_snapshot: string | null;
+  course_name_snapshot: string | null;
+  room_code_snapshot: string | null;
+  building_code_snapshot: string | null;
+  room_name_snapshot: string | null;
+  teaching_lecturer_name_snapshot: string | null;
+  signer_name_snapshot: string | null;
+  display_snapshots_available: boolean;
   signed_at: string;
   invalidated_at: string | null;
   invalidated_reason: string | null;

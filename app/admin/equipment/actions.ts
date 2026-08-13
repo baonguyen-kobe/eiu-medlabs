@@ -280,6 +280,32 @@ export async function disableEquipmentCatalogItems(
   return { ok: true, message: `Đã ngừng sử dụng ${data.length} thiết bị.` };
 }
 
+export async function setEquipmentCatalogActive(
+  rawIds: string[],
+  active: boolean,
+): Promise<EquipmentCatalogActionResult> {
+  const supabase = await requireCatalogManager();
+  const ids = [...new Set(rawIds)].filter((id) => uuidPattern.test(id));
+  if (!ids.length || ids.length > 1000) {
+    return { ok: false, message: "Vui lòng chọn thiết bị cần cập nhật." };
+  }
+  const { data, error } = await supabase
+    .from("equipment_catalog")
+    .update({ is_active: active })
+    .in("id", ids)
+    .select("id");
+  if (error || !data?.length) {
+    return { ok: false, message: "Không thể cập nhật trạng thái thiết bị." };
+  }
+  revalidatePath("/admin/equipment");
+  return {
+    ok: true,
+    message: active
+      ? `Đã kích hoạt ${data.length} thiết bị.`
+      : `Đã ngừng sử dụng ${data.length} thiết bị.`,
+  };
+}
+
 export async function deleteEquipmentCatalogItems(
   rawIds: string[],
 ): Promise<EquipmentCatalogActionResult> {

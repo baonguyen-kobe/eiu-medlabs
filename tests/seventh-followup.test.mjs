@@ -443,7 +443,7 @@ test("Basic Medical catalog candidate search is unbounded and import validation 
   const suffix = crypto.randomUUID().slice(0, 8);
   const rows = Array.from({ length: 510 }, (_, index) => ({
     item_name: `Seventh catalog ${suffix} ${String(index).padStart(3, "0")}`,
-    commercial_name: null,
+    commercial_name: `Seventh commercial ${suffix} ${String(index).padStart(3, "0")}`,
     model: `${suffix}-${index}`,
     unit: "Cái",
   }));

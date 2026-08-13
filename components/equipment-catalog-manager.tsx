@@ -7,6 +7,7 @@ import {
   deleteEquipmentCatalogItems,
   disableEquipmentCatalogItems,
   importEquipmentCatalog,
+  setEquipmentCatalogActive,
   updateEquipmentCatalogItems,
   type EquipmentCatalogInput,
 } from "@/app/admin/equipment/actions";
@@ -28,7 +29,7 @@ export type EquipmentCatalogItem = EquipmentCatalogInput & {
   is_active: boolean;
 };
 
-type CatalogMode = "edit" | "disable" | "delete" | null;
+type CatalogMode = "edit" | "activate" | "disable" | "delete" | null;
 type SortKey =
   | "item_name"
   | "commercial_name"
@@ -241,7 +242,11 @@ export function EquipmentCatalogManager({
 
   function applySelection() {
     const ids = [...selectedIds];
-    if (!ids.length || (mode !== "disable" && mode !== "delete")) return;
+    if (
+      !ids.length ||
+      (mode !== "activate" && mode !== "disable" && mode !== "delete")
+    )
+      return;
     if (
       mode === "delete" &&
       !window.confirm(
@@ -252,16 +257,20 @@ export function EquipmentCatalogManager({
     }
     startTransition(async () => {
       const result =
-        mode === "disable"
-          ? await disableEquipmentCatalogItems(ids)
-          : await deleteEquipmentCatalogItems(ids);
+        mode === "activate"
+          ? await setEquipmentCatalogActive(ids, true)
+          : mode === "disable"
+            ? await disableEquipmentCatalogItems(ids)
+            : await deleteEquipmentCatalogItems(ids);
       setNotice(result);
       if (result.ok) {
         const idSet = new Set(ids);
         setRows((current) =>
-          mode === "disable"
+          mode === "activate" || mode === "disable"
             ? current.map((row) =>
-                idSet.has(row.id) ? { ...row, is_active: false } : row,
+                idSet.has(row.id)
+                  ? { ...row, is_active: mode === "activate" }
+                  : row,
               )
             : current.filter((row) => !idSet.has(row.id)),
         );
@@ -432,6 +441,14 @@ export function EquipmentCatalogManager({
           <div className="equipment-catalog-mode-buttons">
             <button
               type="button"
+              className={`button button-primary${mode === "activate" ? " active" : ""}`}
+              disabled={isPending || (mode !== null && mode !== "activate")}
+              onClick={() => switchMode("activate")}
+            >
+              <PackageCheck size={17} /> Kích hoạt
+            </button>
+            <button
+              type="button"
               className={`button equipment-catalog-edit${mode === "edit" ? " active" : ""}`}
               disabled={isPending || (mode !== null && mode !== "edit")}
               onClick={() =>
@@ -470,7 +487,7 @@ export function EquipmentCatalogManager({
           ) : null}
         </div>
 
-        {mode === "disable" || mode === "delete" ? (
+        {mode === "activate" || mode === "disable" || mode === "delete" ? (
           <div className={`equipment-bulk-confirm equipment-bulk-${mode}`}>
             <span>Đã chọn {selectedIds.size} thiết bị</span>
             <button
@@ -481,9 +498,11 @@ export function EquipmentCatalogManager({
             >
               {isPending
                 ? "Đang xử lý…"
-                : mode === "disable"
-                  ? "Xác nhận ngừng sử dụng"
-                  : "Xác nhận xóa"}
+                : mode === "activate"
+                  ? "Kích hoạt"
+                  : mode === "disable"
+                    ? "Xác nhận ngừng sử dụng"
+                    : "Xác nhận xóa"}
             </button>
           </div>
         ) : null}
@@ -501,7 +520,9 @@ export function EquipmentCatalogManager({
           <table className="data-table equipment-catalog-table">
             <thead>
               <tr>
-                {mode === "disable" || mode === "delete" ? (
+                {mode === "activate" ||
+                mode === "disable" ||
+                mode === "delete" ? (
                   <th className="equipment-select-column">
                     <input
                       aria-label="Chọn tất cả thiết bị đang hiển thị"
@@ -562,7 +583,9 @@ export function EquipmentCatalogManager({
                         : undefined
                     }
                   >
-                    {mode === "disable" || mode === "delete" ? (
+                    {mode === "activate" ||
+                    mode === "disable" ||
+                    mode === "delete" ? (
                       <td className="equipment-select-column">
                         <input
                           aria-label={`Chọn ${item.item_name}`}

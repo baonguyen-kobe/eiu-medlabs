@@ -364,8 +364,8 @@ begin
   select * into v_ctx from _test_context;
 
   -- Ensure inventory item exists for the room
-  insert into public.basic_medical_equipment_catalog (item_name, unit, is_active)
-  values ('Mô hình tim 3D', 'Bộ', true)
+  insert into public.basic_medical_equipment_catalog (item_name, commercial_name, unit, is_active)
+  values ('Mô hình tim 3D', 'Y05 Mô hình tim 3D', 'Bộ', true)
   returning id into v_inv_id;
 
   insert into public.basic_medical_room_inventory (room_id, catalog_item_id, total_quantity, good_quantity, damaged_quantity, is_active)
@@ -877,7 +877,7 @@ do $$
 declare alternate_catalog_id uuid;
 begin
   insert into public.basic_medical_equipment_catalog (item_name, commercial_name, unit, is_active)
-  values ('Y-05 alternate identity', null, 'Bá»™', true)
+  values ('Y-05 alternate identity', 'Y05 alternate identity', 'Bá»™', true)
   returning id into alternate_catalog_id;
   insert into _y05_alternate_catalog values (alternate_catalog_id);
 end $$;
@@ -964,8 +964,8 @@ create temp table _y05_added_inventory (catalog_id uuid, inventory_id uuid);
 do $$
 declare added_catalog_id uuid; added_inventory_id uuid;
 begin
-  insert into public.basic_medical_equipment_catalog (item_name, unit, is_active)
-  values ('Y-05 newly added eligible item', 'Bá»™', true) returning id into added_catalog_id;
+  insert into public.basic_medical_equipment_catalog (item_name, commercial_name, unit, is_active)
+  values ('Y-05 newly added eligible item', 'Y05 newly added eligible item', 'Bá»™', true) returning id into added_catalog_id;
   insert into public.basic_medical_room_inventory
     (room_id, catalog_item_id, total_quantity, good_quantity, damaged_quantity, is_active)
   values ((select room_id from _test_context), added_catalog_id, 1, 1, 0, true)
@@ -990,8 +990,8 @@ truncate _y05_added_inventory;
 do $$
 declare added_catalog_id uuid; added_inventory_id uuid;
 begin
-  insert into public.basic_medical_equipment_catalog (item_name, unit, is_active)
-  values ('Y-05 reactivated item', 'Bá»™', false) returning id into added_catalog_id;
+  insert into public.basic_medical_equipment_catalog (item_name, commercial_name, unit, is_active)
+  values ('Y-05 reactivated item', 'Y05 reactivated item', 'Bá»™', false) returning id into added_catalog_id;
   insert into public.basic_medical_room_inventory
     (room_id, catalog_item_id, total_quantity, good_quantity, damaged_quantity, is_active)
   values ((select room_id from _test_context), added_catalog_id, 1, 1, 0, false)
