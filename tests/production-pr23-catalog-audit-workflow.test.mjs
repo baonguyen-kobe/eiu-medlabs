@@ -35,6 +35,7 @@ test("PR #23 catalog audit selects only the approved catalog evidence", () => {
   assert.match(workflow, /public\.basic_medical_room_inventory as inventory/);
   assert.match(workflow, /basic_medical_equipment_catalog as catalog/);
   assert.match(workflow, /name: pr23-commercial-name-audit/);
+  assert.match(workflow, /result\?\.\[0\]\?\.audit/);
   assert.match(workflow, /result\?\.rows\?\.\[0\]\?\.audit/);
   assert.match(workflow, /result\?\.data\?\.\[0\]\?\.audit/);
   assert.match(workflow, /result\?\.result\?\.\[0\]\?\.audit/);
