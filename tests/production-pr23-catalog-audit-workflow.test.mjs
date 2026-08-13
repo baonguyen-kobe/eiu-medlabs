@@ -13,6 +13,10 @@ const workflow = await readFile(
 test("PR #23 catalog audit workflow is dispatch-only and uses the fixed linked project", () => {
   assert.match(workflow, /^on:\n  workflow_dispatch:$/m);
   assert.match(workflow, /PROJECT_REF: bwhiivfhezoozrzvchmm/);
+  assert.match(
+    workflow,
+    /SUPABASE_DB_PASSWORD: \$\{\{ secrets\.PRODUCTION_DB_PASSWORD \}\}/,
+  );
   assert.match(workflow, /supabase link --project-ref "\$PROJECT_REF" --yes/);
   assert.match(
     workflow,
