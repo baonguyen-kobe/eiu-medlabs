@@ -19,11 +19,10 @@ test("production test-catalog cleanup is fixed, main-only, and dispatch-only", (
   assert.doesNotMatch(workflow, /workflow_dispatch:\n\s+inputs:/);
 });
 
-test("cleanup rechecks the exact three-row state and fails closed on history or FK dependencies", () => {
+test("cleanup rechecks the exact three-row state and fails closed on outside-graph dependencies", () => {
   for (const marker of [
     "catalog_count <> 3",
     "TEST_CATALOG_STATE_CHANGED",
-    "TEST_CATALOG_HAS_HISTORICAL_REFERENCES",
     "TEST_CATALOG_HAS_UNEXPECTED_DEPENDENCIES",
     "pg_constraint",
     "basic_medical_session_equipment_checks",
@@ -36,7 +35,16 @@ test("cleanup rechecks the exact three-row state and fails closed on history or 
   assert.match(workflow, /app\.basic_medical_registration_mutation/);
 });
 
-test("cleanup deletes only the authorized graph in dependency order and does not run migrations", () => {
+test("cleanup deletes only the expanded authorized graph in dependency order and does not run migrations", () => {
+  const checkDelete = workflow.indexOf(
+    "delete from public.basic_medical_session_equipment_checks",
+  );
+  const logDelete = workflow.indexOf(
+    "delete from public.basic_medical_equipment_condition_logs",
+  );
+  const confirmationDelete = workflow.indexOf(
+    "delete from public.basic_medical_session_confirmations",
+  );
   const sessionDelete = workflow.indexOf(
     "delete from public.basic_medical_registration_sessions",
   );
@@ -52,7 +60,10 @@ test("cleanup deletes only the authorized graph in dependency order and does not
     "delete from public.basic_medical_equipment_catalog",
   );
   assert.ok(
-    sessionDelete < scheduleDelete &&
+    checkDelete < logDelete &&
+      logDelete < confirmationDelete &&
+      confirmationDelete < sessionDelete &&
+      sessionDelete < scheduleDelete &&
       scheduleDelete < registrationDelete &&
       registrationDelete < inventoryDelete &&
       inventoryDelete < roomDelete &&
