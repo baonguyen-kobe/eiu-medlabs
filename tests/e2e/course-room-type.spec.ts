@@ -2,6 +2,7 @@ import nextEnv from "@next/env";
 import * as XLSX from "@e965/xlsx";
 import { expect, test, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
+import { clickUntilState, openCombobox } from "./helpers/interaction-readiness";
 
 nextEnv.loadEnvConfig(process.cwd());
 
@@ -26,11 +27,8 @@ async function deleteCourseByCode(page: Page, courseCode: string) {
   await page.goto("/admin/courses");
   const row = page.locator("tbody tr").filter({ hasText: courseCode });
   if ((await row.count()) === 0) return;
+  page.once("dialog", (dialog) => dialog.accept());
   await row.getByRole("button", { name: "Xóa" }).click();
-  await page
-    .getByRole("dialog")
-    .getByRole("button", { name: "Xác nhận" })
-    .click();
 }
 
 test("môn học chỉ được gợi ý trong đúng Loại lịch", async ({ page }) => {
@@ -60,6 +58,7 @@ test("môn học chỉ được gợi ý trong đúng Loại lịch", async ({ p
     const skillsCourse = page.getByRole("combobox", {
       name: "Tìm và chọn môn học",
     });
+    await openCombobox(skillsCourse);
     await skillsCourse.fill(skillsCode);
     await expect(
       page
@@ -122,5 +121,114 @@ test("môn học chỉ được gợi ý trong đúng Loại lịch", async ({ p
     for (const courseCode of [skillsCode, medicalCode, importedCode]) {
       await deleteCourseByCode(page, courseCode);
     }
+  }
+});
+
+test("Admin edits and toggles selected Room and Course catalog rows through the batch UI", async ({
+  page,
+}) => {
+  const suffix = `${Date.now()}`.slice(-8);
+  const courseCodes = [`BC${suffix}A`, `BC${suffix}B`];
+  const roomCodes = [`BR${suffix}A`, `BR${suffix}B`];
+  const { error: courseError } = await serviceDb.from("courses").insert(
+    courseCodes.map((course_code) => ({
+      course_code,
+      course_name: `Batch Course ${course_code}`,
+      room_type_id: nursingSkillsRoomTypeId,
+    })),
+  );
+  if (courseError) throw courseError;
+  const { error: roomError } = await serviceDb.from("rooms").insert(
+    roomCodes.map((room_code) => ({
+      room_code,
+      building_code: "BATCH",
+      room_name: `Batch Room ${room_code}`,
+      capacity: 20,
+      room_type_id: nursingSkillsRoomTypeId,
+    })),
+  );
+  if (roomError) throw roomError;
+
+  try {
+    await loginAsAdmin(page);
+
+    await page.goto("/admin/courses");
+    for (const courseCode of courseCodes) {
+      const checkbox = page.getByLabel(`Chọn ${courseCode}`);
+      await clickUntilState(checkbox, () =>
+        expect(checkbox).toBeChecked({ timeout: 1_000 }),
+      );
+    }
+    await page.getByRole("button", { name: "Sửa mục đã chọn" }).click();
+    const courseEditors = page.locator("form.admin-create-form fieldset");
+    await expect(courseEditors).toHaveCount(2);
+    await courseEditors
+      .nth(0)
+      .getByLabel("Tên")
+      .fill(`Edited ${courseCodes[0]}`);
+    await courseEditors
+      .nth(1)
+      .getByLabel("Tên")
+      .fill(`Edited ${courseCodes[1]}`);
+    await page.getByRole("button", { name: "Lưu", exact: true }).click();
+    await expect(page.getByRole("status")).toContainText("Đã lưu thay đổi");
+    const firstCourseCheckbox = page.getByLabel(`Chọn ${courseCodes[0]}`);
+    await clickUntilState(firstCourseCheckbox, () =>
+      expect(firstCourseCheckbox).toBeChecked({ timeout: 1_000 }),
+    );
+    const secondCourseCheckbox = page.getByLabel(`Chọn ${courseCodes[1]}`);
+    await clickUntilState(secondCourseCheckbox, () =>
+      expect(secondCourseCheckbox).toBeChecked({ timeout: 1_000 }),
+    );
+    await page.getByRole("button", { name: "Ngừng dùng" }).click();
+    await expect(page.getByRole("status")).toContainText("Đã ngừng dùng");
+
+    const { data: updatedCourses, error: updatedCoursesError } = await serviceDb
+      .from("courses")
+      .select("course_code,course_name,is_active")
+      .in("course_code", courseCodes)
+      .order("course_code");
+    if (updatedCoursesError) throw updatedCoursesError;
+    expect(updatedCourses).toEqual([
+      {
+        course_code: courseCodes[0],
+        course_name: `Edited ${courseCodes[0]}`,
+        is_active: false,
+      },
+      {
+        course_code: courseCodes[1],
+        course_name: `Edited ${courseCodes[1]}`,
+        is_active: false,
+      },
+    ]);
+
+    await page.goto("/admin/rooms");
+    for (const roomCode of roomCodes) {
+      const checkbox = page.getByLabel(`Chọn ${roomCode}`);
+      await clickUntilState(checkbox, () =>
+        expect(checkbox).toBeChecked({ timeout: 1_000 }),
+      );
+    }
+    await page.getByRole("button", { name: "Sửa mục đã chọn" }).click();
+    const roomEditors = page.locator("form.admin-create-form fieldset");
+    await expect(roomEditors).toHaveCount(2);
+    await roomEditors.nth(0).getByLabel("Sức chứa").fill("25");
+    await roomEditors.nth(1).getByLabel("Sức chứa").fill("30");
+    await page.getByRole("button", { name: "Lưu", exact: true }).click();
+    await expect(page.getByRole("status")).toContainText("Đã lưu thay đổi");
+
+    const { data: updatedRooms, error: updatedRoomsError } = await serviceDb
+      .from("rooms")
+      .select("room_code,capacity")
+      .in("room_code", roomCodes)
+      .order("room_code");
+    if (updatedRoomsError) throw updatedRoomsError;
+    expect(updatedRooms).toEqual([
+      { room_code: roomCodes[0], capacity: 25 },
+      { room_code: roomCodes[1], capacity: 30 },
+    ]);
+  } finally {
+    await serviceDb.from("courses").delete().in("course_code", courseCodes);
+    await serviceDb.from("rooms").delete().in("room_code", roomCodes);
   }
 });

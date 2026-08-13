@@ -41,7 +41,7 @@ export async function login(
   const [{ data: profile }, { count: roleCount }] = await Promise.all([
     supabase
       .from("profiles")
-      .select("is_active")
+      .select("is_active,must_change_password")
       .eq("id", data.user.id)
       .maybeSingle(),
     supabase
@@ -57,6 +57,8 @@ export async function login(
         "Tài khoản chưa được tạo hoặc chưa được cấp vai trò trong Nhân sự.",
     };
   }
+
+  if (profile.must_change_password) redirect("/change-password");
 
   redirect("/dashboard");
 }

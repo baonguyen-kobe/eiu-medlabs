@@ -2,18 +2,15 @@ import { AdminShell } from "@/components/admin-shell";
 import {
   createRoom,
   createRoomType,
-  deleteRoom,
   importRooms,
-  toggleRoom,
   toggleRoomType,
 } from "@/app/admin/actions";
 import { CatalogTabs } from "@/components/catalog-tabs";
 import { CatalogImportActions } from "@/components/catalog-import-actions";
-import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
-import { Trash2 } from "@/components/icons";
 import { PaginationLinks } from "@/components/pagination-links";
 import { requireAdmin } from "@/lib/admin";
 import { normalizePage, paginationRange } from "@/lib/pagination";
+import { CatalogBatchManager } from "@/components/catalog-batch-manager";
 
 export default async function RoomsPage({
   searchParams,
@@ -39,7 +36,6 @@ export default async function RoomsPage({
       .select("id, code, name, is_active")
       .order("name"),
   ]);
-
   return (
     <AdminShell
       title="Danh mục phòng"
@@ -88,76 +84,19 @@ export default async function RoomsPage({
         </label>
         <button className="button button-primary">Thêm phòng</button>
       </form>
-      <div className="data-panel catalog-data-panel">
-        <div
-          className="responsive-table"
-          role="region"
-          aria-label="Danh mục phòng; vuốt ngang để xem đầy đủ"
-          tabIndex={0}
-        >
-          <table className="data-table catalog-data-table">
-            <thead>
-              <tr>
-                <th>Mã phòng</th>
-                <th>Tên</th>
-                <th>Loại</th>
-                <th>Sức chứa</th>
-                <th>Trạng thái</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {(rooms ?? []).map((room) => (
-                <tr key={room.id}>
-                  <td className="mono">
-                    {room.room_code}.{room.building_code}
-                  </td>
-                  <td>{room.room_name ?? "—"}</td>
-                  <td>
-                    {(room.room_types as unknown as { name: string } | null)
-                      ?.name ?? "—"}
-                  </td>
-                  <td>{room.capacity ?? "—"}</td>
-                  <td>
-                    <span
-                      className={`status-pill ${room.is_active ? "is-active" : ""}`}
-                    >
-                      {room.is_active ? "Đang dùng" : "Ngừng dùng"}
-                    </span>
-                  </td>
-                  <td className="catalog-row-actions">
-                    <form action={toggleRoom}>
-                      <input type="hidden" name="id" value={room.id} />
-                      <input
-                        type="hidden"
-                        name="active"
-                        value={String(!room.is_active)}
-                      />
-                      <button className="table-action">
-                        {room.is_active ? "Ngừng dùng" : "Kích hoạt"}
-                      </button>
-                    </form>
-                    <form action={deleteRoom}>
-                      <input type="hidden" name="id" value={room.id} />
-                      <ConfirmSubmitButton
-                        className="table-action delete-action"
-                        message={`Xóa phòng ${room.room_code}.${room.building_code}?`}
-                      >
-                        <Trash2 size={16} /> Xóa
-                      </ConfirmSubmitButton>
-                    </form>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <PaginationLinks
-          currentPage={currentPage}
-          totalItems={count ?? 0}
-          pathname="/admin/rooms"
-        />
-      </div>
+      <CatalogBatchManager
+        kind="rooms"
+        initialItems={(rooms ?? []).map((room) => ({
+          ...room,
+          room_types: room.room_types as unknown as { name: string } | null,
+        }))}
+        roomTypes={roomTypes ?? []}
+      />
+      <PaginationLinks
+        currentPage={currentPage}
+        totalItems={count ?? 0}
+        pathname="/admin/rooms"
+      />
       <details className="admin-create-personnel room-type-manager">
         <summary>Quản lý Loại phòng</summary>
         <form action={createRoomType} className="admin-create-form">

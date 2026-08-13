@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { assertPasswordChangeNotRequired } from "@/lib/forced-password";
 import { personnelRoleDisplayNames } from "@/lib/admin-catalog-template";
 import {
   assertUniquePersonnelImportIdentities,
@@ -15,6 +16,7 @@ async function adminContext() {
   const { data: claimsData } = await supabase.auth.getClaims();
   const userId = claimsData?.claims?.sub;
   if (!userId) throw new Error("AUTH_REQUIRED");
+  await assertPasswordChangeNotRequired(supabase, userId);
 
   const { data: role } = await supabase
     .from("user_roles")
@@ -31,6 +33,7 @@ async function personnelContext() {
   const { data: claimsData } = await supabase.auth.getClaims();
   const userId = claimsData?.claims?.sub;
   if (!userId) throw new Error("AUTH_REQUIRED");
+  await assertPasswordChangeNotRequired(supabase, userId);
   const { data, error } = await supabase.rpc("get_personnel_authority_context");
   const authority = data as {
     configured?: boolean;
@@ -153,11 +156,203 @@ export async function createCourse(formData: FormData) {
 
 export async function toggleCourse(formData: FormData) {
   const { supabase } = await adminContext();
-  await supabase
-    .from("courses")
-    .update({ is_active: String(formData.get("active")) === "true" })
-    .eq("id", String(formData.get("id") ?? ""));
+  const { error } = await supabase.rpc("set_catalog_courses_active", {
+    target_ids: [String(formData.get("id") ?? "")],
+    target_is_active: String(formData.get("active")) === "true",
+  });
+  if (error) throw new Error("CATALOG_UPDATE_FAILED");
   revalidatePath("/admin/courses");
+}
+
+export async function setRoomsActive(
+  targetIds: string[],
+  targetIsActive: boolean,
+) {
+  const { supabase } = await adminContext();
+  const { error } = await supabase.rpc("set_catalog_rooms_active", {
+    target_ids: targetIds,
+    target_is_active: targetIsActive,
+  });
+  if (error) throw new Error("CATALOG_UPDATE_FAILED");
+  revalidatePath("/admin/rooms");
+}
+
+export async function setCoursesActive(
+  targetIds: string[],
+  targetIsActive: boolean,
+) {
+  const { supabase } = await adminContext();
+  const { error } = await supabase.rpc("set_catalog_courses_active", {
+    target_ids: targetIds,
+    target_is_active: targetIsActive,
+  });
+  if (error) throw new Error("CATALOG_UPDATE_FAILED");
+  revalidatePath("/admin/courses");
+}
+
+export async function updateCatalogRoom(input: {
+  id: string;
+  roomCode: string;
+  buildingCode: string;
+  roomName: string;
+  capacity: number | null;
+  roomTypeId: string;
+}) {
+  const { supabase } = await adminContext();
+  const { error } = await supabase.rpc("update_catalog_room", {
+    target_id: input.id,
+    target_room_code: input.roomCode,
+    target_building_code: input.buildingCode,
+    target_room_name: input.roomName,
+    target_capacity: input.capacity,
+    target_room_type_id: input.roomTypeId,
+  });
+  if (error) throw new Error("CATALOG_UPDATE_FAILED");
+  revalidatePath("/admin/rooms");
+}
+
+export async function updateCatalogCourse(input: {
+  id: string;
+  courseCode: string;
+  courseName: string;
+  roomTypeId: string;
+}) {
+  const { supabase } = await adminContext();
+  const { error } = await supabase.rpc("update_catalog_course", {
+    target_id: input.id,
+    target_course_code: input.courseCode,
+    target_course_name: input.courseName,
+    target_room_type_id: input.roomTypeId,
+  });
+  if (error) throw new Error("CATALOG_UPDATE_FAILED");
+  revalidatePath("/admin/courses");
+}
+
+export async function updateCatalogRoomsBatch(
+  inputs: Array<{
+    id: string;
+    roomCode: string;
+    buildingCode: string;
+    roomName: string;
+    capacity: number | null;
+    roomTypeId: string;
+  }>,
+) {
+  const { supabase } = await adminContext();
+  const { error } = await supabase.rpc("update_catalog_rooms_batch", {
+    target_rows: inputs.map((input) => ({
+      id: input.id,
+      room_code: input.roomCode,
+      building_code: input.buildingCode,
+      room_name: input.roomName,
+      capacity: input.capacity,
+      room_type_id: input.roomTypeId,
+    })),
+  });
+  if (error) throw new Error("CATALOG_UPDATE_FAILED");
+  revalidatePath("/admin/rooms");
+}
+
+export async function updateCatalogCoursesBatch(
+  inputs: Array<{
+    id: string;
+    courseCode: string;
+    courseName: string;
+    roomTypeId: string;
+  }>,
+) {
+  const { supabase } = await adminContext();
+  const { error } = await supabase.rpc("update_catalog_courses_batch", {
+    target_rows: inputs.map((input) => ({
+      id: input.id,
+      course_code: input.courseCode,
+      course_name: input.courseName,
+      room_type_id: input.roomTypeId,
+    })),
+  });
+  if (error) throw new Error("CATALOG_UPDATE_FAILED");
+  revalidatePath("/admin/courses");
+}
+
+export async function resetPersonnelPassword(targetUserId: string) {
+  const { supabase } = await personnelContext();
+  if (!/^[0-9a-f]{8}-/i.test(targetUserId)) throw new Error("INVALID_TARGET");
+  const adminClient = createAdminClient();
+  const { data: authUser, error: authReadError } =
+    await adminClient.auth.admin.getUserById(targetUserId);
+  if (!authUser.user) throw new Error("PASSWORD_RESET_NOT_AVAILABLE");
+  const providers = new Set([
+    authUser?.user.app_metadata?.provider,
+    ...(authUser?.user.app_metadata?.providers ?? []),
+    ...(authUser?.user.identities ?? []).map((identity) => identity.provider),
+  ]);
+  if (authReadError || !providers.has("email")) {
+    throw new Error("PASSWORD_RESET_NOT_AVAILABLE");
+  }
+  const { error: beginError } = await supabase.rpc(
+    "begin_personnel_password_reset",
+    {
+      target_user_id: targetUserId,
+    },
+  );
+  if (beginError) throw new Error("PASSWORD_RESET_NOT_ALLOWED");
+  const canonicalEmail = authUser.user.email?.trim();
+  if (!canonicalEmail) throw new Error("PASSWORD_RESET_NOT_AVAILABLE");
+  const { error: updateError } = await adminClient.auth.admin.updateUserById(
+    targetUserId,
+    { password: canonicalEmail },
+  );
+  await supabase.rpc("record_personnel_password_operation", {
+    target_user_id: targetUserId,
+    target_action: "password_reset",
+    target_result: updateError ? "auth_update_failed" : "auth_update_succeeded",
+  });
+  if (updateError) throw new Error("PASSWORD_RESET_AUTH_FAILED");
+  revalidatePath("/admin/personnel");
+}
+
+export async function changePersonnelPasswordByRoot(
+  targetUserId: string,
+  password: string,
+  confirmation: string,
+) {
+  const { supabase, authority } = await personnelContext();
+  if (
+    !authority.is_root_administrator ||
+    password.length < 6 ||
+    password !== confirmation
+  ) {
+    throw new Error("PASSWORD_CHANGE_NOT_ALLOWED");
+  }
+  const adminClient = createAdminClient();
+  const { data: authUser } =
+    await adminClient.auth.admin.getUserById(targetUserId);
+  if (!authUser.user) throw new Error("PASSWORD_CHANGE_NOT_AVAILABLE");
+  const providers = new Set([
+    authUser?.user.app_metadata?.provider,
+    ...(authUser?.user.app_metadata?.providers ?? []),
+    ...(authUser?.user.identities ?? []).map((identity) => identity.provider),
+  ]);
+  if (!providers.has("email")) throw new Error("PASSWORD_CHANGE_NOT_AVAILABLE");
+  const { error: reserveError } = await supabase.rpc(
+    "reserve_personnel_password_change",
+    { target_user_id: targetUserId },
+  );
+  if (reserveError) throw new Error("PASSWORD_CHANGE_NOT_ALLOWED");
+  const { error } = await adminClient.auth.admin.updateUserById(targetUserId, {
+    password,
+  });
+  if (error) throw new Error("PASSWORD_CHANGE_AUTH_FAILED");
+  const { error: auditError } = await supabase.rpc(
+    "record_personnel_password_operation",
+    {
+      target_user_id: targetUserId,
+      target_action: "password_changed_by_root",
+      target_result: "root_password_changed",
+    },
+  );
+  if (auditError) throw new Error("PASSWORD_CHANGE_AUDIT_FAILED");
+  revalidatePath("/admin/personnel");
 }
 
 function catalogRedirect(
@@ -283,11 +478,11 @@ export async function importCourses(formData: FormData) {
       ]),
     );
     const payload = [...imported.entries()].map(([key, course]) => ({
-      id: existingByCode.get(key) ?? crypto.randomUUID(),
+      id: existingByCode.get(key),
       ...course,
     }));
-    const { error } = await supabase.from("courses").upsert(payload, {
-      onConflict: "id",
+    const { error } = await supabase.rpc("apply_catalog_course_import", {
+      target_rows: payload,
     });
     if (error) throw error;
     revalidatePath("/admin/courses");
@@ -375,11 +570,11 @@ export async function importRooms(formData: FormData) {
       ]),
     );
     const payload = [...imported.entries()].map(([key, room]) => ({
-      id: existingByCode.get(key) ?? crypto.randomUUID(),
+      id: existingByCode.get(key),
       ...room,
     }));
-    const { error } = await supabase.from("rooms").upsert(payload, {
-      onConflict: "id",
+    const { error } = await supabase.rpc("apply_catalog_room_import", {
+      target_rows: payload,
     });
     if (error) throw error;
     revalidatePath("/admin/rooms");
@@ -473,10 +668,11 @@ export async function toggleRoomType(formData: FormData) {
 
 export async function toggleRoom(formData: FormData) {
   const { supabase } = await adminContext();
-  await supabase
-    .from("rooms")
-    .update({ is_active: String(formData.get("active")) === "true" })
-    .eq("id", String(formData.get("id") ?? ""));
+  const { error } = await supabase.rpc("set_catalog_rooms_active", {
+    target_ids: [String(formData.get("id") ?? "")],
+    target_is_active: String(formData.get("active")) === "true",
+  });
+  if (error) throw new Error("CATALOG_UPDATE_FAILED");
   revalidatePath("/admin/rooms");
 }
 

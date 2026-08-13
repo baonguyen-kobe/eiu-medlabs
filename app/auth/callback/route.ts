@@ -26,6 +26,7 @@ export async function GET(request: Request) {
     requestedNext.startsWith("/") && !requestedNext.startsWith("//")
       ? requestedNext
       : "/dashboard";
+  const isPasswordRecovery = next === "/reset-password";
 
   if (!code) {
     return loginError(request, "Google không trả về mã đăng nhập hợp lệ.");
@@ -37,6 +38,12 @@ export async function GET(request: Request) {
     return loginError(
       request,
       "Không thể hoàn tất đăng nhập Google. Vui lòng thử lại.",
+    );
+  }
+
+  if (isPasswordRecovery) {
+    return NextResponse.redirect(
+      new URL("/reset-password", redirectOrigin(request)),
     );
   }
 
@@ -52,7 +59,7 @@ export async function GET(request: Request) {
   const [{ data: profile }, { count: roleCount }] = await Promise.all([
     supabase
       .from("profiles")
-      .select("is_active")
+      .select("is_active,must_change_password")
       .eq("id", data.user.id)
       .maybeSingle(),
     supabase
@@ -69,5 +76,10 @@ export async function GET(request: Request) {
     );
   }
 
-  return NextResponse.redirect(new URL(next, redirectOrigin(request)));
+  return NextResponse.redirect(
+    new URL(
+      profile.must_change_password ? "/change-password" : next,
+      redirectOrigin(request),
+    ),
+  );
 }

@@ -93,8 +93,13 @@ async function createManualSchedule(
   await page.locator('input[name="start_time"]').fill("07:30");
   await page.locator('input[name="end_time"]').fill("11:30");
   await page.locator('textarea[name="note"]').fill(marker);
-  await page.getByRole("button", { name: "Tạo lịch", exact: true }).click();
-  await expect(page.getByRole("status")).toHaveText("Đã tạo lịch thành công.");
+  await clickUntilState(
+    page.getByRole("button", { name: "Tạo lịch", exact: true }),
+    () =>
+      expect(page.getByRole("status")).toHaveText("Đã tạo lịch thành công.", {
+        timeout: 1_000,
+      }),
+  );
 
   const { data, error } = await service
     .from("class_schedules")

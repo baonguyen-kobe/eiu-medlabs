@@ -24,6 +24,7 @@ create table public.profiles (
   title text,
   employee_code text,
   is_active boolean not null default true,
+  must_change_password boolean not null default false,
   can_import_schedules boolean not null default false,
   allow_basic_medical_access boolean not null default false,
   access_version integer not null default 1,

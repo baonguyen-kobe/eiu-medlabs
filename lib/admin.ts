@@ -1,11 +1,13 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { redirectIfPasswordChangeRequired } from "@/lib/forced-password";
 
 export async function requireAdmin() {
   const supabase = await createClient();
   const { data: claimsData } = await supabase.auth.getClaims();
   const userId = claimsData?.claims?.sub;
   if (!userId) redirect("/login");
+  await redirectIfPasswordChangeRequired(supabase, userId);
 
   const { data: role } = await supabase
     .from("user_roles")
@@ -29,6 +31,7 @@ export async function requirePersonnelManager() {
   const { data: claimsData } = await supabase.auth.getClaims();
   const userId = claimsData?.claims?.sub;
   if (!userId) redirect("/login");
+  await redirectIfPasswordChangeRequired(supabase, userId);
 
   const { data, error } = await supabase.rpc("get_personnel_authority_context");
   const authority = data as PersonnelAuthority | null;
