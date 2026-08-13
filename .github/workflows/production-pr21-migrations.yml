@@ -1,0 +1,235 @@
+name: Production PR #21 migrations
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: production-pr21-migrations
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    name: Apply reviewed PR #21 migration
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PROJECT_REF: bwhiivfhezoozrzvchmm
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.PRODUCTION_DB_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install the locked Supabase CLI
+        run: npm ci --ignore-scripts
+
+      - name: Verify the reviewed release identity
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          readonly target_file="supabase/migrations/20260813022210_personnel_password_and_catalog_batches.sql"
+          readonly target_blob="dd573e2ef02a150410739fed1e232235e63cc865"
+          readonly target_version="20260813022210"
+          readonly forbidden_versions=(
+            "20260809120000"
+            "20260809130000"
+            "20260809140000"
+            "20260809150000"
+            "20260809160000"
+            "20260810000000"
+            "20260810010000"
+            "20260810020000"
+            "20260810030000"
+          )
+
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "RELEASE_IDENTITY_CHANGED: production migrations may run only from main."
+            exit 1
+          fi
+
+          [[ -f "$target_file" ]] || {
+            echo "RELEASE_IDENTITY_CHANGED: reviewed target migration is missing."
+            exit 1
+          }
+          if [[ "$(git hash-object "$target_file")" != "$target_blob" ]]; then
+            echo "RELEASE_IDENTITY_CHANGED: reviewed target migration content differs."
+            exit 1
+          fi
+
+          for version in "${forbidden_versions[@]}"; do
+            if compgen -G "supabase/migrations/${version}_*.sql" > /dev/null; then
+              echo "RELEASE_IDENTITY_CHANGED: frozen PR #2 migration is present locally."
+              exit 1
+            fi
+          done
+
+      - name: Link the fixed production project
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --no-install supabase link --project-ref "$PROJECT_REF" --yes
+
+      - name: Preflight approved migration history
+        shell: bash
+        run: |
+          set -euo pipefail
+          readonly target_version="20260813022210"
+          readonly required_remote_versions=(
+            "20260810160016"
+            "20260811133000"
+            "20260811150000"
+            "20260811230000"
+            "20260812000000"
+            "20260812010000"
+            "20260812022922"
+            "20260812030000"
+          )
+          readonly forbidden_versions=(
+            "20260809120000"
+            "20260809130000"
+            "20260809140000"
+            "20260809150000"
+            "20260809160000"
+            "20260810000000"
+            "20260810010000"
+            "20260810020000"
+            "20260810030000"
+          )
+
+          history_json="$(npx --no-install supabase migration list --linked --output-format json)"
+          printf '%s\n' "$history_json" > "$RUNNER_TEMP/pr21-migrations-before.json"
+          mapfile -t remote_versions < <(
+            jq -r '.migrations[] | (.remote // empty)' "$RUNNER_TEMP/pr21-migrations-before.json" \
+              | grep -E '^[0-9]{14}$' \
+              | sort -u
+          )
+          mapfile -t local_versions < <(
+            jq -r '.migrations[] | (.local // empty)' "$RUNNER_TEMP/pr21-migrations-before.json" \
+              | grep -E '^[0-9]{14}$' \
+              | sort -u
+          )
+
+          for version in "${required_remote_versions[@]}"; do
+            if ! printf '%s\n' "${remote_versions[@]}" | grep -Fxq "$version"; then
+              echo "MIGRATION_ALLOWLIST_MISMATCH: approved predecessor is missing remotely."
+              exit 1
+            fi
+          done
+
+          for version in "${forbidden_versions[@]}"; do
+            if printf '%s\n' "${remote_versions[@]}" | grep -Fxq "$version"; then
+              echo "MIGRATION_ALLOWLIST_MISMATCH: frozen PR #2 migration is remotely applied."
+              exit 1
+            fi
+          done
+
+          if ! printf '%s\n' "${local_versions[@]}" | grep -Fxq "$target_version"; then
+            echo "MIGRATION_ALLOWLIST_MISMATCH: reviewed target is absent locally."
+            exit 1
+          fi
+
+          for version in "${local_versions[@]}"; do
+            if ! printf '%s\n' "${remote_versions[@]}" | grep -Fxq "$version" \
+              && [[ "$version" != "$target_version" ]]; then
+              echo "MIGRATION_ALLOWLIST_MISMATCH: unknown local-only migration detected."
+              exit 1
+            fi
+          done
+
+          if printf '%s\n' "${remote_versions[@]}" | grep -Fxq "$target_version"; then
+            echo "TARGET_STATE=already-applied" >> "$GITHUB_ENV"
+          else
+            echo "TARGET_STATE=pending" >> "$GITHUB_ENV"
+          fi
+
+      - name: Dry-run the exact pending migration
+        if: env.TARGET_STATE == 'pending'
+        shell: bash
+        run: |
+          set -euo pipefail
+          readonly target_version="20260813022210"
+          dry_run="$(npx --no-install supabase db push --linked --dry-run 2>&1)" || {
+            printf '%s\n' "$dry_run"
+            exit 1
+          }
+          printf '%s\n' "$dry_run" > "$RUNNER_TEMP/pr21-migrations-dry-run.txt"
+          mapfile -t pending_versions < <(
+            grep -oE '20[0-9]{12}' "$RUNNER_TEMP/pr21-migrations-dry-run.txt" | sort -u
+          )
+
+          if [[ "${#pending_versions[@]}" -ne 1 ]] \
+            || [[ "${pending_versions[0]}" != "$target_version" ]]; then
+            echo "MIGRATION_ALLOWLIST_MISMATCH: dry-run pending set is not exactly the reviewed target."
+            exit 1
+          fi
+
+          echo "Dry-run allowlist: 20260813022210 / PASS"
+
+      - name: Apply the exact reviewed migration
+        if: env.TARGET_STATE == 'pending'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --no-install supabase db push --linked
+
+      - name: Verify the final migration history
+        shell: bash
+        run: |
+          set -euo pipefail
+          readonly expected_remote_versions=(
+            "20260810160016"
+            "20260811133000"
+            "20260811150000"
+            "20260811230000"
+            "20260812000000"
+            "20260812010000"
+            "20260812022922"
+            "20260812030000"
+            "20260813022210"
+          )
+          readonly forbidden_versions=(
+            "20260809120000"
+            "20260809130000"
+            "20260809140000"
+            "20260809150000"
+            "20260809160000"
+            "20260810000000"
+            "20260810010000"
+            "20260810020000"
+            "20260810030000"
+          )
+
+          history_json="$(npx --no-install supabase migration list --linked --output-format json)"
+          printf '%s\n' "$history_json" > "$RUNNER_TEMP/pr21-migrations-after.json"
+          mapfile -t remote_versions < <(
+            jq -r '.migrations[] | (.remote // empty)' "$RUNNER_TEMP/pr21-migrations-after.json" \
+              | grep -E '^[0-9]{14}$' \
+              | sort -u
+          )
+
+          for version in "${expected_remote_versions[@]}"; do
+            if ! printf '%s\n' "${remote_versions[@]}" | grep -Fxq "$version"; then
+              echo "POST_PUSH_MIGRATION_VERIFICATION_FAILED: reviewed migration is missing remotely."
+              exit 1
+            fi
+          done
+
+          for version in "${forbidden_versions[@]}"; do
+            if printf '%s\n' "${remote_versions[@]}" | grep -Fxq "$version"; then
+              echo "POST_PUSH_MIGRATION_VERIFICATION_FAILED: frozen PR #2 migration is remotely applied."
+              exit 1
+            fi
+          done
+
+          echo "Production PR #21 migration history: PASS"
