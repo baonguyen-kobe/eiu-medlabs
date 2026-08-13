@@ -12,6 +12,7 @@ import {
   type PersonnelListItem,
 } from "@/components/personnel-management-list";
 import { PersonnelBasicMedicalPermissionField } from "@/components/personnel-basic-medical-permission-field";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 const roleLabels = {
   admin: "Quản trị viên",
@@ -57,6 +58,20 @@ export default async function PersonnelPage({
     PersonnelListItem & { total_count: number }
   >;
   const totalItems = Number(rows[0]?.total_count ?? 0);
+  const authAdmin = createAdminClient();
+  const passwordCapableById = new Map(
+    await Promise.all(
+      rows.map(async (row) => {
+        const { data } = await authAdmin.auth.admin.getUserById(row.id);
+        const providers = new Set([
+          data.user?.app_metadata?.provider,
+          ...(data.user?.app_metadata?.providers ?? []),
+          ...(data.user?.identities ?? []).map((identity) => identity.provider),
+        ]);
+        return [row.id, providers.has("email")] as const;
+      }),
+    ),
+  );
 
   return (
     <AdminShell
@@ -220,7 +235,10 @@ export default async function PersonnelPage({
         key={`${currentPage}:${query.q ?? ""}:${query.role ?? "all"}:${query.import_permission ?? "all"}:${query.status ?? "all"}:${rows.map((row) => `${row.id}:${row.access_version}`).join("|")}`}
         initialItems={rows.map(({ total_count, ...row }) => {
           void total_count;
-          return row;
+          return {
+            ...row,
+            password_capable: passwordCapableById.get(row.id) ?? false,
+          };
         })}
         roomTypes={roomTypes ?? []}
         viewerId={userId}

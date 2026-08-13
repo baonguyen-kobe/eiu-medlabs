@@ -2,6 +2,7 @@ import nextEnv from "@next/env";
 import * as XLSX from "@e965/xlsx";
 import { expect, test, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
+import { openCombobox } from "./helpers/interaction-readiness";
 
 nextEnv.loadEnvConfig(process.cwd());
 
@@ -26,11 +27,8 @@ async function deleteCourseByCode(page: Page, courseCode: string) {
   await page.goto("/admin/courses");
   const row = page.locator("tbody tr").filter({ hasText: courseCode });
   if ((await row.count()) === 0) return;
+  page.once("dialog", (dialog) => dialog.accept());
   await row.getByRole("button", { name: "Xóa" }).click();
-  await page
-    .getByRole("dialog")
-    .getByRole("button", { name: "Xác nhận" })
-    .click();
 }
 
 test("môn học chỉ được gợi ý trong đúng Loại lịch", async ({ page }) => {
@@ -60,6 +58,7 @@ test("môn học chỉ được gợi ý trong đúng Loại lịch", async ({ p
     const skillsCourse = page.getByRole("combobox", {
       name: "Tìm và chọn môn học",
     });
+    await openCombobox(skillsCourse);
     await skillsCourse.fill(skillsCode);
     await expect(
       page

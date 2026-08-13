@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { redirectIfPasswordChangeRequired } from "@/lib/forced-password";
 
 export type AppRole =
   "admin" | "staff" | "lecturer" | "teaching_assistant" | "viewer";
@@ -9,6 +10,7 @@ export async function getViewer() {
   const { data: claimsData } = await supabase.auth.getClaims();
   const userId = claimsData?.claims?.sub;
   if (!userId) redirect("/login");
+  await redirectIfPasswordChangeRequired(supabase, userId);
 
   const [
     { data: profile },

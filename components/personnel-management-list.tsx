@@ -2,6 +2,8 @@
 
 import { useMemo, useState, useTransition } from "react";
 import {
+  changePersonnelPasswordByRoot,
+  resetPersonnelPassword,
   savePersonnelChanges,
   type SavePersonnelResult,
 } from "@/app/admin/actions";
@@ -26,6 +28,7 @@ export type PersonnelListItem = {
   is_security_principal: boolean;
   is_current_admin: boolean;
   can_edit_security: boolean;
+  password_capable?: boolean;
 };
 
 type RoomType = { id: string; name: string; code: string };
@@ -62,6 +65,8 @@ export function PersonnelManagementList({
   const [original, setOriginal] = useState<PersonnelListItem | null>(null);
   const [draft, setDraft] = useState<PersonnelListItem | null>(null);
   const [result, setResult] = useState<SavePersonnelResult | null>(null);
+  const [passwordDraft, setPasswordDraft] = useState("");
+  const [passwordConfirmation, setPasswordConfirmation] = useState("");
   const [pending, startTransition] = useTransition();
   const dirty = useMemo(
     () =>
@@ -92,6 +97,61 @@ export function PersonnelManagementList({
     setOriginal(null);
     setDraft(null);
     setResult(null);
+    setPasswordDraft("");
+    setPasswordConfirmation("");
+  }
+
+  function resetPassword() {
+    if (
+      !draft?.password_capable ||
+      pending ||
+      !window.confirm(
+        `Đặt lại mật khẩu của ${draft.full_name} thành email đăng nhập và buộc đổi mật khẩu sau khi đăng nhập?`,
+      )
+    )
+      return;
+    startTransition(async () => {
+      try {
+        await resetPersonnelPassword(draft.id);
+        setResult({
+          ok: true,
+          message:
+            "Đã đặt lại mật khẩu tạm thời và yêu cầu đổi mật khẩu sau khi đăng nhập.",
+        });
+      } catch {
+        setResult({
+          ok: false,
+          message: "Không thể đặt lại mật khẩu cho tài khoản này.",
+        });
+      }
+    });
+  }
+
+  function changePasswordAsRoot() {
+    if (
+      !draft ||
+      !viewerIsRoot ||
+      !draft.password_capable ||
+      pending ||
+      passwordDraft.length < 6 ||
+      passwordDraft !== passwordConfirmation
+    )
+      return;
+    if (!window.confirm(`Đổi mật khẩu cho ${draft.full_name}?`)) return;
+    startTransition(async () => {
+      try {
+        await changePersonnelPasswordByRoot(
+          draft.id,
+          passwordDraft,
+          passwordConfirmation,
+        );
+        setPasswordDraft("");
+        setPasswordConfirmation("");
+        setResult({ ok: true, message: "Đã đổi mật khẩu." });
+      } catch {
+        setResult({ ok: false, message: "Không thể đổi mật khẩu." });
+      }
+    });
   }
 
   function toggleRole(role: AppRole) {
@@ -321,6 +381,55 @@ export function PersonnelManagementList({
                     : "Chỉ Root Administrator được thay đổi tài khoản đang có quyền Admin."}
                 </p>
               ) : null}
+              {draft.password_capable ? (
+                <fieldset disabled={pending || !draft.can_edit_security}>
+                  <legend>Mật khẩu</legend>
+                  <button
+                    className="button button-secondary"
+                    type="button"
+                    onClick={resetPassword}
+                  >
+                    Đặt lại mật khẩu
+                  </button>
+                  {viewerIsRoot ? (
+                    <>
+                      <label>
+                        Mật khẩu mới
+                        <input
+                          type="password"
+                          value={passwordDraft}
+                          minLength={6}
+                          onChange={(event) =>
+                            setPasswordDraft(event.target.value)
+                          }
+                        />
+                      </label>
+                      <label>
+                        Xác nhận mật khẩu mới
+                        <input
+                          type="password"
+                          value={passwordConfirmation}
+                          minLength={6}
+                          onChange={(event) =>
+                            setPasswordConfirmation(event.target.value)
+                          }
+                        />
+                      </label>
+                      <button
+                        className="button button-secondary"
+                        type="button"
+                        onClick={changePasswordAsRoot}
+                      >
+                        Đổi mật khẩu
+                      </button>
+                    </>
+                  ) : null}
+                </fieldset>
+              ) : (
+                <p className="field-note">
+                  Tài khoản Google-only không có thao tác mật khẩu.
+                </p>
+              )}
               <fieldset disabled={pending || !draft.can_edit_security}>
                 <legend>Thông tin cơ bản</legend>
                 <label>

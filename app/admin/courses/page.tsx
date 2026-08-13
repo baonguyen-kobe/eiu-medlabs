@@ -1,17 +1,11 @@
 import { AdminShell } from "@/components/admin-shell";
-import {
-  createCourse,
-  deleteCourse,
-  importCourses,
-  toggleCourse,
-} from "@/app/admin/actions";
+import { createCourse, importCourses } from "@/app/admin/actions";
 import { CatalogTabs } from "@/components/catalog-tabs";
 import { CatalogImportActions } from "@/components/catalog-import-actions";
-import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
-import { Trash2 } from "@/components/icons";
 import { PaginationLinks } from "@/components/pagination-links";
 import { requireAdmin } from "@/lib/admin";
 import { normalizePage, paginationRange } from "@/lib/pagination";
+import { CatalogBatchManager } from "@/components/catalog-batch-manager";
 
 export default async function CoursesPage({
   searchParams,
@@ -79,72 +73,19 @@ export default async function CoursesPage({
         </label>
         <button className="button button-primary">Thêm môn học</button>
       </form>
-      <div className="data-panel catalog-data-panel">
-        <div
-          className="responsive-table"
-          role="region"
-          aria-label="Danh mục môn học; vuốt ngang để xem đầy đủ"
-          tabIndex={0}
-        >
-          <table className="data-table catalog-data-table">
-            <thead>
-              <tr>
-                <th>Mã</th>
-                <th>Tên môn học</th>
-                <th>Loại</th>
-                <th>Trạng thái</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {(courses ?? []).map((course) => (
-                <tr key={course.id}>
-                  <td className="mono">{course.course_code}</td>
-                  <td>{course.course_name}</td>
-                  <td>
-                    {(course.room_types as unknown as { name: string } | null)
-                      ?.name ?? "—"}
-                  </td>
-                  <td>
-                    <span
-                      className={`status-pill ${course.is_active ? "is-active" : ""}`}
-                    >
-                      {course.is_active ? "Đang dùng" : "Ngừng dùng"}
-                    </span>
-                  </td>
-                  <td className="catalog-row-actions">
-                    <form action={toggleCourse}>
-                      <input type="hidden" name="id" value={course.id} />
-                      <input
-                        type="hidden"
-                        name="active"
-                        value={String(!course.is_active)}
-                      />
-                      <button className="table-action">
-                        {course.is_active ? "Ngừng dùng" : "Kích hoạt"}
-                      </button>
-                    </form>
-                    <form action={deleteCourse}>
-                      <input type="hidden" name="id" value={course.id} />
-                      <ConfirmSubmitButton
-                        className="table-action delete-action"
-                        message={`Xóa môn học ${course.course_code}?`}
-                      >
-                        <Trash2 size={16} /> Xóa
-                      </ConfirmSubmitButton>
-                    </form>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <PaginationLinks
-          currentPage={currentPage}
-          totalItems={count ?? 0}
-          pathname="/admin/courses"
-        />
-      </div>
+      <CatalogBatchManager
+        kind="courses"
+        initialItems={(courses ?? []).map((course) => ({
+          ...course,
+          room_types: course.room_types as unknown as { name: string } | null,
+        }))}
+        roomTypes={roomTypes ?? []}
+      />
+      <PaginationLinks
+        currentPage={currentPage}
+        totalItems={count ?? 0}
+        pathname="/admin/courses"
+      />
     </AdminShell>
   );
 }

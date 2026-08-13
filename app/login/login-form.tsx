@@ -1,6 +1,7 @@
 "use client";
 
 import { LockKeyhole, Mail } from "@/components/icons";
+import Link from "next/link";
 import { useActionState, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { login, type LoginState } from "./actions";
@@ -69,7 +70,7 @@ export function LoginForm({ oauthError }: { oauthError?: string }) {
         <label>
           <input type="checkbox" /> Ghi nhớ đăng nhập
         </label>
-        <button type="button">Quên mật khẩu?</button>
+        <Link href="/forgot-password">Quên mật khẩu?</Link>
       </div>
       {state.error || oauthError || googleError ? (
         <p className="form-error" role="alert">

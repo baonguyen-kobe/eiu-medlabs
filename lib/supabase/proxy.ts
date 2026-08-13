@@ -23,6 +23,34 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  await supabase.auth.getClaims();
+  const { data: claimsData } = await supabase.auth.getClaims();
+  const userId = claimsData?.claims?.sub;
+  const pathname = request.nextUrl.pathname;
+  const allowedWhileForced = new Set([
+    "/change-password",
+    "/reset-password",
+    "/forgot-password",
+    "/login",
+    "/auth/callback",
+  ]);
+  if (userId && !allowedWhileForced.has(pathname)) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("must_change_password")
+      .eq("id", userId)
+      .maybeSingle();
+    if (profile?.must_change_password) {
+      if (pathname.startsWith("/api/")) {
+        return NextResponse.json(
+          { error: "PASSWORD_CHANGE_REQUIRED" },
+          { status: 423 },
+        );
+      }
+      const url = request.nextUrl.clone();
+      url.pathname = "/change-password";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
+  }
   return response;
 }
