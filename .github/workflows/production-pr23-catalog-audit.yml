@@ -1,0 +1,212 @@
+name: Production PR #23 commercial-name catalog audit
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: production-pr23-catalog-audit
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Read-only commercial-name audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PROJECT_REF: bwhiivfhezoozrzvchmm
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install the locked Supabase CLI
+        run: npm ci --ignore-scripts
+
+      - name: Verify the fixed read-only audit contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          readonly workflow_file=".github/workflows/production-pr23-catalog-audit.yml"
+
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || {
+            echo "RELEASE_IDENTITY_CHANGED: audit may run only from main."
+            exit 1
+          }
+          grep -Fxq '      PROJECT_REF: bwhiivfhezoozrzvchmm' "$workflow_file" || {
+            echo "READ_ONLY_AUDIT_CONTRACT_INVALID: fixed production project is missing."
+            exit 1
+          }
+          grep -Fq 'npx --no-install supabase db query --linked --output-format json --file' "$workflow_file" || {
+            echo "READ_ONLY_AUDIT_CONTRACT_INVALID: linked query mechanism is missing."
+            exit 1
+          }
+          audit_sql="$(awk '/^          with catalog as \($/,/^          SQL$/' "$workflow_file" | sed '1d;$d;s/^          //')"
+          [[ "$audit_sql" == with\ catalog\ as\ \(* ]] || {
+            echo "READ_ONLY_AUDIT_CONTRACT_INVALID: fixed SELECT is missing."
+            exit 1
+          }
+          if grep -Ein '\b(insert|update|delete|merge|upsert|create|alter|drop|grant|revoke|truncate)\b' <<<"$audit_sql" >/dev/null; then
+            echo "READ_ONLY_AUDIT_CONTRACT_INVALID: mutation keyword detected in query."
+            exit 1
+          fi
+
+      - name: Run the fixed linked SELECT audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          # supabase db query executes one prepared statement. This statement is a
+          # fixed SELECT-only read and the prior contract gate rejects mutation DDL.
+          cat > "$RUNNER_TEMP/pr23-commercial-name-audit.sql" <<'SQL'
+          with catalog as (
+            select
+              catalog.id,
+              catalog.item_name,
+              catalog.commercial_name,
+              catalog.manufacturer,
+              catalog.model,
+              catalog.is_active,
+              lower(btrim(catalog.commercial_name)) as normalized_commercial_name,
+              (
+                select count(*)
+                from public.basic_medical_room_inventory as inventory
+                where inventory.catalog_item_id = catalog.id
+              ) as inventory_reference_count
+            from public.basic_medical_equipment_catalog as catalog
+          ),
+          invalid_rows as (
+            select *
+            from catalog
+            where commercial_name is null or btrim(commercial_name) = ''
+          ),
+          duplicate_groups as (
+            select normalized_commercial_name, count(*) as duplicate_count
+            from catalog
+            group by normalized_commercial_name
+            having count(*) > 1
+          )
+          select jsonb_build_object(
+            'total_catalog_rows', (select count(*) from catalog),
+            'null_commercial_name_count', (select count(*) from catalog where commercial_name is null),
+            'blank_after_trim_commercial_name_count', (select count(*) from catalog where commercial_name is not null and btrim(commercial_name) = ''),
+            'normalized_duplicate_group_count', (select count(*) from duplicate_groups),
+            'blank_or_null_rows', coalesce((
+              select jsonb_agg(jsonb_build_object(
+                'id', id,
+                'item_name', item_name,
+                'commercial_name', commercial_name,
+                'is_active', is_active,
+                'inventory_reference_count', inventory_reference_count
+              ) order by item_name, id)
+              from invalid_rows
+            ), '[]'::jsonb),
+            'duplicate_groups', coalesce((
+              select jsonb_agg(jsonb_build_object(
+                'normalized_commercial_name', groups.normalized_commercial_name,
+                'duplicate_count', groups.duplicate_count,
+                'rows', groups.rows
+              ) order by groups.normalized_commercial_name nulls first)
+              from (
+                select
+                  duplicate_groups.normalized_commercial_name,
+                  duplicate_groups.duplicate_count,
+                  coalesce(jsonb_agg(jsonb_build_object(
+                    'id', catalog.id,
+                    'item_name', catalog.item_name,
+                    'commercial_name', catalog.commercial_name,
+                    'manufacturer', catalog.manufacturer,
+                    'model', catalog.model,
+                    'is_active', catalog.is_active,
+                    'inventory_reference_count', catalog.inventory_reference_count
+                  ) order by catalog.item_name, catalog.id), '[]'::jsonb) as rows
+                from duplicate_groups
+                join catalog on catalog.normalized_commercial_name is not distinct from duplicate_groups.normalized_commercial_name
+                group by duplicate_groups.normalized_commercial_name, duplicate_groups.duplicate_count
+              ) as groups
+            ), '[]'::jsonb)
+          ) as audit;
+          SQL
+
+          npx --no-install supabase db query --linked --output-format json --file "$RUNNER_TEMP/pr23-commercial-name-audit.sql" > "$RUNNER_TEMP/pr23-commercial-name-audit.json"
+
+          RUNNER_TEMP="$RUNNER_TEMP" node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+
+          const result = JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP, 'pr23-commercial-name-audit.json'), 'utf8'));
+          const audit = result?.rows?.[0]?.audit;
+          if (!audit || !Array.isArray(audit.blank_or_null_rows) || !Array.isArray(audit.duplicate_groups)) {
+            throw new Error('READ_ONLY_AUDIT_RESULT_INVALID');
+          }
+
+          const outputDirectory = path.join(process.env.RUNNER_TEMP, 'pr23-commercial-name-audit');
+          fs.mkdirSync(outputDirectory, { recursive: true });
+          const affectedIds = new Set(audit.blank_or_null_rows.map((row) => row.id));
+          for (const group of audit.duplicate_groups) {
+            for (const row of group.rows ?? []) affectedIds.add(row.id);
+          }
+          const summary = [
+            `Total catalog rows: ${audit.total_catalog_rows}`,
+            `NULL commercial_name: ${audit.null_commercial_name_count}`,
+            `Blank-after-trim commercial_name: ${audit.blank_after_trim_commercial_name_count}`,
+            `Duplicate normalized groups: ${audit.normalized_duplicate_group_count}`,
+            `Affected catalog rows: ${affectedIds.size}`,
+          ].join('\n') + '\n';
+          fs.writeFileSync(path.join(outputDirectory, 'summary.txt'), summary);
+
+          const quote = (value) => {
+            if (value === null || value === undefined) return '';
+            return `"${String(value).replaceAll('"', '""')}"`;
+          };
+          const lines = [[
+            'issue_type', 'normalized_commercial_name', 'duplicate_count', 'id', 'item_name',
+            'commercial_name', 'manufacturer', 'model', 'is_active', 'inventory_reference_count',
+          ].join(',')];
+          for (const row of audit.blank_or_null_rows) {
+            lines.push([
+              'blank_or_null', '', '', row.id, row.item_name, row.commercial_name, '', '',
+              row.is_active, row.inventory_reference_count,
+            ].map(quote).join(','));
+          }
+          for (const group of audit.duplicate_groups) {
+            for (const row of group.rows ?? []) {
+              lines.push([
+                'duplicate_normalized_name', group.normalized_commercial_name, group.duplicate_count,
+                row.id, row.item_name, row.commercial_name, row.manufacturer, row.model,
+                row.is_active, row.inventory_reference_count,
+              ].map(quote).join(','));
+            }
+          }
+          fs.writeFileSync(path.join(outputDirectory, 'affected_rows.csv'), `${lines.join('\n')}\n`);
+          console.log(summary.trim());
+          NODE
+
+      - name: Verify blocked migrations remain absent
+        shell: bash
+        run: |
+          set -euo pipefail
+          history_json="$(npx --no-install supabase migration list --linked --output-format json)"
+          mapfile -t remote_versions < <(printf '%s\n' "$history_json" | jq -r '.migrations[] | (.remote // empty)' | grep -E '^[0-9]{14}$' | sort -u)
+          for version in 20260813130000 20260813150000; do
+            if printf '%s\n' "${remote_versions[@]}" | grep -Fxq "$version"; then
+              echo "READ_ONLY_AUDIT_POSTCHECK_FAILED: blocked migration unexpectedly appears remotely."
+              exit 1
+            fi
+          done
+
+      - name: Upload private audit artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr23-commercial-name-audit
+          path: ${{ runner.temp }}/pr23-commercial-name-audit
+          if-no-files-found: error
+          retention-days: 14
