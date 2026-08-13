@@ -50,7 +50,17 @@ jobs:
             echo "READ_ONLY_AUDIT_CONTRACT_INVALID: linked query mechanism is missing."
             exit 1
           }
-          audit_sql="$(awk '/^          with catalog as \($/,/^          SQL$/' "$workflow_file" | sed '1d;$d;s/^          //')"
+          audit_sql="$(WORKFLOW_FILE="$workflow_file" node <<'NODE'
+          const fs = require('node:fs');
+          const source = fs.readFileSync(process.env.WORKFLOW_FILE, 'utf8');
+          const startMarker = '          with catalog as (\n';
+          const endMarker = '\n          SQL';
+          const start = source.indexOf(startMarker);
+          const end = source.indexOf(endMarker, start);
+          if (start < 0 || end < 0) process.exit(1);
+          process.stdout.write(source.slice(start, end).replace(/^          /gm, ''));
+          NODE
+          )"
           [[ "$audit_sql" == with\ catalog\ as\ \(* ]] || {
             echo "READ_ONLY_AUDIT_CONTRACT_INVALID: fixed SELECT is missing."
             exit 1

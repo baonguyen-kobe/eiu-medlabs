@@ -36,3 +36,14 @@ test("PR #23 catalog audit selects only the approved catalog evidence", () => {
   );
   assert.doesNotMatch(workflow, /\bsupabase db (push|reset|pull|repair)\b/i);
 });
+
+test("the audit safety gate extracts the fixed SELECT heredoc", () => {
+  const firstLine = workflow.match(/^          with catalog as \($/m)?.[0];
+
+  assert.equal(firstLine, "          with catalog as (");
+  assert.ok(
+    workflow.includes("const startMarker = '          with catalog as (\\n';"),
+    "the Node safety gate must use the exact SQL start marker",
+  );
+  assert.ok(workflow.includes("const endMarker = '\\n          SQL';"));
+});
