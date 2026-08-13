@@ -1,7 +1,7 @@
 export type BasicMedicalEquipmentCatalogItem = {
   id: string;
   item_name: string;
-  commercial_name: string | null;
+  commercial_name: string;
   item_type: string | null;
   country_of_origin: string | null;
   manufacturer: string | null;

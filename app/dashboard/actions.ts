@@ -417,6 +417,31 @@ export async function adminCancelClass(
 ): Promise<ActionResult> {
   const context = await requireAdminAction();
   if (!context) return { ok: false, message: "Chỉ Admin được hủy lớp." };
+  const { data: schedule, error: scheduleError } = await context.supabase
+    .from("class_schedules")
+    .select("basic_medical_registration_id")
+    .eq("id", scheduleId)
+    .maybeSingle();
+  if (scheduleError || !schedule) {
+    return { ok: false, message: "Lớp học không còn khả dụng." };
+  }
+  if (schedule.basic_medical_registration_id) {
+    const { error } = await context.supabase.rpc(
+      "cancel_basic_medical_registration",
+      {
+        target_registration_id: schedule.basic_medical_registration_id,
+        target_reason: null,
+      },
+    );
+    if (error)
+      return { ok: false, message: friendlyDatabaseError(error.message) };
+    revalidateScheduleViews();
+    after(processPendingScheduleEmails);
+    return {
+      ok: true,
+      message: "Đã hủy Phiếu Y cơ sở và đồng bộ các lịch liên kết.",
+    };
+  }
   const { error } = await context.supabase.rpc("cancel_class_schedule", {
     target_schedule_id: scheduleId,
   });

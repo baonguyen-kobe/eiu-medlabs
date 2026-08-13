@@ -478,7 +478,7 @@ test(
         `begin;
          insert into public.basic_medical_equipment_catalog
            (id, item_name, commercial_name, unit, is_active)
-           values ('${ids.addedCatalog}', 'Y05 Added', null, 'set', true);
+           values ('${ids.addedCatalog}', 'Y05 Added', 'Y05 Added commercial', 'set', true);
          \\echo Y05_CATALOG_LOCKED
          select pg_sleep(1);
          insert into public.basic_medical_room_inventory
@@ -532,7 +532,7 @@ test(
           from public.room_types where code = 'basic_medical' limit 1;
         insert into public.basic_medical_equipment_catalog
           (id, item_name, commercial_name, unit, is_active)
-          values ('${ids.catalog}', 'Y05 Heart', null, 'set', true);
+          values ('${ids.catalog}', 'Y05 Heart', 'Y05 Heart commercial', 'set', true);
         insert into public.basic_medical_room_inventory
           (id, room_id, catalog_item_id, total_quantity, good_quantity, damaged_quantity, is_active)
           values ('${ids.inventory}', '${ids.room}', '${ids.catalog}', 10, 8, 2, true);

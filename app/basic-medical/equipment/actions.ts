@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 export type BasicMedicalCatalogInput = {
   id?: string;
   item_name: string;
-  commercial_name: string | null;
+  commercial_name: string;
   item_type: string | null;
   country_of_origin: string | null;
   manufacturer: string | null;
@@ -69,12 +69,13 @@ function parseCatalogRow(
   };
   if (Object.values(raw).every((value) => !cleanText(value))) return null;
   const itemName = pick("tenthietbivavattu", "tenthietbi");
+  const commercialName = pick("tenthuongmai", "commercialname");
   const unit = pick("dvt", "donvitinh");
-  if (!itemName || !unit)
+  if (!itemName || !commercialName || !unit)
     throw new Error("Mỗi dòng phải có Tên thiết bị và vật tư cùng ĐVT.");
   return {
     item_name: itemName,
-    commercial_name: pick("tenthuongmai"),
+    commercial_name: commercialName,
     item_type: pick("loai"),
     country_of_origin: pick("nuocsx", "nuocsanxuat"),
     manufacturer: pick("hang", "hangsanxuat"),
@@ -86,8 +87,9 @@ function parseCatalogRow(
 export async function createBasicMedicalCatalogItem(formData: FormData) {
   const supabase = await requireManager();
   const itemName = cleanText(formData.get("item_name"));
+  const commercialName = cleanText(formData.get("commercial_name"));
   const unit = cleanText(formData.get("unit"));
-  if (!itemName || !unit)
+  if (!itemName || !commercialName || !unit)
     redirect(
       "/basic-medical/equipment?error=" +
         encodeURIComponent("Vui lòng nhập tên thiết bị và ĐVT."),
@@ -96,7 +98,7 @@ export async function createBasicMedicalCatalogItem(formData: FormData) {
     .from("basic_medical_equipment_catalog")
     .insert({
       item_name: itemName,
-      commercial_name: cleanText(formData.get("commercial_name")),
+      commercial_name: commercialName,
       item_type: cleanText(formData.get("item_type")),
       country_of_origin: cleanText(formData.get("country_of_origin")),
       manufacturer: cleanText(formData.get("manufacturer")),
@@ -127,7 +129,11 @@ export async function updateBasicMedicalCatalogItems(
     !payload.length ||
     payload.length > 1000 ||
     payload.some(
-      (row) => !uuidPattern.test(row.id) || !row.item_name || !row.unit,
+      (row) =>
+        !uuidPattern.test(row.id) ||
+        !row.item_name ||
+        !row.commercial_name ||
+        !row.unit,
     )
   ) {
     return { ok: false, message: "Danh sách chỉnh sửa không hợp lệ." };

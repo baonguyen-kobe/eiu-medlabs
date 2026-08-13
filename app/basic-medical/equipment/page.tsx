@@ -234,7 +234,11 @@ export default async function BasicMedicalEquipmentPage({
                   <span>{label}</span>
                   <input
                     name={name}
-                    required={name === "item_name" || name === "unit"}
+                    required={
+                      name === "item_name" ||
+                      name === "commercial_name" ||
+                      name === "unit"
+                    }
                   />
                 </label>
               ))}

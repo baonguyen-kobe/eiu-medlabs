@@ -153,6 +153,7 @@ test("existing inventory cannot bypass inactive Basic Medical targets", async ()
       .from("basic_medical_equipment_catalog")
       .insert({
         item_name: `${FIXTURE_CATALOG_NAME_PREFIX}${suffix}`,
+        commercial_name: `${FIXTURE_CATALOG_NAME_PREFIX}commercial-${suffix}`,
         unit: "item",
         is_active: true,
       })

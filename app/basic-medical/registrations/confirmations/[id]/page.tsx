@@ -36,9 +36,8 @@ export default async function BasicMedicalConfirmationEvidencePage({
 
   const viewer = await getViewer();
   const roomTypeCodes = viewer.roomTypes.map(({ code }) => code);
-  if (!canViewBasicMedicalRegistrations(viewer.roles, roomTypeCodes)) {
+  if (!canViewBasicMedicalRegistrations(viewer.roles, roomTypeCodes))
     notFound();
-  }
 
   const { data, error } = await viewer.supabase.rpc(
     "get_basic_medical_confirmation_evidence",
@@ -59,11 +58,20 @@ export default async function BasicMedicalConfirmationEvidencePage({
       title="Bằng chứng xác nhận Y cơ sở"
       description="Bản ghi lịch sử chỉ sử dụng dữ liệu đã chụp tại thời điểm ký."
     >
-      <p>
-        <Link href="/basic-medical/registrations">
+      <div className="toolbar">
+        <Link
+          className="button button-secondary"
+          href="/basic-medical/registrations"
+        >
           ← Trở lại danh sách phiếu
         </Link>
-      </p>
+        <a
+          className="button button-primary"
+          href={`/api/basic-medical/registrations/confirmations/${id}/pdf`}
+        >
+          Xuất PDF
+        </a>
+      </div>
 
       {invalidated ? (
         <div className="action-feedback error" role="status">
@@ -79,6 +87,7 @@ export default async function BasicMedicalConfirmationEvidencePage({
       )}
 
       <section className="data-panel equipment-request-list-panel">
+        <h2>Thông tin buổi học đã chụp</h2>
         <div className="equipment-request-detail-grid">
           <div>
             <span>Thời điểm ký</span>

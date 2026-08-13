@@ -17,6 +17,7 @@ import type {
   BasicMedicalEquipmentCatalogItem,
   BasicMedicalRoomInventoryItem,
 } from "@/lib/basic-medical-equipment";
+import { parseBasicMedicalInventoryQuantityEdit } from "@/lib/basic-medical-inventory-edit.mjs";
 
 type Tab = "inventory" | "rooms" | "damaged" | "logs";
 type Room = {
@@ -172,6 +173,26 @@ function InventoryTab({
                 }
               >
                 Ngừng sử dụng
+              </button>
+              <button
+                className="button button-primary"
+                type="button"
+                disabled={!selected.size || isPending}
+                onClick={() =>
+                  run(
+                    () => setBasicMedicalCatalogActive([...selected], true),
+                    () =>
+                      setCatalog((rows) =>
+                        rows.map((row) =>
+                          selected.has(row.id)
+                            ? { ...row, is_active: true }
+                            : row,
+                        ),
+                      ),
+                  )
+                }
+              >
+                Kích hoạt
               </button>
               <button
                 className="button equipment-catalog-delete"
@@ -420,32 +441,42 @@ function RoomInventoryTab({
                         type="button"
                         className="text-action"
                         onClick={() => {
-                          const total = Number(
-                            prompt(
-                              "Tổng số lượng",
-                              String(item.total_quantity),
-                            ),
+                          const totalRaw = prompt(
+                            "Tổng số lượng",
+                            String(item.total_quantity),
                           );
-                          const damaged = Number(
-                            prompt(
-                              "Số lượng Hư",
-                              String(item.damaged_quantity),
-                            ),
+                          if (totalRaw === null) return;
+                          const damagedRaw = prompt(
+                            "Số lượng Hư",
+                            String(item.damaged_quantity),
+                          );
+                          if (damagedRaw === null) return;
+                          const staged = parseBasicMedicalInventoryQuantityEdit(
+                            totalRaw,
+                            damagedRaw,
                           );
                           if (
-                            Number.isInteger(total) &&
-                            Number.isInteger(damaged)
-                          )
-                            run(() =>
-                              saveBasicMedicalRoomInventory({
-                                inventoryId: item.id,
-                                roomId: item.room_id,
-                                catalogItemId: item.catalog_item_id,
-                                totalQuantity: total,
-                                damagedQuantity: damaged,
-                                note: "Cập nhật tại danh sách thiết bị Y cơ sở",
-                              }),
-                            );
+                            !staged.ok ||
+                            staged.totalQuantity === undefined ||
+                            staged.damagedQuantity === undefined
+                          ) {
+                            setNotice({
+                              ok: false,
+                              message:
+                                staged.message ?? "Số lượng không hợp lệ.",
+                            });
+                            return;
+                          }
+                          run(() =>
+                            saveBasicMedicalRoomInventory({
+                              inventoryId: item.id,
+                              roomId: item.room_id,
+                              catalogItemId: item.catalog_item_id,
+                              totalQuantity: staged.totalQuantity,
+                              damagedQuantity: staged.damagedQuantity,
+                              note: "Cập nhật tại danh sách thiết bị Y cơ sở",
+                            }),
+                          );
                         }}
                       >
                         Sửa số lượng
