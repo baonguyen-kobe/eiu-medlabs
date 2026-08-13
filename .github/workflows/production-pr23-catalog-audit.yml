@@ -70,6 +70,12 @@ jobs:
             exit 1
           fi
 
+      - name: Link the fixed production project for the read-only query
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --no-install supabase link --project-ref "$PROJECT_REF" --yes
+
       - name: Run the fixed linked SELECT audit
         shell: bash
         run: |
