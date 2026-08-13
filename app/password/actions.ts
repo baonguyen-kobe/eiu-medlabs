@@ -1,6 +1,8 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
+import { passwordRecoveryRedirectUrl } from "@/lib/application-url.mjs";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -30,10 +32,28 @@ export async function requestPasswordRecovery(
         ...(data.user?.identities ?? []).map((identity) => identity.provider),
       ]);
       if (providers.has("email")) {
-        const supabase = await createClient();
-        await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/auth/callback?next=/reset-password`,
-        });
+        try {
+          const supabase = await createClient();
+          const requestHeaders = await headers();
+          const host = requestHeaders.get("host");
+          const requestOrigin =
+            requestHeaders.get("origin") ??
+            (host
+              ? `${requestHeaders.get("x-forwarded-proto") ?? "http"}://${host}`
+              : undefined);
+          await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: passwordRecoveryRedirectUrl(process.env, requestOrigin),
+          });
+        } catch (error) {
+          if (
+            !(error instanceof Error) ||
+            error.message !== "APPLICATION_ORIGIN_UNAVAILABLE"
+          ) {
+            console.error("password.recovery.request_failed", {
+              code: error instanceof Error ? error.name : "UNKNOWN",
+            });
+          }
+        }
       }
     }
   }

@@ -26,6 +26,7 @@ export async function GET(request: Request) {
     requestedNext.startsWith("/") && !requestedNext.startsWith("//")
       ? requestedNext
       : "/dashboard";
+  const isPasswordRecovery = next === "/reset-password";
 
   if (!code) {
     return loginError(request, "Google không trả về mã đăng nhập hợp lệ.");
@@ -37,6 +38,12 @@ export async function GET(request: Request) {
     return loginError(
       request,
       "Không thể hoàn tất đăng nhập Google. Vui lòng thử lại.",
+    );
+  }
+
+  if (isPasswordRecovery) {
+    return NextResponse.redirect(
+      new URL("/reset-password", redirectOrigin(request)),
     );
   }
 

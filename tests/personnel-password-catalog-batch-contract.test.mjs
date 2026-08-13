@@ -9,6 +9,8 @@ const [
   actions,
   forcedPassword,
   passwordActions,
+  applicationUrl,
+  passwordState,
   catalogManager,
 ] = await Promise.all([
   readFile(
@@ -29,6 +31,8 @@ const [
   readFile(new URL("../app/admin/actions.ts", import.meta.url), "utf8"),
   readFile(new URL("../lib/forced-password.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/password/actions.ts", import.meta.url), "utf8"),
+  readFile(new URL("../lib/application-url.mjs", import.meta.url), "utf8"),
+  readFile(new URL("../lib/password-state.mjs", import.meta.url), "utf8"),
   readFile(
     new URL("../components/catalog-batch-manager.tsx", import.meta.url),
     "utf8",
@@ -54,12 +58,23 @@ test("password operations are server-authorized, fail closed, and sanitized", ()
     );
     assert.doesNotMatch(source, /recovery_link|service_role|target_password/);
   }
-  assert.match(proxy, /profile\?\.must_change_password/);
+  assert.match(proxy, /PASSWORD_STATE_UNAVAILABLE/);
+  assert.match(proxy, /status: 503/);
+  assert.match(forcedPassword, /PasswordStateUnavailableError/);
+  assert.match(passwordState, /!result\.data/);
+  assert.match(
+    passwordState,
+    /typeof result\.data\.must_change_password !== "boolean"/,
+  );
   assert.match(forcedPassword, /PASSWORD_CHANGE_REQUIRED/);
   assert.match(proxy, /PASSWORD_CHANGE_REQUIRED/);
   assert.match(actions, /auth\.admin\.updateUserById/);
   assert.match(actions, /reserve_personnel_password_change/);
   assert.match(passwordActions, /providers\.has\("email"\)/);
+  assert.match(passwordActions, /passwordRecoveryRedirectUrl/);
+  assert.doesNotMatch(passwordActions, /NEXT_PUBLIC_SITE_URL/);
+  assert.match(applicationUrl, /NEXT_PUBLIC_APP_URL/);
+  assert.match(applicationUrl, /APPLICATION_ORIGIN_UNAVAILABLE/);
   assert.doesNotMatch(actions, /resetPasswordForEmail\(/);
 });
 

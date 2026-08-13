@@ -18,6 +18,39 @@ async function login(page: Page, email: string, password: string) {
   await page.getByRole("button", { name: "Đăng nhập", exact: true }).click();
 }
 
+async function waitForRecoveryLink(email: string) {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const listResponse = await fetch("http://127.0.0.1:54324/api/v1/messages");
+    const list = (await listResponse.json()) as {
+      messages?: Array<{ ID?: string; To?: Array<{ Address?: string }> }>;
+    };
+    const message = list.messages?.find((candidate) =>
+      candidate.To?.some(
+        (recipient) => recipient.Address?.toLowerCase() === email.toLowerCase(),
+      ),
+    );
+    if (message?.ID) {
+      const detailResponse = await fetch(
+        `http://127.0.0.1:54324/api/v1/message/${message.ID}`,
+      );
+      const detail = (await detailResponse.json()) as {
+        Text?: string;
+        HTML?: string;
+      };
+      const content = `${detail.Text ?? ""}\n${detail.HTML ?? ""}`.replaceAll(
+        "&amp;",
+        "&",
+      );
+      const link = content
+        .match(/https?:\/\/[^\s"'<>]+/g)
+        ?.find((value) => value.includes("/auth/v1/verify"));
+      if (link) return link;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error("Password recovery email was not delivered to local Mailpit");
+}
+
 test("Personnel reset forces an email-password account through password change before workspace access", async ({
   page,
 }) => {
@@ -51,6 +84,26 @@ test("Personnel reset forces an email-password account through password change b
     await clickUntilState(row.getByRole("button", { name: "Sửa" }), () =>
       expect(drawer).toBeVisible({ timeout: 1_000 }),
     );
+    await drawer
+      .getByRole("textbox", { name: "Mật khẩu mới", exact: true })
+      .fill("RootCustom123!");
+    await drawer.getByLabel("Xác nhận mật khẩu mới").fill("RootCustom123!");
+    page.once("dialog", (dialog) => dialog.accept());
+    await drawer.getByRole("button", { name: "Đổi mật khẩu" }).click();
+    await expect(drawer.getByRole("status")).toContainText("Đã đổi mật khẩu");
+
+    await page.context().clearCookies();
+    await login(page, email, "RootCustom123!");
+    await expect(page).toHaveURL(/\/dashboard$/);
+
+    await page.context().clearCookies();
+    await login(page, "admin@campus.local", "LocalAdmin123!");
+    await expect(page).toHaveURL(/\/dashboard$/);
+    await page.goto(`/admin/personnel?q=${encodeURIComponent(email)}`);
+    await expect(row).toBeVisible();
+    await clickUntilState(row.getByRole("button", { name: "Sửa" }), () =>
+      expect(drawer).toBeVisible({ timeout: 1_000 }),
+    );
     page.once("dialog", (dialog) => dialog.accept());
     await drawer.getByRole("button", { name: "Đặt lại mật khẩu" }).click();
     await expect(drawer.getByRole("status")).toContainText("mật khẩu tạm thời");
@@ -80,5 +133,115 @@ test("Personnel reset forces an email-password account through password change b
     expect(completedProfile?.must_change_password).toBe(false);
   } finally {
     await serviceDb.auth.admin.deleteUser(targetId);
+  }
+});
+
+test("forgot-password uses the local canonical callback and completes an email-password recovery", async ({
+  page,
+}) => {
+  const email = `recovery-${crypto.randomUUID()}@campus.local`;
+  const initialPassword = "InitialPassword123!";
+  const recoveredPassword = "RecoveredPassword123!";
+  const { data: created, error: createError } =
+    await serviceDb.auth.admin.createUser({
+      email,
+      password: initialPassword,
+      email_confirm: true,
+    });
+  expect(createError).toBeNull();
+  const targetId = created.user?.id;
+  if (!targetId) throw new Error("Missing recovery test user id");
+
+  try {
+    await serviceDb.from("user_roles").insert({
+      user_id: targetId,
+      role: "lecturer",
+    });
+    await page.goto("/forgot-password");
+    await page.getByLabel("Email đăng nhập").fill(email);
+    await page.getByRole("button", { name: "Gửi hướng dẫn" }).click();
+    await expect(page.getByText("Nếu tài khoản hỗ trợ mật khẩu")).toBeVisible();
+
+    const recoveryLink = await waitForRecoveryLink(email);
+    expect(recoveryLink).toContain("redirect_to=http%3A%2F%2Flocalhost%3A3000");
+    await page.goto(recoveryLink);
+    await expect(page).toHaveURL(/\/reset-password$/);
+    await page.getByLabel("Mật khẩu mới").fill(recoveredPassword);
+    await page.getByLabel("Xác nhận mật khẩu").fill(recoveredPassword);
+    await page.getByRole("button", { name: "Cập nhật mật khẩu" }).click();
+    await expect(page).toHaveURL(/\/dashboard$/);
+
+    await page.context().clearCookies();
+    await login(page, email, recoveredPassword);
+    await expect(page).toHaveURL(/\/dashboard$/);
+  } finally {
+    await serviceDb.auth.admin.deleteUser(targetId);
+  }
+});
+
+test("database password operations reject Google-only targets and non-Root custom changes", async () => {
+  const suffix = crypto.randomUUID();
+  const { data: passwordUser, error: passwordUserError } =
+    await serviceDb.auth.admin.createUser({
+      email: `non-root-${suffix}@campus.local`,
+      password: "InitialPassword123!",
+      email_confirm: true,
+    });
+  const { data: googleUser, error: googleUserError } =
+    await serviceDb.auth.admin.createUser({
+      email: `google-only-${suffix}@campus.local`,
+      email_confirm: true,
+      app_metadata: { provider: "google", providers: ["google"] },
+    });
+  expect(passwordUserError).toBeNull();
+  expect(googleUserError).toBeNull();
+  const passwordUserId = passwordUser.user?.id;
+  const googleUserId = googleUser.user?.id;
+  if (!passwordUserId || !googleUserId)
+    throw new Error("Missing provider fixtures");
+
+  try {
+    await serviceDb.from("user_roles").insert([
+      { user_id: passwordUserId, role: "lecturer" },
+      { user_id: googleUserId, role: "lecturer" },
+    ]);
+    const root = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+      { auth: { autoRefreshToken: false, persistSession: false } },
+    );
+    const { error: rootSignInError } = await root.auth.signInWithPassword({
+      email: "admin@campus.local",
+      password: "LocalAdmin123!",
+    });
+    expect(rootSignInError).toBeNull();
+    const { error: googleResetError } = await root.rpc(
+      "begin_personnel_password_reset",
+      { target_user_id: googleUserId },
+    );
+    expect(googleResetError?.message).toContain("PASSWORD_RESET_NOT_AVAILABLE");
+
+    const nonRoot = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+      { auth: { autoRefreshToken: false, persistSession: false } },
+    );
+    const { error: nonRootSignInError } = await nonRoot.auth.signInWithPassword(
+      {
+        email: "admin.other@campus.local",
+        password: "LocalOtherAdmin123!",
+      },
+    );
+    expect(nonRootSignInError).toBeNull();
+    const { error: nonRootChangeError } = await nonRoot.rpc(
+      "reserve_personnel_password_change",
+      { target_user_id: passwordUserId },
+    );
+    expect(nonRootChangeError?.message).toMatch(
+      /ROOT_REQUIRED|PERSONNEL_MANAGER_REQUIRED/,
+    );
+  } finally {
+    await serviceDb.auth.admin.deleteUser(passwordUserId);
+    await serviceDb.auth.admin.deleteUser(googleUserId);
   }
 });
