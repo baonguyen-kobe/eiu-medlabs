@@ -160,8 +160,23 @@ jobs:
           const path = require('node:path');
 
           const result = JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP, 'pr23-commercial-name-audit.json'), 'utf8'));
-          const audit = result?.rows?.[0]?.audit;
+          const candidates = [
+            result?.rows?.[0]?.audit,
+            result?.data?.[0]?.audit,
+            result?.result?.[0]?.audit,
+            result?.audit,
+          ];
+          const audit = candidates
+            .map((candidate) => {
+              if (typeof candidate !== 'string') return candidate;
+              try { return JSON.parse(candidate); } catch { return undefined; }
+            })
+            .find((candidate) => candidate && typeof candidate === 'object');
           if (!audit || !Array.isArray(audit.blank_or_null_rows) || !Array.isArray(audit.duplicate_groups)) {
+            console.error(JSON.stringify({
+              result_keys: Object.keys(result),
+              row_keys: Object.keys(result?.rows?.[0] ?? result?.data?.[0] ?? result?.result?.[0] ?? {}),
+            }));
             throw new Error('READ_ONLY_AUDIT_RESULT_INVALID');
           }
 
