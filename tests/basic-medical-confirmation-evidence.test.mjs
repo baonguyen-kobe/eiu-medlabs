@@ -2,34 +2,46 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const [migration, evidencePage, registrationsPage, registrationList] =
-  await Promise.all([
-    readFile(
-      new URL(
-        "../supabase/migrations/20260812022922_add_basic_medical_confirmation_evidence.sql",
-        import.meta.url,
-      ),
-      "utf8",
+const [
+  displaySnapshotMigration,
+  migration,
+  evidencePage,
+  registrationsPage,
+  registrationList,
+] = await Promise.all([
+  readFile(
+    new URL(
+      "../supabase/migrations/20260813150000_add_basic_medical_confirmation_display_snapshots.sql",
+      import.meta.url,
     ),
-    readFile(
-      new URL(
-        "../app/basic-medical/registrations/confirmations/[id]/page.tsx",
-        import.meta.url,
-      ),
-      "utf8",
+    "utf8",
+  ),
+  readFile(
+    new URL(
+      "../supabase/migrations/20260812022922_add_basic_medical_confirmation_evidence.sql",
+      import.meta.url,
     ),
-    readFile(
-      new URL("../app/basic-medical/registrations/page.tsx", import.meta.url),
-      "utf8",
+    "utf8",
+  ),
+  readFile(
+    new URL(
+      "../app/basic-medical/registrations/confirmations/[id]/page.tsx",
+      import.meta.url,
     ),
-    readFile(
-      new URL(
-        "../components/basic-medical-registration-list.tsx",
-        import.meta.url,
-      ),
-      "utf8",
+    "utf8",
+  ),
+  readFile(
+    new URL("../app/basic-medical/registrations/page.tsx", import.meta.url),
+    "utf8",
+  ),
+  readFile(
+    new URL(
+      "../components/basic-medical-registration-list.tsx",
+      import.meta.url,
     ),
-  ]);
+    "utf8",
+  ),
+]);
 
 test("evidence RPC is least-privilege and snapshot-only", () => {
   assert.match(migration, /security definer\s+set search_path = ''/i);
@@ -50,6 +62,35 @@ test("evidence RPC is least-privilege and snapshot-only", () => {
   assert.match(
     migration,
     /grant execute on function public\.get_basic_medical_confirmation_evidence\(uuid\)\s+to authenticated;/,
+  );
+});
+
+test("human-readable evidence values are prospective snapshots, not render-time lookups", () => {
+  const evidenceRpc = displaySnapshotMigration.slice(
+    displaySnapshotMigration.indexOf(
+      "create or replace function public.get_basic_medical_confirmation_evidence",
+    ),
+  );
+  assert.match(
+    displaySnapshotMigration,
+    /before insert on public\.basic_medical_session_confirmations/,
+  );
+  for (const field of [
+    "course_code_snapshot",
+    "course_name_snapshot",
+    "room_code_snapshot",
+    "building_code_snapshot",
+    "room_name_snapshot",
+    "teaching_lecturer_name_snapshot",
+    "signer_name_snapshot",
+  ]) {
+    assert.match(displaySnapshotMigration, new RegExp(field));
+    assert.match(evidenceRpc, new RegExp(`confirmations\\.${field}`));
+  }
+  assert.match(evidenceRpc, /display_snapshots_available/);
+  assert.doesNotMatch(
+    evidenceRpc,
+    /join public\.(?:courses|rooms|profiles|basic_medical_equipment_catalog)/,
   );
 });
 
@@ -82,6 +123,8 @@ test("server-rendered evidence page requests only the guarded RPC result", () =>
   assert.match(evidencePage, /evidence\.signature_data/);
   assert.match(evidencePage, /evidence\.equipment_checks\.map/);
   assert.match(evidencePage, /evidence\.invalidated_reason/);
+  assert.match(evidencePage, /Thông tin kỹ thuật/);
+  assert.match(evidencePage, /Không có snapshot tên hiển thị cho bản ghi cũ/);
   assert.doesNotMatch(
     evidencePage,
     /\.from\("(?:basic_medical_equipment_catalog|basic_medical_room_inventory|profiles|rooms)"\)/,

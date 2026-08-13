@@ -95,7 +95,7 @@ test("linked Basic Medical schedule cancellation uses the canonical registration
 });
 
 test("evidence UI and PDF stay feature-gated, snapshot-only, and readable", () => {
-  assert.match(evidencePage, /title="Bằng chứng xác nhận Y cơ sở"/);
+  assert.match(evidencePage, /title="BẰNG CHỨNG XÁC NHẬN Y CƠ SỞ"/);
   assert.match(evidencePage, /<th>ĐVT<\/th>/);
   assert.match(evidencePage, /Xuất PDF/);
   assert.doesNotMatch(evidencePage, /(?:Ã.|Â.|Æ.|áº|á»|Ä)/);

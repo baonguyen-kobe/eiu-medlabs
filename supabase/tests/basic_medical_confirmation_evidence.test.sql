@@ -1,5 +1,5 @@
 begin;
-select plan(17);
+select plan(22);
 
 create temp table y06_context (
   admin_id uuid,
@@ -8,7 +8,8 @@ create temp table y06_context (
   outsider_id uuid,
   inactive_id uuid,
   registration_id uuid,
-  confirmation_id uuid
+  confirmation_id uuid,
+  legacy_confirmation_id uuid
 );
 grant select on table y06_context to authenticated, anon;
 
@@ -27,6 +28,7 @@ declare
   catalog_id uuid := gen_random_uuid();
   inventory_id uuid := gen_random_uuid();
   confirmation_id uuid := gen_random_uuid();
+  legacy_confirmation_id uuid := gen_random_uuid();
   basic_medical_room_type_id uuid;
   skills_room_type_id uuid;
 begin
@@ -133,14 +135,33 @@ begin
     'Historical commercial name', 'snapshot-unit', 7, 5, 2, 1, 4, 3
   );
 
+  -- A legacy-shaped row is intentionally not backfilled or reconstructed.
+  insert into public.basic_medical_session_confirmations (
+    id, registration_id_snapshot, class_schedule_id_snapshot, signer_id,
+    signature_data, schedule_date_snapshot, start_time_snapshot,
+    end_time_snapshot, room_id_snapshot, teaching_lecturer_id_snapshot
+  ) values (
+    legacy_confirmation_id, registration_id, schedule_id, lecturer_id,
+    'data:image/png;base64,' || repeat('A', 128), date '2040-12-30',
+    time '07:45', time '09:45', room_id, lecturer_id
+  );
+
   update public.basic_medical_equipment_catalog
   set item_name = 'Renamed current catalog item',
       commercial_name = 'Renamed current commercial name'
   where id = catalog_id;
+  update public.courses set course_name = 'Renamed current course'
+  where id = course_id;
+  update public.rooms
+  set building_code = 'CURRENT-BUILDING', room_code = 'CURRENT-ROOM',
+      room_name = 'Renamed current room'
+  where id = room_id;
+  update public.profiles set full_name = 'Renamed current lecturer'
+  where id = lecturer_id;
 
   insert into y06_context values (
     admin_id, viewer_id, lecturer_id, outsider_id, inactive_id,
-    registration_id, confirmation_id
+    registration_id, confirmation_id, legacy_confirmation_id
   );
 end;
 $$;
@@ -266,6 +287,58 @@ select is(
   )->>'schedule_date_snapshot',
   '2040-12-31',
   'schedule evidence uses the stored schedule date snapshot'
+);
+
+select is(
+  public.get_basic_medical_confirmation_evidence(
+    (select confirmation_id from y06_context)
+  )->>'course_code_snapshot',
+  'Y06-SNAPSHOT-CODE',
+  'course code is the immutable class-schedule snapshot after current course mutation'
+);
+
+select is(
+  public.get_basic_medical_confirmation_evidence(
+    (select confirmation_id from y06_context)
+  )->>'course_name_snapshot',
+  'Y06 Snapshot Course',
+  'course name is the immutable class-schedule snapshot after current course mutation'
+);
+
+select ok(
+  (
+    public.get_basic_medical_confirmation_evidence(
+      (select confirmation_id from y06_context)
+    ) - 'equipment_checks' - 'signature_data' - 'confirmation_id'
+      - 'registration_id_snapshot' - 'class_schedule_id_snapshot' - 'signer_id'
+      - 'schedule_date_snapshot' - 'start_time_snapshot' - 'end_time_snapshot'
+      - 'room_id_snapshot' - 'teaching_lecturer_id_snapshot' - 'signed_at'
+      - 'invalidated_at' - 'invalidated_reason'
+  ) @> jsonb_build_object(
+    'room_code_snapshot', 'Y06-R',
+    'building_code_snapshot', 'Y06-B',
+    'room_name_snapshot', 'Y06 Evidence Room',
+    'teaching_lecturer_name_snapshot', 'Y06 Lecturer',
+    'signer_name_snapshot', 'Y06 Lecturer',
+    'display_snapshots_available', true
+  ),
+  'room and people display values remain signing-time snapshots after current mutations'
+);
+
+select is(
+  public.get_basic_medical_confirmation_evidence(
+    (select legacy_confirmation_id from y06_context)
+  )->>'display_snapshots_available',
+  'false',
+  'legacy evidence states honestly that display snapshots are unavailable'
+);
+
+select is(
+  public.get_basic_medical_confirmation_evidence(
+    (select legacy_confirmation_id from y06_context)
+  )->>'course_name_snapshot',
+  null,
+  'legacy evidence does not reconstruct a course display name from current data'
 );
 
 select is(

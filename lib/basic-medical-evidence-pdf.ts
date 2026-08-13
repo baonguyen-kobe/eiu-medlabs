@@ -21,10 +21,16 @@ const boldFontPath = path.join(
 const logoPath = path.join(process.cwd(), "public", "eiu-full-logo.jpg");
 const left = 40;
 const width = 515;
+const contentBottom = 780;
+const pageFooterY = 812;
 
 function value(input: unknown, fallback = "—") {
   const normalized = String(input ?? "").trim();
   return normalized || fallback;
+}
+
+function legacyValue(input: string | null) {
+  return input?.trim() || "Không có snapshot tên hiển thị cho bản ghi cũ.";
 }
 
 function signatureBuffer(data: string) {
@@ -37,22 +43,35 @@ function signatureBuffer(data: string) {
   }
 }
 
-function field(
-  doc: PDFKit.PDFDocument,
-  label: string,
-  content: string,
-  y: number,
-) {
+function drawPageHeader(doc: PDFKit.PDFDocument, compact = false) {
+  doc.image(logoPath, left, 20, { fit: compact ? [84, 26] : [112, 34] });
   doc
     .font("Bold")
-    .fontSize(8)
+    .fontSize(compact ? 10 : 14)
     .fillColor("#153f6d")
-    .text(label, left, y, { width: 130 });
+    .text("BẰNG CHỨNG XÁC NHẬN Y CƠ SỞ", left + (compact ? 94 : 126), 27, {
+      width: width - (compact ? 94 : 126),
+      align: "right",
+    });
   doc
-    .font("Regular")
-    .fontSize(8.5)
-    .fillColor("#111827")
-    .text(content, left + 132, y, { width: width - 132 });
+    .moveTo(left, 59)
+    .lineTo(left + width, 59)
+    .strokeColor("#ad8b55")
+    .stroke();
+  return 72;
+}
+
+function newContentPage(doc: PDFKit.PDFDocument) {
+  doc.addPage();
+  return drawPageHeader(doc, true);
+}
+
+function ensureSpace(doc: PDFKit.PDFDocument, y: number, height: number) {
+  return y + height <= contentBottom ? y : newContentPage(doc);
+}
+
+function fieldHeight(doc: PDFKit.PDFDocument, label: string, content: string) {
+  doc.font("Regular").fontSize(8.5);
   return (
     Math.max(
       doc.heightOfString(label, { width: 130 }),
@@ -61,14 +80,61 @@ function field(
   );
 }
 
+function field(
+  doc: PDFKit.PDFDocument,
+  label: string,
+  content: string,
+  y: number,
+) {
+  const height = fieldHeight(doc, label, content);
+  const nextY = ensureSpace(doc, y, height);
+  doc.font("Bold").fontSize(8).fillColor("#153f6d").text(label, left, nextY, {
+    width: 130,
+  });
+  doc
+    .font("Regular")
+    .fontSize(8.5)
+    .fillColor("#111827")
+    .text(content, left + 132, nextY, { width: width - 132 });
+  return nextY + height;
+}
+
 function section(doc: PDFKit.PDFDocument, y: number, title: string) {
-  doc.roundedRect(left, y, width, 21, 3).fill("#e9f0f7");
+  const nextY = ensureSpace(doc, y, 29);
+  doc.roundedRect(left, nextY, width, 21, 3).fill("#e9f0f7");
   doc
     .font("Bold")
     .fontSize(10)
     .fillColor("#153f6d")
-    .text(title, left + 8, y + 6, { width: width - 16 });
-  return y + 28;
+    .text(title, left + 8, nextY + 6, { width: width - 16 });
+  return nextY + 28;
+}
+
+function drawEquipmentHeader(doc: PDFKit.PDFDocument, y: number) {
+  const headers = ["Thiết bị", "ĐVT", "Trước", "Hư mới", "Sau"];
+  const columns = [190, 55, 95, 60, 95];
+  let x = left;
+  headers.forEach((header, index) => {
+    doc.rect(x, y, columns[index], 22).fill("#153f6d");
+    doc
+      .font("Bold")
+      .fontSize(7)
+      .fillColor("#fff")
+      .text(header, x + 4, y + 7, {
+        width: columns[index] - 8,
+        align: "center",
+      });
+    x += columns[index];
+  });
+  return { columns, y: y + 22 };
+}
+
+function formatSignedAt(value: string) {
+  return new Intl.DateTimeFormat("vi-VN", {
+    dateStyle: "short",
+    timeStyle: "short",
+    timeZone: "Asia/Ho_Chi_Minh",
+  }).format(new Date(value));
 }
 
 export async function createBasicMedicalEvidencePdf(
@@ -88,50 +154,48 @@ export async function createBasicMedicalEvidencePdf(
     doc.on("error", reject);
   });
 
-  doc.image(logoPath, left, 20, { fit: [112, 34] });
-  doc
-    .font("Bold")
-    .fontSize(14)
-    .fillColor("#153f6d")
-    .text("BẰNG CHỨNG XÁC NHẬN Y CƠ SỞ", left + 126, 27, {
-      width: width - 126,
-      align: "right",
-    });
-  doc
-    .moveTo(left, 59)
-    .lineTo(left + width, 59)
-    .strokeColor("#ad8b55")
-    .stroke();
-
-  let y = section(doc, 72, "I. THÔNG TIN BUỔI HỌC");
-  y += field(
+  let y = drawPageHeader(doc);
+  y = section(doc, y, "I. THÔNG TIN BUỔI HỌC");
+  y = field(
+    doc,
+    "Môn học",
+    `${legacyValue(evidence.course_code_snapshot)} · ${legacyValue(evidence.course_name_snapshot)}`,
+    y,
+  );
+  y = field(
     doc,
     "Ngày / giờ",
     `${value(evidence.schedule_date_snapshot)} · ${value(evidence.start_time_snapshot).slice(0, 5)}–${value(evidence.end_time_snapshot).slice(0, 5)}`,
     y,
   );
-  y += field(doc, "Mã lịch", value(evidence.class_schedule_id_snapshot), y);
-  y += field(doc, "Phòng (snapshot)", value(evidence.room_id_snapshot), y);
-  y += field(
+  y = field(
     doc,
-    "Giảng viên (snapshot)",
-    value(evidence.teaching_lecturer_id_snapshot),
+    "Phòng học",
+    [
+      evidence.building_code_snapshot,
+      evidence.room_code_snapshot,
+      evidence.room_name_snapshot,
+    ]
+      .filter((part): part is string => Boolean(part?.trim()))
+      .join(" · ") || legacyValue(null),
+    y,
+  );
+  y = field(
+    doc,
+    "Giảng viên giảng dạy",
+    legacyValue(evidence.teaching_lecturer_name_snapshot),
     y,
   );
 
   y = section(doc, y + 8, "II. THÔNG TIN XÁC NHẬN");
-  y += field(doc, "Người xác nhận", value(evidence.signer_id), y);
-  y += field(
+  y = field(
     doc,
-    "Thời điểm ký",
-    new Intl.DateTimeFormat("vi-VN", {
-      dateStyle: "short",
-      timeStyle: "short",
-      timeZone: "Asia/Ho_Chi_Minh",
-    }).format(new Date(evidence.signed_at)),
+    "Người xác nhận",
+    legacyValue(evidence.signer_name_snapshot),
     y,
   );
-  y += field(
+  y = field(doc, "Thời điểm ký", formatSignedAt(evidence.signed_at), y);
+  y = field(
     doc,
     "Trạng thái",
     evidence.invalidated_at
@@ -141,6 +205,7 @@ export async function createBasicMedicalEvidencePdf(
   );
 
   y = section(doc, y + 8, "III. CHỮ KÝ ĐIỆN TỬ");
+  y = ensureSpace(doc, y, 92);
   const signature = signatureBuffer(evidence.signature_data);
   if (signature) doc.image(signature, left + 10, y, { fit: [250, 80] });
   else
@@ -152,23 +217,10 @@ export async function createBasicMedicalEvidencePdf(
   y += 92;
 
   y = section(doc, y, "IV. TÌNH TRẠNG THIẾT BỊ ĐÃ CHỤP");
-  const headers = ["Thiết bị", "ĐVT", "Trước", "Hư mới", "Sau"];
-  const columns = [190, 55, 95, 60, 95];
-  let x = left;
-  headers.forEach((header, index) => {
-    doc.rect(x, y, columns[index], 22).fill("#153f6d");
-    doc
-      .font("Bold")
-      .fontSize(7)
-      .fillColor("#fff")
-      .text(header, x + 4, y + 7, {
-        width: columns[index] - 8,
-        align: "center",
-      });
-    x += columns[index];
-  });
-  y += 22;
+  let table = drawEquipmentHeader(doc, ensureSpace(doc, y, 52));
+  y = table.y;
   if (!evidence.equipment_checks.length) {
+    y = ensureSpace(doc, y, 28);
     doc
       .font("Regular")
       .fontSize(8)
@@ -176,10 +228,11 @@ export async function createBasicMedicalEvidencePdf(
       .text("Không có dòng điều kiện thiết bị được lưu.", left + 5, y + 10);
     y += 28;
   }
+
   evidence.equipment_checks.forEach((check) => {
-    const name = `${value(check.item_name_snapshot)}${check.commercial_name_snapshot ? `\n${check.commercial_name_snapshot}` : ""}`;
+    const equipmentName = `${value(check.item_name_snapshot)}${check.commercial_name_snapshot ? `\n${check.commercial_name_snapshot}` : ""}`;
     const values = [
-      name,
+      equipmentName,
       value(check.unit_snapshot),
       `${check.good_before}/${check.damaged_before}/${check.total_before}`,
       String(check.newly_damaged_quantity),
@@ -190,16 +243,19 @@ export async function createBasicMedicalEvidencePdf(
       doc
         .font("Regular")
         .fontSize(8)
-        .heightOfString(name, { width: columns[0] - 8 }) + 10,
+        .heightOfString(equipmentName, {
+          width: table.columns[0] - 8,
+        }) + 10,
     );
-    if (y + height > 785) {
-      doc.addPage();
-      y = 45;
+    if (y + height > contentBottom) {
+      y = newContentPage(doc);
+      table = drawEquipmentHeader(doc, y);
+      y = table.y;
     }
-    x = left;
+    let x = left;
     values.forEach((cell, index) => {
       doc
-        .rect(x, y, columns[index], height)
+        .rect(x, y, table.columns[index], height)
         .lineWidth(0.4)
         .strokeColor("#718096")
         .stroke();
@@ -208,17 +264,22 @@ export async function createBasicMedicalEvidencePdf(
         .fontSize(7.5)
         .fillColor("#111827")
         .text(cell, x + 4, y + 5, {
-          width: columns[index] - 8,
+          width: table.columns[index] - 8,
           align: index > 0 ? "center" : "left",
         });
-      x += columns[index];
+      x += table.columns[index];
     });
     y += height;
   });
 
   y = section(doc, y + 12, "V. THÔNG TIN KỸ THUẬT");
-  y += field(doc, "Confirmation ID", evidence.confirmation_id, y);
-  y += field(doc, "Registration ID", evidence.registration_id_snapshot, y);
+  y = field(doc, "Confirmation ID", evidence.confirmation_id, y);
+  y = field(doc, "Registration ID", evidence.registration_id_snapshot, y);
+  y = field(doc, "Schedule ID", evidence.class_schedule_id_snapshot, y);
+  y = field(doc, "Room ID", evidence.room_id_snapshot, y);
+  y = field(doc, "Lecturer ID", evidence.teaching_lecturer_id_snapshot, y);
+  field(doc, "Signer ID", evidence.signer_id, y);
+
   const pages = doc.bufferedPageRange();
   for (let index = pages.start; index < pages.start + pages.count; index += 1) {
     doc.switchToPage(index);
@@ -229,7 +290,7 @@ export async function createBasicMedicalEvidencePdf(
       .text(
         `Bằng chứng xác nhận Y cơ sở · Trang ${index + 1}/${pages.count}`,
         left,
-        812,
+        pageFooterY,
         { width },
       );
   }

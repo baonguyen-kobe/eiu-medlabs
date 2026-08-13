@@ -17,6 +17,8 @@ export default defineConfig({
         command: "npm run dev",
         env: {
           ...process.env,
+          BASIC_MEDICAL_CONFIRMATION_EVIDENCE_ENABLED:
+            process.env.BASIC_MEDICAL_CONFIRMATION_EVIDENCE_ENABLED ?? "true",
           CRON_SECRET: process.env.CRON_SECRET ?? "local-e2e-cron-secret",
         },
         reuseExistingServer: true,
