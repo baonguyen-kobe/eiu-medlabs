@@ -146,10 +146,12 @@ jobs:
             target_registration_ids uuid[];
             target_schedule_ids uuid[];
             target_session_ids uuid[];
+            target_confirmation_ids uuid[];
+            target_equipment_check_ids uuid[];
+            target_condition_log_ids uuid[];
             catalog_count integer;
             expected_count integer;
             deleted_count integer;
-            historical_count bigint;
             ref_count bigint;
             ref record;
             referenced_ids uuid[];
@@ -188,6 +190,19 @@ jobs:
             into target_session_ids
             from public.basic_medical_registration_sessions
             where registration_id = any(target_registration_ids);
+            select coalesce(array_agg(id order by id), '{}'::uuid[])
+            into target_confirmation_ids
+            from public.basic_medical_session_confirmations
+            where session_id = any(target_session_ids)
+               or room_id_snapshot = any(target_room_ids);
+            select coalesce(array_agg(id order by id), '{}'::uuid[])
+            into target_equipment_check_ids
+            from public.basic_medical_session_equipment_checks
+            where inventory_id = any(coalesce(target_inventory_ids, '{}'::uuid[]));
+            select coalesce(array_agg(id order by id), '{}'::uuid[])
+            into target_condition_log_ids
+            from public.basic_medical_equipment_condition_logs
+            where inventory_id = any(coalesce(target_inventory_ids, '{}'::uuid[]));
 
             if exists (
               select 1 from public.class_schedules
@@ -197,19 +212,12 @@ jobs:
               raise exception 'TEST_CATALOG_HAS_UNEXPECTED_DEPENDENCIES' using errcode = 'P0001';
             end if;
 
-            select count(*) into historical_count
-            from public.basic_medical_session_equipment_checks
-            where inventory_id = any(coalesce(target_inventory_ids, '{}'::uuid[]));
-            historical_count := historical_count + (
-              select count(*) from public.basic_medical_equipment_condition_logs
-              where inventory_id = any(coalesce(target_inventory_ids, '{}'::uuid[]))
-            ) + (
-              select count(*) from public.basic_medical_session_confirmations
-              where session_id = any(target_session_ids)
-                 or room_id_snapshot = any(target_room_ids)
-            );
-            if historical_count <> 0 then
-              raise exception 'TEST_CATALOG_HAS_HISTORICAL_REFERENCES' using errcode = 'P0001';
+            if exists (
+              select 1 from public.basic_medical_session_equipment_checks
+              where id = any(target_equipment_check_ids)
+                and confirmation_id <> all(target_confirmation_ids)
+            ) then
+              raise exception 'TEST_CATALOG_HAS_UNEXPECTED_DEPENDENCIES' using errcode = 'P0001';
             end if;
 
             for ref in
@@ -236,6 +244,7 @@ jobs:
                 when 'public.rooms'::regclass then target_room_ids
                 when 'public.basic_medical_registrations'::regclass then target_registration_ids
                 when 'public.basic_medical_registration_sessions'::regclass then target_session_ids
+                when 'public.basic_medical_session_confirmations'::regclass then target_confirmation_ids
                 when 'public.class_schedules'::regclass then target_schedule_ids
               end;
               execute format('select count(*) from %I.%I where %I = any ($1)', ref.schema_name, ref.table_name, ref.column_name)
@@ -248,7 +257,12 @@ jobs:
                 ('class_schedules', 'room_id', 'public.rooms'::regclass),
                 ('class_schedules', 'basic_medical_registration_id', 'public.basic_medical_registrations'::regclass),
                 ('basic_medical_registration_sessions', 'registration_id', 'public.basic_medical_registrations'::regclass),
-                ('basic_medical_registration_sessions', 'class_schedule_id', 'public.class_schedules'::regclass)
+                ('basic_medical_registration_sessions', 'class_schedule_id', 'public.class_schedules'::regclass),
+                ('basic_medical_session_confirmations', 'session_id', 'public.basic_medical_registration_sessions'::regclass),
+                ('basic_medical_session_confirmations', 'room_id_snapshot', 'public.rooms'::regclass),
+                ('basic_medical_session_equipment_checks', 'confirmation_id', 'public.basic_medical_session_confirmations'::regclass),
+                ('basic_medical_session_equipment_checks', 'inventory_id', 'public.basic_medical_room_inventory'::regclass),
+                ('basic_medical_equipment_condition_logs', 'inventory_id', 'public.basic_medical_room_inventory'::regclass)
               ) then
                 continue;
               end if;
@@ -259,6 +273,21 @@ jobs:
             end loop;
 
             perform set_config('app.basic_medical_registration_mutation', 'true', true);
+
+            expected_count := coalesce(array_length(target_equipment_check_ids, 1), 0);
+            delete from public.basic_medical_session_equipment_checks where id = any(target_equipment_check_ids);
+            get diagnostics deleted_count = row_count;
+            if deleted_count <> expected_count then raise exception 'TEST_CATALOG_STATE_CHANGED' using errcode = 'P0001'; end if;
+
+            expected_count := coalesce(array_length(target_condition_log_ids, 1), 0);
+            delete from public.basic_medical_equipment_condition_logs where id = any(target_condition_log_ids);
+            get diagnostics deleted_count = row_count;
+            if deleted_count <> expected_count then raise exception 'TEST_CATALOG_STATE_CHANGED' using errcode = 'P0001'; end if;
+
+            expected_count := coalesce(array_length(target_confirmation_ids, 1), 0);
+            delete from public.basic_medical_session_confirmations where id = any(target_confirmation_ids);
+            get diagnostics deleted_count = row_count;
+            if deleted_count <> expected_count then raise exception 'TEST_CATALOG_STATE_CHANGED' using errcode = 'P0001'; end if;
 
             expected_count := coalesce(array_length(target_session_ids, 1), 0);
             delete from public.basic_medical_registration_sessions where id = any(target_session_ids);
@@ -343,7 +372,9 @@ jobs:
             `Basic Medical registrations deleted: ${preflight.registration_rows}`,
             `Linked class schedules deleted: ${preflight.schedule_rows}`,
             `Linked registration sessions deleted: ${preflight.session_rows}`,
-            'Historical/equipment-check/condition-log/confirmation rows deleted: 0',
+            `Authorized equipment-check rows deleted: ${preflight.equipment_check_rows}`,
+            `Authorized condition-log rows deleted: ${preflight.condition_log_rows}`,
+            `Authorized confirmation rows deleted: ${preflight.confirmation_rows}`,
             `Catalog rows remaining: ${postcheck.catalog_rows_remaining}`,
             `Catalog-joined inventory rows remaining: ${postcheck.inventory_rows_joining_catalog}`,
             'Blocked migrations remain absent: PASS',
