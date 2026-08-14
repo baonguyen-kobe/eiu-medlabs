@@ -106,5 +106,11 @@ test("catalog writes use authenticated batch RPCs and protect type history", () 
   assert.match(catalogManager, /updateCatalogRoomsBatch/);
   assert.match(catalogManager, /updateCatalogCoursesBatch/);
   assert.match(catalogManager, /Xóa/);
-  assert.match(catalogManager, /Chỉnh sửa từng mục đã chọn/);
+  assert.match(catalogManager, /Sửa mục đã chọn/);
+  assert.match(catalogManager, /Lưu chỉnh sửa/);
+  assert.match(catalogManager, /catalog-inline-fields/);
+  assert.doesNotMatch(
+    catalogManager,
+    /<form className="admin-create-form" action=\{save\}/,
+  );
 });
