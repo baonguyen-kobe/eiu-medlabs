@@ -1,0 +1,212 @@
+name: Production PR #33 migrations
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: production-pr33-migrations
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    name: Apply reviewed PR #33 migrations
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PROJECT_REF: bwhiivfhezoozrzvchmm
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.PRODUCTION_DB_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install the locked Supabase CLI
+        run: npm ci --ignore-scripts
+
+      - name: Verify release identity and reviewed migration files
+        shell: bash
+        run: |
+          set -euo pipefail
+          readonly target_versions=("20260813160000" "20260813161000")
+          readonly target_files=(
+            "20260813160000_operations_integrity_master_batch.sql"
+            "20260813161000_catalog_reconciliation_preview_apply.sql"
+          )
+          readonly target_blobs=(
+            "0b2fdf2608e523aed26416b290d8120e5f858e37"
+            "49b9d767dd8f403dcfef6686ff1fe59d5ca8848d"
+          )
+          readonly forbidden_versions=(
+            "20260809120000" "20260809130000" "20260809140000"
+            "20260809150000" "20260809160000" "20260810000000"
+            "20260810010000" "20260810020000" "20260810030000"
+          )
+
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || {
+            echo "RELEASE_IDENTITY_CHANGED: production migrations may run only from main."
+            exit 1
+          }
+          for index in "${!target_files[@]}"; do
+            file="supabase/migrations/${target_files[$index]}"
+            [[ -f "$file" ]] || { echo "RELEASE_IDENTITY_CHANGED: reviewed target migration is missing."; exit 1; }
+            [[ "$(git hash-object "$file")" == "${target_blobs[$index]}" ]] || {
+              echo "RELEASE_IDENTITY_CHANGED: reviewed target migration content differs."
+              exit 1
+            }
+          done
+          for version in "${forbidden_versions[@]}"; do
+            if compgen -G "supabase/migrations/${version}_*.sql" > /dev/null; then
+              echo "RELEASE_IDENTITY_CHANGED: frozen PR #2 migration is present locally."
+              exit 1
+            fi
+          done
+
+      - name: Link the fixed production project
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --no-install supabase link --project-ref "$PROJECT_REF" --yes
+
+      - name: Preflight the exact production migration history
+        shell: bash
+        run: |
+          set -euo pipefail
+          readonly target_versions=("20260813160000" "20260813161000")
+          readonly forbidden_versions=(
+            "20260809120000" "20260809130000" "20260809140000"
+            "20260809150000" "20260809160000" "20260810000000"
+            "20260810010000" "20260810020000" "20260810030000"
+          )
+          history_json="$(npx --no-install supabase migration list --linked --output-format json)"
+          printf '%s\n' "$history_json" > "$RUNNER_TEMP/pr33-migrations-before.json"
+          mapfile -t remote_versions < <(jq -r '.migrations[] | (.remote // empty)' "$RUNNER_TEMP/pr33-migrations-before.json" | grep -E '^[0-9]{14}$' | sort -u)
+          mapfile -t local_versions < <(jq -r '.migrations[] | (.local // empty)' "$RUNNER_TEMP/pr33-migrations-before.json" | grep -E '^[0-9]{14}$' | sort -u)
+
+          for version in "${forbidden_versions[@]}"; do
+            if printf '%s\n' "${remote_versions[@]}" | grep -Fxq "$version"; then
+              echo "MIGRATION_ALLOWLIST_MISMATCH: frozen PR #2 migration is already applied remotely."
+              exit 1
+            fi
+          done
+          for version in "${target_versions[@]}"; do
+            if ! printf '%s\n' "${local_versions[@]}" | grep -Fxq "$version"; then
+              echo "MIGRATION_ALLOWLIST_MISMATCH: reviewed target migration is missing locally."
+              exit 1
+            fi
+            if printf '%s\n' "${remote_versions[@]}" | grep -Fxq "$version"; then
+              echo "MIGRATION_ALLOWLIST_MISMATCH: reviewed target migration is unexpectedly already remote."
+              exit 1
+            fi
+          done
+
+          expected_remote_before=()
+          for version in "${local_versions[@]}"; do
+            if ! printf '%s\n' "${target_versions[@]}" | grep -Fxq "$version"; then
+              expected_remote_before+=("$version")
+            fi
+          done
+          if [[ "$(printf '%s\n' "${remote_versions[@]}")" != "$(printf '%s\n' "${expected_remote_before[@]}")" ]]; then
+            echo "MIGRATION_ALLOWLIST_MISMATCH: remote history is not exactly the reviewed baseline through 20260813150000."
+            exit 1
+          fi
+          printf '%s\n' "${remote_versions[@]}" > "$RUNNER_TEMP/pr33-remote-before.txt"
+          printf '%s\n' "${target_versions[@]}" > "$RUNNER_TEMP/pr33-pending-targets.txt"
+
+      - name: Preflight room capacity data without mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/pr33-room-capacity-preflight.sql" <<'SQL'
+          select jsonb_build_object(
+            'invalid_room_count', count(*),
+            'rooms', coalesce(jsonb_agg(jsonb_build_object(
+              'room_code', room_code,
+              'building_code', building_code,
+              'capacity', capacity
+            ) order by building_code, room_code), '[]'::jsonb)
+          ) as preflight
+          from public.rooms
+          where capacity is not null and capacity < 1;
+          SQL
+          npx --no-install supabase db query --linked --output-format json --file "$RUNNER_TEMP/pr33-room-capacity-preflight.sql" > "$RUNNER_TEMP/pr33-room-capacity-preflight.json"
+          RUNNER_TEMP="$RUNNER_TEMP" node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const result = JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP, 'pr33-room-capacity-preflight.json'), 'utf8'));
+          const raw = result?.[0]?.preflight ?? result?.rows?.[0]?.preflight ?? result?.preflight;
+          const preflight = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          if (!preflight || !Array.isArray(preflight.rooms) || !Number.isInteger(preflight.invalid_room_count)) {
+            throw new Error('ROOM_CAPACITY_DATA_PREFLIGHT_INVALID');
+          }
+          console.log(`Room capacity rows below 1: ${preflight.invalid_room_count}`);
+          if (preflight.invalid_room_count !== 0) {
+            console.log(JSON.stringify(preflight.rooms));
+            throw new Error('ROOM_CAPACITY_DATA_PREFLIGHT_FAILED');
+          }
+          NODE
+
+      - name: Dry-run and assert the exact ordered pending set
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t expected_pending < "$RUNNER_TEMP/pr33-pending-targets.txt"
+          npx --no-install supabase db push --linked --dry-run > "$RUNNER_TEMP/pr33-migrations-dry-run.txt" 2>&1 || {
+            echo "MIGRATION_DRY_RUN_FAILED"
+            exit 1
+          }
+          mapfile -t observed_pending < <(grep -oE '20[0-9]{12}' "$RUNNER_TEMP/pr33-migrations-dry-run.txt" | awk '!seen[$0]++')
+          if [[ "$(printf '%s\n' "${observed_pending[@]}")" != "$(printf '%s\n' "${expected_pending[@]}")" ]]; then
+            echo "MIGRATION_ALLOWLIST_MISMATCH: dry-run differs from the exact reviewed ordered set."
+            exit 1
+          fi
+
+      - name: Apply the exact reviewed pending migrations
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --no-install supabase db push --linked
+
+      - name: Verify the exact final migration history
+        shell: bash
+        run: |
+          set -euo pipefail
+          history_json="$(npx --no-install supabase migration list --linked --output-format json)"
+          printf '%s\n' "$history_json" > "$RUNNER_TEMP/pr33-migrations-after.json"
+          mapfile -t remote_versions < <(jq -r '.migrations[] | (.remote // empty)' "$RUNNER_TEMP/pr33-migrations-after.json" | grep -E '^[0-9]{14}$' | sort -u)
+          mapfile -t local_versions < <(jq -r '.migrations[] | (.local // empty)' "$RUNNER_TEMP/pr33-migrations-after.json" | grep -E '^[0-9]{14}$' | sort -u)
+          if [[ "$(printf '%s\n' "${remote_versions[@]}")" != "$(printf '%s\n' "${local_versions[@]}")" ]]; then
+            echo "POST_PUSH_MIGRATION_VERIFICATION_FAILED: remote history differs from the exact reviewed local history."
+            exit 1
+          fi
+          for version in 20260813160000 20260813161000; do
+            if ! printf '%s\n' "${remote_versions[@]}" | grep -Fxq "$version"; then
+              echo "POST_PUSH_MIGRATION_VERIFICATION_FAILED: reviewed migration is missing remotely."
+              exit 1
+            fi
+          done
+          for version in 20260809120000 20260809130000 20260809140000 20260809150000 20260809160000 20260810000000 20260810010000 20260810020000 20260810030000; do
+            if printf '%s\n' "${remote_versions[@]}" | grep -Fxq "$version"; then
+              echo "POST_PUSH_MIGRATION_VERIFICATION_FAILED: frozen PR #2 migration is remotely applied."
+              exit 1
+            fi
+          done
+          mapfile -t remote_before < "$RUNNER_TEMP/pr33-remote-before.txt"
+          mapfile -t expected_added < "$RUNNER_TEMP/pr33-pending-targets.txt"
+          added_versions=()
+          for version in "${remote_versions[@]}"; do
+            if ! printf '%s\n' "${remote_before[@]}" | grep -Fxq "$version"; then added_versions+=("$version"); fi
+          done
+          if [[ "$(printf '%s\n' "${added_versions[@]}")" != "$(printf '%s\n' "${expected_added[@]}")" ]]; then
+            echo "POST_PUSH_MIGRATION_VERIFICATION_FAILED: remote history gained an unexpected migration."
+            exit 1
+          fi
