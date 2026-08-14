@@ -50,6 +50,7 @@ export default async function EmailNotificationsPage({
       allowBasicMedicalAccess={viewer.allowBasicMedicalAccess}
       canImportSchedules={viewer.canImportSchedules}
       canManagePersonnel={viewer.canManagePersonnel}
+      canManageEmailNotifications={viewer.canManageEmailNotifications}
       title="Email thông báo"
       description={
         deliveryMode === "off"

@@ -34,9 +34,21 @@ const normalize = (value: unknown) =>
     .trim();
 
 const text = (value: unknown) => String(value ?? "").trim() || null;
+const maxFileBytes = 10 * 1024 * 1024;
+const maxRows = 5_000;
+const rowCountErrorMessage = "File phải có từ 1 đến 5000 dòng dữ liệu.";
+const requiredFieldsErrorMessage =
+  "Mỗi dòng cần có Tên thiết bị, Tên thương mại và ĐVT.";
+const genericImportErrorMessage = "Không thể đọc file import.";
 
-function importErrorMessage() {
-  return "Mỗi dòng cần có Tên thiết bị, Tên thương mại và ĐVT.";
+function localParserErrorMessage(error: unknown) {
+  if (
+    error instanceof Error &&
+    [rowCountErrorMessage, requiredFieldsErrorMessage].includes(error.message)
+  ) {
+    return error.message;
+  }
+  return genericImportErrorMessage;
 }
 
 export function CatalogReconciliationImport({
@@ -59,7 +71,18 @@ export function CatalogReconciliationImport({
   const [pending, startTransition] = useTransition();
 
   async function readFile(file: File | null) {
-    if (!file) return;
+    if (!file) {
+      setNotice("Vui lòng chọn file CSV hoặc XLSX.");
+      return;
+    }
+    if (!/\.(csv|xlsx)$/i.test(file.name)) {
+      setNotice("Chỉ hỗ trợ file CSV hoặc XLSX.");
+      return;
+    }
+    if (file.size > maxFileBytes) {
+      setNotice("File đối soát không được lớn hơn 10 MB.");
+      return;
+    }
 
     try {
       const XLSX = await import("@e965/xlsx");
@@ -71,6 +94,9 @@ export function CatalogReconciliationImport({
         workbook.Sheets[workbook.SheetNames[0]],
         { defval: "", raw: false },
       );
+      if (!raw.length || raw.length > maxRows) {
+        throw new Error(rowCountErrorMessage);
+      }
       const parsed = raw.map((source) => {
         const fields = new Map(
           Object.entries(source).map(([key, value]) => [
@@ -84,7 +110,7 @@ export function CatalogReconciliationImport({
         const commercial_name = pick("tenthuongmai", "commercialname");
         const unit = pick("dvt", "donvitinh", "unit");
         if (!item_name || !commercial_name || !unit) {
-          throw new Error(importErrorMessage());
+          throw new Error(requiredFieldsErrorMessage);
         }
         return {
           item_name,
@@ -96,16 +122,13 @@ export function CatalogReconciliationImport({
           model: pick("model"),
         };
       });
-      if (!parsed.length) throw new Error("File không có dòng hợp lệ.");
       setRows(parsed);
       setPlan(null);
       setNotice(`${parsed.length} dòng đã sẵn sàng để preview.`);
     } catch (error) {
       setRows(null);
       setPlan(null);
-      setNotice(
-        error instanceof Error ? error.message : "Không thể đọc file import.",
-      );
+      setNotice(localParserErrorMessage(error));
     }
   }
 
@@ -130,12 +153,8 @@ export function CatalogReconciliationImport({
             try {
               setPlan(await preview(rows));
               setNotice(null);
-            } catch (error) {
-              setNotice(
-                error instanceof Error
-                  ? error.message
-                  : "Không thể preview file.",
-              );
+            } catch {
+              setNotice("Không thể preview file.");
             }
           })
         }
@@ -158,12 +177,16 @@ export function CatalogReconciliationImport({
           rows &&
           plan &&
           startTransition(async () => {
-            const result = await apply(rows, plan.fingerprint);
-            setNotice(result.message);
-            if (result.ok) {
-              setPlan(null);
-              setRows(null);
-              router.refresh();
+            try {
+              const result = await apply(rows, plan.fingerprint);
+              setNotice(result.message);
+              if (result.ok) {
+                setPlan(null);
+                setRows(null);
+                router.refresh();
+              }
+            } catch {
+              setNotice("Không thể áp dụng đối soát danh mục.");
             }
           })
         }

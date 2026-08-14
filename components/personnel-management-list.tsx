@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import {
   changePersonnelPasswordByRoot,
+  reconcilePersonnelPasswordOperation,
   resetPersonnelPassword,
   savePersonnelChanges,
   setPersonnelEmailNotificationCapability,
@@ -34,6 +35,14 @@ export type PersonnelListItem = {
 };
 
 type RoomType = { id: string; name: string; code: string };
+type PasswordReconciliationItem = {
+  id: string;
+  correlation_id: string;
+  action: string;
+  status: string;
+  created_at: string;
+  target: { full_name: string; email: string } | null;
+};
 
 const roleLabels: Record<AppRole, string> = {
   admin: "Quản trị viên",
@@ -57,11 +66,13 @@ export function PersonnelManagementList({
   roomTypes,
   viewerId,
   viewerIsRoot,
+  passwordReconciliationItems = [],
 }: {
   initialItems: PersonnelListItem[];
   roomTypes: RoomType[];
   viewerId: string;
   viewerIsRoot: boolean;
+  passwordReconciliationItems?: PasswordReconciliationItem[];
 }) {
   const [items, setItems] = useState(initialItems);
   const [original, setOriginal] = useState<PersonnelListItem | null>(null);
@@ -70,6 +81,7 @@ export function PersonnelManagementList({
   const [passwordDraft, setPasswordDraft] = useState("");
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
   const [emailCapability, setEmailCapability] = useState(false);
+  const [reconcilingId, setReconcilingId] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const dirty = useMemo(
     () =>
@@ -105,6 +117,24 @@ export function PersonnelManagementList({
     setPasswordConfirmation("");
   }
 
+  function reconcilePasswordOperation(operationId: string) {
+    setResult(null);
+    setReconcilingId(operationId);
+    startTransition(async () => {
+      try {
+        await reconcilePersonnelPasswordOperation(operationId);
+        setResult({ ok: true, message: "Đã đối soát thao tác mật khẩu." });
+      } catch {
+        setResult({
+          ok: false,
+          message: "Không thể đối soát thao tác mật khẩu.",
+        });
+      } finally {
+        setReconcilingId(null);
+      }
+    });
+  }
+
   function resetPassword() {
     if (
       !draft?.password_capable ||
@@ -132,7 +162,10 @@ export function PersonnelManagementList({
               : error instanceof Error &&
                   error.message.includes("AUTH_FAILED_RECONCILIATION_REQUIRED")
                 ? "Auth báo thất bại; trạng thái lưu cần đối soát trước khi thử lại."
-                : "Auth không đổi mật khẩu; không có thay đổi mật khẩu nào được xác nhận.",
+                : error instanceof Error &&
+                    error.message.includes("AUTH_OUTCOME_UNCHANGED")
+                  ? "Không nhận được phản hồi từ Auth; đối soát đã xác nhận mật khẩu chưa đổi và có thể thử lại."
+                  : "Auth không đổi mật khẩu; không có thay đổi mật khẩu nào được xác nhận.",
         });
       }
     });
@@ -169,7 +202,10 @@ export function PersonnelManagementList({
               : error instanceof Error &&
                   error.message.includes("AUTH_FAILED_RECONCILIATION_REQUIRED")
                 ? "Auth báo thất bại; trạng thái lưu cần đối soát trước khi thử lại."
-                : "Auth không đổi mật khẩu; không có thay đổi mật khẩu nào được xác nhận.",
+                : error instanceof Error &&
+                    error.message.includes("AUTH_OUTCOME_UNCHANGED")
+                  ? "Không nhận được phản hồi từ Auth; đối soát đã xác nhận mật khẩu chưa đổi và có thể thử lại."
+                  : "Auth không đổi mật khẩu; không có thay đổi mật khẩu nào được xác nhận.",
         });
       }
     });
@@ -278,6 +314,54 @@ export function PersonnelManagementList({
 
   return (
     <>
+      {viewerIsRoot && passwordReconciliationItems.length ? (
+        <section className="data-panel" aria-label="Đối soát mật khẩu">
+          <h2>Thao tác mật khẩu cần đối soát</h2>
+          <div className="responsive-table">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Mã thao tác</th>
+                  <th>Nhân sự</th>
+                  <th>Loại</th>
+                  <th>Trạng thái</th>
+                  <th>Thời điểm</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {passwordReconciliationItems.map((operation) => (
+                  <tr key={operation.id}>
+                    <td className="mono">
+                      {operation.correlation_id.slice(0, 8)}
+                    </td>
+                    <td>{operation.target?.full_name ?? "Nhân sự"}</td>
+                    <td>{operation.action}</td>
+                    <td>{operation.status}</td>
+                    <td>
+                      {new Intl.DateTimeFormat("vi-VN", {
+                        dateStyle: "short",
+                        timeStyle: "short",
+                      }).format(new Date(operation.created_at))}
+                    </td>
+                    <td>
+                      <button
+                        className="button button-secondary"
+                        disabled={pending || reconcilingId === operation.id}
+                        onClick={() => reconcilePasswordOperation(operation.id)}
+                      >
+                        {reconcilingId === operation.id
+                          ? "Đang đối soát…"
+                          : "Đối soát"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
       <div className="personnel-table-wrap">
         <table className="personnel-table">
           <thead>

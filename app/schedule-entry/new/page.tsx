@@ -32,6 +32,7 @@ export default async function NewSchedulePage({
     allowBasicMedicalAccess,
     canImportSchedules,
     canManagePersonnel,
+    canManageEmailNotifications,
   } = await getViewer();
   const roomTypeCodes = roomTypes.map(({ code }) => code);
   if (!canUseSkillsWorkspace(roles, roomTypeCodes)) {
@@ -91,6 +92,7 @@ export default async function NewSchedulePage({
       allowBasicMedicalAccess={allowBasicMedicalAccess}
       canImportSchedules={canImportSchedules}
       canManagePersonnel={canManagePersonnel}
+      canManageEmailNotifications={canManageEmailNotifications}
       title="Tạo lịch Skills lab"
       description="Lịch hợp lệ được tạo và hiển thị ngay trong hệ thống."
     >

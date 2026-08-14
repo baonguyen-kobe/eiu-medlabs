@@ -1,6 +1,6 @@
 begin;
 
-select plan(42);
+select plan(58);
 
 create temporary table feature_context as
 select
@@ -357,15 +357,141 @@ select ok(
   not exists (select 1 from private.personnel_password_auth_evidence where operation_id = (select operation_id from password_begin_failure_context)),
   'terminal reconciled pre-Auth failure deletes private evidence'
 );
+-- Model an external updateUserById call that throws after either changing or
+-- not changing Auth. The app records outcome-unknown and reconciliation must
+-- derive the truth from the private pre-Auth hash, never record false.
+select set_config('role', 'authenticated', true);
+select set_config('request.jwt.claim.role', 'authenticated', true);
+create temporary table password_throw_unchanged_context as
+select public.reserve_personnel_password_operation(
+  (select manager_id from feature_context), 'password_reset'
+) as operation_id;
+grant select on password_throw_unchanged_context to authenticated, service_role;
+select set_config('role', 'service_role', true);
+select set_config('request.jwt.claim.role', 'service_role', true);
+select lives_ok(
+  $$select public.begin_personnel_password_auth_update((select operation_id from password_throw_unchanged_context))$$,
+  'unchanged-then-throw fixture records a durable pre-Auth marker'
+);
+select lives_ok(
+  $$select public.mark_personnel_password_reconciliation_required((select operation_id from password_throw_unchanged_context), 'auth_update_outcome_unknown')$$,
+  'unchanged thrown Auth outcome is recorded only as reconciliation-required'
+);
+select is(
+  public.reconcile_personnel_password_operation((select operation_id from password_throw_unchanged_context))->>'outcome',
+  'auth_failed',
+  'reconciliation truthfully derives unchanged thrown Auth outcome as auth_failed'
+);
+select set_config('role', 'postgres', true);
+select ok(
+  not exists (select 1 from private.personnel_password_auth_evidence where operation_id = (select operation_id from password_throw_unchanged_context)),
+  'unchanged thrown outcome cleanup removes private evidence after terminal failure'
+);
+
+select set_config('role', 'authenticated', true);
+select set_config('request.jwt.claim.role', 'authenticated', true);
+create temporary table password_throw_changed_context as
+select public.reserve_personnel_password_operation(
+  (select manager_id from feature_context), 'password_reset'
+) as operation_id;
+grant select on password_throw_changed_context to authenticated, service_role;
+select ok(
+  (select operation_id is not null from password_throw_changed_context),
+  'unchanged thrown outcome releases uniqueness so a retry can reserve the target'
+);
+select set_config('role', 'service_role', true);
+select set_config('request.jwt.claim.role', 'service_role', true);
+select lives_ok(
+  $$select public.begin_personnel_password_auth_update((select operation_id from password_throw_changed_context))$$,
+  'changed-then-throw fixture records a durable pre-Auth marker'
+);
+select set_config('role', 'postgres', true);
+update auth.users set encrypted_password = crypt('ThrownAfterChange123!', gen_salt('bf'))
+where id = (select manager_id from feature_context);
+select set_config('role', 'service_role', true);
+select set_config('request.jwt.claim.role', 'service_role', true);
+select lives_ok(
+  $$select public.mark_personnel_password_reconciliation_required((select operation_id from password_throw_changed_context), 'auth_update_outcome_unknown')$$,
+  'changed thrown Auth outcome is never recorded as a false Auth failure'
+);
+select is(
+  public.reconcile_personnel_password_operation((select operation_id from password_throw_changed_context))->>'outcome',
+  'committed',
+  'reconciliation derives changed thrown Auth outcome and commits without plaintext'
+);
+select set_config('role', 'postgres', true);
+select is(
+  (select status from public.personnel_password_operations where id = (select operation_id from password_throw_changed_context)),
+  'committed',
+  'changed thrown outcome is terminally committed and no longer blocks retries'
+);
+select ok(
+  not exists (select 1 from private.personnel_password_auth_evidence where operation_id = (select operation_id from password_throw_changed_context)),
+  'changed thrown outcome cleanup removes private evidence after reconciliation'
+);
 select set_config('role', 'authenticated', true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select lives_ok(
   $$select public.reserve_personnel_password_operation((select manager_id from feature_context), 'password_reset')$$,
-  'released pre-Auth begin failure permits a subsequent password operation for the same target'
+  'changed thrown outcome releases uniqueness for a subsequent safe retry'
 );
-select set_config('role', 'authenticated', true);
-select set_config('request.jwt.claim.role', 'authenticated', true);
 
+select throws_ok(
+  $$select public.update_catalog_room(
+    (select room_one_id from feature_context), 'PWB-101', 'PWB', 'Invalid capacity', 0,
+    (select first_type_id from feature_context)
+  )$$,
+  '22023',
+  'INVALID_ROOM_CAPACITY',
+  'single room edit rejects zero capacity with the canonical validation error'
+);
+
+select throws_ok(
+  $$select public.update_catalog_rooms_batch(jsonb_build_array(jsonb_build_object(
+    'id', (select room_one_id from feature_context), 'room_code', 'PWB-101',
+    'building_code', 'PWB', 'room_name', 'Invalid capacity', 'capacity', 0,
+    'room_type_id', (select first_type_id from feature_context)
+  )))$$,
+  '22023',
+  'INVALID_ROOM_CAPACITY',
+  'batch room edit rejects zero capacity through the canonical validation error'
+);
+
+select throws_ok(
+  $$select public.apply_catalog_room_import(jsonb_build_array(jsonb_build_object(
+    'room_code', 'PWB-IMPORT-ZERO', 'building_code', 'PWB', 'room_name', 'Invalid capacity',
+    'capacity', 0, 'room_type_id', (select first_type_id from feature_context)
+  )))$$,
+  '22023',
+  'INVALID_ROOM_CAPACITY',
+  'room import rejects zero capacity before the generic table constraint'
+);
+
+select set_config('role', 'postgres', true);
+
+select throws_ok(
+  $$insert into public.rooms (room_code, building_code, room_name, room_type_id, capacity)
+    values ('PWB-DIRECT-ZERO', 'PWB', 'Invalid direct capacity',
+      (select first_type_id from feature_context), 0)$$,
+  '23514',
+  'new row for relation "rooms" violates check constraint "rooms_capacity_positive"',
+  'direct table writes retain the final non-null capacity >= 1 constraint'
+);
+
+select set_config('role', 'authenticated', true);
+select set_config('request.jwt.claims', json_build_object('sub', (select root_id from feature_context), 'role', 'authenticated')::text, true);
+select lives_ok(
+  $$select public.list_basic_medical_schedule_confirmation_states('{}'::uuid[])$$,
+  'Admin can read only the bounded calendar confirmation-state contract'
+);
+select ok(
+  not exists (
+    select 1
+    from public.list_operational_shift_assignees()
+    where id = (select root_id from feature_context)
+  ),
+  'Root remains visible historically but is absent from the canonical operational shift picker'
+);
 select set_config('role', 'postgres', true);
 
 select ok(
@@ -377,6 +503,8 @@ select ok(
 select ok(
   not has_function_privilege('anon', 'public.begin_personnel_password_reset(uuid)', 'EXECUTE')
   and not has_function_privilege('anon', 'public.update_catalog_rooms_batch(jsonb)', 'EXECUTE')
+  and not has_function_privilege('anon', 'public.list_basic_medical_schedule_confirmation_states(uuid[])', 'EXECUTE')
+  and has_function_privilege('authenticated', 'public.list_basic_medical_schedule_confirmation_states(uuid[])', 'EXECUTE')
   and has_function_privilege('authenticated', 'public.update_catalog_rooms_batch(jsonb)', 'EXECUTE'),
   'sensitive personnel and catalog batch RPCs are authenticated-only'
 );

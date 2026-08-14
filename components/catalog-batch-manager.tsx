@@ -134,6 +134,16 @@ export function CatalogBatchManager({
               roomTypeId: draft.roomTypeId,
             };
           });
+          if (
+            input.some(
+              (room) =>
+                room.capacity !== null &&
+                (!Number.isInteger(room.capacity) || room.capacity < 1),
+            )
+          ) {
+            setNotice("Sức chứa phải là số nguyên từ 1 trở lên hoặc để trống.");
+            return;
+          }
           if (input.length === 1) await updateCatalogRoom(input[0]);
           else await updateCatalogRoomsBatch(input);
         } else {
@@ -179,9 +189,12 @@ export function CatalogBatchManager({
         setEditing([]);
         setDrafts({});
         setNotice("Đã lưu thay đổi.");
-      } catch {
+      } catch (error) {
         setNotice(
-          "Không thể lưu. Mọi thay đổi trong lô đã được từ chối an toàn.",
+          error instanceof Error &&
+            error.message.includes("INVALID_ROOM_CAPACITY")
+            ? "Sức chứa phải là số nguyên từ 1 trở lên hoặc để trống."
+            : "Không thể lưu. Mọi thay đổi trong lô đã được từ chối an toàn.",
         );
       }
     });

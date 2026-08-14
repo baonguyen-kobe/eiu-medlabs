@@ -30,6 +30,7 @@ export default async function DashboardPage() {
     allowBasicMedicalAccess,
     canImportSchedules,
     canManagePersonnel,
+    canManageEmailNotifications,
   } = await getViewer();
   const roomTypeCodes = roomTypes.map(({ code }) => code);
   if (
@@ -131,6 +132,7 @@ export default async function DashboardPage() {
       allowBasicMedicalAccess={allowBasicMedicalAccess}
       canImportSchedules={canImportSchedules}
       canManagePersonnel={canManagePersonnel}
+      canManageEmailNotifications={canManageEmailNotifications}
       title="Tổng quan"
       description={`Hôm nay ${formatBusinessDate(todayText)} · Xin chào ${fullName}`}
       actions={

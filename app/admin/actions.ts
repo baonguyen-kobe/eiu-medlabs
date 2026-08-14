@@ -190,6 +190,12 @@ export async function setCoursesActive(
   revalidatePath("/admin/courses");
 }
 
+function assertRoomCapacityInput(capacity: number | null) {
+  if (capacity !== null && (!Number.isInteger(capacity) || capacity < 1)) {
+    throw new Error("INVALID_ROOM_CAPACITY");
+  }
+}
+
 export async function updateCatalogRoom(input: {
   id: string;
   roomCode: string;
@@ -198,6 +204,7 @@ export async function updateCatalogRoom(input: {
   capacity: number | null;
   roomTypeId: string;
 }) {
+  assertRoomCapacityInput(input.capacity);
   const { supabase } = await adminContext();
   const { error } = await supabase.rpc("update_catalog_room", {
     target_id: input.id,
@@ -207,7 +214,12 @@ export async function updateCatalogRoom(input: {
     target_capacity: input.capacity,
     target_room_type_id: input.roomTypeId,
   });
-  if (error) throw new Error("CATALOG_UPDATE_FAILED");
+  if (error)
+    throw new Error(
+      error.message.includes("INVALID_ROOM_CAPACITY")
+        ? "INVALID_ROOM_CAPACITY"
+        : "CATALOG_UPDATE_FAILED",
+    );
   revalidatePath("/admin/rooms");
 }
 
@@ -238,6 +250,7 @@ export async function updateCatalogRoomsBatch(
     roomTypeId: string;
   }>,
 ) {
+  inputs.forEach((input) => assertRoomCapacityInput(input.capacity));
   const { supabase } = await adminContext();
   const { error } = await supabase.rpc("update_catalog_rooms_batch", {
     target_rows: inputs.map((input) => ({
@@ -249,7 +262,12 @@ export async function updateCatalogRoomsBatch(
       room_type_id: input.roomTypeId,
     })),
   });
-  if (error) throw new Error("CATALOG_UPDATE_FAILED");
+  if (error)
+    throw new Error(
+      error.message.includes("INVALID_ROOM_CAPACITY")
+        ? "INVALID_ROOM_CAPACITY"
+        : "CATALOG_UPDATE_FAILED",
+    );
   revalidatePath("/admin/rooms");
 }
 
@@ -289,19 +307,47 @@ export async function resetPersonnelPassword(targetUserId: string) {
   if (authReadError || !providers.has("email")) {
     throw new Error("PASSWORD_RESET_NOT_AVAILABLE");
   }
+  const canonicalEmail = authUser.user.email?.trim();
+  if (!canonicalEmail) throw new Error("PASSWORD_RESET_NOT_AVAILABLE");
   const { data: operationId, error: reserveError } = await supabase.rpc(
     "reserve_personnel_password_operation",
     { target_user_id: targetUserId, target_action: "password_reset" },
   );
   if (reserveError || !operationId)
     throw new Error("PASSWORD_RESET_NOT_ALLOWED");
-  const canonicalEmail = authUser.user.email?.trim();
-  if (!canonicalEmail) throw new Error("PASSWORD_RESET_NOT_AVAILABLE");
   await beginPersonnelPasswordAuthUpdate(adminClient, operationId);
-  const { error: updateError } = await adminClient.auth.admin.updateUserById(
-    targetUserId,
-    { password: canonicalEmail },
-  );
+  let updateError: { message: string } | null = null;
+  let updateThrew = false;
+  try {
+    const result = await adminClient.auth.admin.updateUserById(targetUserId, {
+      password: canonicalEmail,
+    });
+    updateError = result.error;
+  } catch {
+    updateThrew = true;
+  }
+  if (updateThrew) {
+    const { error: markError } = await adminClient.rpc(
+      "mark_personnel_password_reconciliation_required",
+      {
+        target_operation_id: operationId,
+        target_error: "auth_update_outcome_unknown",
+      },
+    );
+    if (markError) throw new Error("PASSWORD_OPERATION_RECOVERY_REQUIRED");
+    const recovered = await reconcilePersonnelPasswordAuthUpdate(
+      adminClient,
+      operationId,
+    );
+    if (recovered?.outcome === "auth_failed") {
+      throw new Error("PASSWORD_RESET_AUTH_OUTCOME_UNCHANGED");
+    }
+    if (recovered?.outcome !== "committed") {
+      throw new Error("PASSWORD_AUTH_CHANGED_RECONCILIATION_REQUIRED");
+    }
+    revalidatePath("/admin/personnel");
+    return;
+  }
   const { error: authStateError } = await adminClient.rpc(
     "record_personnel_password_auth_result",
     {
@@ -371,9 +417,38 @@ export async function changePersonnelPasswordByRoot(
   if (reserveError || !operationId)
     throw new Error("PASSWORD_CHANGE_NOT_ALLOWED");
   await beginPersonnelPasswordAuthUpdate(adminClient, operationId);
-  const { error } = await adminClient.auth.admin.updateUserById(targetUserId, {
-    password,
-  });
+  let error: { message: string } | null = null;
+  let updateThrew = false;
+  try {
+    const result = await adminClient.auth.admin.updateUserById(targetUserId, {
+      password,
+    });
+    error = result.error;
+  } catch {
+    updateThrew = true;
+  }
+  if (updateThrew) {
+    const { error: markError } = await adminClient.rpc(
+      "mark_personnel_password_reconciliation_required",
+      {
+        target_operation_id: operationId,
+        target_error: "auth_update_outcome_unknown",
+      },
+    );
+    if (markError) throw new Error("PASSWORD_OPERATION_RECOVERY_REQUIRED");
+    const recovered = await reconcilePersonnelPasswordAuthUpdate(
+      adminClient,
+      operationId,
+    );
+    if (recovered?.outcome === "auth_failed") {
+      throw new Error("PASSWORD_CHANGE_AUTH_OUTCOME_UNCHANGED");
+    }
+    if (recovered?.outcome !== "committed") {
+      throw new Error("PASSWORD_AUTH_CHANGED_RECONCILIATION_REQUIRED");
+    }
+    revalidatePath("/admin/personnel");
+    return;
+  }
   const { error: authStateError } = await adminClient.rpc(
     "record_personnel_password_auth_result",
     {
@@ -676,7 +751,11 @@ export async function importRooms(formData: FormData) {
     catalogRedirect(
       "/admin/rooms",
       "error",
-      error instanceof Error ? error.message : "Không thể đọc file import.",
+      error instanceof Error && error.message.includes("INVALID_ROOM_CAPACITY")
+        ? "Sức chứa phải là số nguyên từ 1 trở lên hoặc để trống."
+        : error instanceof Error
+          ? error.message
+          : "Không thể đọc file import.",
     );
   }
 }

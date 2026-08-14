@@ -69,6 +69,7 @@ export default async function BasicMedicalConfirmationEvidencePage({
       allowBasicMedicalAccess={viewer.allowBasicMedicalAccess}
       canImportSchedules={viewer.canImportSchedules}
       canManagePersonnel={viewer.canManagePersonnel}
+      canManageEmailNotifications={viewer.canManageEmailNotifications}
       title="BẰNG CHỨNG XÁC NHẬN Y CƠ SỞ"
       description="Tài liệu lịch sử chỉ sử dụng dữ liệu đã chụp tại thời điểm ký."
     >

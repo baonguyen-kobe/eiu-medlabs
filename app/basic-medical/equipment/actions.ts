@@ -37,7 +37,7 @@ export async function previewBasicMedicalCatalogReconciliation(
     target_domain: "basic_medical",
     target_rows: rows,
   });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error("CATALOG_RECONCILIATION_PREVIEW_FAILED");
   return data as BasicMedicalCatalogReconciliationPreview;
 }
 
@@ -51,10 +51,22 @@ export async function applyBasicMedicalCatalogReconciliation(
     target_rows: rows,
     target_fingerprint: fingerprint,
   });
-  if (error)
+  if (error?.message.includes("CATALOG_RECONCILIATION_STALE_PREVIEW"))
     return {
       ok: false,
       message: "Dữ liệu đã thay đổi; vui lòng xem lại preview.",
+    };
+  if (error)
+    return {
+      ok: false,
+      message:
+        error.code === "42501"
+          ? "Bạn không có quyền đối soát danh mục."
+          : error.code === "22023" ||
+              error.code === "23503" ||
+              error.code === "23505"
+            ? "Dữ liệu danh mục không hợp lệ hoặc còn đang được tham chiếu."
+            : "Không thể đối soát danh mục.",
     };
   revalidatePath("/basic-medical/equipment");
   return {

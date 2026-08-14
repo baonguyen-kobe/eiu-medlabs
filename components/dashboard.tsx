@@ -25,6 +25,8 @@ import {
 } from "react";
 import {
   adminCancelClass,
+  adminCancelBasicMedicalSession,
+  adminInvalidateBasicMedicalSessionConfirmation,
   adminReassignShift,
   claimClass,
   withdrawClass,
@@ -291,6 +293,8 @@ export function Dashboard({
   roomTypeCodes = [],
   allowBasicMedicalAccess = false,
   canEditBasicMedicalSchedules = false,
+  canManageEmailNotifications = false,
+  isRootAdministrator = false,
 }: {
   fullName: string;
   roles: Role[];
@@ -309,6 +313,8 @@ export function Dashboard({
   roomTypeCodes?: string[];
   allowBasicMedicalAccess?: boolean;
   canEditBasicMedicalSchedules?: boolean;
+  canManageEmailNotifications?: boolean;
+  isRootAdministrator?: boolean;
 }) {
   const router = useRouter();
   useScheduleRealtime();
@@ -349,6 +355,11 @@ export function Dashboard({
     ok: boolean;
     text: string;
   } | null>(null);
+  const [basicMedicalAction, setBasicMedicalAction] = useState<{
+    kind: "cancel" | "invalidate";
+    event: ScheduleEvent;
+  } | null>(null);
+  const [basicMedicalReason, setBasicMedicalReason] = useState("");
 
   useEffect(() => {
     if (!selectedEvent) return;
@@ -492,6 +503,7 @@ export function Dashboard({
       roles={roles}
       roomTypeCodes={roomTypeCodes}
       allowBasicMedicalAccess={allowBasicMedicalAccess}
+      canManageEmailNotifications={canManageEmailNotifications}
       title={
         calendarKind === "basic_medical" ? "Lịch Y cơ sở" : "Lịch Skills lab"
       }
@@ -1030,6 +1042,13 @@ export function Dashboard({
                   </dd>
                 </div>
               ) : null}
+              {selectedEvent.type === "class" &&
+              selectedEvent.rootOperationalAssignment ? (
+                <p className="action-feedback error">
+                  Tài khoản Root Admin không thể được phân công vận hành. Vui
+                  lòng chọn người thay thế.
+                </p>
+              ) : null}
               {selectedEvent.type === "class" && calendarKind === "combined" ? (
                 <div>
                   <dt>Đăng ký TTB</dt>
@@ -1067,7 +1086,14 @@ export function Dashboard({
                 (calendarKind !== "basic_medical" && selectedEvent.owned)) ? (
                 <button
                   className="button button-primary full-width"
-                  disabled={pending}
+                  disabled={
+                    pending ||
+                    Boolean(
+                      selectedEvent.rootOperationalAssigneeIds?.some((id) =>
+                        selectedLecturerIds.includes(id),
+                      ),
+                    )
+                  }
                   onClick={() =>
                     runEventAction(() =>
                       canEditClassDetails
@@ -1098,6 +1124,7 @@ export function Dashboard({
               calendarKind !== "basic_medical" &&
               (selectedEvent.personIds?.length ?? 0) < 2 &&
               !selectedEvent.owned &&
+              !isRootAdministrator &&
               (role === "lecturer" || role === "admin") ? (
                 <button
                   className="button button-primary full-width"
@@ -1110,6 +1137,7 @@ export function Dashboard({
               {selectedEvent.type === "class" &&
               calendarKind !== "basic_medical" &&
               selectedEvent.owned &&
+              !isRootAdministrator &&
               (role === "lecturer" || role === "admin") ? (
                 <button
                   className="button button-secondary full-width"
@@ -1127,20 +1155,52 @@ export function Dashboard({
                 </button>
               ) : null}
               {role === "admin" && selectedEvent.type === "class" ? (
-                <button
-                  className="button button-secondary full-width"
-                  disabled={pending}
-                  onClick={() =>
-                    runEventAction(() => adminCancelClass(selectedEvent.id), {
-                      title: "Hủy lịch học?",
-                      description:
-                        "Lớp sẽ được ẩn khỏi lịch vận hành nhưng vẫn được lưu trong lịch sử thay đổi.",
-                      confirmLabel: "Hủy lịch học",
-                    })
-                  }
-                >
-                  Hủy lớp
-                </button>
+                calendarKind === "basic_medical" ? (
+                  selectedEvent.activeConfirmation ? (
+                    <button
+                      className="button button-warning full-width"
+                      disabled={pending}
+                      onClick={() => {
+                        setBasicMedicalReason("");
+                        setBasicMedicalAction({
+                          kind: "invalidate",
+                          event: selectedEvent,
+                        });
+                      }}
+                    >
+                      Vô hiệu hóa xác nhận
+                    </button>
+                  ) : (
+                    <button
+                      className="button button-secondary full-width"
+                      disabled={pending}
+                      onClick={() => {
+                        setBasicMedicalReason("");
+                        setBasicMedicalAction({
+                          kind: "cancel",
+                          event: selectedEvent,
+                        });
+                      }}
+                    >
+                      Hủy lớp
+                    </button>
+                  )
+                ) : (
+                  <button
+                    className="button button-secondary full-width"
+                    disabled={pending}
+                    onClick={() =>
+                      runEventAction(() => adminCancelClass(selectedEvent.id), {
+                        title: "Hủy lịch học?",
+                        description:
+                          "Lớp sẽ được ẩn khỏi lịch vận hành nhưng vẫn được lưu trong lịch sử thay đổi.",
+                        confirmLabel: "Hủy lịch học",
+                      })
+                    }
+                  >
+                    Hủy lớp
+                  </button>
+                )
               ) : null}
               {role === "admin" && selectedEvent.type === "shift" ? (
                 <button
@@ -1196,6 +1256,60 @@ export function Dashboard({
         }}
         onCancel={() => setConfirmation(null)}
       />
+      <ConfirmDialog
+        open={Boolean(basicMedicalAction)}
+        title={
+          basicMedicalAction?.kind === "invalidate"
+            ? "Vô hiệu hóa xác nhận buổi học?"
+            : "Hủy buổi học Y cơ sở?"
+        }
+        description={
+          basicMedicalAction?.kind === "invalidate"
+            ? `${basicMedicalAction.event.title} · ${formatDisplayDate(basicMedicalAction.event.date)} · ${basicMedicalAction.event.start}–${basicMedicalAction.event.end} · ${basicMedicalAction.event.room ?? "Chưa xác định phòng"} · Người ký: ${basicMedicalAction.event.activeConfirmation?.signerName ?? "Không xác định"} lúc ${basicMedicalAction.event.activeConfirmation ? new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Ho_Chi_Minh" }).format(new Date(basicMedicalAction.event.activeConfirmation.signedAt)) : "không xác định"}. Chữ ký và bằng chứng gốc sẽ được giữ nguyên.`
+            : "Chỉ hủy đúng buổi đã chọn; các buổi khác của Phiếu Y cơ sở không thay đổi."
+        }
+        confirmLabel={
+          basicMedicalAction?.kind === "invalidate"
+            ? "Vô hiệu hóa"
+            : "Hủy buổi học"
+        }
+        pending={pending}
+        onCancel={() => setBasicMedicalAction(null)}
+        onConfirm={() => {
+          const action = basicMedicalAction;
+          const reason = basicMedicalReason.trim();
+          if (!action || !reason) {
+            setActionMessage({
+              ok: false,
+              text: "Vui lòng nhập lý do bắt buộc.",
+            });
+            return;
+          }
+          setBasicMedicalAction(null);
+          runEventAction(() =>
+            action.kind === "invalidate" && action.event.activeConfirmation
+              ? adminInvalidateBasicMedicalSessionConfirmation(
+                  action.event.activeConfirmation.id,
+                  reason,
+                )
+              : adminCancelBasicMedicalSession(action.event.id, reason),
+          );
+        }}
+      >
+        <label className="form-field">
+          <span>
+            {basicMedicalAction?.kind === "invalidate"
+              ? "Lý do vô hiệu hóa *"
+              : "Lý do hủy buổi học *"}
+          </span>
+          <input
+            value={basicMedicalReason}
+            required
+            onChange={(event) => setBasicMedicalReason(event.target.value)}
+            placeholder="Nhập lý do bắt buộc"
+          />
+        </label>
+      </ConfirmDialog>
     </WorkspaceShell>
   );
 }

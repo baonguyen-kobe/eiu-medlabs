@@ -14,12 +14,21 @@ import type { ScheduleEvent } from "@/lib/demo-data";
 import { businessToday, businessTodayString } from "@/lib/business-time";
 import { BASIC_MEDICAL_ROOM_TYPE_ID } from "@/lib/room-types";
 import { getViewer } from "@/lib/viewer";
+import { createAdminClient } from "@/lib/supabase/admin";
 import {
   canManageBasicMedicalWorkspace,
   canViewBasicMedicalSchedules,
 } from "@/lib/workspace-access";
 
 type ViewMode = "month" | "week" | "list";
+type ConfirmationState = {
+  class_schedule_id: string;
+  session_id: string;
+  confirmation_id: string | null;
+  signed_at: string | null;
+  signer_name_snapshot: string | null;
+  invalidated_at: string | null;
+};
 
 export default async function BasicMedicalSchedulesPage({
   searchParams,
@@ -33,6 +42,8 @@ export default async function BasicMedicalSchedulesPage({
     roles,
     roomTypes,
     allowBasicMedicalAccess,
+    canManageEmailNotifications,
+    isRootAdministrator,
   } = await getViewer();
   const roomTypeCodes = roomTypes.map(({ code }) => code);
   if (!canViewBasicMedicalSchedules(roles, roomTypeCodes)) {
@@ -91,11 +102,77 @@ export default async function BasicMedicalSchedulesPage({
       .order("room_code"),
   ]);
 
+  const scheduleIds = (schedules ?? []).map((schedule) => schedule.id);
+  const { data: confirmationStates, error: confirmationStatesError } =
+    roles.includes("admin") && scheduleIds.length
+      ? await supabase.rpc("list_basic_medical_schedule_confirmation_states", {
+          target_schedule_ids: scheduleIds,
+        })
+      : { data: [] };
+  if (confirmationStatesError) {
+    throw new Error("BASIC_MEDICAL_CALENDAR_CONFIRMATION_LOOKUP_FAILED");
+  }
+  const calendarConfirmationStates = (confirmationStates ??
+    []) as ConfirmationState[];
+  const sessionByScheduleId = new Map(
+    calendarConfirmationStates.map((state) => [
+      state.class_schedule_id,
+      { id: state.session_id },
+    ]),
+  );
+  const confirmationsBySessionId = new Map<
+    string,
+    Array<{
+      id: string;
+      signed_at: string;
+      signer_name_snapshot: string | null;
+      invalidated_at: string | null;
+    }>
+  >();
+  for (const state of calendarConfirmationStates) {
+    if (!state.confirmation_id) continue;
+    const current = confirmationsBySessionId.get(state.session_id) ?? [];
+    current.push({
+      id: state.confirmation_id,
+      signed_at: state.signed_at ?? "",
+      signer_name_snapshot: state.signer_name_snapshot,
+      invalidated_at: state.invalidated_at,
+    });
+    confirmationsBySessionId.set(state.session_id, current);
+  }
+
   const peopleById = new Map(
     ((people ?? []) as Array<{ id: string; full_name: string }>).map(
       (person) => [person.id, person.full_name],
     ),
   );
+  const referencedLecturerIds = (schedules ?? []).flatMap((schedule) =>
+    [schedule.lecturer_id, schedule.lecturer_2_id].filter((id): id is string =>
+      Boolean(id),
+    ),
+  );
+  const adminClient = createAdminClient();
+  const [{ data: rootPrincipal }, { data: historicalPeople }] =
+    await Promise.all([
+      adminClient
+        .from("system_security_principals")
+        .select("root_admin_id")
+        .eq("singleton", true)
+        .maybeSingle(),
+      referencedLecturerIds.length
+        ? adminClient
+            .from("profiles")
+            .select("id,full_name")
+            .in("id", [...new Set(referencedLecturerIds)])
+        : Promise.resolve({ data: [] }),
+    ]);
+  for (const person of (historicalPeople ?? []) as Array<{
+    id: string;
+    full_name: string;
+  }>) {
+    peopleById.set(person.id, person.full_name);
+  }
+  const rootAdminId = rootPrincipal?.root_admin_id ?? null;
   const classEvents: ScheduleEvent[] = (schedules ?? []).map((schedule) => {
     const room = schedule.rooms as unknown as {
       room_code: string;
@@ -105,6 +182,10 @@ export default async function BasicMedicalSchedulesPage({
     const lecturerIds = [schedule.lecturer_id, schedule.lecturer_2_id].filter(
       Boolean,
     ) as string[];
+    const session = sessionByScheduleId.get(schedule.id);
+    const activeConfirmation = confirmationsBySessionId
+      .get(session?.id ?? "")
+      ?.find((confirmation) => confirmation.invalidated_at === null);
     return {
       id: schedule.id,
       type: "class",
@@ -129,6 +210,20 @@ export default async function BasicMedicalSchedulesPage({
       roomTypeId: room?.room_type_id,
       basicMedicalRegistrationId:
         schedule.basic_medical_registration_id ?? undefined,
+      basicMedicalSessionId: session?.id,
+      activeConfirmation: activeConfirmation
+        ? {
+            id: activeConfirmation.id,
+            signedAt: activeConfirmation.signed_at,
+            signerName: activeConfirmation.signer_name_snapshot,
+          }
+        : undefined,
+      rootOperationalAssignment:
+        schedule.schedule_date >= businessTodayString() &&
+        Boolean(rootAdminId && lecturerIds.includes(rootAdminId)),
+      rootOperationalAssigneeIds: rootAdminId
+        ? lecturerIds.filter((id) => id === rootAdminId)
+        : [],
     };
   });
 
@@ -173,6 +268,8 @@ export default async function BasicMedicalSchedulesPage({
       roles={roles}
       roomTypeCodes={roomTypeCodes}
       allowBasicMedicalAccess={allowBasicMedicalAccess}
+      canManageEmailNotifications={canManageEmailNotifications}
+      isRootAdministrator={isRootAdministrator}
       canEditBasicMedicalSchedules={canManageBasicMedicalWorkspace(
         roles,
         roomTypeCodes,

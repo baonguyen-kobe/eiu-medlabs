@@ -38,22 +38,38 @@ export default async function PersonnelPage({
   const { supabase, userId, authority } = await requirePersonnelManager();
   const query = await searchParams;
   const currentPage = normalizePage(query.page);
-  const [{ data: roomTypes }, { data: personnelRows, error: personnelError }] =
-    await Promise.all([
-      supabase
-        .from("room_types")
-        .select("id,code,name")
-        .eq("is_active", true)
-        .order("name"),
-      supabase.rpc("admin_list_personnel", {
-        target_query: query.q?.trim() || null,
-        target_role: query.role && query.role !== "all" ? query.role : null,
-        target_import_permission: query.import_permission ?? "all",
-        target_status: query.status ?? "all",
-        target_page: currentPage,
-        target_page_size: TABLE_PAGE_SIZE,
-      }),
-    ]);
+  const [
+    { data: roomTypes },
+    { data: personnelRows, error: personnelError },
+    { data: passwordReconciliationRows },
+  ] = await Promise.all([
+    supabase
+      .from("room_types")
+      .select("id,code,name")
+      .eq("is_active", true)
+      .order("name"),
+    supabase.rpc("admin_list_personnel", {
+      target_query: query.q?.trim() || null,
+      target_role: query.role && query.role !== "all" ? query.role : null,
+      target_import_permission: query.import_permission ?? "all",
+      target_status: query.status ?? "all",
+      target_page: currentPage,
+      target_page_size: TABLE_PAGE_SIZE,
+    }),
+    authority.is_root_administrator
+      ? createAdminClient()
+          .from("personnel_password_operations")
+          .select(
+            "id,correlation_id,action,status,created_at,target:profiles!personnel_password_operations_target_user_id_fkey(full_name,email)",
+          )
+          .in("status", [
+            "reconciliation_required",
+            "auth_update_started",
+            "auth_updated",
+          ])
+          .order("created_at")
+      : Promise.resolve({ data: [] }),
+  ]);
   const rows = (personnelRows ?? []) as Array<
     PersonnelListItem & { total_count: number }
   >;
@@ -257,6 +273,21 @@ export default async function PersonnelPage({
         roomTypes={roomTypes ?? []}
         viewerId={userId}
         viewerIsRoot={authority.is_root_administrator}
+        passwordReconciliationItems={
+          (passwordReconciliationRows ?? []).map((operation) => ({
+            ...operation,
+            target: Array.isArray(operation.target)
+              ? (operation.target[0] ?? null)
+              : operation.target,
+          })) as Array<{
+            id: string;
+            correlation_id: string;
+            action: string;
+            status: string;
+            created_at: string;
+            target: { full_name: string; email: string } | null;
+          }>
+        }
       />
       {!rows.length ? (
         <p className="panel-empty">Không tìm thấy nhân sự phù hợp.</p>

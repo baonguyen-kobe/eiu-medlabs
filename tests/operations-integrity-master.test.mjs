@@ -122,6 +122,71 @@ test("integrity UI paths use canonical operations and app dialogs", async () => 
   assert.doesNotMatch(catalog, /window\.confirm/);
 });
 
+test("review correction UI coverage keeps capability, calendar, Root, and reconciliation boundaries explicit", async () => {
+  const [
+    dashboard,
+    basicMedicalSchedules,
+    classSchedules,
+    staffShifts,
+    personnelPage,
+    personnelList,
+    catalogImport,
+    adminActions,
+  ] = await Promise.all([
+    read("components/dashboard.tsx"),
+    read("app/basic-medical/schedules/page.tsx"),
+    read("app/class-schedules/page.tsx"),
+    read("app/staff-shifts/page.tsx"),
+    read("app/admin/personnel/page.tsx"),
+    read("components/personnel-management-list.tsx"),
+    read("components/catalog-reconciliation-import.tsx"),
+    read("app/admin/actions.ts"),
+  ]);
+
+  for (const source of [basicMedicalSchedules, classSchedules]) {
+    assert.match(source, /rootOperationalAssignment/);
+    assert.match(source, /rootOperationalAssigneeIds/);
+    assert.match(source, /system_security_principals/);
+    assert.match(source, /createAdminClient/);
+  }
+  assert.match(dashboard, /adminCancelBasicMedicalSession/);
+  assert.match(dashboard, /adminInvalidateBasicMedicalSessionConfirmation/);
+  assert.match(dashboard, /Lý do hủy buổi học \*/);
+  assert.match(dashboard, /Lý do vô hiệu hóa \*/);
+  assert.match(dashboard, /activeConfirmation/);
+  assert.match(dashboard, /isRootAdministrator/);
+  assert.match(dashboard, /!isRootAdministrator/);
+  assert.match(dashboard, /Root Admin không thể được phân công vận hành/);
+  assert.match(staffShifts, /list_operational_shift_assignees/);
+  assert.match(staffShifts, /historicalPeople/);
+  assert.match(staffShifts, /createAdminClient/);
+  assert.match(classSchedules, /list_operational_shift_assignees/);
+  assert.doesNotMatch(classSchedules, /directoryRoles/);
+  assert.match(dashboard, /shiftAssignees\.map/);
+  assert.match(adminActions, /auth_update_outcome_unknown/);
+  assert.match(adminActions, /let updateThrew = false/);
+  assert.match(
+    adminActions,
+    /if \(updateThrew\)[\s\S]*mark_personnel_password_reconciliation_required/,
+  );
+  assert.doesNotMatch(personnelPage, /last_error/);
+  assert.doesNotMatch(personnelList, /last_error/);
+  assert.match(personnelPage, /personnel_password_operations/);
+  assert.match(personnelPage, /authority\.is_root_administrator/);
+  assert.match(personnelList, /Đối soát/);
+  assert.match(personnelList, /reconcilePersonnelPasswordOperation/);
+  assert.match(catalogImport, /maxFileBytes = 10 \* 1024 \* 1024/);
+  assert.match(catalogImport, /maxRows = 5_000/);
+  assert.match(catalogImport, /\.\(csv\|xlsx\)/);
+  assert.match(
+    adminActions,
+    /canonicalEmail = authUser\.user\.email\?\.trim\(\)/,
+  );
+  assert.match(adminActions, /PASSWORD_RESET_AUTH_OUTCOME_UNCHANGED/);
+  assert.match(adminActions, /PASSWORD_CHANGE_AUTH_OUTCOME_UNCHANGED/);
+  assert.match(adminActions, /assertRoomCapacityInput/);
+});
+
 test("catalog reconciliation is previewed and atomically applied in both domains", async () => {
   const [migration, schema, skillsActions, basicActions, importUi] =
     await Promise.all([
@@ -143,12 +208,38 @@ test("catalog reconciliation is previewed and atomically applied in both domains
   ]) {
     assert.match(migration, new RegExp(contract));
   }
+  assert.match(
+    await read(
+      "supabase/migrations/20260813160000_operations_integrity_master_batch.sql",
+    ),
+    /create or replace function public\.apply_catalog_room_import[\s\S]*INVALID_ROOM_CAPACITY/,
+  );
   assert.match(skillsActions, /previewEquipmentCatalogReconciliation/);
   assert.match(basicActions, /previewBasicMedicalCatalogReconciliation/);
+  assert.match(skillsActions, /CATALOG_RECONCILIATION_PREVIEW_FAILED/);
+  assert.match(basicActions, /CATALOG_RECONCILIATION_PREVIEW_FAILED/);
   assert.match(skillsActions, /requestedMode !== "new"/);
   assert.match(basicActions, /mode !== "new"/);
   assert.match(importUi, /Preview đối soát/);
   assert.match(importUi, /router\.refresh\(\)/);
+  for (const localMessage of [
+    "Vui lòng chọn file CSV hoặc XLSX.",
+    "Chỉ hỗ trợ file CSV hoặc XLSX.",
+    "File đối soát không được lớn hơn 10 MB.",
+    "Mỗi dòng cần có Tên thiết bị, Tên thương mại và ĐVT.",
+  ]) {
+    assert.match(importUi, new RegExp(localMessage));
+  }
+  assert.match(
+    importUi,
+    /const rowCountErrorMessage = "File phải có từ 1 đến 5000 dòng dữ liệu\."/,
+  );
+  assert.match(
+    importUi,
+    /function localParserErrorMessage\(error: unknown\)[\s\S]*return genericImportErrorMessage/,
+  );
+  assert.match(importUi, /setNotice\(localParserErrorMessage\(error\)\)/);
+  assert.doesNotMatch(importUi, /setNotice\(error\.message\)/);
   assert.match(migration, /catalog_item_id_snapshot/);
   assert.match(migration, /'referenced',referenced/);
 });

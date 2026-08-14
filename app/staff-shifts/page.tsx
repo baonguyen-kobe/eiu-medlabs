@@ -15,6 +15,7 @@ import { StaffShiftRoster } from "@/components/staff-shift-roster";
 import { WorkspaceShell } from "@/components/workspace-shell";
 import { businessToday } from "@/lib/business-time";
 import { getViewer } from "@/lib/viewer";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 type ShiftView = "week" | "month";
 type ShiftTab = "patterns" | "manage";
@@ -33,6 +34,8 @@ export default async function StaffShiftsPage({
     allowBasicMedicalAccess,
     canImportSchedules,
     canManagePersonnel,
+    canManageEmailNotifications,
+    isRootAdministrator,
   } = await getViewer();
   const query = await searchParams;
   const parsedDate = query.date ? parseISO(query.date) : businessToday();
@@ -91,8 +94,21 @@ export default async function StaffShiftsPage({
     full_name: string;
     title: string | null;
   }>;
+  const referencedStaffIds = [
+    ...(shifts ?? []).map((shift) => shift.staff_id),
+    ...(patterns ?? []).map((pattern) => pattern.staff_id),
+  ];
+  const { data: historicalPeople } = referencedStaffIds.length
+    ? await createAdminClient()
+        .from("profiles")
+        .select("id,full_name")
+        .in("id", [...new Set(referencedStaffIds)])
+    : { data: [] };
   const peopleById = new Map(
-    operationalShiftAssignees.map((person) => [person.id, person.full_name]),
+    [
+      ...operationalShiftAssignees,
+      ...((historicalPeople ?? []) as Array<{ id: string; full_name: string }>),
+    ].map((person) => [person.id, person.full_name]),
   );
   const assignees = operationalShiftAssignees
     .sort((a, b) => a.full_name.localeCompare(b.full_name, "vi"))
@@ -106,6 +122,7 @@ export default async function StaffShiftsPage({
       allowBasicMedicalAccess={allowBasicMedicalAccess}
       canImportSchedules={canImportSchedules}
       canManagePersonnel={canManagePersonnel}
+      canManageEmailNotifications={canManageEmailNotifications}
       title="Lịch trực"
       description="Đăng ký lịch cố định hoặc quản lý người trực theo tuần và tháng."
     >
@@ -127,7 +144,10 @@ export default async function StaffShiftsPage({
         periodLabel={periodLabel}
         view={view}
         tab={tab}
-        canSelfRegister={roles.includes("staff") || roles.includes("admin")}
+        canSelfRegister={
+          !isRootAdministrator &&
+          (roles.includes("staff") || roles.includes("admin"))
+        }
         canManage={roles.includes("admin")}
       />
     </WorkspaceShell>

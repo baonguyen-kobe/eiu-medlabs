@@ -21,6 +21,14 @@ export type ScheduleEvent = {
   studentCount?: number;
   roomTypeId?: string;
   basicMedicalRegistrationId?: string;
+  basicMedicalSessionId?: string;
+  activeConfirmation?: {
+    id: string;
+    signedAt: string;
+    signerName: string | null;
+  };
+  rootOperationalAssignment?: boolean;
+  rootOperationalAssigneeIds?: string[];
   equipmentRequest?: { id: string; status: EquipmentRequestStatus };
 };
 

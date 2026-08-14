@@ -80,6 +80,10 @@ export async function getViewer() {
       (personnelAuthority as { can_manage_personnel?: boolean } | null)
         ?.can_manage_personnel,
     ),
+    isRootAdministrator: Boolean(
+      (personnelAuthority as { is_root_administrator?: boolean } | null)
+        ?.is_root_administrator,
+    ),
     canManageBasicMedical: Boolean(
       (
         basicMedicalAuthority as {

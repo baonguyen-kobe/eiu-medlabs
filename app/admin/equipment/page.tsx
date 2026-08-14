@@ -20,6 +20,7 @@ export default async function EquipmentCatalogPage({
     allowBasicMedicalAccess,
     canImportSchedules,
     canManagePersonnel,
+    canManageEmailNotifications,
   } = await getViewer();
   if (!roles.some((role) => ["admin", "staff"].includes(role))) {
     redirect("/dashboard");
@@ -51,6 +52,7 @@ export default async function EquipmentCatalogPage({
       allowBasicMedicalAccess={allowBasicMedicalAccess}
       canImportSchedules={canImportSchedules}
       canManagePersonnel={canManagePersonnel}
+      canManageEmailNotifications={canManageEmailNotifications}
       title="Danh mục thiết bị"
       description="Thiết bị và vật tư dùng cho phiếu đăng ký Skills lab."
     >

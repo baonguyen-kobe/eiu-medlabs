@@ -11,6 +11,7 @@ import {
   startOfWeek,
 } from "date-fns";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type { ScheduleEvent } from "@/lib/demo-data";
 import { businessToday, businessTodayString } from "@/lib/business-time";
 import { normalizeCalendarEquipmentRequest } from "@/lib/equipment-calendar-request";
@@ -61,14 +62,17 @@ export default async function ClassSchedulesPage({
     { data: schedules },
     { data: shifts },
     { data: people },
-    { data: directoryRoles },
+    { data: operationalShiftAssignees },
     { data: roomTypes },
     { data: scopedLecturers },
     { data: rooms },
+    { data: personnelAuthority },
   ] = await Promise.all([
     supabase
       .from("profiles")
-      .select("full_name, allow_basic_medical_access")
+      .select(
+        "full_name, allow_basic_medical_access, can_manage_email_notifications",
+      )
       .eq("id", claimsData.claims.sub)
       .single(),
     supabase
@@ -102,7 +106,7 @@ export default async function ClassSchedulesPage({
       .order("shift_date")
       .order("start_time"),
     supabase.rpc("list_active_people"),
-    supabase.from("user_roles").select("user_id, role"),
+    supabase.rpc("list_operational_shift_assignees"),
     supabase.from("room_types").select("id, code, name").eq("is_active", true),
     supabase.rpc("list_scoped_lecturers", {
       target_room_type_id: NURSING_SKILLS_ROOM_TYPE_ID,
@@ -113,6 +117,7 @@ export default async function ClassSchedulesPage({
       .eq("room_type_id", NURSING_SKILLS_ROOM_TYPE_ID)
       .eq("is_active", true)
       .order("room_code"),
+    supabase.rpc("get_personnel_authority_context"),
   ]);
 
   const roles = (roleRows ?? []).map((row) => row.role as Role);
@@ -120,13 +125,36 @@ export default async function ClassSchedulesPage({
   if (!canUseSkillsWorkspace(roles, roomTypeCodes)) {
     redirect(defaultWorkspacePath(roles, roomTypeCodes));
   }
+  const referencedLecturerIds = (schedules ?? []).flatMap((schedule) =>
+    [schedule.lecturer_id, schedule.lecturer_2_id].filter((id): id is string =>
+      Boolean(id),
+    ),
+  );
+  const adminClient = createAdminClient();
+  const [{ data: rootPrincipal }, { data: historicalPeople }] =
+    await Promise.all([
+      adminClient
+        .from("system_security_principals")
+        .select("root_admin_id")
+        .eq("singleton", true)
+        .maybeSingle(),
+      referencedLecturerIds.length
+        ? adminClient
+            .from("profiles")
+            .select("id,full_name")
+            .in("id", [...new Set(referencedLecturerIds)])
+        : Promise.resolve({ data: [] }),
+    ]);
   const activePeople = (people ?? []) as Array<{
     id: string;
     full_name: string;
     title: string | null;
   }>;
   const peopleById = new Map(
-    activePeople.map((person) => [person.id, person.full_name]),
+    [
+      ...activePeople,
+      ...((historicalPeople ?? []) as Array<{ id: string; full_name: string }>),
+    ].map((person) => [person.id, person.full_name]),
   );
   const weekdayLabels = [
     "Thứ Hai",
@@ -138,6 +166,7 @@ export default async function ClassSchedulesPage({
     "Chủ nhật",
   ];
   const todayText = businessTodayString();
+  const rootAdminId = rootPrincipal?.root_admin_id ?? null;
   const dayCount = viewMode === "month" ? 42 : 7;
   const calendarDays = Array.from({ length: dayCount }, (_, index) => {
     const date = addDays(periodStart, index);
@@ -199,6 +228,12 @@ export default async function ClassSchedulesPage({
       equipmentRequest: normalizeCalendarEquipmentRequest<
         NonNullable<ScheduleEvent["equipmentRequest"]>["status"]
       >(schedule.equipment_requests),
+      rootOperationalAssignment:
+        schedule.schedule_date >= todayText &&
+        Boolean(rootAdminId && lecturerIds.includes(rootAdminId)),
+      rootOperationalAssigneeIds: rootAdminId
+        ? lecturerIds.filter((id) => id === rootAdminId)
+        : [],
     };
   });
   const shiftEvents: ScheduleEvent[] = (shifts ?? []).map((shift) => {
@@ -231,6 +266,18 @@ export default async function ClassSchedulesPage({
       roles={roles}
       roomTypeCodes={roomTypeCodes}
       allowBasicMedicalAccess={profile?.allow_basic_medical_access ?? false}
+      canManageEmailNotifications={
+        roles.includes("admin") ||
+        (roles.includes("staff") &&
+          (profile?.can_manage_email_notifications ?? false))
+      }
+      isRootAdministrator={Boolean(
+        (
+          personnelAuthority as {
+            is_root_administrator?: boolean;
+          } | null
+        )?.is_root_administrator,
+      )}
       events={[...classEvents, ...shiftEvents]}
       calendarDays={calendarDays}
       periodLabel={periodLabel}
@@ -247,14 +294,13 @@ export default async function ClassSchedulesPage({
         label: `${room.room_code} · ${room.building_code}`,
         roomTypeId: room.room_type_id,
       }))}
-      shiftAssignees={Array.from(
-        new Set(
-          (directoryRoles ?? [])
-            .filter(({ role }) => role === "staff" || role === "admin")
-            .map(({ user_id }) => user_id),
-        ),
+      shiftAssignees={(
+        (operationalShiftAssignees ?? []) as Array<{
+          id: string;
+          full_name: string;
+        }>
       )
-        .map((id) => ({ id, fullName: peopleById.get(id) ?? "Nhân sự" }))
+        .map(({ id, full_name }) => ({ id, fullName: full_name }))
         .sort((a, b) => a.fullName.localeCompare(b.fullName, "vi"))}
     />
   );

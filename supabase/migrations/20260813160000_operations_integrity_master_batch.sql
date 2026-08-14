@@ -287,6 +287,40 @@ begin
 end;
 $$;
 
+-- Calendar administrators need confirmation state to choose the canonical
+-- cancel versus invalidation action.  Keep this a narrow, Admin-only read
+-- contract rather than broadening confirmation-table or signature access.
+create or replace function public.list_basic_medical_schedule_confirmation_states(
+  target_schedule_ids uuid[]
+)
+returns table (
+  class_schedule_id uuid,
+  session_id uuid,
+  confirmation_id uuid,
+  signed_at timestamptz,
+  signer_name_snapshot text,
+  invalidated_at timestamptz
+)
+language plpgsql stable security definer set search_path = '' as $$
+begin
+  if not (select private.is_admin()) then
+    raise exception 'ADMIN_REQUIRED' using errcode = '42501';
+  end if;
+  if coalesce(cardinality(target_schedule_ids), 0) > 500 then
+    raise exception 'INVALID_BASIC_MEDICAL_SCHEDULE_BATCH' using errcode = '22023';
+  end if;
+  return query
+  select sessions.class_schedule_id, sessions.id, confirmations.id,
+    confirmations.signed_at, confirmations.signer_name_snapshot,
+    confirmations.invalidated_at
+  from public.basic_medical_registration_sessions sessions
+  left join public.basic_medical_session_confirmations confirmations
+    on confirmations.session_id = sessions.id
+  where sessions.class_schedule_id = any(target_schedule_ids)
+  order by sessions.class_schedule_id, confirmations.signed_at nulls last;
+end;
+$$;
+
 create or replace function public.get_basic_medical_confirmation_evidence(target_confirmation_id uuid)
 returns jsonb language plpgsql stable security definer set search_path = '' as $$
 declare evidence jsonb;
@@ -549,6 +583,60 @@ begin
   update public.rooms set room_code=btrim(target_room_code), building_code=btrim(target_building_code), room_name=nullif(btrim(target_room_name), ''), capacity=target_capacity, room_type_id=target_room_type_id where id=target_id;
 end; $$;
 
+-- Keep the import RPC on the same human-readable capacity boundary as the
+-- create, single-edit and batch-edit paths.  The table check below remains the
+-- last line of defense for direct writes.
+create or replace function public.apply_catalog_room_import(target_rows jsonb)
+returns integer language plpgsql security definer set search_path = '' as $$
+declare item jsonb; changed_count integer := 0; target_id uuid;
+begin
+  if not (select private.is_admin())
+    or jsonb_typeof(target_rows) <> 'array'
+    or jsonb_array_length(target_rows) < 1
+    or jsonb_array_length(target_rows) > 5000 then
+    raise exception 'INVALID_CATALOG_IMPORT' using errcode = '22023';
+  end if;
+  if exists (
+    select 1 from jsonb_array_elements(target_rows) as rows(row_json)
+    left join public.room_types types on types.id = (rows.row_json->>'room_type_id')::uuid
+    where nullif(btrim(rows.row_json->>'room_code'), '') is null
+      or nullif(btrim(rows.row_json->>'building_code'), '') is null
+      or types.id is null or not types.is_active
+  ) or (select count(*) from (
+    select lower(btrim(rows.row_json->>'room_code')), lower(btrim(rows.row_json->>'building_code'))
+    from jsonb_array_elements(target_rows) rows(row_json)
+    group by 1, 2 having count(*) > 1
+  ) duplicates) > 0 then
+    raise exception 'INVALID_CATALOG_IMPORT' using errcode = '22023';
+  end if;
+  if exists (
+    select 1 from jsonb_array_elements(target_rows) rows(row_json)
+    where nullif(btrim(rows.row_json->>'capacity'), '') is not null
+      and btrim(rows.row_json->>'capacity') !~ '^[1-9][0-9]*$'
+  ) then
+    raise exception 'INVALID_ROOM_CAPACITY' using errcode = '22023';
+  end if;
+  for item in select value from jsonb_array_elements(target_rows) loop
+    target_id := nullif(item->>'id', '')::uuid;
+    if target_id is null then
+      insert into public.rooms(room_code, building_code, room_name, room_type_id, capacity)
+      values (
+        btrim(item->>'room_code'), btrim(item->>'building_code'),
+        nullif(btrim(item->>'room_name'), ''), (item->>'room_type_id')::uuid,
+        nullif(btrim(item->>'capacity'), '')::integer
+      );
+    else
+      perform public.update_catalog_room(
+        target_id, item->>'room_code', item->>'building_code',
+        coalesce(item->>'room_name',''), nullif(item->>'capacity','')::integer,
+        (item->>'room_type_id')::uuid
+      );
+    end if;
+    changed_count := changed_count + 1;
+  end loop;
+  return changed_count;
+end; $$;
+
 -- A condition adjustment is an accountable operational event.  The existing
 -- UI already requires a reason; enforce the same rule for direct RPC callers.
 create or replace function public.adjust_basic_medical_inventory_condition(
@@ -596,7 +684,7 @@ end;
 $$;
 
 revoke all on function private.is_operationally_assignable(uuid), private.assert_operationally_assignable(uuid), private.guard_operational_assignment(), private.can_manage_email_notifications(), private.assert_catalog_room_capacity(integer), private.assert_personnel_password_operation_service() from public, anon, authenticated;
-revoke all on function public.cancel_basic_medical_session(uuid,text), public.invalidate_basic_medical_session_confirmation(uuid,text), public.list_operational_people(), public.list_operational_shift_assignees(), public.reserve_personnel_password_operation(uuid,text), public.begin_personnel_password_auth_update(uuid), public.record_personnel_password_auth_result(uuid,boolean,text), public.commit_personnel_password_operation(uuid), public.mark_personnel_password_reconciliation_required(uuid,text), public.reconcile_personnel_password_operation(uuid) from public, anon, authenticated;
+revoke all on function public.cancel_basic_medical_session(uuid,text), public.invalidate_basic_medical_session_confirmation(uuid,text), public.list_basic_medical_schedule_confirmation_states(uuid[]), public.list_operational_people(), public.list_operational_shift_assignees(), public.reserve_personnel_password_operation(uuid,text), public.begin_personnel_password_auth_update(uuid), public.record_personnel_password_auth_result(uuid,boolean,text), public.commit_personnel_password_operation(uuid), public.mark_personnel_password_reconciliation_required(uuid,text), public.reconcile_personnel_password_operation(uuid) from public, anon, authenticated;
 revoke all on function public.set_personnel_email_notification_capability(uuid,boolean) from public, anon;
-grant execute on function public.cancel_basic_medical_session(uuid,text), public.invalidate_basic_medical_session_confirmation(uuid,text), public.list_operational_people(), public.list_operational_shift_assignees(), public.reserve_personnel_password_operation(uuid,text), public.set_personnel_email_notification_capability(uuid,boolean) to authenticated;
+grant execute on function public.cancel_basic_medical_session(uuid,text), public.invalidate_basic_medical_session_confirmation(uuid,text), public.list_basic_medical_schedule_confirmation_states(uuid[]), public.list_operational_people(), public.list_operational_shift_assignees(), public.reserve_personnel_password_operation(uuid,text), public.set_personnel_email_notification_capability(uuid,boolean) to authenticated;
 grant execute on function public.begin_personnel_password_auth_update(uuid), public.record_personnel_password_auth_result(uuid,boolean,text), public.commit_personnel_password_operation(uuid), public.mark_personnel_password_reconciliation_required(uuid,text), public.reconcile_personnel_password_operation(uuid) to service_role;

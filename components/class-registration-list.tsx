@@ -48,6 +48,7 @@ export function ClassRegistrationList({
   lecturerOptionsByRoomType = {},
   roomTypeOptions = [],
   roomOptions = [],
+  isRootAdministrator = false,
 }: {
   classes: RegistrationClass[];
   mode: "open" | "mine";
@@ -57,6 +58,7 @@ export function ClassRegistrationList({
   lecturerOptionsByRoomType?: Record<string, ComboboxOption[]>;
   roomTypeOptions?: Array<{ id: string; name: string }>;
   roomOptions?: Array<{ id: string; label: string; roomTypeId: string }>;
+  isRootAdministrator?: boolean;
 }) {
   const router = useRouter();
   useScheduleRealtime();
@@ -113,7 +115,9 @@ export function ClassRegistrationList({
     range.error ? { ok: false, text: range.error } : null,
   );
   const [pending, startTransition] = useTransition();
-  const canClaim = roles.includes("lecturer") || roles.includes("admin");
+  const canClaim =
+    !isRootAdministrator &&
+    (roles.includes("lecturer") || roles.includes("admin"));
   const canDelete = roles.some((role) =>
     ["staff", "admin", "teaching_assistant"].includes(role),
   );
