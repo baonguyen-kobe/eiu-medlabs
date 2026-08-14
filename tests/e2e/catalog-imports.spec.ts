@@ -10,11 +10,13 @@ const serviceDb = createClient(
   process.env.SUPABASE_SECRET_KEY!,
   { auth: { autoRefreshToken: false, persistSession: false } },
 );
+const e2eAdminEmail = process.env.E2E_ADMIN_EMAIL ?? "admin@campus.local";
+const e2eAdminPassword = process.env.E2E_ADMIN_PASSWORD ?? "LocalAdmin123!";
 
 async function loginAsAdmin(page: Page) {
   await page.goto("/login");
-  await page.locator('input[name="email"]').fill("admin@campus.local");
-  await page.locator('input[name="password"]').fill("LocalAdmin123!");
+  await page.locator('input[name="email"]').fill(e2eAdminEmail);
+  await page.locator('input[name="password"]').fill(e2eAdminPassword);
   await page.getByRole("button", { name: "Đăng nhập", exact: true }).click();
   await expect(page).toHaveURL(/\/dashboard$/);
 }
@@ -217,7 +219,9 @@ test("template và import danh mục môn học, phòng, thiết bị, nhân s�
     await page.getByRole("button", { name: "Import mới", exact: true }).click();
     await expect(page).toHaveURL(/\/admin\/personnel\?notice=/);
     await expect(
-      page.locator(".person-card").filter({ hasText: personnelEmail }),
+      page
+        .locator(".personnel-table tbody tr")
+        .filter({ hasText: personnelEmail }),
     ).toContainText(`Nhân sự import ${suffix}`);
 
     const { data: createdProfile, error: createdProfileError } = await serviceDb
@@ -236,7 +240,7 @@ test("template và import danh mục môn học, phòng, thiết bị, nhân s�
       buffer: Buffer.from(
         [
           "Họ và tên,Email đăng nhập,Mật khẩu tạm,Số điện thoại,Chức danh,Vai trò,Loại phòng,Quyền Y cơ sở",
-          `Nhân sự cập nhật ${suffix},${personnelEmail},,${updatedPersonnelPhone},Điều phối viên,Chuyên viên,Kỹ năng Điều dưỡng,Có`,
+          `Nhân sự cập nhật ${suffix},${personnelEmail},,${updatedPersonnelPhone},Điều phối viên,Giảng viên,Y cơ sở,Có`,
         ].join("\n"),
         "utf8",
       ),
@@ -247,7 +251,9 @@ test("template và import danh mục môn học, phòng, thiết bị, nhân s�
       .click();
     await expect(page).toHaveURL(/\/admin\/personnel\?notice=/);
     await expect(
-      page.locator(".person-card").filter({ hasText: personnelEmail }),
+      page
+        .locator(".personnel-table tbody tr")
+        .filter({ hasText: personnelEmail }),
     ).toContainText(`Nhân sự cập nhật ${suffix}`);
 
     const [{ data: updatedProfile }, { data: importedRoles }] =
@@ -265,7 +271,7 @@ test("template và import danh mục môn học, phòng, thiết bị, nhân s�
       title: "Điều phối viên",
       allow_basic_medical_access: true,
     });
-    expect(importedRoles?.map(({ role }) => role)).toEqual(["staff"]);
+    expect(importedRoles?.map(({ role }) => role)).toEqual(["lecturer"]);
 
     await page.getByLabel("Chọn file import nhân sự").setInputFiles({
       name: "personnel-viewer.csv",
@@ -294,21 +300,28 @@ test("template và import danh mục môn học, phòng, thiết bị, nhân s�
       .toBe(true);
 
     const viewerCard = page
-      .locator(".person-card")
+      .locator(".personnel-table tbody tr")
       .filter({ hasText: personnelViewerEmail });
     await expect(viewerCard.locator(".role-chip.selected")).toHaveText(
       "Người xem",
     );
-    await expect(
-      viewerCard
-        .locator('.person-room-scope:has-text("Kỹ năng Điều dưỡng")')
-        .getByLabel("Nhận email thông báo (Người xem)"),
-    ).toBeChecked();
-    await expect(
-      viewerCard
-        .locator('.person-room-scope:has-text("Y cơ sở")')
-        .getByLabel("Nhận email thông báo (Người xem)"),
-    ).not.toBeChecked();
+    const { data: viewerScopes, error: viewerScopesError } = await serviceDb
+      .from("profile_room_types")
+      .select("room_type_id,receive_schedule_emails")
+      .eq("profile_id", personnelViewerId!);
+    if (viewerScopesError) throw viewerScopesError;
+    expect(viewerScopes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          room_type_id: "40000000-0000-0000-0000-000000000001",
+          receive_schedule_emails: true,
+        }),
+        expect.objectContaining({
+          room_type_id: "40000000-0000-0000-0000-000000000002",
+          receive_schedule_emails: false,
+        }),
+      ]),
+    );
   } finally {
     if (!personnelId) {
       const { data: profile } = await serviceDb

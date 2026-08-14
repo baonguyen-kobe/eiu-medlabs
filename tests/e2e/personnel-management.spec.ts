@@ -15,11 +15,18 @@ const adminDb = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
   { auth: { autoRefreshToken: false, persistSession: false } },
 );
+const e2eAdminEmail = process.env.E2E_ADMIN_EMAIL ?? "admin@campus.local";
+const e2eAdminPassword = process.env.E2E_ADMIN_PASSWORD ?? "LocalAdmin123!";
+const e2eAdminAuthEmail =
+  process.env.E2E_ADMIN_AUTH_EMAIL ??
+  (e2eAdminEmail === "admin" ? "admin@medlabs.local" : e2eAdminEmail);
+const e2eAdminProfileEmail =
+  process.env.E2E_ADMIN_PROFILE_EMAIL ?? "admin@campus.local";
 
 async function loginAsAdmin(page: Page) {
   await page.goto("/login");
-  await page.locator('input[name="email"]').fill("admin@campus.local");
-  await page.locator('input[name="password"]').fill("LocalAdmin123!");
+  await page.locator('input[name="email"]').fill(e2eAdminEmail);
+  await page.locator('input[name="password"]').fill(e2eAdminPassword);
   await page.locator('button[type="submit"]').click();
   await expect(page).toHaveURL(/\/dashboard$/);
 }
@@ -34,8 +41,8 @@ async function login(page: Page, email: string, password: string) {
 
 async function deletePersonnel(email: string) {
   await adminDb.auth.signInWithPassword({
-    email: "admin@campus.local",
-    password: "LocalAdmin123!",
+    email: e2eAdminAuthEmail,
+    password: e2eAdminPassword,
   });
   const { data } = await adminDb
     .from("profiles")
@@ -49,6 +56,7 @@ test("personnel drawer saves role, import capability and lock atomically", async
   page,
 }) => {
   const email = `personnel-e2e-${crypto.randomUUID()}@campus.local`;
+  const phone = `09${Date.now().toString().slice(-8)}`;
   await loginAsAdmin(page);
   try {
     await page.goto("/admin/personnel");
@@ -57,7 +65,7 @@ test("personnel drawer saves role, import capability and lock atomically", async
     await createForm.locator('input[name="full_name"]').fill("Trợ giảng E2E");
     await createForm.locator('input[name="email"]').fill(email);
     await createForm.locator('input[name="password"]').fill("LocalQa123!");
-    await createForm.locator('input[name="phone"]').fill("0900999888");
+    await createForm.locator('input[name="phone"]').fill(phone);
     await createForm
       .locator('input[name="roles"][value="teaching_assistant"]')
       .check();
@@ -110,7 +118,7 @@ test("Root và Bảo thấy Personnel, Admin thường bị ẩn menu và redire
   await expect(page).toHaveURL(/\/admin\/personnel/);
   const rootRow = page
     .locator(".personnel-table tbody tr")
-    .filter({ hasText: "admin@campus.local" });
+    .filter({ hasText: e2eAdminProfileEmail });
   await expect(rootRow).toContainText("Root Administrator");
   await expect(rootRow.getByRole("button", { name: "Xem" })).toBeVisible();
   const managerRow = page
@@ -184,6 +192,33 @@ test("Personnel edit drawer remains usable at the required desktop viewports", a
   }
 });
 
+test("email notification capability alone requires an explicit save or discard", async ({
+  page,
+}) => {
+  await loginAsAdmin(page);
+  await page.goto("/admin/personnel");
+  const staffRow = page
+    .locator(".personnel-table tbody tr")
+    .filter({ hasText: "staff@campus.local" });
+  await staffRow.getByRole("button", { name: "Sửa" }).click();
+  const drawer = page.getByRole("dialog", { name: "Chỉnh sửa nhân sự" });
+  const capability = drawer.getByLabel("Quản lý Email Notifications");
+  const save = drawer.getByRole("button", { name: "Lưu thay đổi" });
+  const initiallyChecked = await capability.isChecked();
+  await expect(save).toBeDisabled();
+  await capability.setChecked(!initiallyChecked);
+  await expect(save).toBeEnabled();
+  await drawer.getByRole("button", { name: "Đóng" }).click();
+  const discard = page.getByRole("dialog", { name: "Bỏ thay đổi chưa lưu?" });
+  await expect(discard).toBeVisible();
+  await discard.getByRole("button", { name: "Bỏ thay đổi" }).click();
+  await expect(drawer).toHaveCount(0);
+
+  await staffRow.getByRole("button", { name: "Sửa" }).click();
+  expect(await capability.isChecked()).toBe(initiallyChecked);
+  await drawer.getByRole("button", { name: "Đóng" }).click();
+});
+
 test("personnel reconciler actual integration test (N-MEDIUM-01)", async ({
   request,
 }) => {
@@ -210,8 +245,8 @@ test("personnel reconciler actual integration test (N-MEDIUM-01)", async ({
 
     // Sign in as root temporarily to get session
     const { error: rootAuthError } = await rootDb.auth.signInWithPassword({
-      email: "admin@campus.local",
-      password: "LocalAdmin123!",
+      email: e2eAdminAuthEmail,
+      password: e2eAdminPassword,
     });
     expect(rootAuthError).toBeNull();
 

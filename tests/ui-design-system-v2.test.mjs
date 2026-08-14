@@ -143,3 +143,38 @@ test("catalog import keeps the one-button file-to-preview flow and a circle step
   assert.match(capture, /reports\/ui-v2\/after/);
   assert.match(capture, /basic-medical-calendar/);
 });
+
+test("final Master correction keeps table ownership, counters, and stable catalog slots", async () => {
+  const css = await source("app/globals.css");
+  const master = await source("docs/UI_DESIGN_SYSTEM_V2_MASTER.md");
+  const catalog = await source("components/catalog-batch-manager.tsx");
+  const personnel = await source("components/personnel-management-list.tsx");
+  const catalogImport = await source(
+    "components/catalog-reconciliation-import.tsx",
+  );
+
+  assert.doesNotMatch(
+    css,
+    /\.responsive-table,\s*\.preview-table-wrap,\s*\.period-calendar\s*\{\s*scrollbar-gutter: stable/s,
+  );
+  assert.match(css, /\.responsive-table,[\s\S]*scrollbar-gutter: auto/);
+  assert.match(css, /A direct child viewport only scrolls/);
+  assert.match(
+    css,
+    /\.equipment-catalog-count,[\s\S]*height: 44px[\s\S]*display: inline-flex[\s\S]*justify-content: center/,
+  );
+  assert.match(
+    css,
+    /\.catalog-master-action-group \.button[\s\S]*width: 154px[\s\S]*min-height: 42px/,
+  );
+  assert.match(master, /Canonical Table Shell Ownership/);
+  assert.match(master, /BUG-UI-TABLE-RIGHT-EDGE-001/);
+  assert.match(catalog, /catalog-master-action-group/);
+  assert.match(catalog, /selected\.length !== 1/);
+  assert.match(catalog, /editing\.length \? "Lưu chỉnh sửa" : "Sửa"/);
+  assert.match(personnel, /const emailCapabilityDirty/);
+  assert.match(personnel, /const hasChanges = dirty \|\| emailCapabilityDirty/);
+  assert.match(catalogImport, /const \[modalNotice, setModalNotice\]/);
+  assert.match(catalogImport, /role="alert"/);
+  assert.match(catalogImport, /stalePreviewMessage/);
+});

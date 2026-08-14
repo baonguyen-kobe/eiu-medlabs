@@ -20,6 +20,8 @@ const previewPageSize = 25;
 const rowCountErrorMessage = "File phải có từ 1 đến 5000 dòng dữ liệu.";
 const requiredFieldsErrorMessage =
   "Mỗi dòng cần có Tên thiết bị, Tên thương mại và ĐVT.";
+const stalePreviewMessage =
+  "Dữ liệu danh mục đã thay đổi. Hãy chọn lại file để xem trước bản mới.";
 
 const normalize = (value: unknown) =>
   String(value ?? "")
@@ -38,6 +40,13 @@ function safeParserError(error: unknown) {
     : "Không thể đọc file import.";
 }
 
+function safeApplyError(message: string) {
+  return message.includes("CATALOG_RECONCILIATION_STALE_PREVIEW") ||
+    message.includes("Dữ liệu đã thay đổi")
+    ? stalePreviewMessage
+    : "Không thể áp dụng file import. Dữ liệu không thay đổi.";
+}
+
 export function CatalogReconciliationImport({
   preview,
   apply,
@@ -54,12 +63,14 @@ export function CatalogReconciliationImport({
   const [previewPage, setPreviewPage] = useState(0);
   const [plan, setPlan] = useState<Preview | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [modalNotice, setModalNotice] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const resetPreview = () => {
     setRows(null);
     setFileName(null);
     setPlan(null);
     setPreviewPage(0);
+    setModalNotice(null);
   };
 
   async function readFile(file: File | null) {
@@ -109,6 +120,7 @@ export function CatalogReconciliationImport({
       setPreviewPage(0);
       setPlan(null);
       setNotice(null);
+      setModalNotice(null);
       startTransition(async () => {
         try {
           setPlan(await preview(parsed));
@@ -170,18 +182,29 @@ export function CatalogReconciliationImport({
           startTransition(async () => {
             try {
               const result = await apply(rows, plan.fingerprint);
-              setNotice(result.message);
               if (result.ok) {
+                setNotice(result.message);
                 resetPreview();
                 window.location.reload();
+                return;
               }
+              setPlan(null);
+              setModalNotice(safeApplyError(result.message));
             } catch {
-              setNotice("Không thể import danh mục.");
+              setPlan(null);
+              setModalNotice(
+                "Không thể áp dụng file import. Dữ liệu không thay đổi.",
+              );
             }
           })
         }
       >
         <div className="catalog-import-preview">
+          {modalNotice ? (
+            <p className="action-feedback" role="alert">
+              {modalNotice}
+            </p>
+          ) : null}
           <p className="field-note">
             Đây là dữ liệu trong file bạn chuẩn bị import.
           </p>

@@ -1033,8 +1033,10 @@ export function EquipmentRequestList({
         >
           Xóa bộ lọc
         </button>
-        <span className="equipment-filter-count">
-          {filteredItems.length}/{visibleItems.length} phiếu
+        <span className="inline-toolbar-count-slot equipment-filter-count-slot">
+          <span className="equipment-filter-count">
+            {filteredItems.length}/{visibleItems.length} phiếu
+          </span>
         </span>
       </div>
 

@@ -553,6 +553,38 @@ Inner scroll viewport chỉ scrolling.
 
 Không `shell inside shell`.
 
+## Canonical Table Shell Ownership — BUG-UI-TABLE-RIGHT-EDGE-001
+
+Personnel production table is the visual reference for a Data Table's right
+edge, continuous border, rounded corners, and header/body coverage. This is a
+visual-shell reference only; it does not prescribe Personnel columns or
+business layout for other table families.
+
+Every Data Table family has exactly one visual shell owner. The visual shell
+owns border, border-radius, background, clipping, and any shadow. It may own
+horizontal scrolling when the DOM permits it.
+
+An optional inner scroll viewport is permitted only for scrolling. It must not
+own a second border, radius, card background, shadow, or fake right padding.
+Its equivalent contract is:
+
+```text
+width: 100%
+max-width: 100%
+overflow-x: auto
+border: 0
+border-radius: 0
+background: transparent
+padding-right: 0
+scrollbar-gutter: auto
+```
+
+The table fills the available visual shell with `width: 100%`; use an
+intentional `min-width` only when content requires local horizontal scrolling.
+Header and body cells must terminate at the same right edge as the rounded
+shell. Do not introduce a blank column, spacer, pseudo-element, width mismatch,
+or nested visual shell that leaves a reserved white strip.
+
 ## Rounded corners
 
 - bo kín cả 4 góc
@@ -1388,6 +1420,10 @@ Do not introduce:
 - random radius/shadow
 - hardcoded page-specific table header color
 - white table gutter
+- outer visual table shell → nested visual responsive-table shell → reserved
+  scrollbar gutter
+- multiple elements in one Data Table hierarchy independently owning border,
+  radius, and opaque background
 - multi-line desktop table headers due poor width planning
 - page-level horizontal scroll
 - tiny font to fit data
@@ -1601,6 +1637,11 @@ This task is DONE only when:
 - cells have safe inset;
 - table shell rounded 4 corners;
 - no right-edge white gutter;
+- every Data Table has exactly one visual shell owner;
+- Data Table scrollbar gutter is `auto` or intentionally omitted;
+- header and body terminate at the same right edge;
+- Personnel production remains the visual reference for Data Table edge/radius;
+- shared TableScrollViewport behavior is used instead of page-specific fixes;
 - Equipment name columns prioritized;
 - filters same 44px height;
 - reset aligned;

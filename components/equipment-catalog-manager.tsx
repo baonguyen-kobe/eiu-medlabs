@@ -407,8 +407,10 @@ export function EquipmentCatalogManager({
           >
             Xóa bộ lọc
           </button>
-          <span className="equipment-catalog-count">
-            {visibleRows.length}/{rows.length} thiết bị
+          <span className="inline-toolbar-count-slot">
+            <span className="equipment-catalog-count">
+              {visibleRows.length}/{rows.length} thiết bị
+            </span>
           </span>
         </div>
 

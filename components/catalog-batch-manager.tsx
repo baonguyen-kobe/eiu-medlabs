@@ -253,20 +253,54 @@ export function CatalogBatchManager({
 
   return (
     <div className="data-panel catalog-data-panel">
-      {editing.length ? (
-        <div
-          className="equipment-catalog-toolbar"
-          aria-label="Chỉnh sửa nội tuyến"
-        >
-          <span>{editing.length} mục đang chỉnh sửa</span>
+      <div
+        className="equipment-catalog-toolbar"
+        aria-label={
+          editing.length ? "Chỉnh sửa nội tuyến" : "Thao tác danh mục"
+        }
+      >
+        <span>{editing.length || selected.length} mục được chọn</span>
+        <div className="catalog-master-action-group">
           <button
             className="button button-primary"
             type="button"
-            disabled={pending}
-            onClick={save}
+            disabled={Boolean(editing.length) || !selected.length || pending}
+            onClick={() => setActiveConfirmation(true)}
           >
-            Lưu chỉnh sửa
+            Kích hoạt
           </button>
+          <button
+            className="button button-secondary"
+            type="button"
+            disabled={pending || (!editing.length && !selected.length)}
+            onClick={() => (editing.length ? save() : beginEdit(selected))}
+          >
+            {editing.length ? "Lưu chỉnh sửa" : "Sửa"}
+          </button>
+          <button
+            className="button button-secondary"
+            type="button"
+            disabled={Boolean(editing.length) || !selected.length || pending}
+            onClick={() => setActiveConfirmation(false)}
+          >
+            Ngừng sử dụng
+          </button>
+          <button
+            className="button button-danger"
+            type="button"
+            disabled={
+              Boolean(editing.length) || selected.length !== 1 || pending
+            }
+            onClick={() =>
+              setDeleteTarget(
+                items.find((item) => item.id === selected[0]) ?? null,
+              )
+            }
+          >
+            Xóa
+          </button>
+        </div>
+        {editing.length ? (
           <button
             className="button button-secondary"
             type="button"
@@ -275,36 +309,8 @@ export function CatalogBatchManager({
           >
             Hủy
           </button>
-        </div>
-      ) : (
-        <div className="equipment-catalog-toolbar">
-          <span>{selected.length} mục được chọn</span>
-          <button
-            className="button button-secondary"
-            type="button"
-            disabled={!selected.length || pending}
-            onClick={() => setActiveConfirmation(false)}
-          >
-            Ngừng dùng
-          </button>
-          <button
-            className="button button-secondary"
-            type="button"
-            disabled={!selected.length || pending}
-            onClick={() => beginEdit(selected)}
-          >
-            Sửa mục đã chọn
-          </button>
-          <button
-            className="button button-secondary"
-            type="button"
-            disabled={!selected.length || pending}
-            onClick={() => setActiveConfirmation(true)}
-          >
-            Kích hoạt
-          </button>
-        </div>
-      )}
+        ) : null}
+      </div>
       {notice ? (
         <p className="action-feedback" role="status">
           {notice}

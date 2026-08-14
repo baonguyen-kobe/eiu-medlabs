@@ -101,6 +101,12 @@ export function PersonnelManagementList({
       ),
     [draft, original],
   );
+  const emailCapabilityDirty = Boolean(
+    original &&
+    original.can_manage_email_notifications !==
+      (draft?.roles.includes("staff") ? emailCapability : false),
+  );
+  const hasChanges = dirty || emailCapabilityDirty;
   const basicMedicalEligible = Boolean(
     draft?.roles.some((role) =>
       ["lecturer", "teaching_assistant"].includes(role),
@@ -124,7 +130,7 @@ export function PersonnelManagementList({
 
   function close() {
     if (pending) return;
-    if (dirty) {
+    if (hasChanges) {
       setConfirmation("discard");
       return;
     }
@@ -271,6 +277,7 @@ export function PersonnelManagementList({
     const canImportRole = next.some((value) =>
       ["staff", "lecturer", "teaching_assistant"].includes(value),
     );
+    if (!next.includes("staff")) setEmailCapability(false);
     setDraft({
       ...draft,
       roles: next,
@@ -352,12 +359,15 @@ export function PersonnelManagementList({
           });
           return;
         }
+      } else {
+        saved.can_manage_email_notifications = false;
       }
       setItems((current) =>
         current.map((item) => (item.id === saved.id ? clone(saved) : item)),
       );
       setOriginal(clone(saved));
       setDraft(clone(saved));
+      setEmailCapability(Boolean(saved.can_manage_email_notifications));
     });
   }
 
@@ -880,7 +890,11 @@ export function PersonnelManagementList({
             </div>
             <footer>
               <span>
-                {dirty ? "Có thay đổi chưa lưu" : result?.ok ? "Đã lưu" : ""}
+                {hasChanges
+                  ? "Có thay đổi chưa lưu"
+                  : result?.ok
+                    ? "Đã lưu"
+                    : ""}
               </span>
               <button
                 className="button button-secondary"
@@ -897,7 +911,7 @@ export function PersonnelManagementList({
                 disabled={
                   pending ||
                   !draft.can_edit_security ||
-                  !dirty ||
+                  !hasChanges ||
                   draft.roles.length === 0 ||
                   draft.room_type_ids.length === 0
                 }

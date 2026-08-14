@@ -13,11 +13,13 @@ const serviceDb = createClient(
 
 const nursingSkillsRoomTypeId = "40000000-0000-0000-0000-000000000001";
 const basicMedicalRoomTypeId = "40000000-0000-0000-0000-000000000002";
+const e2eAdminEmail = process.env.E2E_ADMIN_EMAIL ?? "admin@campus.local";
+const e2eAdminPassword = process.env.E2E_ADMIN_PASSWORD ?? "LocalAdmin123!";
 
 async function loginAsAdmin(page: Page) {
   await page.goto("/login");
-  await page.locator('input[name="email"]').fill("admin@campus.local");
-  await page.locator('input[name="password"]').fill("LocalAdmin123!");
+  await page.locator('input[name="email"]').fill(e2eAdminEmail);
+  await page.locator('input[name="password"]').fill(e2eAdminPassword);
   await page.locator('button[type="submit"]').click();
   await expect(page).toHaveURL(/\/dashboard$/);
 }
@@ -68,7 +70,10 @@ test("Room and Course catalog rows edit inline without weakening capacity or bat
     };
 
     await chooseCourse(courseCodes[0]);
-    await page.getByRole("button", { name: "Sửa mục đã chọn" }).click();
+    await page
+      .locator(".catalog-master-action-group")
+      .getByRole("button", { name: "Sửa", exact: true })
+      .click();
     await expect(
       editingCourseRow(courseCodes[0]).locator("input").nth(1),
     ).toBeVisible();
@@ -96,17 +101,26 @@ test("Room and Course catalog rows edit inline without weakening capacity or bat
 
     await page.getByLabel(`Chọn ${courseCodes[0]}`).uncheck();
     await chooseCourse(courseCodes[0]);
-    await page.getByRole("button", { name: "Sửa mục đã chọn" }).click();
+    await page
+      .locator(".catalog-master-action-group")
+      .getByRole("button", { name: "Sửa", exact: true })
+      .click();
     await editingCourseRow(courseCodes[0])
       .locator("input")
       .nth(2)
       .fill(`Edited ${courseCodes[0]}`);
-    await page.getByRole("button", { name: "Lưu chỉnh sửa" }).click();
+    await page
+      .locator(".catalog-master-action-group")
+      .getByRole("button", { name: "Lưu chỉnh sửa", exact: true })
+      .click();
     await expect(page.getByRole("status")).toContainText("Đã lưu thay đổi");
 
     await chooseCourse(courseCodes[0]);
     await chooseCourse(courseCodes[1]);
-    await page.getByRole("button", { name: "Sửa mục đã chọn" }).click();
+    await page
+      .locator(".catalog-master-action-group")
+      .getByRole("button", { name: "Sửa", exact: true })
+      .click();
     await editingCourseRow(courseCodes[0])
       .locator("input")
       .nth(2)
@@ -118,12 +132,18 @@ test("Room and Course catalog rows edit inline without weakening capacity or bat
     await editingCourseRow(courseCodes[0])
       .locator("select")
       .selectOption(basicMedicalRoomTypeId);
-    await page.getByRole("button", { name: "Lưu chỉnh sửa" }).click();
+    await page
+      .locator(".catalog-master-action-group")
+      .getByRole("button", { name: "Lưu chỉnh sửa", exact: true })
+      .click();
     await expect(page.getByRole("status")).toContainText("Đã lưu thay đổi");
 
     await chooseCourse(courseCodes[0]);
     await chooseCourse(courseCodes[1]);
-    await page.getByRole("button", { name: "Ngừng dùng" }).click();
+    await page
+      .locator(".catalog-master-action-group")
+      .getByRole("button", { name: "Ngừng sử dụng", exact: true })
+      .click();
     const deactivateDialog = page.getByRole("dialog", {
       name: "Ngừng sử dụng 2 môn học?",
     });
@@ -137,7 +157,10 @@ test("Room and Course catalog rows edit inline without weakening capacity or bat
     if (coursesAfterCancelError) throw coursesAfterCancelError;
     expect(coursesAfterCancel?.every((course) => course.is_active)).toBe(true);
 
-    await page.getByRole("button", { name: "Ngừng dùng" }).click();
+    await page
+      .locator(".catalog-master-action-group")
+      .getByRole("button", { name: "Ngừng sử dụng", exact: true })
+      .click();
     await page
       .getByRole("dialog", { name: "Ngừng sử dụng 2 môn học?" })
       .getByRole("button", { name: "Xác nhận" })
@@ -145,7 +168,10 @@ test("Room and Course catalog rows edit inline without weakening capacity or bat
     await expect(page.getByRole("status")).toContainText("Đã ngừng dùng");
     await chooseCourse(courseCodes[0]);
     await chooseCourse(courseCodes[1]);
-    await page.getByRole("button", { name: "Kích hoạt" }).click();
+    await page
+      .locator(".catalog-master-action-group")
+      .getByRole("button", { name: "Kích hoạt", exact: true })
+      .click();
     await page
       .getByRole("dialog", { name: "Kích hoạt 2 môn học?" })
       .getByRole("button", { name: "Xác nhận" })
@@ -174,7 +200,10 @@ test("Room and Course catalog rows edit inline without weakening capacity or bat
     };
 
     await chooseRoom(roomCodes[0]);
-    await page.getByRole("button", { name: "Sửa mục đã chọn" }).click();
+    await page
+      .locator(".catalog-master-action-group")
+      .getByRole("button", { name: "Sửa", exact: true })
+      .click();
     await expect(
       editingRoomRow(roomCodes[0]).locator("input").first(),
     ).toBeVisible();
@@ -182,7 +211,10 @@ test("Room and Course catalog rows edit inline without weakening capacity or bat
       editingRoomRow(roomCodes[0]).locator("input").nth(1),
     ).toBeVisible();
     await editingRoomRow(roomCodes[0]).locator("input").nth(4).fill("");
-    await page.getByRole("button", { name: "Lưu chỉnh sửa" }).click();
+    await page
+      .locator(".catalog-master-action-group")
+      .getByRole("button", { name: "Lưu chỉnh sửa", exact: true })
+      .click();
     await expect(page.getByRole("status")).toContainText("Đã lưu thay đổi");
 
     const { data: blankCapacityRoom, error: blankCapacityRoomError } =
@@ -195,7 +227,10 @@ test("Room and Course catalog rows edit inline without weakening capacity or bat
     expect(blankCapacityRoom.capacity).toBeNull();
 
     await chooseRoom(roomCodes[0]);
-    await page.getByRole("button", { name: "Sửa mục đã chọn" }).click();
+    await page
+      .locator(".catalog-master-action-group")
+      .getByRole("button", { name: "Sửa", exact: true })
+      .click();
     await expect(
       editingRoomRow(roomCodes[0]).locator("select option"),
     ).toHaveCount(2);
@@ -203,13 +238,22 @@ test("Room and Course catalog rows edit inline without weakening capacity or bat
       .locator("select")
       .selectOption(nursingSkillsRoomTypeId);
     await editingRoomRow(roomCodes[0]).locator("input").nth(4).fill("1");
-    await page.getByRole("button", { name: "Lưu chỉnh sửa" }).click();
+    await page
+      .locator(".catalog-master-action-group")
+      .getByRole("button", { name: "Lưu chỉnh sửa", exact: true })
+      .click();
     await expect(page.getByRole("status")).toContainText("Đã lưu thay đổi");
 
     await chooseRoom(roomCodes[0]);
-    await page.getByRole("button", { name: "Sửa mục đã chọn" }).click();
+    await page
+      .locator(".catalog-master-action-group")
+      .getByRole("button", { name: "Sửa", exact: true })
+      .click();
     await editingRoomRow(roomCodes[0]).locator("input").nth(4).fill("0");
-    await page.getByRole("button", { name: "Lưu chỉnh sửa" }).click();
+    await page
+      .locator(".catalog-master-action-group")
+      .getByRole("button", { name: "Lưu chỉnh sửa", exact: true })
+      .click();
     await expect(page.getByRole("status")).toContainText(
       "Sức chứa phải là số nguyên từ 1 trở lên hoặc để trống.",
     );

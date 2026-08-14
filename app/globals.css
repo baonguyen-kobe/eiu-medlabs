@@ -5666,15 +5666,12 @@ body,
   max-width: 100%;
 }
 
-.responsive-table,
-.preview-table-wrap,
 .period-calendar {
   scrollbar-gutter: stable;
   -webkit-overflow-scrolling: touch;
 }
 
 .responsive-table:focus-visible,
-.preview-table-wrap:focus-visible,
 .period-calendar:focus-visible {
   outline: 3px solid rgb(20 64 105 / 24%);
   outline-offset: -3px;
@@ -9310,6 +9307,13 @@ body {
   color: #fff;
 }
 
+.workspace-sidebar .brand-lockup strong {
+  font-size: 21.5px;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+}
+
 .workspace-sidebar .brand-lockup span,
 .workspace-sidebar .workspace-user span,
 .workspace-sidebar .nav-heading {
@@ -9546,7 +9550,8 @@ textarea:focus-visible {
   .catalog-data-panel,
   .calendar-card,
   .open-classes,
-  .upcoming-card
+  .upcoming-card,
+  .overview-panel
 ) {
   overflow: hidden;
   border-color: var(--border);
@@ -9554,13 +9559,20 @@ textarea:focus-visible {
   box-shadow: var(--shadow-card);
 }
 
-:where(
-  .responsive-table,
-  .admin-table-wrap,
-  .preview-table-wrap,
-  .personnel-table-wrap,
-  .equipment-catalog-table-wrap
-) {
+.data-panel,
+.catalog-data-panel,
+.calendar-card,
+.open-classes,
+.upcoming-card,
+.overview-panel {
+  scrollbar-gutter: auto;
+}
+
+.responsive-table,
+.admin-table-wrap,
+.preview-table-wrap,
+.personnel-table-wrap,
+.equipment-catalog-table-wrap {
   width: 100%;
   max-width: 100%;
   overflow-x: auto;
@@ -9569,6 +9581,29 @@ textarea:focus-visible {
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
   background: var(--surface);
+}
+
+/* A direct child viewport only scrolls; its card parent owns the single visual
+   table shell. This prevents duplicate edge treatment and reserved gutters. */
+:is(
+    .data-panel,
+    .catalog-data-panel,
+    .calendar-card,
+    .open-classes,
+    .upcoming-card,
+    .overview-panel
+  )
+  > :is(
+    .responsive-table,
+    .admin-table-wrap,
+    .preview-table-wrap,
+    .personnel-table-wrap,
+    .equipment-catalog-table-wrap
+  ) {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding-right: 0;
 }
 
 :where(
@@ -9874,6 +9909,96 @@ time,
   white-space: nowrap;
 }
 
+/* Inline toolbar counters share the same geometry as adjacent filters. */
+.equipment-catalog-count,
+.equipment-filter-count,
+.inline-toolbar-count {
+  height: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.inline-toolbar-count-slot {
+  min-width: 0;
+}
+
+.equipment-catalog-filters .equipment-catalog-count,
+.equipment-request-filters .equipment-filter-count,
+.basic-medical-registration-filters .equipment-filter-count,
+.basic-medical-catalog-filters .equipment-catalog-count,
+.basic-medical-list-filters .equipment-catalog-count {
+  display: inline-flex;
+}
+
+.catalog-master-action-group {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+.catalog-master-action-group .button {
+  width: 154px;
+  min-width: 154px;
+  min-height: 42px;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.catalog-data-panel > .equipment-catalog-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  justify-content: initial;
+}
+
+.catalog-data-panel > .equipment-catalog-toolbar .catalog-master-action-group {
+  grid-column: 2;
+  flex-wrap: nowrap;
+}
+
+.catalog-data-panel
+  > .equipment-catalog-toolbar
+  .catalog-master-action-group
+  + .button {
+  grid-column: 3;
+  justify-self: end;
+}
+
+@media (max-width: 760px) {
+  .catalog-data-panel > .equipment-catalog-toolbar {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .catalog-data-panel
+    > .equipment-catalog-toolbar
+    .catalog-master-action-group {
+    grid-column: auto;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .catalog-data-panel
+    > .equipment-catalog-toolbar
+    .catalog-master-action-group
+    .button {
+    flex: 0 1 154px;
+    max-width: 100%;
+  }
+
+  .catalog-data-panel
+    > .equipment-catalog-toolbar
+    .catalog-master-action-group
+    + .button {
+    grid-column: auto;
+    justify-self: auto;
+  }
+}
+
 @media (min-width: 1441px) {
   .equipment-catalog-import {
     grid-template-columns: minmax(300px, 1fr) auto;
@@ -9919,7 +10044,7 @@ time,
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .equipment-request-filters .equipment-filter-count {
+  .equipment-request-filters .equipment-filter-count-slot {
     grid-column: 1 / -1;
   }
 }
