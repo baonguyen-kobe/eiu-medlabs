@@ -150,9 +150,6 @@ button {
 }
 
 button:focus-visible,
-input:focus-visible,
-select:focus-visible,
-textarea:focus-visible,
 a:focus-visible {
   outline: 3px solid rgb(20 64 105 / 28%);
   outline-offset: 2px;
@@ -8199,8 +8196,16 @@ body,
   table-layout: fixed;
 }
 
-.equipment-catalog-table th:nth-last-child(1),
-.equipment-catalog-table td:nth-last-child(1) {
+.equipment-catalog-col-select {
+  width: 52px;
+}
+
+.equipment-catalog-col-name,
+.equipment-catalog-col-commercial-name {
+  width: 275px;
+}
+
+.equipment-catalog-col-metadata {
   width: 145px;
 }
 
@@ -8217,7 +8222,7 @@ body,
   width: 100%;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 8px;
   padding: 0;
   color: inherit;
@@ -9277,6 +9282,8 @@ body {
 
 /* Workspace shell: the existing navigation structure is preserved. */
 .workspace-sidebar.sidebar {
+  width: 244px;
+  flex: 0 0 244px;
   padding: 22px 14px 16px;
   color: #edf4fb;
   background: linear-gradient(180deg, #173f64 0%, #102f4d 62%, #0c2944 100%);
@@ -9285,13 +9292,17 @@ body {
 }
 
 .workspace-sidebar .brand-lockup {
-  min-height: 64px;
+  min-height: 0;
   padding: 0 8px 20px;
 }
 
 .workspace-sidebar .brand-mark {
+  height: 62px;
+  padding: 8px 10px;
   color: var(--primary);
   background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 10px 24px rgb(0 0 0 / 20%);
 }
 
 .workspace-sidebar .brand-lockup strong,
@@ -9312,9 +9323,9 @@ body {
 .workspace-sidebar .nav-heading {
   margin: 0 8px 7px;
   color: #d9c49e;
-  font-size: 10px;
+  font-size: 14px;
   font-weight: 800;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
@@ -9324,6 +9335,8 @@ body {
   padding: 0 12px;
   color: rgb(255 255 255 / 86%);
   border-radius: 11px;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .workspace-sidebar .nav-item:hover {
@@ -9336,16 +9349,13 @@ body {
   background: #fff;
   box-shadow:
     inset 4px 0 #a78656,
-    0 2px 10px rgb(5 25 48 / 18%);
+    0 8px 18px rgb(0 0 0 / 12%);
+  font-weight: 700;
 }
 
 .workspace-sidebar .user-card {
   border-color: rgb(255 255 255 / 20%);
   background: rgb(255 255 255 / 8%);
-}
-
-.workspace-sidebar .brand-lockup {
-  min-height: 112px;
 }
 
 .workspace-sidebar .avatar {
@@ -9359,11 +9369,15 @@ body {
 }
 
 .workspace-topbar.page-header {
-  min-height: 106px;
+  position: sticky;
+  top: 0;
+  z-index: 35;
+  min-height: 82px;
   gap: 16px;
-  padding: 24px 32px 18px;
+  padding: 16px 30px;
   border-bottom: 1px solid var(--border);
-  background: rgb(248 246 241 / 92%);
+  background: rgb(255 255 255 / 94%);
+  backdrop-filter: blur(14px);
 }
 
 .page-header-copy {
@@ -9382,9 +9396,9 @@ body {
 
 .workspace-topbar p,
 .page-header p {
-  margin-top: 5px;
+  margin-top: 4px;
   color: var(--foreground-muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.45;
 }
 
@@ -9409,6 +9423,7 @@ body {
   font-size: 14px;
   font-weight: 700;
   line-height: 1.2;
+  white-space: nowrap;
   transition:
     background-color 120ms ease,
     border-color 120ms ease,
@@ -9470,10 +9485,19 @@ body {
   input:not([type="checkbox"]):not([type="radio"]),
   select,
   textarea
-):focus {
+):focus-visible {
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgb(20 64 105 / 12%);
   outline: 0;
+}
+
+/* Match the legacy selector specificity: one form control gets one visible
+   focus boundary, rather than the old outline plus inner ring combination. */
+input:not([type="checkbox"]):not([type="radio"]):focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 0;
+  outline-offset: 0;
 }
 
 .badge,
@@ -9570,16 +9594,37 @@ body {
   )
   th {
   height: 44px;
-  padding: 11px 14px;
+  padding: 14px 16px;
   color: var(--primary);
   background: var(--table-header);
   border-bottom: 1px solid var(--border-strong);
   font-size: 13px;
   font-weight: 700;
   line-height: 1.35;
-  text-align: left;
+  text-align: center;
   text-transform: none;
+  vertical-align: middle;
   white-space: nowrap;
+}
+
+/* These selectors intentionally match legacy table specificity so the Master
+   contract wins without adding per-page table patches. */
+.data-table th,
+.personnel-table th,
+.admin-table th,
+.responsive-table table th,
+.preview-table-wrap table th {
+  padding: 14px 16px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.data-table td,
+.personnel-table td,
+.admin-table td,
+.responsive-table table td,
+.preview-table-wrap table td {
+  padding: 14px 16px;
 }
 
 :where(
@@ -9590,7 +9635,7 @@ body {
     .preview-table-wrap table
   )
   td {
-  padding: 12px 14px;
+  padding: 14px 16px;
   border-bottom: 1px solid var(--border);
   font-size: 14px;
   line-height: 1.4;
@@ -9635,9 +9680,27 @@ body {
 }
 
 .filter-bar :where(.search-field, .filter-control, .filter-reset) {
-  min-height: 40px;
+  height: 44px;
+  min-height: 44px;
   border-radius: var(--radius-control);
   font-size: 13px;
+}
+
+:is(
+    .filter-bar,
+    .basic-medical-list-filters,
+    .basic-medical-registration-filters,
+    .basic-medical-catalog-filters
+  )
+  :where(
+    input:not([type="checkbox"]):not([type="radio"]),
+    select,
+    .button,
+    button
+  ) {
+  height: 44px;
+  min-height: 44px;
+  box-sizing: border-box;
 }
 
 .kpi-grid {
@@ -9792,8 +9855,23 @@ time,
 .equipment-catalog-filters :where(input, select, .button),
 .equipment-request-filters :where(input, select, .button),
 .equipment-catalog-mode-buttons .button {
-  min-height: 42px;
   box-sizing: border-box;
+}
+
+.equipment-catalog-filters :where(input, select, .button),
+.equipment-request-filters :where(input, select, .button) {
+  height: 44px;
+  min-height: 44px;
+}
+
+.equipment-catalog-mode-buttons .button,
+.equipment-import-actions .button,
+.catalog-import-actions .button {
+  width: 154px;
+  min-width: 154px;
+  min-height: 42px;
+  justify-content: center;
+  white-space: nowrap;
 }
 
 @media (min-width: 1441px) {
@@ -9932,7 +10010,7 @@ time,
 }
 
 .form-section-title {
-  gap: 10px;
+  gap: 9px;
   margin-bottom: 16px;
 }
 

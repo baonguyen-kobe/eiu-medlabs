@@ -506,6 +506,21 @@ export function EquipmentCatalogManager({
 
         <div className="responsive-table equipment-catalog-table-wrap">
           <table className="data-table equipment-catalog-table">
+            <colgroup>
+              {mode === "activate" ||
+              mode === "disable" ||
+              mode === "delete" ? (
+                <col className="equipment-catalog-col-select" />
+              ) : null}
+              <col className="equipment-catalog-col-name" />
+              <col className="equipment-catalog-col-commercial-name" />
+              <col className="equipment-catalog-col-metadata" />
+              <col className="equipment-catalog-col-metadata" />
+              <col className="equipment-catalog-col-metadata" />
+              <col className="equipment-catalog-col-metadata" />
+              <col className="equipment-catalog-col-metadata" />
+              <col className="equipment-catalog-col-metadata" />
+            </colgroup>
             <thead>
               <tr>
                 {mode === "activate" ||

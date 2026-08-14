@@ -33,6 +33,45 @@ test("UI V2 keeps the approved semantic visual foundation", async () => {
   assert.match(css, /border-radius: 9px/);
 });
 
+test("UI V2 shared chrome and data primitives use canonical Master geometry", async () => {
+  const css = await source("app/globals.css");
+  const catalog = await source("components/equipment-catalog-manager.tsx");
+
+  for (const token of [
+    "width: 244px",
+    "flex: 0 0 244px",
+    "font-size: 14px",
+    "min-height: 82px",
+    "padding: 16px 30px",
+    "background: rgb(255 255 255 / 94%)",
+    "backdrop-filter: blur(14px)",
+    "height: 44px",
+    "padding: 14px 16px",
+    "text-align: center",
+    "width: 275px",
+    "width: 145px",
+    "width: 52px",
+  ]) {
+    assert.match(css, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
+
+  assert.match(
+    css,
+    /\.workspace-topbar\.page-header \{[\s\S]*position: sticky[\s\S]*z-index: 35/,
+  );
+  assert.match(
+    css,
+    /\.workspace-sidebar \.nav-heading \{[\s\S]*font-size: 14px[\s\S]*letter-spacing: 0\.06em/,
+  );
+  assert.match(
+    css,
+    /\.equipment-catalog-col-name,[\s\S]*\.equipment-catalog-col-commercial-name \{[\s\S]*width: 275px/,
+  );
+  assert.match(catalog, /<colgroup>/);
+  assert.match(catalog, /equipment-catalog-col-select/);
+  assert.match(catalog, /equipment-catalog-col-commercial-name/);
+});
+
 test("UI V2 keeps equipment controls and wide request tables inside local viewports", async () => {
   const css = await source("app/globals.css");
   assert.match(
