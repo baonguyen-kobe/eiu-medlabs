@@ -78,15 +78,23 @@ export default async function PersonnelPage({
       }),
     ),
   );
-  const emailCapabilityById = new Map(
+  const profileDetailsById = new Map(
     await Promise.all(
       rows.map(async (row) => {
         const { data } = await authAdmin
           .from("profiles")
-          .select("can_manage_email_notifications")
+          .select("employee_code,can_manage_email_notifications")
           .eq("id", row.id)
           .maybeSingle();
-        return [row.id, Boolean(data?.can_manage_email_notifications)] as const;
+        return [
+          row.id,
+          {
+            employee_code: data?.employee_code ?? null,
+            can_manage_email_notifications: Boolean(
+              data?.can_manage_email_notifications,
+            ),
+          },
+        ] as const;
       }),
     ),
   );
@@ -255,9 +263,12 @@ export default async function PersonnelPage({
           void total_count;
           return {
             ...row,
+            employee_code:
+              profileDetailsById.get(row.id)?.employee_code ?? null,
             password_capable: passwordCapableById.get(row.id) ?? false,
             can_manage_email_notifications:
-              emailCapabilityById.get(row.id) ?? false,
+              profileDetailsById.get(row.id)?.can_manage_email_notifications ??
+              false,
           };
         })}
         roomTypes={roomTypes ?? []}

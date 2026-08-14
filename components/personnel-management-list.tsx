@@ -15,6 +15,7 @@ import { BASIC_MEDICAL_ROOM_TYPE_ID } from "@/lib/room-types";
 
 export type PersonnelListItem = {
   id: string;
+  employee_code?: string | null;
   email: string;
   full_name: string;
   phone: string | null;
@@ -382,17 +383,22 @@ export function PersonnelManagementList({
         <table className="personnel-table">
           <thead>
             <tr>
-              <th>Nhân sự</th>
+              <th>Mã</th>
+              <th>Họ và tên</th>
+              <th>Email</th>
               <th>Vai trò</th>
               <th>Quyền bổ sung</th>
               <th>Phạm vi</th>
               <th>Trạng thái</th>
-              <th aria-label="Thao tác" />
+              <th>Thao tác</th>
             </tr>
           </thead>
           <tbody>
             {items.map((item) => (
               <tr key={item.id}>
+                <td className="personnel-code mono">
+                  {item.employee_code?.trim() || "—"}
+                </td>
                 <td>
                   <span className="personnel-identity">
                     <span
@@ -403,24 +409,11 @@ export function PersonnelManagementList({
                     </span>
                     <span>
                       <strong>{item.full_name}</strong>
-                      <span className="personnel-badges">
-                        {item.is_root_administrator ? (
-                          <span className="permission-badge">
-                            Root Administrator
-                          </span>
-                        ) : null}
-                        {item.is_security_principal &&
-                        !item.is_root_administrator ? (
-                          <span className="permission-badge">
-                            Quản lý nhân sự
-                          </span>
-                        ) : null}
-                      </span>
-                      <small>{item.email}</small>
                       {item.title ? <small>{item.title}</small> : null}
                     </span>
                   </span>
                 </td>
+                <td className="personnel-email">{item.email}</td>
                 <td>
                   <span className="personnel-badges">
                     {item.roles.map((role) => (
@@ -431,11 +424,25 @@ export function PersonnelManagementList({
                   </span>
                 </td>
                 <td>
-                  {item.can_import_schedules ? (
-                    <span className="permission-badge">Nhập lịch</span>
-                  ) : (
-                    "—"
-                  )}
+                  <span className="personnel-badges">
+                    {item.is_root_administrator ? (
+                      <span className="permission-badge">
+                        Root Administrator
+                      </span>
+                    ) : null}
+                    {item.is_security_principal &&
+                    !item.is_root_administrator ? (
+                      <span className="permission-badge">Quản lý nhân sự</span>
+                    ) : null}
+                    {item.can_import_schedules ? (
+                      <span className="permission-badge">Nhập lịch</span>
+                    ) : null}
+                    {!item.is_root_administrator &&
+                    !item.is_security_principal &&
+                    !item.can_import_schedules
+                      ? "—"
+                      : null}
+                  </span>
                 </td>
                 <td>
                   <span className="personnel-badges">
@@ -518,7 +525,10 @@ export function PersonnelManagementList({
                 </p>
               ) : null}
               {draft.password_capable ? (
-                <fieldset disabled={pending || !draft.can_edit_security}>
+                <fieldset
+                  className="personnel-password-section"
+                  disabled={pending || !draft.can_edit_security}
+                >
                   <legend>Mật khẩu</legend>
                   <button
                     className="button button-secondary"

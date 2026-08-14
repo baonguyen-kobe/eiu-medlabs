@@ -62,45 +62,48 @@ export default async function EquipmentCatalogPage({
         </p>
       ) : null}
 
-      <form
-        action={createEquipmentCatalogItem}
-        className="data-panel catalog-inline-form equipment-catalog-create-form"
-      >
-        <div className="equipment-catalog-create-heading">
-          <strong>Thêm thiết bị thủ công</strong>
-        </div>
-        <div className="form-grid equipment-catalog-create-grid">
-          <label>
-            Tên thiết bị và vật tư *
-            <input name="item_name" required />
-          </label>
-          <label>
-            Tên thương mại *
-            <input name="commercial_name" required />
-          </label>
-          <label>
-            Loại
-            <input name="item_type" />
-          </label>
-          <label>
-            Nước SX
-            <input name="country_of_origin" />
-          </label>
-          <label>
-            Hãng
-            <input name="manufacturer" />
-          </label>
-          <label>
-            Model
-            <input name="model" />
-          </label>
-          <label>
-            ĐVT *
-            <input name="unit" required />
-          </label>
-        </div>
-        <button className="button button-primary">Thêm vào danh mục</button>
-      </form>
+      <details className="catalog-manual-add">
+        <summary>+ Thêm thiết bị</summary>
+        <form
+          action={createEquipmentCatalogItem}
+          className="data-panel catalog-inline-form equipment-catalog-create-form"
+        >
+          <div className="equipment-catalog-create-heading">
+            <strong>Thêm thiết bị thủ công</strong>
+          </div>
+          <div className="form-grid equipment-catalog-create-grid">
+            <label>
+              Tên thiết bị và vật tư *
+              <input name="item_name" required />
+            </label>
+            <label>
+              Tên thương mại *
+              <input name="commercial_name" required />
+            </label>
+            <label>
+              Loại
+              <input name="item_type" />
+            </label>
+            <label>
+              Nước SX
+              <input name="country_of_origin" />
+            </label>
+            <label>
+              Hãng
+              <input name="manufacturer" />
+            </label>
+            <label>
+              Model
+              <input name="model" />
+            </label>
+            <label>
+              ĐVT *
+              <input name="unit" required />
+            </label>
+          </div>
+          <button className="button button-primary">Thêm vào danh mục</button>
+        </form>
+      </details>
 
       <EquipmentCatalogManager initialItems={data} />
     </WorkspaceShell>
