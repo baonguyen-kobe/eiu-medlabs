@@ -21,7 +21,16 @@ test("UI V2 keeps the approved semantic visual foundation", async () => {
     assert.match(css, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
   assert.match(css, /overflow-x: auto/);
-  assert.match(css, /scrollbar-gutter: stable both-edges/);
+  assert.doesNotMatch(css, /scrollbar-gutter: stable both-edges/);
+  assert.match(
+    css,
+    /linear-gradient\(180deg, #173f64 0%, #102f4d 62%, #0c2944 100%\)/,
+  );
+  assert.match(css, /color: #d9c49e/);
+  assert.match(css, /inset 4px 0 #a78656/);
+  assert.match(css, /font-size: clamp\(27px, 2vw, 32px\)/);
+  assert.match(css, /background: #e5edf5/);
+  assert.match(css, /border-radius: 9px/);
 });
 
 test("UI V2 keeps equipment controls and wide request tables inside local viewports", async () => {
@@ -61,6 +70,16 @@ test("UI V2 personnel structure follows the approved table and drawer order", as
     assert.match(personnel, new RegExp(`<th>${heading}</th>`));
   }
   assert.match(personnel, /personnel-password-section/);
+  assert.doesNotMatch(personnel, /window\.confirm/);
+  assert.match(personnel, /<ConfirmDialog/);
+  assert.match(
+    personnel,
+    /action === "grant-admin" && requiresDeactivationConfirmation\(\)/,
+  );
+  const confirmationDialog = await source("components/confirm-dialog.tsx");
+  assert.match(confirmationDialog, /event\.key !== "Tab"/);
+  assert.match(confirmationDialog, /last\.focus\(\)/);
+  assert.match(confirmationDialog, /first\.focus\(\)/);
   assert.match(personnel, /employee_code\?\.trim\(\) \|\| "—"/);
   assert.doesNotMatch(personnel, /item\.id\.slice\(/);
   assert.match(
@@ -68,4 +87,20 @@ test("UI V2 personnel structure follows the approved table and drawer order", as
     /select\("employee_code,can_manage_email_notifications"\)/,
   );
   assert.doesNotMatch(dashboard, /Xin chào/);
+});
+
+test("catalog import keeps the one-button file-to-preview flow and a circle stepper", async () => {
+  const catalogImport = await source(
+    "components/catalog-reconciliation-import.tsx",
+  );
+  const importWizard = await source("components/import-wizard.tsx");
+  const capture = await source("tests/e2e/ui-v2-visual-capture.spec.ts");
+
+  assert.match(catalogImport, /Import tất cả/);
+  assert.doesNotMatch(catalogImport, /Chọn file đối soát|Preview đối soát/);
+  assert.doesNotMatch(catalogImport, /Cập nhật.*Thêm mới.*Kích hoạt lại/s);
+  assert.match(catalogImport, /previewPageSize/);
+  assert.match(importWizard, /<ol className="stepper">/);
+  assert.match(capture, /reports\/ui-v2\/after/);
+  assert.match(capture, /basic-medical-calendar/);
 });

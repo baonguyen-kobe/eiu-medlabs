@@ -75,8 +75,21 @@ test("personnel drawer saves role, import capability and lock atomically", async
     );
     await drawer.getByLabel("Cho phép nhập lịch").uncheck();
     await drawer.getByLabel("Đang hoạt động").uncheck();
-    page.once("dialog", (dialog) => dialog.accept());
     await drawer.getByRole("button", { name: "Lưu thay đổi" }).click();
+    const confirmation = page.locator(".confirm-dialog");
+    await expect(confirmation).toContainText("Khóa tài khoản?");
+    await expect(
+      confirmation.getByRole("button", { name: "Quay lại" }),
+    ).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(
+      confirmation.getByRole("button", { name: "Khóa tài khoản" }),
+    ).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(
+      confirmation.getByRole("button", { name: "Quay lại" }),
+    ).toBeFocused();
+    await confirmation.getByRole("button", { name: "Khóa tài khoản" }).click();
 
     await expect(drawer.getByRole("status")).toContainText(
       "Đã cập nhật nhân sự.",
@@ -138,7 +151,9 @@ test("Personnel edit drawer remains usable at the required desktop viewports", a
     await staffRow.getByRole("button", { name: "Sửa" }).click();
     const drawer = page.getByRole("dialog", { name: "Chỉnh sửa nhân sự" });
     await expect(drawer).toBeVisible();
-    await expect(drawer.getByText("Mật khẩu", { exact: true })).toBeVisible();
+    await expect(
+      drawer.getByText("Mật khẩu / Bảo mật", { exact: true }),
+    ).toBeVisible();
     await expect(
       drawer.getByText("Vai trò chính", { exact: true }),
     ).toBeVisible();

@@ -1,11 +1,18 @@
 import { expect, test, type Page } from "@playwright/test";
+import { clickUntilState } from "./helpers/interaction-readiness";
 
 async function loginAsAdmin(page: Page) {
   await page.goto("/login");
-  await page.locator('input[name="email"]').fill("admin@campus.local");
-  await page.locator('input[name="password"]').fill("LocalAdmin123!");
-  await page.getByRole("button", { name: "Đăng nhập", exact: true }).click();
-  await expect(page).toHaveURL(/\/dashboard$/);
+  const email = page.locator('input[name="email"]');
+  const password = page.locator('input[name="password"]');
+  await clickUntilState(
+    page.getByRole("button", { name: "Đăng nhập", exact: true }),
+    () => expect(page).toHaveURL(/\/dashboard$/),
+    async () => {
+      await email.fill("admin@campus.local");
+      await password.fill("LocalAdmin123!");
+    },
+  );
 }
 
 function catalogCsv(name: string, manufacturer: string) {
@@ -26,8 +33,10 @@ test("danh mục thiết bị hỗ trợ import, export, tìm kiếm, sort và t
     element.dispatchEvent(new Event("scroll"));
   });
   const scrollBefore = await nav.evaluate((element) => element.scrollTop);
-  await page.getByRole("link", { name: "Danh mục thiết bị" }).click();
-  await expect(page).toHaveURL(/\/admin\/equipment$/);
+  await clickUntilState(
+    page.getByRole("link", { name: "Danh mục thiết bị" }),
+    () => expect(page).toHaveURL(/\/admin\/equipment$/),
+  );
   await expect(page.getByRole("link", { name: "Danh mục khác" })).toBeVisible();
   if (scrollBefore > 0) {
     await expect
@@ -117,14 +126,16 @@ test("danh mục thiết bị hỗ trợ import, export, tìm kiếm, sort và t
   );
 
   const uniqueName = `[E2E ${Date.now()}] Bộ thực hành`;
-  const upload = page.locator('.equipment-catalog-import input[name="file"]');
-  await upload.setInputFiles({
+  const importNewUpload = page.locator(
+    '.catalog-import-new-action input[name="file"]',
+  );
+  await importNewUpload.setInputFiles({
     name: "equipment-new.csv",
     mimeType: "text/csv",
     buffer: Buffer.from(catalogCsv(uniqueName, "Hãng ban đầu"), "utf8"),
   });
-  await page.getByRole("button", { name: "Import mới" }).click();
   await expect(page).toHaveURL(/notice=/);
+  await page.goto("/admin/equipment", { waitUntil: "networkidle" });
 
   const search = page.locator(".equipment-catalog-search input");
   await search.fill(uniqueName);
@@ -134,13 +145,22 @@ test("danh mục thiết bị hỗ trợ import, export, tìm kiếm, sort và t
   await expect(row).toHaveCount(1);
   await expect(row).toContainText("Hãng ban đầu");
 
-  await upload.setInputFiles({
+  const importAllUpload = page.locator(
+    '.catalog-import-all-action input[type="file"]',
+  );
+  await importAllUpload.setInputFiles({
     name: "equipment-all.csv",
     mimeType: "text/csv",
     buffer: Buffer.from(catalogCsv(uniqueName, "Hãng đã cập nhật"), "utf8"),
   });
-  await page.getByRole("button", { name: "Import tất cả" }).click();
-  await expect(page).toHaveURL(/notice=/);
+  const previewDialog = page.getByRole("dialog", { name: "Import tất cả" });
+  await expect(previewDialog).toBeVisible();
+  await expect(previewDialog).toContainText("equipment-all.csv");
+  await previewDialog
+    .getByRole("button", { name: "Import tất cả", exact: true })
+    .click();
+  await expect(previewDialog).toHaveCount(0);
+  await page.goto("/admin/equipment", { waitUntil: "networkidle" });
   await page.locator(".equipment-catalog-search input").fill(uniqueName);
   row = page
     .locator(".equipment-catalog-table tbody tr")
@@ -161,13 +181,18 @@ test("danh mục thiết bị hỗ trợ import, export, tìm kiếm, sort và t
   await page.getByRole("button", { name: "Ngừng sử dụng" }).click();
   await row.getByRole("checkbox", { name: `Chọn ${uniqueName}` }).check();
   await page.getByRole("button", { name: "Xác nhận ngừng sử dụng" }).click();
+  const disableDialog = page.locator(".confirm-dialog");
+  await expect(disableDialog).toContainText("Ngừng sử dụng 1 thiết bị?");
+  await disableDialog.getByRole("button", { name: "Xác nhận" }).click();
   await expect(row).toContainText("Ngừng sử dụng");
   await page.getByLabel("Lọc trạng thái thiết bị").selectOption("inactive");
   await expect(row).toHaveCount(1);
 
   await page.getByRole("button", { name: "Xóa", exact: true }).click();
   await row.getByRole("checkbox", { name: `Chọn ${uniqueName}` }).check();
-  page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Xác nhận xóa" }).click();
+  const deleteDialog = page.locator(".confirm-dialog");
+  await expect(deleteDialog).toContainText("Xóa 1 thiết bị?");
+  await deleteDialog.getByRole("button", { name: "Xác nhận" }).click();
   await expect(row).toHaveCount(0);
 });

@@ -9,6 +9,7 @@ import {
   setPersonnelEmailNotificationCapability,
   type SavePersonnelResult,
 } from "@/app/admin/actions";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { getNameInitials } from "@/lib/person-name";
 import type { AppRole } from "@/lib/viewer";
 import { BASIC_MEDICAL_ROOM_TYPE_ID } from "@/lib/room-types";
@@ -44,6 +45,13 @@ type PasswordReconciliationItem = {
   created_at: string;
   target: { full_name: string; email: string } | null;
 };
+
+type PersonnelConfirmation =
+  | "discard"
+  | "reset-password"
+  | "change-password"
+  | "grant-admin"
+  | "deactivate";
 
 const roleLabels: Record<AppRole, string> = {
   admin: "Quản trị viên",
@@ -83,6 +91,8 @@ export function PersonnelManagementList({
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
   const [emailCapability, setEmailCapability] = useState(false);
   const [reconcilingId, setReconcilingId] = useState<string | null>(null);
+  const [confirmation, setConfirmation] =
+    useState<PersonnelConfirmation | null>(null);
   const [pending, startTransition] = useTransition();
   const dirty = useMemo(
     () =>
@@ -104,18 +114,21 @@ export function PersonnelManagementList({
     setResult(null);
   }
 
-  function close() {
-    if (pending) return;
-    if (
-      dirty &&
-      !window.confirm("Bạn có thay đổi chưa lưu. Đóng mà không lưu?")
-    )
-      return;
+  function closeDrawer() {
     setOriginal(null);
     setDraft(null);
     setResult(null);
     setPasswordDraft("");
     setPasswordConfirmation("");
+  }
+
+  function close() {
+    if (pending) return;
+    if (dirty) {
+      setConfirmation("discard");
+      return;
+    }
+    closeDrawer();
   }
 
   function reconcilePasswordOperation(operationId: string) {
@@ -137,14 +150,12 @@ export function PersonnelManagementList({
   }
 
   function resetPassword() {
-    if (
-      !draft?.password_capable ||
-      pending ||
-      !window.confirm(
-        `Đặt lại mật khẩu của ${draft.full_name} thành email đăng nhập và buộc đổi mật khẩu sau khi đăng nhập?`,
-      )
-    )
-      return;
+    if (!draft?.password_capable || pending) return;
+    setConfirmation("reset-password");
+  }
+
+  function performPasswordReset() {
+    if (!draft?.password_capable || pending) return;
     startTransition(async () => {
       try {
         const outcome = await resetPersonnelPassword(draft.id);
@@ -190,7 +201,19 @@ export function PersonnelManagementList({
       passwordDraft !== passwordConfirmation
     )
       return;
-    if (!window.confirm(`Đổi mật khẩu cho ${draft.full_name}?`)) return;
+    setConfirmation("change-password");
+  }
+
+  function performRootPasswordChange() {
+    if (
+      !draft ||
+      !viewerIsRoot ||
+      !draft.password_capable ||
+      pending ||
+      passwordDraft.length < 6 ||
+      passwordDraft !== passwordConfirmation
+    )
+      return;
     startTransition(async () => {
       try {
         const outcome = await changePersonnelPasswordByRoot(
@@ -266,23 +289,32 @@ export function PersonnelManagementList({
 
   function submit() {
     if (!draft || pending || !draft.can_edit_security) return;
-    if (
+    if (requiresGrantAdminConfirmation()) {
+      setConfirmation("grant-admin");
+      return;
+    }
+    if (requiresDeactivationConfirmation()) {
+      setConfirmation("deactivate");
+      return;
+    }
+    performSubmit();
+  }
+
+  function requiresGrantAdminConfirmation() {
+    return Boolean(
+      draft &&
       !viewerIsRoot &&
       !original?.is_current_admin &&
-      draft.roles.includes("admin") &&
-      !window.confirm(
-        `Cấp quyền Quản trị viên cho ${draft.full_name}?\n\nSau khi lưu, chỉ Root Administrator mới có thể thay đổi quyền hoặc khóa tài khoản này.`,
-      )
-    )
-      return;
-    if (!draft.is_active && original?.is_active) {
-      if (
-        !window.confirm(
-          `Khóa tài khoản ${draft.full_name}?\n\nNgười dùng sẽ không thể đăng nhập, nhưng dữ liệu và lịch sử hoạt động vẫn được giữ lại.`,
-        )
-      )
-        return;
-    }
+      draft.roles.includes("admin"),
+    );
+  }
+
+  function requiresDeactivationConfirmation() {
+    return Boolean(draft && !draft.is_active && original?.is_active);
+  }
+
+  function performSubmit() {
+    if (!draft || pending || !draft.can_edit_security) return;
     const formData = new FormData();
     formData.set("id", draft.id);
     formData.set("email", draft.email);
@@ -328,6 +360,124 @@ export function PersonnelManagementList({
       setDraft(clone(saved));
     });
   }
+
+  const confirmationCopy = {
+    discard: {
+      title: "Bỏ thay đổi chưa lưu?",
+      description:
+        "Các thay đổi trong biểu mẫu Nhân sự sẽ bị bỏ và không được lưu.",
+      confirmLabel: "Bỏ thay đổi",
+      tone: "danger" as const,
+    },
+    "reset-password": {
+      title: "Đặt lại mật khẩu?",
+      description: draft
+        ? `Mật khẩu của ${draft.full_name} sẽ được đặt thành email đăng nhập và buộc đổi sau khi đăng nhập.`
+        : "Mật khẩu sẽ được đặt lại theo chính sách hiện hành.",
+      confirmLabel: "Đặt lại mật khẩu",
+      tone: "danger" as const,
+    },
+    "change-password": {
+      title: "Đổi mật khẩu với quyền Root?",
+      description: draft
+        ? `Mật khẩu mới sẽ được áp dụng cho ${draft.full_name}. Hành động này được ghi nhận bảo mật.`
+        : "Mật khẩu mới sẽ được áp dụng cho nhân sự đã chọn.",
+      confirmLabel: "Đổi mật khẩu",
+      tone: "danger" as const,
+    },
+    "grant-admin": {
+      title: "Cấp quyền Quản trị viên?",
+      description: draft
+        ? `Sau khi lưu, chỉ Root Administrator mới có thể thay đổi quyền hoặc khóa tài khoản ${draft.full_name}.`
+        : "Quyền Quản trị viên sẽ được cấp sau khi lưu.",
+      confirmLabel: "Cấp quyền Admin",
+      tone: "danger" as const,
+    },
+    deactivate: {
+      title: "Khóa tài khoản?",
+      description: draft
+        ? `${draft.full_name} sẽ không thể đăng nhập. Dữ liệu và lịch sử hoạt động vẫn được giữ lại.`
+        : "Người dùng sẽ không thể đăng nhập, nhưng dữ liệu và lịch sử vẫn được giữ lại.",
+      confirmLabel: "Khóa tài khoản",
+      tone: "danger" as const,
+    },
+  } satisfies Record<
+    PersonnelConfirmation,
+    { title: string; description: string; confirmLabel: string; tone: "danger" }
+  >;
+
+  function confirmPersonnelAction() {
+    const action = confirmation;
+    if (!action || pending) return;
+    setConfirmation(null);
+    if (action === "discard") return closeDrawer();
+    if (action === "reset-password") return performPasswordReset();
+    if (action === "change-password") return performRootPasswordChange();
+    if (action === "grant-admin" && requiresDeactivationConfirmation()) {
+      setConfirmation("deactivate");
+      return;
+    }
+    performSubmit();
+  }
+
+  const passwordSection = draft ? (
+    draft.password_capable ? (
+      <fieldset
+        className="personnel-password-section"
+        disabled={pending || !draft.can_edit_security}
+      >
+        <legend>Mật khẩu / Bảo mật</legend>
+        <button
+          className="button button-secondary"
+          type="button"
+          onClick={resetPassword}
+        >
+          Đặt lại mật khẩu
+        </button>
+        {viewerIsRoot ? (
+          <>
+            <label>
+              Mật khẩu mới
+              <input
+                type="password"
+                value={passwordDraft}
+                minLength={6}
+                onChange={(event) => setPasswordDraft(event.target.value)}
+              />
+            </label>
+            <label>
+              Xác nhận mật khẩu mới
+              <input
+                type="password"
+                value={passwordConfirmation}
+                minLength={6}
+                onChange={(event) =>
+                  setPasswordConfirmation(event.target.value)
+                }
+              />
+            </label>
+            <button
+              className="button button-secondary"
+              type="button"
+              onClick={changePasswordAsRoot}
+            >
+              Đổi mật khẩu
+            </button>
+          </>
+        ) : null}
+      </fieldset>
+    ) : (
+      <section
+        className="personnel-password-section"
+        aria-label="Mật khẩu / Bảo mật"
+      >
+        <h3>Mật khẩu / Bảo mật</h3>
+        <p className="field-note">
+          Tài khoản Google-only không có thao tác mật khẩu.
+        </p>
+      </section>
+    )
+  ) : null;
 
   return (
     <>
@@ -524,58 +674,6 @@ export function PersonnelManagementList({
                     : "Chỉ Root Administrator được thay đổi tài khoản đang có quyền Admin."}
                 </p>
               ) : null}
-              {draft.password_capable ? (
-                <fieldset
-                  className="personnel-password-section"
-                  disabled={pending || !draft.can_edit_security}
-                >
-                  <legend>Mật khẩu</legend>
-                  <button
-                    className="button button-secondary"
-                    type="button"
-                    onClick={resetPassword}
-                  >
-                    Đặt lại mật khẩu
-                  </button>
-                  {viewerIsRoot ? (
-                    <>
-                      <label>
-                        Mật khẩu mới
-                        <input
-                          type="password"
-                          value={passwordDraft}
-                          minLength={6}
-                          onChange={(event) =>
-                            setPasswordDraft(event.target.value)
-                          }
-                        />
-                      </label>
-                      <label>
-                        Xác nhận mật khẩu mới
-                        <input
-                          type="password"
-                          value={passwordConfirmation}
-                          minLength={6}
-                          onChange={(event) =>
-                            setPasswordConfirmation(event.target.value)
-                          }
-                        />
-                      </label>
-                      <button
-                        className="button button-secondary"
-                        type="button"
-                        onClick={changePasswordAsRoot}
-                      >
-                        Đổi mật khẩu
-                      </button>
-                    </>
-                  ) : null}
-                </fieldset>
-              ) : (
-                <p className="field-note">
-                  Tài khoản Google-only không có thao tác mật khẩu.
-                </p>
-              )}
               <fieldset disabled={pending || !draft.can_edit_security}>
                 <legend>Thông tin cơ bản</legend>
                 <label>
@@ -778,6 +876,7 @@ export function PersonnelManagementList({
                   Đang hoạt động
                 </label>
               </fieldset>
+              {passwordSection}
             </div>
             <footer>
               <span>
@@ -808,6 +907,18 @@ export function PersonnelManagementList({
             </footer>
           </section>
         </div>
+      ) : null}
+      {confirmation ? (
+        <ConfirmDialog
+          open
+          title={confirmationCopy[confirmation].title}
+          description={confirmationCopy[confirmation].description}
+          confirmLabel={confirmationCopy[confirmation].confirmLabel}
+          tone={confirmationCopy[confirmation].tone}
+          pending={pending}
+          onCancel={() => setConfirmation(null)}
+          onConfirm={confirmPersonnelAction}
+        />
       ) : null}
     </>
   );

@@ -20,12 +20,12 @@ import {
   Search,
   Settings,
   Trash2,
-  UploadCloud,
   X,
 } from "@/components/icons";
 import { PaginationControls } from "@/components/pagination-controls";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { CatalogReconciliationImport } from "@/components/catalog-reconciliation-import";
+import { CatalogImportNew } from "@/components/catalog-import-new";
 import { TABLE_PAGE_SIZE, totalPagesFor } from "@/lib/pagination";
 
 export type EquipmentCatalogItem = EquipmentCatalogInput & {
@@ -289,20 +289,7 @@ export function EquipmentCatalogManager({
 
   return (
     <div className="equipment-catalog-workspace">
-      <form
-        action={importEquipmentCatalog}
-        className="data-panel equipment-catalog-import"
-      >
-        <label className="equipment-import-file">
-          <UploadCloud size={20} />
-          <span>File CSV hoặc XLSX</span>
-          <input
-            accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            name="file"
-            required
-            type="file"
-          />
-        </label>
+      <section className="data-panel equipment-catalog-import">
         <div className="equipment-import-actions">
           <Link
             className="button equipment-template-download"
@@ -312,17 +299,11 @@ export function EquipmentCatalogManager({
           >
             <Download size={17} /> Tải template
           </Link>
+          <CatalogImportNew action={importEquipmentCatalog} />
           <CatalogReconciliationImport
             preview={previewEquipmentCatalogReconciliation}
             apply={applyEquipmentCatalogReconciliation}
           />
-          <button
-            className="button equipment-import-new"
-            name="mode"
-            value="new"
-          >
-            <UploadCloud size={17} /> Import mới
-          </button>
           <a
             className="button equipment-export-all"
             href="/api/equipment-catalog/export"
@@ -330,7 +311,7 @@ export function EquipmentCatalogManager({
             <Download size={17} /> Export tất cả
           </a>
         </div>
-      </form>
+      </section>
 
       <section className="data-panel equipment-catalog-panel">
         <div className="equipment-catalog-filters">

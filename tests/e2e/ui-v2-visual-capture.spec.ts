@@ -3,7 +3,7 @@ import { clickUntilState } from "./helpers/interaction-readiness";
 
 const outputRoot =
   process.env.UI_CAPTURE_DIR ??
-  "D:/Webapp/Lịch trực/_EIU_MEDLABS_LOCAL/reports/ui-v2/baseline";
+  "D:/Webapp/Lịch trực/_EIU_MEDLABS_LOCAL/reports/ui-v2/after";
 
 const viewports = [
   { name: "1920", width: 1920, height: 1080 },
@@ -25,6 +25,7 @@ const routes = [
   ["my-equipment", "/equipment/mine"],
   ["equipment-requests", "/equipment/requests"],
   ["basic-medical-registrations", "/basic-medical/registrations"],
+  ["basic-medical-calendar", "/basic-medical/schedules"],
   ["basic-medical-create", "/basic-medical/new"],
   ["skills-import", "/schedule-entry/import"],
   [
@@ -92,4 +93,22 @@ test("captures the approved UI V2 baseline surfaces", async ({ page }) => {
       path: `${outputRoot}/${viewport.name}-login.png`,
     });
   }
+});
+
+test("captures a representative Skills calendar detail drawer", async ({
+  page,
+}) => {
+  await login(page);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/class-schedules?view=week&date=2026-07-31", {
+    waitUntil: "networkidle",
+  });
+  const event = page.locator(".slot-event-class").first();
+  const drawer = page.getByLabel("Chi tiết lịch");
+  await clickUntilState(event, () => expect(drawer).toBeVisible());
+  await page.screenshot({
+    fullPage: true,
+    path: `${outputRoot}/1440-skills-calendar-drawer.png`,
+  });
+  await drawer.getByRole("button", { name: "Đóng", exact: true }).click();
 });
