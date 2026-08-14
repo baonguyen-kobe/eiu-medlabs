@@ -6,6 +6,7 @@ import {
   assertLocalDestructiveTestTarget,
   resolveEffectiveSupabaseTestConfig,
 } from "../helpers/local-test-safety.mjs";
+import { clickUntilState } from "./helpers/interaction-readiness";
 
 const validSignature =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
@@ -70,12 +71,17 @@ async function localConfig() {
 
 async function login(page: Page, email: string, password: string) {
   await page.goto("/login");
-  await expect(async () => {
-    await page.locator('input[name="email"]').fill(email);
-    await page.locator('input[name="password"]').fill(password);
-    await page.locator('button[type="submit"]').click();
-    await expect(page).toHaveURL(/\/dashboard$/, { timeout: 1_500 });
-  }).toPass({ timeout: 15_000 });
+  await clickUntilState(
+    page.locator('button[type="submit"]'),
+    () => expect(page).toHaveURL(/\/dashboard$/, { timeout: 1_500 }),
+    async () => {
+      // Hydration can replace the server-rendered form and clear an early fill.
+      // Refill on every bounded retry before submitting the React-owned form.
+      await page.locator('input[name="email"]').fill(email);
+      await page.locator('input[name="password"]').fill(password);
+    },
+  );
+  await expect(page).toHaveURL(/\/dashboard$/);
 }
 
 function evidenceCounts(confirmationId: string) {
