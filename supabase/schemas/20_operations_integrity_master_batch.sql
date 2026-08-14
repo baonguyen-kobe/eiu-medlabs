@@ -534,6 +534,36 @@ returns boolean language sql volatile security definer set search_path = '' as $
   end;
 $$;
 
+-- A network exception from the Auth Admin API is not proof that the remote
+-- password mutation failed: the request can finish after this process has
+-- observed the exception. Keep that outcome out of every recovery path until
+-- the same durable, server-owned grace period expires. Other explicitly
+-- classified reconciliation states are safe to settle immediately because the
+-- application knows that Auth was not started, Auth returned, or Auth success
+-- was durably recorded before a later commit failed.
+create or replace function private.personnel_password_operation_is_recoverable(
+  operation public.personnel_password_operations
+)
+returns boolean language sql volatile security definer set search_path = '' as $$
+  select case
+    when operation.status in ('reserved', 'auth_update_started', 'auth_updated') then
+      private.personnel_password_operation_is_stale(operation)
+    when operation.status = 'reconciliation_required' then
+      case
+        when operation.last_error in ('auth_update_not_started', 'auth_result_recording_failed') then true
+        when operation.auth_updated_at is not null then true
+        when operation.last_error = 'auth_update_outcome_unknown' then coalesce(
+          (select evidence.auth_update_started_at
+           from private.personnel_password_auth_evidence evidence
+           where evidence.operation_id = operation.id),
+          operation.created_at
+        ) <= clock_timestamp() - interval '5 minutes'
+        else false
+      end
+    else false
+  end;
+$$;
+
 -- The Root screen consumes only this service-authorized, server-filtered
 -- recovery queue.  It deliberately contains no hashes, Auth error detail,
 -- reset values, tokens, or other private evidence.
@@ -555,9 +585,7 @@ begin
     operations.status, operations.created_at, profiles.full_name, profiles.email
   from public.personnel_password_operations operations
   join public.profiles profiles on profiles.id = operations.target_user_id
-  where operations.status = 'reconciliation_required'
-    or (operations.status in ('reserved', 'auth_update_started', 'auth_updated')
-      and (select private.personnel_password_operation_is_stale(operations)))
+  where (select private.personnel_password_operation_is_recoverable(operations))
   order by operations.created_at;
 end;
 $$;
@@ -571,9 +599,7 @@ begin
   perform private.assert_personnel_password_operation_service();
   select * into operation from public.personnel_password_operations where id = target_operation_id for update;
   if not found then raise exception 'PASSWORD_OPERATION_NOT_FOUND' using errcode = 'P0002'; end if;
-  if operation.status <> 'reconciliation_required'
-    and not (operation.status in ('reserved', 'auth_update_started', 'auth_updated')
-      and (select private.personnel_password_operation_is_stale(operation))) then
+  if not (select private.personnel_password_operation_is_recoverable(operation)) then
     raise exception 'PASSWORD_OPERATION_STILL_IN_PROGRESS' using errcode = '55000';
   end if;
   -- A stale reservation proves Auth was never begun, so it is safe to release
@@ -751,7 +777,7 @@ begin
 end;
 $$;
 
-revoke all on function private.is_operationally_assignable(uuid), private.assert_operationally_assignable(uuid), private.guard_operational_assignment(), private.can_manage_email_notifications(), private.assert_catalog_room_capacity(integer), private.assert_personnel_password_operation_service(), private.personnel_password_operation_is_stale(public.personnel_password_operations) from public, anon, authenticated;
+revoke all on function private.is_operationally_assignable(uuid), private.assert_operationally_assignable(uuid), private.guard_operational_assignment(), private.can_manage_email_notifications(), private.assert_catalog_room_capacity(integer), private.assert_personnel_password_operation_service(), private.personnel_password_operation_is_stale(public.personnel_password_operations), private.personnel_password_operation_is_recoverable(public.personnel_password_operations) from public, anon, authenticated;
 revoke all on function public.cancel_basic_medical_session(uuid,text), public.invalidate_basic_medical_session_confirmation(uuid,text), public.list_basic_medical_schedule_confirmation_states(uuid[]), public.list_operational_people(), public.list_operational_shift_assignees(), public.reserve_personnel_password_operation(uuid,text), public.begin_personnel_password_auth_update(uuid), public.record_personnel_password_auth_result(uuid,boolean,text), public.commit_personnel_password_operation(uuid), public.mark_personnel_password_reconciliation_required(uuid,text), public.reconcile_personnel_password_operation(uuid), public.list_recoverable_personnel_password_operations() from public, anon, authenticated;
 revoke all on function public.set_personnel_email_notification_capability(uuid,boolean) from public, anon;
 grant execute on function public.cancel_basic_medical_session(uuid,text), public.invalidate_basic_medical_session_confirmation(uuid,text), public.list_basic_medical_schedule_confirmation_states(uuid[]), public.list_operational_people(), public.list_operational_shift_assignees(), public.reserve_personnel_password_operation(uuid,text), public.set_personnel_email_notification_capability(uuid,boolean) to authenticated;

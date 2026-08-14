@@ -335,18 +335,8 @@ export async function resetPersonnelPassword(targetUserId: string) {
       },
     );
     if (markError) throw new Error("PASSWORD_OPERATION_RECOVERY_REQUIRED");
-    const recovered = await reconcilePersonnelPasswordAuthUpdate(
-      adminClient,
-      operationId,
-    );
-    if (recovered?.outcome === "auth_failed") {
-      throw new Error("PASSWORD_RESET_AUTH_OUTCOME_UNCHANGED");
-    }
-    if (recovered?.outcome !== "committed") {
-      throw new Error("PASSWORD_AUTH_CHANGED_RECONCILIATION_REQUIRED");
-    }
     revalidatePath("/admin/personnel");
-    return;
+    return { outcome: "reconciliation_pending" as const };
   }
   const { error: authStateError } = await adminClient.rpc(
     "record_personnel_password_auth_result",
@@ -441,18 +431,8 @@ export async function changePersonnelPasswordByRoot(
       },
     );
     if (markError) throw new Error("PASSWORD_OPERATION_RECOVERY_REQUIRED");
-    const recovered = await reconcilePersonnelPasswordAuthUpdate(
-      adminClient,
-      operationId,
-    );
-    if (recovered?.outcome === "auth_failed") {
-      throw new Error("PASSWORD_CHANGE_AUTH_OUTCOME_UNCHANGED");
-    }
-    if (recovered?.outcome !== "committed") {
-      throw new Error("PASSWORD_AUTH_CHANGED_RECONCILIATION_REQUIRED");
-    }
     revalidatePath("/admin/personnel");
-    return;
+    return { outcome: "reconciliation_pending" as const };
   }
   const { error: authStateError } = await adminClient.rpc(
     "record_personnel_password_auth_result",

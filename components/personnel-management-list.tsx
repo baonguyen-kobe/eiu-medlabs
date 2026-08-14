@@ -146,7 +146,15 @@ export function PersonnelManagementList({
       return;
     startTransition(async () => {
       try {
-        await resetPersonnelPassword(draft.id);
+        const outcome = await resetPersonnelPassword(draft.id);
+        if (outcome?.outcome === "reconciliation_pending") {
+          setResult({
+            ok: false,
+            message:
+              "Không xác định được kết quả cập nhật Auth. Hệ thống đã ghi nhận để đối soát; không thử lại mật khẩu ngay.",
+          });
+          return;
+        }
         setResult({
           ok: true,
           message:
@@ -184,11 +192,19 @@ export function PersonnelManagementList({
     if (!window.confirm(`Đổi mật khẩu cho ${draft.full_name}?`)) return;
     startTransition(async () => {
       try {
-        await changePersonnelPasswordByRoot(
+        const outcome = await changePersonnelPasswordByRoot(
           draft.id,
           passwordDraft,
           passwordConfirmation,
         );
+        if (outcome?.outcome === "reconciliation_pending") {
+          setResult({
+            ok: false,
+            message:
+              "Không xác định được kết quả cập nhật Auth. Hệ thống đã ghi nhận để đối soát; không thử lại mật khẩu ngay.",
+          });
+          return;
+        }
         setPasswordDraft("");
         setPasswordConfirmation("");
         setResult({ ok: true, message: "Đã đổi mật khẩu." });

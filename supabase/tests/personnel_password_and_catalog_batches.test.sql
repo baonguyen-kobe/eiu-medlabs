@@ -1,6 +1,6 @@
 begin;
 
-select plan(78);
+select plan(85);
 
 create temporary table feature_context as
 select
@@ -312,6 +312,10 @@ select lives_ok(
   $$select public.mark_personnel_password_reconciliation_required((select operation_id from password_result_write_failure_context), 'auth_result_recording_failed')$$,
   'a completed external Auth result-write failure is explicitly marked before reconciliation'
 );
+select ok(
+  exists (select 1 from public.list_recoverable_personnel_password_operations() where id = (select operation_id from password_result_write_failure_context)),
+  'a completed external Auth result-write failure remains immediately recoverable'
+);
 select is(
   (public.reconcile_personnel_password_operation((select operation_id from password_result_write_failure_context))->>'outcome'),
   'committed',
@@ -372,9 +376,10 @@ select ok(
   not exists (select 1 from private.personnel_password_auth_evidence where operation_id = (select operation_id from password_begin_failure_context)),
   'terminal reconciled pre-Auth failure deletes private evidence'
 );
--- Model an external updateUserById call that throws after either changing or
--- not changing Auth. The app records outcome-unknown and reconciliation must
--- derive the truth from the private pre-Auth hash, never record false.
+-- A thrown Admin Auth request can still complete remotely after this process
+-- observes the exception.  Its outcome therefore remains unavailable for the
+-- server-owned grace period; only then can reconciliation inspect the private
+-- pre-Auth hash and make a terminal decision.
 select set_config('role', 'authenticated', true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 create temporary table password_throw_unchanged_context as
@@ -392,10 +397,31 @@ select lives_ok(
   $$select public.mark_personnel_password_reconciliation_required((select operation_id from password_throw_unchanged_context), 'auth_update_outcome_unknown')$$,
   'unchanged thrown Auth outcome is recorded only as reconciliation-required'
 );
+select ok(
+  not exists (select 1 from public.list_recoverable_personnel_password_operations() where id = (select operation_id from password_throw_unchanged_context)),
+  'fresh unknown Auth outcome is excluded from the Root recovery queue'
+);
+select throws_ok(
+  $$select public.reconcile_personnel_password_operation((select operation_id from password_throw_unchanged_context))$$,
+  '55000',
+  'PASSWORD_OPERATION_STILL_IN_PROGRESS',
+  'fresh unknown Auth outcome cannot be reconciled before the durable grace period'
+);
+select set_config('role', 'postgres', true);
+select ok(
+  (select status = 'reconciliation_required' from public.personnel_password_operations where id = (select operation_id from password_throw_unchanged_context))
+  and exists (select 1 from private.personnel_password_auth_evidence where operation_id = (select operation_id from password_throw_unchanged_context)),
+  'denied fresh unknown reconciliation preserves status and private pre-Auth evidence'
+);
+update private.personnel_password_auth_evidence
+set auth_update_started_at = clock_timestamp() - interval '6 minutes'
+where operation_id = (select operation_id from password_throw_unchanged_context);
+select set_config('role', 'service_role', true);
+select set_config('request.jwt.claim.role', 'service_role', true);
 select is(
   public.reconcile_personnel_password_operation((select operation_id from password_throw_unchanged_context))->>'outcome',
   'auth_failed',
-  'reconciliation truthfully derives unchanged thrown Auth outcome as auth_failed'
+  'stale unchanged thrown Auth outcome reconciles as auth_failed'
 );
 select set_config('role', 'postgres', true);
 select ok(
@@ -429,10 +455,31 @@ select lives_ok(
   $$select public.mark_personnel_password_reconciliation_required((select operation_id from password_throw_changed_context), 'auth_update_outcome_unknown')$$,
   'changed thrown Auth outcome is never recorded as a false Auth failure'
 );
+select ok(
+  not exists (select 1 from public.list_recoverable_personnel_password_operations() where id = (select operation_id from password_throw_changed_context)),
+  'fresh changed unknown Auth outcome is also excluded from the Root recovery queue'
+);
+select throws_ok(
+  $$select public.reconcile_personnel_password_operation((select operation_id from password_throw_changed_context))$$,
+  '55000',
+  'PASSWORD_OPERATION_STILL_IN_PROGRESS',
+  'fresh changed unknown Auth outcome cannot lose evidence before its grace period'
+);
+select set_config('role', 'postgres', true);
+select ok(
+  (select status = 'reconciliation_required' from public.personnel_password_operations where id = (select operation_id from password_throw_changed_context))
+  and exists (select 1 from private.personnel_password_auth_evidence where operation_id = (select operation_id from password_throw_changed_context)),
+  'fresh changed unknown Auth outcome preserves the private evidence required for later truth'
+);
+update private.personnel_password_auth_evidence
+set auth_update_started_at = clock_timestamp() - interval '6 minutes'
+where operation_id = (select operation_id from password_throw_changed_context);
+select set_config('role', 'service_role', true);
+select set_config('request.jwt.claim.role', 'service_role', true);
 select is(
   public.reconcile_personnel_password_operation((select operation_id from password_throw_changed_context))->>'outcome',
   'committed',
-  'reconciliation derives changed thrown Auth outcome and commits without plaintext'
+  'stale changed thrown Auth outcome derives committed state without plaintext'
 );
 select set_config('role', 'postgres', true);
 select is(
@@ -667,7 +714,7 @@ select lives_ok(
   'immediate reconciliation fixture begins Auth phase'
 );
 select lives_ok(
-  $$select public.mark_personnel_password_reconciliation_required((select operation_id from password_immediate_reconcile_context), 'auth_update_outcome_unknown')$$,
+  $$select public.mark_personnel_password_reconciliation_required((select operation_id from password_immediate_reconcile_context), 'auth_update_not_started')$$,
   'explicitly compensated operation is immediately eligible for Root reconciliation'
 );
 select ok(

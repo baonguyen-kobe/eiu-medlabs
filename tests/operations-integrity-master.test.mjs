@@ -172,6 +172,15 @@ test("review correction UI coverage keeps capability, calendar, Root, and reconc
     adminActions,
     /if \(updateThrew\)[\s\S]*mark_personnel_password_reconciliation_required/,
   );
+  const unknownOutcomeBranches = [
+    ...adminActions.matchAll(/if \(updateThrew\) \{([\s\S]*?)\n  \}/g),
+  ].map((match) => match[1]);
+  assert.equal(unknownOutcomeBranches.length, 2);
+  for (const branch of unknownOutcomeBranches) {
+    assert.match(branch, /auth_update_outcome_unknown/);
+    assert.match(branch, /outcome: "reconciliation_pending"/);
+    assert.doesNotMatch(branch, /reconcilePersonnelPasswordAuthUpdate/);
+  }
   assert.doesNotMatch(personnelPage, /last_error/);
   assert.doesNotMatch(personnelList, /last_error/);
   assert.match(personnelPage, /personnel_password_operations/);
@@ -185,8 +194,14 @@ test("review correction UI coverage keeps capability, calendar, Root, and reconc
     adminActions,
     /canonicalEmail = authUser\.user\.email\?\.trim\(\)/,
   );
-  assert.match(adminActions, /PASSWORD_RESET_AUTH_OUTCOME_UNCHANGED/);
-  assert.match(adminActions, /PASSWORD_CHANGE_AUTH_OUTCOME_UNCHANGED/);
+  assert.match(
+    personnelList,
+    /Không xác định được kết quả cập nhật Auth\. Hệ thống đã ghi nhận để đối soát; không thử lại mật khẩu ngay\./,
+  );
+  assert.match(
+    personnelList,
+    /outcome\?\.outcome === "reconciliation_pending"/,
+  );
   assert.match(adminActions, /assertRoomCapacityInput/);
 });
 
