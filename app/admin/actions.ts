@@ -755,19 +755,8 @@ export async function deleteCourse(formData: FormData) {
   const { error } = await supabase.rpc("delete_catalog_course", {
     target_course_id: String(formData.get("id") ?? ""),
   });
-  if (error) {
-    catalogRedirect(
-      "/admin/courses",
-      "error",
-      error.message.includes("CATALOG_HAS_RELATED_REQUESTS")
-        ? "Môn học còn phiếu thiết bị hoặc buổi Y cơ sở liên quan nên chưa thể xóa."
-        : error.message.includes("CATALOG_HAS_BASIC_MEDICAL_REGISTRATIONS")
-          ? "Môn học còn đăng ký Y cơ sở nên chưa thể xóa."
-          : "Môn học còn lớp đang sử dụng nên chưa thể xóa.",
-    );
-  }
+  if (error) throw new Error("CATALOG_DELETE_BLOCKED");
   revalidatePath("/admin/courses");
-  catalogRedirect("/admin/courses", "notice", "Đã xóa môn học.");
 }
 
 export async function createRoom(formData: FormData) {
@@ -873,19 +862,8 @@ export async function deleteRoom(formData: FormData) {
   const { error } = await supabase.rpc("delete_catalog_room", {
     target_room_id: String(formData.get("id") ?? ""),
   });
-  if (error) {
-    catalogRedirect(
-      "/admin/rooms",
-      "error",
-      error.message.includes("CATALOG_HAS_RELATED_REQUESTS")
-        ? "Phòng còn phiếu thiết bị hoặc buổi Y cơ sở liên quan nên chưa thể xóa."
-        : error.message.includes("CATALOG_HAS_BASIC_MEDICAL_REGISTRATIONS")
-          ? "Phòng còn đăng ký Y cơ sở nên chưa thể xóa."
-          : "Phòng còn lớp đang sử dụng nên chưa thể xóa.",
-    );
-  }
+  if (error) throw new Error("CATALOG_DELETE_BLOCKED");
   revalidatePath("/admin/rooms");
-  catalogRedirect("/admin/rooms", "notice", "Đã xóa phòng.");
 }
 
 export async function createShiftTemplate(formData: FormData) {

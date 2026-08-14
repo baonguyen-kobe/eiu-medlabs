@@ -160,17 +160,17 @@ test("Admin edits and toggles selected Room and Course catalog rows through the 
       );
     }
     await page.getByRole("button", { name: "Sửa mục đã chọn" }).click();
-    const courseEditors = page.locator("form.admin-create-form fieldset");
+    const courseEditors = page.locator("tbody tr.is-editing");
     await expect(courseEditors).toHaveCount(2);
     await courseEditors
       .nth(0)
-      .getByLabel("Tên")
+      .getByLabel("Tên môn học")
       .fill(`Edited ${courseCodes[0]}`);
     await courseEditors
       .nth(1)
-      .getByLabel("Tên")
+      .getByLabel("Tên môn học")
       .fill(`Edited ${courseCodes[1]}`);
-    await page.getByRole("button", { name: "Lưu", exact: true }).click();
+    await page.getByRole("button", { name: "Lưu chỉnh sửa" }).click();
     await expect(page.getByRole("status")).toContainText("Đã lưu thay đổi");
     const firstCourseCheckbox = page.getByLabel(`Chọn ${courseCodes[0]}`);
     await clickUntilState(firstCourseCheckbox, () =>
@@ -232,11 +232,11 @@ test("Admin edits and toggles selected Room and Course catalog rows through the 
       );
     }
     await page.getByRole("button", { name: "Sửa mục đã chọn" }).click();
-    const roomEditors = page.locator("form.admin-create-form fieldset");
+    const roomEditors = page.locator("tbody tr.is-editing");
     await expect(roomEditors).toHaveCount(2);
     await roomEditors.nth(0).getByLabel("Sức chứa").fill("25");
     await roomEditors.nth(1).getByLabel("Sức chứa").fill("30");
-    await page.getByRole("button", { name: "Lưu", exact: true }).click();
+    await page.getByRole("button", { name: "Lưu chỉnh sửa" }).click();
     await expect(page.getByRole("status")).toContainText("Đã lưu thay đổi");
 
     const { data: updatedRooms, error: updatedRoomsError } = await serviceDb
