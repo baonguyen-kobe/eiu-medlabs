@@ -426,11 +426,22 @@ export async function adminCancelClass(
     return { ok: false, message: "Lớp học không còn khả dụng." };
   }
   if (schedule.basic_medical_registration_id) {
+    const { data: session, error: sessionError } = await context.supabase
+      .from("basic_medical_registration_sessions")
+      .select("id")
+      .eq("class_schedule_id", scheduleId)
+      .maybeSingle();
+    if (sessionError || !session) {
+      return {
+        ok: false,
+        message: "Không xác định được buổi Y cơ sở liên kết để hủy.",
+      };
+    }
     const { error } = await context.supabase.rpc(
-      "cancel_basic_medical_registration",
+      "cancel_basic_medical_session",
       {
-        target_registration_id: schedule.basic_medical_registration_id,
-        target_reason: null,
+        target_session_id: session.id,
+        target_reason: "Hủy từ lịch chung bởi quản trị viên.",
       },
     );
     if (error)
@@ -439,7 +450,7 @@ export async function adminCancelClass(
     after(processPendingScheduleEmails);
     return {
       ok: true,
-      message: "Đã hủy Phiếu Y cơ sở và đồng bộ các lịch liên kết.",
+      message: "Đã hủy đúng một buổi Y cơ sở và lưu lại lịch sử thay đổi.",
     };
   }
   const { error } = await context.supabase.rpc("cancel_class_schedule", {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef } from "react";
+import { type ReactNode, useEffect, useId, useRef } from "react";
 import { AlertTriangle } from "@/components/icons";
 
 export function ConfirmDialog({
@@ -11,6 +11,7 @@ export function ConfirmDialog({
   cancelLabel = "Quay lại",
   tone = "danger",
   pending = false,
+  children,
   onConfirm,
   onCancel,
 }: {
@@ -21,6 +22,7 @@ export function ConfirmDialog({
   cancelLabel?: string;
   tone?: "danger" | "primary";
   pending?: boolean;
+  children?: ReactNode;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
@@ -72,6 +74,7 @@ export function ConfirmDialog({
           <h2 id={titleId}>{title}</h2>
           <p id={descriptionId}>{description}</p>
         </div>
+        {children}
         <footer className="confirm-dialog-actions">
           <button
             ref={cancelRef}

@@ -1,6 +1,6 @@
 begin;
 
-select plan(14);
+select plan(42);
 
 create temporary table feature_context as
 select
@@ -121,6 +121,250 @@ select ok(
   (select must_change_password from public.profiles where id = (select root_id from feature_context)),
   'failed direct clear preserves the forced-password state'
 );
+
+create temporary table password_operation_context as
+select public.reserve_personnel_password_operation(
+  (select manager_id from feature_context), 'password_reset'
+) as operation_id;
+grant select on password_operation_context to authenticated, service_role;
+
+select throws_ok(
+  $$select public.record_personnel_password_auth_result((select operation_id from password_operation_context), true, null)$$,
+  '42501',
+  'permission denied for function record_personnel_password_auth_result',
+  'an authenticated caller cannot forge a successful Auth password phase'
+);
+
+select throws_ok(
+  $$select public.commit_personnel_password_operation((select operation_id from password_operation_context))$$,
+  '42501',
+  'permission denied for function commit_personnel_password_operation',
+  'an authenticated caller cannot commit a password operation directly'
+);
+
+select set_config('role', 'postgres', true);
+select is(
+  (select status from public.personnel_password_operations where id = (select operation_id from password_operation_context)),
+  'reserved',
+  'forged successful phase leaves the durable operation reserved'
+);
+select set_config('role', 'authenticated', true);
+
+select ok(
+  not has_function_privilege('authenticated', 'public.record_personnel_password_auth_result(uuid,boolean,text)', 'EXECUTE')
+  and not has_function_privilege('authenticated', 'public.commit_personnel_password_operation(uuid)', 'EXECUTE')
+  and not has_function_privilege('authenticated', 'public.mark_personnel_password_reconciliation_required(uuid,text)', 'EXECUTE')
+  and has_function_privilege('service_role', 'public.record_personnel_password_auth_result(uuid,boolean,text)', 'EXECUTE'),
+  'password Auth-result, commit, and reconciliation RPCs are service-role-only'
+);
+
+select set_config('role', 'service_role', true);
+select set_config('request.jwt.claim.role', 'service_role', true);
+select lives_ok(
+  $$select public.begin_personnel_password_auth_update((select operation_id from password_operation_context))$$,
+  'service records the durable pre-Auth update marker before any Auth mutation'
+);
+select lives_ok(
+  $$select public.record_personnel_password_auth_result((select operation_id from password_operation_context), false, 'injected_auth_failure')$$,
+  'service role records a truthful terminal Auth failure'
+);
+select set_config('role', 'postgres', true);
+select is(
+  (select status from public.personnel_password_operations where id = (select operation_id from password_operation_context)),
+  'auth_failed',
+  'Auth failure releases the reservation without claiming success'
+);
+select ok(
+  not exists (select 1 from private.personnel_password_auth_evidence where operation_id = (select operation_id from password_operation_context)),
+  'terminal direct Auth failure deletes private pre-Auth evidence'
+);
+select set_config('role', 'authenticated', true);
+select set_config('request.jwt.claim.role', 'authenticated', true);
+
+create temporary table password_partial_context as
+select public.reserve_personnel_password_operation(
+  (select manager_id from feature_context), 'password_reset'
+) as operation_id;
+grant select on password_partial_context to authenticated, service_role;
+
+select set_config('role', 'service_role', true);
+select set_config('request.jwt.claim.role', 'service_role', true);
+select lives_ok(
+  $$select public.begin_personnel_password_auth_update((select operation_id from password_partial_context))$$,
+  'post-Auth partial fixture has durable pre-Auth evidence'
+);
+select lives_ok(
+  $$select public.record_personnel_password_auth_result((select operation_id from password_partial_context), true, null)$$,
+  'service role records the completed Auth phase before a later injected DB failure'
+);
+select set_config('role', 'postgres', true);
+create function public.pwb_injected_password_commit_audit_failure()
+returns trigger language plpgsql as $$
+begin
+  if new.action = 'password_reset' then
+    raise exception 'PWB_INJECTED_PASSWORD_COMMIT_FAILURE' using errcode = 'P0001';
+  end if;
+  return new;
+end;
+$$;
+create trigger pwb_injected_password_commit_audit_failure
+before insert on public.audit_logs for each row
+execute function public.pwb_injected_password_commit_audit_failure();
+select set_config('role', 'service_role', true);
+select set_config('request.jwt.claim.role', 'service_role', true);
+select throws_ok(
+  $$select public.commit_personnel_password_operation((select operation_id from password_partial_context))$$,
+  'P0001',
+  'PWB_INJECTED_PASSWORD_COMMIT_FAILURE',
+  'a post-Auth database finalization failure is surfaced instead of being reported as a normal success'
+);
+select set_config('role', 'postgres', true);
+drop trigger pwb_injected_password_commit_audit_failure on public.audit_logs;
+select is(
+  (select status from public.personnel_password_operations where id = (select operation_id from password_partial_context)),
+  'auth_updated',
+  'failed commit retains truthful Auth-updated state for reconciliation'
+);
+select set_config('role', 'service_role', true);
+select set_config('request.jwt.claim.role', 'service_role', true);
+select lives_ok(
+  $$select public.mark_personnel_password_reconciliation_required((select operation_id from password_partial_context), 'injected_commit_failure')$$,
+  'service compensation marks a post-Auth partial failure for reconciliation'
+);
+select set_config('role', 'postgres', true);
+select is(
+  (select status from public.personnel_password_operations where id = (select operation_id from password_partial_context)),
+  'reconciliation_required',
+  'partial password failure is never misrepresented as an Auth failure or a committed success'
+);
+select ok(
+  exists (select 1 from private.personnel_password_auth_evidence where operation_id = (select operation_id from password_partial_context)),
+  'active reconciliation-required operation retains private evidence until it can settle'
+);
+select set_config('role', 'service_role', true);
+select set_config('request.jwt.claim.role', 'service_role', true);
+select lives_ok(
+  $$select public.reconcile_personnel_password_operation((select operation_id from password_partial_context))$$,
+  'service reconciliation can finalize only the durably recorded successful Auth phase without password input'
+);
+select set_config('role', 'postgres', true);
+select is(
+  (select status from public.personnel_password_operations where id = (select operation_id from password_partial_context)),
+  'committed',
+  'safe password reconciliation finalizes the known Auth-success partial state'
+);
+select ok(
+  not exists (select 1 from private.personnel_password_auth_evidence where operation_id = (select operation_id from password_partial_context)),
+  'terminal reconciled commit deletes private evidence'
+);
+
+create temporary table password_result_write_failure_context as
+select public.reserve_personnel_password_operation(
+  (select manager_id from feature_context), 'password_reset'
+) as operation_id;
+grant select on password_result_write_failure_context to authenticated, service_role;
+select set_config('role', 'service_role', true);
+select set_config('request.jwt.claim.role', 'service_role', true);
+select lives_ok(
+  $$select public.begin_personnel_password_auth_update((select operation_id from password_result_write_failure_context))$$,
+  'exact result-write failure fixture persists pre-Auth evidence before simulated Auth success'
+);
+select set_config('role', 'postgres', true);
+update auth.users set encrypted_password = crypt('ResultWriteChanged123!', gen_salt('bf'))
+where id = (select manager_id from feature_context);
+create function public.pwb_injected_auth_result_write_failure()
+returns trigger language plpgsql as $$
+begin
+  if new.status = 'auth_updated' then
+    raise exception 'PWB_INJECTED_AUTH_RESULT_WRITE_FAILURE' using errcode = 'P0001';
+  end if;
+  return new;
+end;
+$$;
+create trigger pwb_injected_auth_result_write_failure
+before update on public.personnel_password_operations for each row
+execute function public.pwb_injected_auth_result_write_failure();
+select set_config('role', 'service_role', true);
+select set_config('request.jwt.claim.role', 'service_role', true);
+select throws_ok(
+  $$select public.record_personnel_password_auth_result((select operation_id from password_result_write_failure_context), true, null)$$,
+  'P0001',
+  'PWB_INJECTED_AUTH_RESULT_WRITE_FAILURE',
+  'injected result persistence failure occurs after the simulated external Auth success'
+);
+select set_config('role', 'postgres', true);
+drop trigger pwb_injected_auth_result_write_failure on public.personnel_password_operations;
+select is(
+  (select status from public.personnel_password_operations where id = (select operation_id from password_result_write_failure_context)),
+  'auth_update_started',
+  'failed Auth-result write leaves the pre-Auth durable state discoverable instead of falsely reserved or lost'
+);
+select set_config('role', 'service_role', true);
+select set_config('request.jwt.claim.role', 'service_role', true);
+select is(
+  (public.reconcile_personnel_password_operation((select operation_id from password_result_write_failure_context))->>'outcome'),
+  'committed',
+  'service reconciliation derives Auth success from durable pre-Auth evidence and commits without plaintext'
+);
+select set_config('role', 'postgres', true);
+select is(
+  (select status from public.personnel_password_operations where id = (select operation_id from password_result_write_failure_context)),
+  'committed',
+  'successful reconciliation clears the active unique-index reservation rather than permanently blocking the target'
+);
+
+create temporary table password_begin_failure_context as
+select public.reserve_personnel_password_operation(
+  (select manager_id from feature_context), 'password_reset'
+) as operation_id;
+grant select on password_begin_failure_context to authenticated, service_role;
+create function public.pwb_injected_password_begin_failure()
+returns trigger language plpgsql as $$
+begin
+  if new.status = 'auth_update_started' then
+    raise exception 'PWB_INJECTED_PASSWORD_BEGIN_FAILURE' using errcode = 'P0001';
+  end if;
+  return new;
+end;
+$$;
+create trigger pwb_injected_password_begin_failure
+before update on public.personnel_password_operations for each row
+execute function public.pwb_injected_password_begin_failure();
+select set_config('role', 'service_role', true);
+select set_config('request.jwt.claim.role', 'service_role', true);
+select throws_ok(
+  $$select public.begin_personnel_password_auth_update((select operation_id from password_begin_failure_context))$$,
+  'P0001',
+  'PWB_INJECTED_PASSWORD_BEGIN_FAILURE',
+  'injected pre-Auth begin failure prevents any external Auth call'
+);
+select set_config('role', 'postgres', true);
+drop trigger pwb_injected_password_begin_failure on public.personnel_password_operations;
+select is(
+  (select status from public.personnel_password_operations where id = (select operation_id from password_begin_failure_context)),
+  'reserved',
+  'failed pre-Auth begin leaves only a safe reserved operation for immediate release'
+);
+select set_config('role', 'service_role', true);
+select set_config('request.jwt.claim.role', 'service_role', true);
+select is(
+  (public.reconcile_personnel_password_operation((select operation_id from password_begin_failure_context))->>'outcome'),
+  'auth_failed',
+  'service reconciliation releases a failed pre-Auth begin without claiming an Auth change'
+);
+select set_config('role', 'postgres', true);
+select ok(
+  not exists (select 1 from private.personnel_password_auth_evidence where operation_id = (select operation_id from password_begin_failure_context)),
+  'terminal reconciled pre-Auth failure deletes private evidence'
+);
+select set_config('role', 'authenticated', true);
+select set_config('request.jwt.claim.role', 'authenticated', true);
+select lives_ok(
+  $$select public.reserve_personnel_password_operation((select manager_id from feature_context), 'password_reset')$$,
+  'released pre-Auth begin failure permits a subsequent password operation for the same target'
+);
+select set_config('role', 'authenticated', true);
+select set_config('request.jwt.claim.role', 'authenticated', true);
 
 select set_config('role', 'postgres', true);
 

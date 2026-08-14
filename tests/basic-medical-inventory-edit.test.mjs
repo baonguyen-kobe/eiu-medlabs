@@ -25,7 +25,7 @@ test("inventory edit stages both quantities before any mutation", () => {
   }
 });
 
-test("room inventory UI returns on either Cancel before calling the server action", async () => {
+test("room inventory UI uses a cancellable app modal before calling the server action", async () => {
   const source = await readFile(
     new URL(
       "../components/basic-medical-equipment-manager.tsx",
@@ -33,13 +33,8 @@ test("room inventory UI returns on either Cancel before calling the server actio
     ),
     "utf8",
   );
-  const start = source.indexOf("const totalRaw = prompt(");
-  const handler = source.slice(
-    start,
-    source.indexOf("saveBasicMedicalRoomInventory({", start),
-  );
-  assert.notEqual(start, -1);
-  assert.match(handler, /if \(totalRaw === null\) return;/);
-  assert.match(handler, /if \(damagedRaw === null\) return;/);
-  assert.match(handler, /parseBasicMedicalInventoryQuantityEdit/);
+  assert.doesNotMatch(source, /\bprompt\s*\(/);
+  assert.match(source, /InventoryAdjustmentDialog/);
+  assert.match(source, /onCancel=\{onCancel\}/);
+  assert.match(source, /saveBasicMedicalRoomInventory\(\{/);
 });

@@ -23,7 +23,7 @@ export async function getViewer() {
     supabase
       .from("profiles")
       .select(
-        "full_name, title, allow_basic_medical_access, can_import_schedules",
+        "full_name, title, allow_basic_medical_access, can_import_schedules, can_manage_email_notifications",
       )
       .eq("id", userId)
       .single(),
@@ -72,6 +72,10 @@ export async function getViewer() {
     roomTypes,
     allowBasicMedicalAccess: profile?.allow_basic_medical_access ?? false,
     canImportSchedules: profile?.can_import_schedules ?? false,
+    canManageEmailNotifications:
+      roles.includes("admin") ||
+      (roles.includes("staff") &&
+        (profile?.can_manage_email_notifications ?? false)),
     canManagePersonnel: Boolean(
       (personnelAuthority as { can_manage_personnel?: boolean } | null)
         ?.can_manage_personnel,

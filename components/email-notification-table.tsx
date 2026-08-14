@@ -33,10 +33,12 @@ const statusLabels: Record<string, string> = {
 export function EmailNotificationTable({
   notifications,
   isAdmin,
+  canRetry,
   deliveryMode,
 }: {
   notifications: EmailNotificationRow[];
   isAdmin: boolean;
+  canRetry: boolean;
   deliveryMode: "off" | "test" | "live";
 }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -152,7 +154,9 @@ export function EmailNotificationTable({
                   <small>{item.last_error ?? "—"}</small>
                 </td>
                 <td className="table-action">
-                  {item.status === "failed" && deliveryMode !== "off" ? (
+                  {item.status === "failed" &&
+                  deliveryMode !== "off" &&
+                  canRetry ? (
                     <form action={retryFailedEmail}>
                       <input type="hidden" name="id" value={item.id} />
                       <button

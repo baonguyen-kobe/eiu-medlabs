@@ -181,6 +181,28 @@ test("Admin edits and toggles selected Room and Course catalog rows through the 
       expect(secondCourseCheckbox).toBeChecked({ timeout: 1_000 }),
     );
     await page.getByRole("button", { name: "Ngừng dùng" }).click();
+    const deactivateDialog = page.getByRole("dialog", {
+      name: "Ngừng sử dụng 2 môn học?",
+    });
+    await expect(deactivateDialog).toBeVisible();
+    await expect(deactivateDialog).toContainText("đúng các mục đang chọn");
+    await deactivateDialog.getByRole("button", { name: "Quay lại" }).click();
+    await expect(deactivateDialog).toBeHidden();
+
+    const { data: coursesAfterCancel, error: coursesAfterCancelError } =
+      await serviceDb
+        .from("courses")
+        .select("course_code,is_active")
+        .in("course_code", courseCodes)
+        .order("course_code");
+    if (coursesAfterCancelError) throw coursesAfterCancelError;
+    expect(coursesAfterCancel?.every((course) => course.is_active)).toBe(true);
+
+    await page.getByRole("button", { name: "Ngừng dùng" }).click();
+    await page
+      .getByRole("dialog", { name: "Ngừng sử dụng 2 môn học?" })
+      .getByRole("button", { name: "Xác nhận" })
+      .click();
     await expect(page.getByRole("status")).toContainText("Đã ngừng dùng");
 
     const { data: updatedCourses, error: updatedCoursesError } = await serviceDb

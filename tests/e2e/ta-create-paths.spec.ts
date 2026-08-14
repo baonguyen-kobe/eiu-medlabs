@@ -81,12 +81,14 @@ async function createManualSchedule(
         name: "Tìm và chọn giảng viên thứ nhất",
       }),
     );
-    await page
+    const lecturerOptions = page
       .getByRole("listbox")
       .getByRole("option")
-      .filter({ hasNotText: "Chưa chọn giảng viên" })
-      .first()
-      .click();
+      .filter({ hasNotText: "Chưa chọn giảng viên" });
+    await expect(lecturerOptions.filter({ hasText: "Nguyễn An" })).toHaveCount(
+      0,
+    );
+    await lecturerOptions.first().click();
   }
   await page.locator('select[name="room_id"]').selectOption({ index: 1 });
   await page.locator('input[name="schedule_date"]').fill(date);

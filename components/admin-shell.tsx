@@ -21,6 +21,7 @@ export async function AdminShell({
     allowBasicMedicalAccess,
     canImportSchedules,
     canManagePersonnel,
+    canManageEmailNotifications,
   } = await getViewer();
   return (
     <WorkspaceShell
@@ -30,6 +31,7 @@ export async function AdminShell({
       allowBasicMedicalAccess={allowBasicMedicalAccess}
       canImportSchedules={canImportSchedules}
       canManagePersonnel={canManagePersonnel}
+      canManageEmailNotifications={canManageEmailNotifications}
       title={title}
       description={description}
       actions={actions}

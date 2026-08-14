@@ -92,6 +92,9 @@ export default async function BasicMedicalConfirmationEvidencePage({
           <strong>Xác nhận đã vô hiệu</strong>
           <br />
           {evidence.invalidated_reason || "Không có lý do được ghi nhận."}
+          {evidence.invalidated_by_name_snapshot
+            ? ` · ${evidence.invalidated_by_name_snapshot}`
+            : null}
           {evidence.invalidated_at
             ? ` · ${dateTimeFormatter.format(new Date(evidence.invalidated_at))}`
             : null}

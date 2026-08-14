@@ -5,6 +5,7 @@ import {
   changePersonnelPasswordByRoot,
   resetPersonnelPassword,
   savePersonnelChanges,
+  setPersonnelEmailNotificationCapability,
   type SavePersonnelResult,
 } from "@/app/admin/actions";
 import { getNameInitials } from "@/lib/person-name";
@@ -20,6 +21,7 @@ export type PersonnelListItem = {
   is_active: boolean;
   can_import_schedules: boolean;
   allow_basic_medical_access: boolean;
+  can_manage_email_notifications?: boolean;
   access_version: number;
   roles: AppRole[];
   room_type_ids: string[];
@@ -67,6 +69,7 @@ export function PersonnelManagementList({
   const [result, setResult] = useState<SavePersonnelResult | null>(null);
   const [passwordDraft, setPasswordDraft] = useState("");
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
+  const [emailCapability, setEmailCapability] = useState(false);
   const [pending, startTransition] = useTransition();
   const dirty = useMemo(
     () =>
@@ -84,6 +87,7 @@ export function PersonnelManagementList({
   function open(item: PersonnelListItem) {
     setOriginal(clone(item));
     setDraft(clone(item));
+    setEmailCapability(Boolean(item.can_manage_email_notifications));
     setResult(null);
   }
 
@@ -118,10 +122,17 @@ export function PersonnelManagementList({
           message:
             "Đã đặt lại mật khẩu tạm thời và yêu cầu đổi mật khẩu sau khi đăng nhập.",
         });
-      } catch {
+      } catch (error) {
         setResult({
           ok: false,
-          message: "Không thể đặt lại mật khẩu cho tài khoản này.",
+          message:
+            error instanceof Error &&
+            error.message.includes("AUTH_CHANGED_RECONCILIATION_REQUIRED")
+              ? "Mật khẩu trên Auth có thể đã đổi nhưng lưu hồ sơ chưa hoàn tất. Đã ghi nhận đối soát; không thử lại mật khẩu này."
+              : error instanceof Error &&
+                  error.message.includes("AUTH_FAILED_RECONCILIATION_REQUIRED")
+                ? "Auth báo thất bại; trạng thái lưu cần đối soát trước khi thử lại."
+                : "Auth không đổi mật khẩu; không có thay đổi mật khẩu nào được xác nhận.",
         });
       }
     });
@@ -148,8 +159,18 @@ export function PersonnelManagementList({
         setPasswordDraft("");
         setPasswordConfirmation("");
         setResult({ ok: true, message: "Đã đổi mật khẩu." });
-      } catch {
-        setResult({ ok: false, message: "Không thể đổi mật khẩu." });
+      } catch (error) {
+        setResult({
+          ok: false,
+          message:
+            error instanceof Error &&
+            error.message.includes("AUTH_CHANGED_RECONCILIATION_REQUIRED")
+              ? "Mật khẩu trên Auth có thể đã đổi nhưng lưu hồ sơ chưa hoàn tất. Đã ghi nhận đối soát; không nhập lại mật khẩu này."
+              : error instanceof Error &&
+                  error.message.includes("AUTH_FAILED_RECONCILIATION_REQUIRED")
+                ? "Auth báo thất bại; trạng thái lưu cần đối soát trước khi thử lại."
+                : "Auth không đổi mật khẩu; không có thay đổi mật khẩu nào được xác nhận.",
+        });
       }
     });
   }
@@ -232,6 +253,21 @@ export function PersonnelManagementList({
       setResult(response);
       if (!response.ok || !response.personnel) return;
       const saved = response.personnel as unknown as PersonnelListItem;
+      if (saved.roles.includes("staff")) {
+        try {
+          saved.access_version = await setPersonnelEmailNotificationCapability(
+            saved.id,
+            emailCapability,
+          );
+          saved.can_manage_email_notifications = emailCapability;
+        } catch {
+          setResult({
+            ok: false,
+            message: "Không thể cập nhật quyền Quản lý Email Notifications.",
+          });
+          return;
+        }
+      }
       setItems((current) =>
         current.map((item) => (item.id === saved.id ? clone(saved) : item)),
       );
@@ -517,6 +553,18 @@ export function PersonnelManagementList({
                   />
                   Cho phép nhập lịch
                 </label>
+                {draft.roles.includes("staff") ? (
+                  <label className="check-label">
+                    <input
+                      type="checkbox"
+                      checked={emailCapability}
+                      onChange={(event) =>
+                        setEmailCapability(event.target.checked)
+                      }
+                    />
+                    Quản lý Email Notifications
+                  </label>
+                ) : null}
                 {!draft.roles.some((role) =>
                   ["staff", "lecturer", "teaching_assistant"].includes(role),
                 ) ? (

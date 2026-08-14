@@ -8,7 +8,7 @@ const workflow = await readFile(
     import.meta.url,
   ),
   "utf8",
-);
+).then((contents) => contents.replace(/\r\n/g, "\n"));
 
 test("PR #23 catalog audit workflow is dispatch-only and uses the fixed linked project", () => {
   assert.match(workflow, /^on:\n  workflow_dispatch:$/m);

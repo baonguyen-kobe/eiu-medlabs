@@ -80,16 +80,18 @@ test("Basic Medical commercial name is a fail-closed durable catalog identity", 
   }
 });
 
-test("linked Basic Medical schedule cancellation uses the canonical registration RPC", () => {
+test("linked Basic Medical schedule cancellation uses the canonical one-session RPC", () => {
   const branch = dashboardActions.slice(
     dashboardActions.indexOf("export async function adminCancelClass"),
   );
   assert.match(branch, /select\("basic_medical_registration_id"\)/);
   assert.match(branch, /if \(schedule\.basic_medical_registration_id\)/);
-  assert.match(branch, /rpc\(\s*"cancel_basic_medical_registration"/);
+  assert.match(branch, /from\("basic_medical_registration_sessions"\)/);
+  assert.match(branch, /rpc\(\s*"cancel_basic_medical_session"/);
+  assert.doesNotMatch(branch, /cancel_basic_medical_registration/);
   assert.match(branch, /rpc\("cancel_class_schedule"/);
   assert.ok(
-    branch.indexOf("cancel_basic_medical_registration") <
+    branch.indexOf("cancel_basic_medical_session") <
       branch.indexOf("cancel_class_schedule"),
   );
 });
@@ -116,7 +118,7 @@ test("evidence UI and PDF stay feature-gated, snapshot-only, and readable", () =
 test("catalog managers offer explicit reactivation without changing inventory eligibility", () => {
   assert.match(
     inventoryManager,
-    /setBasicMedicalCatalogActive\(\[\.\.\.selected\], true\)/,
+    /setBasicMedicalCatalogActive\(selectedIds, action === "activate"\)/,
   );
   assert.match(inventoryManager, />\s*Kích hoạt\s*</);
   assert.match(skillsCatalogManager, /setEquipmentCatalogActive\(ids, true\)/);

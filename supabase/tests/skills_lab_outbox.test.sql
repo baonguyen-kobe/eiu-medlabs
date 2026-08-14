@@ -75,7 +75,7 @@ values (
   '80000000-0000-0000-0000-000000000001'::uuid,
   (select id from public.courses where room_type_id = (select id from public.room_types where code = 'nursing_skills' limit 1) limit 1),
   (select id from public.rooms where room_type_id = (select id from public.room_types where code = 'nursing_skills' limit 1) limit 1),
-  coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid),
+  coalesce((select id from public.profiles where lower(email) = 'giangvien@campus.local'), '10000000-0000-0000-0000-000000000003'::uuid),
   current_date + interval '14 days', '07:30', '11:30', 20, 'SL-101', 'Thực hành Điều dưỡng', 'published', now(),
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid), 'manual',
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid)
@@ -135,6 +135,9 @@ select results_eq(
 );
 
 -- Test 14: SL-04 Lecturer withdraw generates 0 outbox events
+select set_config('request.jwt.claim.role', 'authenticated', true);
+select set_config('request.jwt.claim.sub', coalesce((select id::text from public.profiles where lower(email) = 'giangvien@campus.local'), '10000000-0000-0000-0000-000000000003'), true);
+select set_config('request.jwt.claims', json_build_object('sub', coalesce((select id from public.profiles where lower(email) = 'giangvien@campus.local'), '10000000-0000-0000-0000-000000000003'::uuid), 'role', 'authenticated')::text, true);
 select lives_ok(
   $$ select public.withdraw_class('80000000-0000-0000-0000-000000000001'::uuid); $$,
   'Test 14. Withdraw class executes successfully'
@@ -188,7 +191,7 @@ values (
   '80000000-0000-0000-0000-000000000003'::uuid,
   (select id from public.courses where room_type_id = (select id from public.room_types where code = 'nursing_skills' limit 1) limit 1),
   (select id from public.rooms where room_type_id = (select id from public.room_types where code = 'nursing_skills' limit 1) limit 1),
-  coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid),
+  coalesce((select id from public.profiles where lower(email) = 'giangvien@campus.local'), '10000000-0000-0000-0000-000000000003'::uuid),
   current_date + interval '16 days', '07:30', '11:30', 20, 'SL-103', 'Thực hành Khám', 'published', now(),
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid), 'manual',
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid)
@@ -230,7 +233,7 @@ values (
   '80000000-0000-0000-0000-000000000010'::uuid,
   (select id from public.courses where room_type_id = (select id from public.room_types where code = 'nursing_skills' limit 1) limit 1),
   (select id from public.rooms where room_type_id = (select id from public.room_types where code = 'nursing_skills' limit 1) limit 1),
-  coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid),
+  coalesce((select id from public.profiles where lower(email) = 'giangvien@campus.local'), '10000000-0000-0000-0000-000000000003'::uuid),
   current_date + interval '25 days', '07:30', '11:30', 20, 'SL-IMP', 'Thực hành Import', 'published', now(),
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid), 'import',
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid),
@@ -255,7 +258,7 @@ values (
   '80000000-0000-0000-0000-000000000088'::uuid,
   '10000000-0000-0000-0000-000000000088'::uuid,
   '20000000-0000-0000-0000-000000000088'::uuid,
-  coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid),
+  coalesce((select id from public.profiles where lower(email) = 'giangvien@campus.local'), '10000000-0000-0000-0000-000000000003'::uuid),
   current_date + interval '10 days', '07:30', '11:30', 20, 'BM-101', 'Y cơ sở 1', 'published', now(),
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid), 'manual',
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid)
@@ -344,7 +347,7 @@ values (
   '80000000-0000-0000-0000-000000000004'::uuid,
   (select id from public.courses where room_type_id = (select id from public.room_types where code = 'nursing_skills' limit 1) limit 1),
   (select id from public.rooms where room_type_id = (select id from public.room_types where code = 'nursing_skills' limit 1) limit 1),
-  coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid),
+  coalesce((select id from public.profiles where lower(email) = 'giangvien@campus.local'), '10000000-0000-0000-0000-000000000003'::uuid),
   current_date + interval '30 days', '07:30', '11:30', 20, 'SL-OFF', 'Thực hành OFF', 'published', now(),
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid), 'manual',
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid)

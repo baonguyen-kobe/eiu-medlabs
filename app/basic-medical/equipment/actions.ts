@@ -20,6 +20,49 @@ export type BasicMedicalEquipmentActionResult = {
   message: string;
 };
 
+export type BasicMedicalCatalogReconciliationPreview = {
+  updated: number;
+  reactivated: number;
+  inserted: number;
+  deactivated: number;
+  deleted: number;
+  fingerprint: string;
+};
+
+export async function previewBasicMedicalCatalogReconciliation(
+  rows: BasicMedicalCatalogInput[],
+): Promise<BasicMedicalCatalogReconciliationPreview> {
+  const supabase = await requireManager();
+  const { data, error } = await supabase.rpc("preview_catalog_reconciliation", {
+    target_domain: "basic_medical",
+    target_rows: rows,
+  });
+  if (error) throw new Error(error.message);
+  return data as BasicMedicalCatalogReconciliationPreview;
+}
+
+export async function applyBasicMedicalCatalogReconciliation(
+  rows: BasicMedicalCatalogInput[],
+  fingerprint: string,
+): Promise<BasicMedicalEquipmentActionResult> {
+  const supabase = await requireManager();
+  const { error } = await supabase.rpc("apply_catalog_reconciliation", {
+    target_domain: "basic_medical",
+    target_rows: rows,
+    target_fingerprint: fingerprint,
+  });
+  if (error)
+    return {
+      ok: false,
+      message: "Dữ liệu đã thay đổi; vui lòng xem lại preview.",
+    };
+  revalidatePath("/basic-medical/equipment");
+  return {
+    ok: true,
+    message: "Đã đối soát danh mục thiết bị Y cơ sở theo file.",
+  };
+}
+
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -72,7 +115,7 @@ function parseCatalogRow(
   const commercialName = pick("tenthuongmai", "commercialname");
   const unit = pick("dvt", "donvitinh");
   if (!itemName || !commercialName || !unit)
-    throw new Error("Mỗi dòng phải có Tên thiết bị và vật tư cùng ĐVT.");
+    throw new Error("Vui lòng nhập Tên thiết bị, Tên thương mại và ĐVT.");
   return {
     item_name: itemName,
     commercial_name: commercialName,
@@ -92,7 +135,9 @@ export async function createBasicMedicalCatalogItem(formData: FormData) {
   if (!itemName || !commercialName || !unit)
     redirect(
       "/basic-medical/equipment?error=" +
-        encodeURIComponent("Vui lòng nhập tên thiết bị và ĐVT."),
+        encodeURIComponent(
+          "Vui lòng nhập Tên thiết bị, Tên thương mại và ĐVT.",
+        ),
     );
   const { error } = await supabase
     .from("basic_medical_equipment_catalog")
@@ -107,7 +152,7 @@ export async function createBasicMedicalCatalogItem(formData: FormData) {
     });
   revalidatePath("/basic-medical/equipment");
   redirect(
-    `/basic-medical/equipment?${error ? `error=${encodeURIComponent(error.code === "23505" ? "Thiết bị đã có trong danh mục." : "Không thể thêm thiết bị.")}` : "notice=" + encodeURIComponent("Đã thêm thiết bị Y cơ sở.")}`,
+    `/basic-medical/equipment?${error ? `error=${encodeURIComponent(error.code === "23505" ? "Tên thương mại đã tồn tại." : "Không thể thêm thiết bị.")}` : "notice=" + encodeURIComponent("Đã thêm thiết bị Y cơ sở.")}`,
   );
 }
 
@@ -146,7 +191,7 @@ export async function updateBasicMedicalCatalogItems(
       ok: false,
       message:
         error.code === "23505"
-          ? "Thiết bị bị trùng với dòng khác."
+          ? "Tên thương mại đã tồn tại."
           : "Không thể lưu chỉnh sửa.",
     };
   revalidatePath("/basic-medical/equipment");
@@ -206,6 +251,8 @@ export async function saveBasicMedicalRoomInventory(input: {
   note?: string;
 }): Promise<BasicMedicalEquipmentActionResult> {
   const supabase = await requireManager();
+  if (!input.note?.trim())
+    return { ok: false, message: "Vui lòng nhập ghi chú điều chỉnh." };
   const { error } = await supabase.rpc("set_basic_medical_room_inventory", {
     target_inventory_id: input.inventoryId ?? null,
     target_room_id: input.roomId,
@@ -213,7 +260,7 @@ export async function saveBasicMedicalRoomInventory(input: {
     target_total_quantity: input.totalQuantity,
     target_damaged_quantity: input.damagedQuantity,
     target_is_active: true,
-    target_note: cleanText(input.note),
+    target_note: input.note.trim(),
   });
   if (error) return { ok: false, message: error.message };
   revalidatePath("/basic-medical/equipment");
@@ -271,6 +318,12 @@ export async function importBasicMedicalEquipment(formData: FormData) {
       "/basic-medical/equipment?error=" +
         encodeURIComponent("Vui lòng chọn file CSV hoặc XLSX."),
     );
+  if (mode !== "new") {
+    redirect(
+      "/basic-medical/equipment?error=" +
+        encodeURIComponent("Import tất cả phải dùng Preview đối soát."),
+    );
+  }
   try {
     const XLSX = await import("@e965/xlsx");
     const buffer = await file.arrayBuffer();

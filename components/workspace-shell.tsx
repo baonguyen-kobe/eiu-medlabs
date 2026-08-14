@@ -80,6 +80,7 @@ function buildNavigation(
   allowBasicMedicalAccess: boolean,
   canImportSchedules: boolean,
   canManagePersonnel: boolean,
+  canManageEmailNotifications: boolean,
 ): Array<{ label: string; items: NavItem[] }> {
   const isAdmin = roles.includes("admin");
   const isStaff = roles.includes("staff") && !isAdmin;
@@ -183,12 +184,16 @@ function buildNavigation(
           icon: Import,
           activeIcon: ImportSolid,
         },
-        {
-          label: "Email thông báo",
-          href: "/email-notifications",
-          icon: FileClock,
-          activeIcon: FileClockSolid,
-        },
+        ...(canManageEmailNotifications
+          ? [
+              {
+                label: "Email thông báo",
+                href: "/email-notifications",
+                icon: FileClock,
+                activeIcon: FileClockSolid,
+              },
+            ]
+          : []),
       ],
     });
   } else if (hasSkillsWorkspace && isAdmin) {
@@ -225,12 +230,16 @@ function buildNavigation(
             icon: Import,
             activeIcon: ImportSolid,
           },
-          {
-            label: "Email thông báo",
-            href: "/email-notifications",
-            icon: FileClock,
-            activeIcon: FileClockSolid,
-          },
+          ...(canManageEmailNotifications
+            ? [
+                {
+                  label: "Email thông báo",
+                  href: "/email-notifications",
+                  icon: FileClock,
+                  activeIcon: FileClockSolid,
+                },
+              ]
+            : []),
         ],
       },
     );
@@ -394,6 +403,7 @@ export function WorkspaceShell({
   allowBasicMedicalAccess = false,
   canImportSchedules = false,
   canManagePersonnel = false,
+  canManageEmailNotifications = false,
 }: {
   fullName: string;
   roles: AppRole[];
@@ -405,6 +415,7 @@ export function WorkspaceShell({
   allowBasicMedicalAccess?: boolean;
   canImportSchedules?: boolean;
   canManagePersonnel?: boolean;
+  canManageEmailNotifications?: boolean;
 }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -421,6 +432,7 @@ export function WorkspaceShell({
     allowBasicMedicalAccess,
     canImportSchedules,
     canManagePersonnel,
+    canManageEmailNotifications,
   );
   const primaryRoleLabel = getPrimaryRoleLabel(roles);
   const initials = getNameInitials(fullName);

@@ -72,6 +72,18 @@ export default async function PersonnelPage({
       }),
     ),
   );
+  const emailCapabilityById = new Map(
+    await Promise.all(
+      rows.map(async (row) => {
+        const { data } = await authAdmin
+          .from("profiles")
+          .select("can_manage_email_notifications")
+          .eq("id", row.id)
+          .maybeSingle();
+        return [row.id, Boolean(data?.can_manage_email_notifications)] as const;
+      }),
+    ),
+  );
 
   return (
     <AdminShell
@@ -238,6 +250,8 @@ export default async function PersonnelPage({
           return {
             ...row,
             password_capable: passwordCapableById.get(row.id) ?? false,
+            can_manage_email_notifications:
+              emailCapabilityById.get(row.id) ?? false,
           };
         })}
         roomTypes={roomTypes ?? []}

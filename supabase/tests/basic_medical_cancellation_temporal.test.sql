@@ -1,5 +1,5 @@
 begin;
-select plan(26);
+select plan(36);
 
 create temp table y03_cancel_context (
   admin_id uuid,
@@ -250,6 +250,88 @@ select set_config('role', 'postgres', true);
 
 select is((select (staff_result->>'cancelled_schedules')::integer from y03_cancel_context), 1, 'Basic-Medical-scoped Staff can cancel a registration');
 select is((select schedule_status::text from public.class_schedules where id = (select staff_future_schedule_id from y03_cancel_context)), 'cancelled', 'scoped Staff cancellation transitions its future schedule');
+
+-- The one-session correction is deliberately independent of the old
+-- registration-wide future-only operation: a past unconfirmed session is
+-- cancellable and the linked-schedule guard accepts only the RPC-local GUC.
+select set_config('role', 'authenticated', true);
+select set_config('request.jwt.claims', json_build_object('sub', (select admin_id from y03_cancel_context), 'role', 'authenticated')::text, true);
+select lives_ok(
+  $$select public.cancel_basic_medical_session(
+    (select sessions.id from public.basic_medical_registration_sessions sessions where sessions.class_schedule_id = (select past_schedule_id from y03_cancel_context)),
+    'correct past unconfirmed session'
+  )$$,
+  'Admin can cancel one past unconfirmed Basic Medical session through the canonical guarded RPC'
+);
+select set_config('role', 'postgres', true);
+select is(
+  (select schedule_status::text from public.class_schedules where id = (select past_schedule_id from y03_cancel_context)),
+  'cancelled',
+  'one-session cancellation passes the linked schedule mutation guard'
+);
+select is(
+  (select cancellation_reason from public.basic_medical_registration_sessions where class_schedule_id = (select past_schedule_id from y03_cancel_context)),
+  'correct past unconfirmed session',
+  'one-session cancellation persists its accountable trimmed reason'
+);
+select is(
+  (select count(*)::integer from public.email_outbox_events where event_key = concat('basic_medical:schedule:', (select past_schedule_id from y03_cancel_context), ':cancelled')),
+  1,
+  'one-session cancellation enqueues exactly one canonical schedule_cancelled outbox event'
+);
+select is(
+  (select count(*)::integer from public.audit_logs where action = 'basic_medical.session_cancelled' and entity_id = (select sessions.id from public.basic_medical_registration_sessions sessions where sessions.class_schedule_id = (select past_schedule_id from y03_cancel_context))),
+  1,
+  'one-session cancellation writes one audit record'
+);
+select set_config('role', 'authenticated', true);
+select throws_ok(
+  $$select public.cancel_basic_medical_session((select sessions.id from public.basic_medical_registration_sessions sessions where sessions.class_schedule_id = (select past_schedule_id from y03_cancel_context)), '   ')$$,
+  '22023',
+  'BASIC_MEDICAL_SESSION_CANCELLATION_REASON_REQUIRED',
+  'one-session cancellation rejects a blank reason directly'
+);
+select lives_ok(
+  $$select public.cancel_basic_medical_session((select sessions.id from public.basic_medical_registration_sessions sessions where sessions.class_schedule_id = (select past_schedule_id from y03_cancel_context)), 'repeat cancellation')$$,
+  'one-session cancellation is idempotent with an accountable repeat request'
+);
+select set_config('role', 'postgres', true);
+select is(
+  (select count(*)::integer from public.email_outbox_events where event_key = concat('basic_medical:schedule:', (select past_schedule_id from y03_cancel_context), ':cancelled')),
+  1,
+  'idempotent one-session cancellation does not duplicate its outbox event'
+);
+
+create function public.y03_injected_cancel_audit_failure()
+returns trigger language plpgsql as $$
+begin
+  if new.action = 'basic_medical.session_cancelled' then
+    raise exception 'Y03_INJECTED_CANCEL_AUDIT_FAILURE' using errcode = 'P0001';
+  end if;
+  return new;
+end;
+$$;
+create trigger y03_injected_cancel_audit_failure
+before insert on public.audit_logs for each row
+execute function public.y03_injected_cancel_audit_failure();
+
+select set_config('role', 'authenticated', true);
+select set_config('request.jwt.claims', json_build_object('sub', (select admin_id from y03_cancel_context), 'role', 'authenticated')::text, true);
+select throws_ok(
+  $$select public.cancel_basic_medical_session(
+    (select sessions.id from public.basic_medical_registration_sessions sessions where sessions.class_schedule_id = (select exact_schedule_id from y03_cancel_context)),
+    'force rollback after schedule write'
+  )$$,
+  'P0001',
+  'Y03_INJECTED_CANCEL_AUDIT_FAILURE',
+  'a failure after the guarded schedule mutation aborts the one-session cancellation'
+);
+select set_config('role', 'postgres', true);
+select ok(
+  (select schedule_status = 'published' from public.class_schedules where id = (select exact_schedule_id from y03_cancel_context))
+  and (select cancelled_at is null from public.basic_medical_registration_sessions where class_schedule_id = (select exact_schedule_id from y03_cancel_context)),
+  'injected post-update failure rolls back both schedule and session cancellation state'
+);
 
 select * from finish();
 rollback;
