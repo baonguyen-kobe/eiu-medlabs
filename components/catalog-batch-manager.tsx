@@ -72,12 +72,22 @@ export function CatalogBatchManager({
 
   function beginEdit(ids: string[]) {
     const nextItems = items.filter((item) => ids.includes(item.id));
+    if (!nextItems.length || pending) return;
     setEditing(nextItems.map((item) => item.id));
+    setSelected(nextItems.map((item) => item.id));
     setDrafts(
       Object.fromEntries(
         nextItems.map((item) => [item.id, toDraft(kind, item)]),
       ),
     );
+    setNotice(null);
+  }
+
+  function cancelEdit() {
+    if (pending) return;
+    setEditing([]);
+    setDrafts({});
+    setNotice("Đã hủy chỉnh sửa. Dữ liệu chưa được thay đổi.");
   }
 
   function updateDraft(id: string, field: keyof Draft, value: string) {
@@ -120,10 +130,28 @@ export function CatalogBatchManager({
 
   function save() {
     if (!editingItems.length || pending) return;
+    const changedItems = editingItems.filter((item) => {
+      const draft = drafts[item.id];
+      if (!draft) return false;
+      return (
+        draft.code.trim() !==
+          (kind === "rooms" ? item.room_code : (item.course_code ?? "")) ||
+        draft.building.trim() !== (item.building_code ?? "") ||
+        draft.name.trim() !==
+          (kind === "rooms" ? item.room_name : (item.course_name ?? "")) ||
+        draft.capacity !==
+          (item.capacity == null ? "" : String(item.capacity)) ||
+        draft.roomTypeId !== item.room_type_id
+      );
+    });
+    if (!changedItems.length) {
+      cancelEdit();
+      return;
+    }
     startTransition(async () => {
       try {
         if (kind === "rooms") {
-          const input = editingItems.map((item) => {
+          const input = changedItems.map((item) => {
             const draft = drafts[item.id];
             return {
               id: item.id,
@@ -147,7 +175,7 @@ export function CatalogBatchManager({
           if (input.length === 1) await updateCatalogRoom(input[0]);
           else await updateCatalogRoomsBatch(input);
         } else {
-          const input = editingItems.map((item) => {
+          const input = changedItems.map((item) => {
             const draft = drafts[item.id];
             return {
               id: item.id,
@@ -159,10 +187,11 @@ export function CatalogBatchManager({
           if (input.length === 1) await updateCatalogCourse(input[0]);
           else await updateCatalogCoursesBatch(input);
         }
+        const changedIds = new Set(changedItems.map((item) => item.id));
         setItems((value) =>
           value.map((item) => {
             const draft = drafts[item.id];
-            if (!draft || !editing.includes(item.id)) return item;
+            if (!draft || !changedIds.has(item.id)) return item;
             return {
               ...item,
               room_code: kind === "rooms" ? draft.code : item.room_code,
@@ -188,6 +217,7 @@ export function CatalogBatchManager({
         );
         setEditing([]);
         setDrafts({});
+        setSelected([]);
         setNotice("Đã lưu thay đổi.");
       } catch (error) {
         setNotice(
@@ -223,33 +253,58 @@ export function CatalogBatchManager({
 
   return (
     <div className="data-panel catalog-data-panel">
-      <div className="equipment-catalog-toolbar">
-        <span>{selected.length} mục được chọn</span>
-        <button
-          className="button button-secondary"
-          type="button"
-          disabled={!selected.length || pending}
-          onClick={() => setActiveConfirmation(false)}
+      {editing.length ? (
+        <div
+          className="equipment-catalog-toolbar"
+          aria-label="Chỉnh sửa nội tuyến"
         >
-          Ngừng dùng
-        </button>
-        <button
-          className="button button-secondary"
-          type="button"
-          disabled={!selected.length || pending}
-          onClick={() => beginEdit(selected)}
-        >
-          Sửa mục đã chọn
-        </button>
-        <button
-          className="button button-secondary"
-          type="button"
-          disabled={!selected.length || pending}
-          onClick={() => setActiveConfirmation(true)}
-        >
-          Kích hoạt
-        </button>
-      </div>
+          <span>{editing.length} mục đang chỉnh sửa</span>
+          <button
+            className="button button-primary"
+            type="button"
+            disabled={pending}
+            onClick={save}
+          >
+            Lưu chỉnh sửa
+          </button>
+          <button
+            className="button button-secondary"
+            type="button"
+            disabled={pending}
+            onClick={cancelEdit}
+          >
+            Hủy
+          </button>
+        </div>
+      ) : (
+        <div className="equipment-catalog-toolbar">
+          <span>{selected.length} mục được chọn</span>
+          <button
+            className="button button-secondary"
+            type="button"
+            disabled={!selected.length || pending}
+            onClick={() => setActiveConfirmation(false)}
+          >
+            Ngừng dùng
+          </button>
+          <button
+            className="button button-secondary"
+            type="button"
+            disabled={!selected.length || pending}
+            onClick={() => beginEdit(selected)}
+          >
+            Sửa mục đã chọn
+          </button>
+          <button
+            className="button button-secondary"
+            type="button"
+            disabled={!selected.length || pending}
+            onClick={() => setActiveConfirmation(true)}
+          >
+            Kích hoạt
+          </button>
+        </div>
+      )}
       {notice ? (
         <p className="action-feedback" role="status">
           {notice}
@@ -295,6 +350,7 @@ export function CatalogBatchManager({
                   aria-label="Chọn tất cả mục đang xem"
                   type="checkbox"
                   checked={allSelected}
+                  disabled={editing.length > 0 || pending}
                   onChange={() =>
                     setSelected(allSelected ? [] : items.map((item) => item.id))
                   }
@@ -309,155 +365,158 @@ export function CatalogBatchManager({
             </tr>
           </thead>
           <tbody>
-            {items.map((item) => (
-              <tr key={item.id}>
-                <td>
-                  <input
-                    aria-label={`Chọn ${kind === "rooms" ? item.room_code : item.course_code}`}
-                    type="checkbox"
-                    checked={selected.includes(item.id)}
-                    onChange={() => toggle(item.id)}
-                  />
-                </td>
-                <td className="mono">
-                  {kind === "rooms"
-                    ? `${item.room_code}.${item.building_code}`
-                    : item.course_code}
-                </td>
-                <td>
-                  {kind === "rooms"
-                    ? (item.room_name ?? "—")
-                    : item.course_name}
-                </td>
-                <td>{item.room_types?.name ?? "—"}</td>
-                {kind === "rooms" ? <td>{item.capacity ?? "—"}</td> : null}
-                <td>
-                  <span
-                    className={`status-pill ${item.is_active ? "is-active" : ""}`}
-                  >
-                    {item.is_active ? "Đang dùng" : "Ngừng dùng"}
-                  </span>
-                </td>
-                <td className="catalog-row-actions">
-                  <button
-                    className="table-action"
-                    type="button"
-                    disabled={pending}
-                    onClick={() => beginEdit([item.id])}
-                  >
-                    Sửa
-                  </button>
-                  <button
-                    className="table-action delete-action"
-                    type="button"
-                    disabled={pending}
-                    onClick={() => setDeleteTarget(item)}
-                  >
-                    Xóa
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {items.map((item) => {
+              const isEditing = editing.includes(item.id);
+              const draft = drafts[item.id] ?? toDraft(kind, item);
+              return (
+                <tr
+                  key={item.id}
+                  className={isEditing ? "is-editing" : undefined}
+                >
+                  <td>
+                    <input
+                      aria-label={`Chọn ${kind === "rooms" ? item.room_code : item.course_code}`}
+                      type="checkbox"
+                      checked={selected.includes(item.id)}
+                      disabled={isEditing || editing.length > 0 || pending}
+                      onChange={() => toggle(item.id)}
+                    />
+                  </td>
+                  <td className="mono">
+                    {isEditing ? (
+                      kind === "rooms" ? (
+                        <div className="catalog-inline-fields">
+                          <input
+                            aria-label="Mã phòng"
+                            required
+                            value={draft.code}
+                            onChange={(event) =>
+                              updateDraft(item.id, "code", event.target.value)
+                            }
+                          />
+                          <input
+                            aria-label="Tòa nhà"
+                            required
+                            value={draft.building}
+                            onChange={(event) =>
+                              updateDraft(
+                                item.id,
+                                "building",
+                                event.target.value,
+                              )
+                            }
+                          />
+                        </div>
+                      ) : (
+                        <input
+                          aria-label="Mã môn học"
+                          required
+                          value={draft.code}
+                          onChange={(event) =>
+                            updateDraft(item.id, "code", event.target.value)
+                          }
+                        />
+                      )
+                    ) : kind === "rooms" ? (
+                      `${item.room_code}.${item.building_code}`
+                    ) : (
+                      item.course_code
+                    )}
+                  </td>
+                  <td>
+                    {isEditing ? (
+                      <input
+                        aria-label={
+                          kind === "rooms" ? "Tên phòng" : "Tên môn học"
+                        }
+                        required={kind === "courses"}
+                        value={draft.name}
+                        onChange={(event) =>
+                          updateDraft(item.id, "name", event.target.value)
+                        }
+                      />
+                    ) : kind === "rooms" ? (
+                      (item.room_name ?? "—")
+                    ) : (
+                      item.course_name
+                    )}
+                  </td>
+                  <td>
+                    {isEditing ? (
+                      <select
+                        aria-label="Loại phòng"
+                        value={draft.roomTypeId}
+                        onChange={(event) =>
+                          updateDraft(item.id, "roomTypeId", event.target.value)
+                        }
+                      >
+                        {roomTypes
+                          .filter((type) => type.is_active)
+                          .map((type) => (
+                            <option key={type.id} value={type.id}>
+                              {type.name}
+                            </option>
+                          ))}
+                      </select>
+                    ) : (
+                      (item.room_types?.name ?? "—")
+                    )}
+                  </td>
+                  {kind === "rooms" ? (
+                    <td>
+                      {isEditing ? (
+                        <input
+                          aria-label="Sức chứa"
+                          type="number"
+                          min="1"
+                          step="1"
+                          value={draft.capacity}
+                          onChange={(event) =>
+                            updateDraft(item.id, "capacity", event.target.value)
+                          }
+                        />
+                      ) : (
+                        (item.capacity ?? "—")
+                      )}
+                    </td>
+                  ) : null}
+                  <td>
+                    <span
+                      className={`status-pill ${item.is_active ? "is-active" : ""}`}
+                    >
+                      {item.is_active ? "Đang dùng" : "Ngừng dùng"}
+                    </span>
+                  </td>
+                  <td className="catalog-row-actions">
+                    {isEditing ? (
+                      <span className="field-note">Đang sửa</span>
+                    ) : (
+                      <>
+                        <button
+                          className="table-action"
+                          type="button"
+                          disabled={pending}
+                          onClick={() => beginEdit([item.id])}
+                        >
+                          Sửa
+                        </button>
+                        <button
+                          className="table-action delete-action"
+                          type="button"
+                          disabled={pending}
+                          onClick={() => setDeleteTarget(item)}
+                        >
+                          Xóa
+                        </button>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
-      {editingItems.length ? (
-        <form className="admin-create-form" action={save}>
-          <p className="field-note">
-            {editingItems.length > 1
-              ? "Chỉnh sửa từng mục đã chọn; toàn bộ lô được kiểm tra và lưu nguyên tử."
-              : "Chỉnh sửa mục đã chọn."}
-          </p>
-          {editingItems.map((item) => {
-            const draft = drafts[item.id];
-            return (
-              <fieldset key={item.id}>
-                <legend>
-                  {kind === "rooms"
-                    ? `${item.room_code}.${item.building_code}`
-                    : item.course_code}
-                </legend>
-                <label>
-                  Mã
-                  <input
-                    value={draft?.code ?? ""}
-                    required
-                    onChange={(event) =>
-                      updateDraft(item.id, "code", event.target.value)
-                    }
-                  />
-                </label>
-                {kind === "rooms" ? (
-                  <label>
-                    Tòa nhà
-                    <input
-                      value={draft?.building ?? ""}
-                      required
-                      onChange={(event) =>
-                        updateDraft(item.id, "building", event.target.value)
-                      }
-                    />
-                  </label>
-                ) : null}
-                <label>
-                  Tên
-                  <input
-                    value={draft?.name ?? ""}
-                    required={kind === "courses"}
-                    onChange={(event) =>
-                      updateDraft(item.id, "name", event.target.value)
-                    }
-                  />
-                </label>
-                {kind === "rooms" ? (
-                  <label>
-                    Sức chứa
-                    <input
-                      type="number"
-                      min="1"
-                      value={draft?.capacity ?? ""}
-                      onChange={(event) =>
-                        updateDraft(item.id, "capacity", event.target.value)
-                      }
-                    />
-                  </label>
-                ) : null}
-                <label>
-                  Loại
-                  <select
-                    value={draft?.roomTypeId ?? ""}
-                    onChange={(event) =>
-                      updateDraft(item.id, "roomTypeId", event.target.value)
-                    }
-                  >
-                    {roomTypes
-                      .filter((type) => type.is_active)
-                      .map((type) => (
-                        <option key={type.id} value={type.id}>
-                          {type.name}
-                        </option>
-                      ))}
-                  </select>
-                </label>
-              </fieldset>
-            );
-          })}
-          <button className="button button-primary" disabled={pending}>
-            Lưu
-          </button>
-          <button
-            className="button button-secondary"
-            type="button"
-            disabled={pending}
-            onClick={() => {
-              setEditing([]);
-              setDrafts({});
-            }}
-          >
-            Hủy
-          </button>
-        </form>
-      ) : null}
     </div>
   );
 }
