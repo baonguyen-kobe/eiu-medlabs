@@ -357,6 +357,11 @@ export async function resetPersonnelPassword(targetUserId: string) {
     },
   );
   if (authStateError) {
+    await markPersonnelPasswordReconciliationRequired(
+      adminClient,
+      operationId,
+      "auth_result_recording_failed",
+    );
     const recovered = await reconcilePersonnelPasswordAuthUpdate(
       adminClient,
       operationId,
@@ -458,6 +463,11 @@ export async function changePersonnelPasswordByRoot(
     },
   );
   if (authStateError) {
+    await markPersonnelPasswordReconciliationRequired(
+      adminClient,
+      operationId,
+      "auth_result_recording_failed",
+    );
     const recovered = await reconcilePersonnelPasswordAuthUpdate(
       adminClient,
       operationId,
@@ -970,6 +980,11 @@ async function beginPersonnelPasswordAuthUpdate(
     { target_operation_id: operationId },
   );
   if (!error) return;
+  await markPersonnelPasswordReconciliationRequired(
+    adminClient,
+    operationId,
+    "auth_update_not_started",
+  );
   const released = await reconcilePersonnelPasswordAuthUpdate(
     adminClient,
     operationId,
@@ -977,6 +992,18 @@ async function beginPersonnelPasswordAuthUpdate(
   if (released?.outcome !== "auth_failed")
     throw new Error("PASSWORD_OPERATION_RECOVERY_REQUIRED");
   throw new Error("PASSWORD_AUTH_UPDATE_NOT_STARTED");
+}
+
+async function markPersonnelPasswordReconciliationRequired(
+  adminClient: ReturnType<typeof createAdminClient>,
+  operationId: string,
+  reason: string,
+) {
+  const { error } = await adminClient.rpc(
+    "mark_personnel_password_reconciliation_required",
+    { target_operation_id: operationId, target_error: reason },
+  );
+  if (error) throw new Error("PASSWORD_OPERATION_RECOVERY_REQUIRED");
 }
 
 async function reconcilePersonnelPasswordAuthUpdate(

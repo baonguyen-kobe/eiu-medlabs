@@ -31,6 +31,9 @@ test("operations integrity migration has declarative parity", async () => {
     "personnel_password_auth_evidence",
     "delete from private.personnel_password_auth_evidence",
     "auth_update_started",
+    "PASSWORD_OPERATION_STILL_IN_PROGRESS",
+    "list_recoverable_personnel_password_operations",
+    "personnel_password_operation_is_stale",
     "PASSWORD_OPERATION_RECONCILIATION_UNSAFE",
     "BASIC_MEDICAL_INVENTORY_ADJUSTMENT_REASON_REQUIRED",
     "rooms_capacity_real_or_unknown",
@@ -259,6 +262,31 @@ test("password saga settlement is server-admin only and shift UI uses its canoni
   );
   assert.match(adminActions, /mark_personnel_password_reconciliation_required/);
   assert.match(adminActions, /PASSWORD_AUTH_CHANGED_RECONCILIATION_REQUIRED/);
+  assert.match(
+    adminActions,
+    /auth_result_recording_failed[\s\S]*markPersonnelPasswordReconciliationRequired/,
+  );
   assert.match(shiftPage, /list_operational_shift_assignees/);
   assert.doesNotMatch(shiftPage, /list_active_people/);
+});
+
+test("Root equipment responsibility never reintroduces Root through registrant defaults", async () => {
+  const [registerPage, form, actions] = await Promise.all([
+    read("app/equipment/register/page.tsx"),
+    read("components/equipment-request-form.tsx"),
+    read("app/equipment/actions.ts"),
+  ]);
+  assert.match(registerPage, /system_security_principals/);
+  assert.match(registerPage, /registrantIsOperationallyAssignable/);
+  assert.match(registerPage, /requiresResponsibleLecturerReplacement/);
+  assert.match(
+    form,
+    /registrantIsOperationallyAssignable \? registrantId : ""/,
+  );
+  assert.match(form, /Tài khoản Root Admin không thể được phân công vận hành/);
+  assert.doesNotMatch(
+    form,
+    /defaultValue=\{initialData\?\.responsibleLecturerId \?\? registrantId\}/,
+  );
+  assert.match(actions, /responsible_lecturer_id/);
 });

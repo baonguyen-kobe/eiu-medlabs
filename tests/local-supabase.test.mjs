@@ -2669,6 +2669,13 @@ test("direct equipment RPC luôn xác minh giảng viên phụ trách và độ 
   const admin = await signIn("admin@campus.local", "LocalAdmin123!");
   const staff = await signIn("staff@campus.local", "LocalStaff123!");
   const lecturer = await signIn("giangvien@campus.local", "LocalLecturer123!");
+  const { data: staffProfile, error: staffProfileError } = await service
+    .from("profiles")
+    .select("phone")
+    .eq("id", staff.user.id)
+    .single();
+  assert.ifError(staffProfileError);
+  assert.ok(staffProfile);
   const scheduleId = crypto.randomUUID();
   const catalogId = crypto.randomUUID();
   try {
@@ -2747,6 +2754,10 @@ test("direct equipment RPC luôn xác minh giảng viên phụ trách và độ 
     assert.ok(oversizedNote.error);
     assert.equal(oversizedNote.error.code, "22023");
   } finally {
+    await service
+      .from("profiles")
+      .update({ phone: staffProfile.phone })
+      .eq("id", staff.user.id);
     // Use serviceClient() since DELETE privilege is revoked from authenticated role
     await serviceClient()
       .from("equipment_requests")

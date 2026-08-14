@@ -38,6 +38,7 @@ export default async function PersonnelPage({
   const { supabase, userId, authority } = await requirePersonnelManager();
   const query = await searchParams;
   const currentPage = normalizePage(query.page);
+  const authAdmin = createAdminClient();
   const [
     { data: roomTypes },
     { data: personnelRows, error: personnelError },
@@ -57,24 +58,13 @@ export default async function PersonnelPage({
       target_page_size: TABLE_PAGE_SIZE,
     }),
     authority.is_root_administrator
-      ? createAdminClient()
-          .from("personnel_password_operations")
-          .select(
-            "id,correlation_id,action,status,created_at,target:profiles!personnel_password_operations_target_user_id_fkey(full_name,email)",
-          )
-          .in("status", [
-            "reconciliation_required",
-            "auth_update_started",
-            "auth_updated",
-          ])
-          .order("created_at")
+      ? authAdmin.rpc("list_recoverable_personnel_password_operations")
       : Promise.resolve({ data: [] }),
   ]);
   const rows = (personnelRows ?? []) as Array<
     PersonnelListItem & { total_count: number }
   >;
   const totalItems = Number(rows[0]?.total_count ?? 0);
-  const authAdmin = createAdminClient();
   const passwordCapableById = new Map(
     await Promise.all(
       rows.map(async (row) => {
@@ -274,11 +264,25 @@ export default async function PersonnelPage({
         viewerId={userId}
         viewerIsRoot={authority.is_root_administrator}
         passwordReconciliationItems={
-          (passwordReconciliationRows ?? []).map((operation) => ({
+          (
+            (passwordReconciliationRows ?? []) as Array<{
+              id: string;
+              correlation_id: string;
+              action: string;
+              status: string;
+              created_at: string;
+              target_full_name: string | null;
+              target_email: string | null;
+            }>
+          ).map((operation) => ({
             ...operation,
-            target: Array.isArray(operation.target)
-              ? (operation.target[0] ?? null)
-              : operation.target,
+            target:
+              operation.target_full_name || operation.target_email
+                ? {
+                    full_name: operation.target_full_name ?? "Nhân sự",
+                    email: operation.target_email ?? "",
+                  }
+                : null,
           })) as Array<{
             id: string;
             correlation_id: string;

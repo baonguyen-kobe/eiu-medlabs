@@ -1,11 +1,12 @@
 begin;
 
-select plan(58);
+select plan(78);
 
 create temporary table feature_context as
 select
   gen_random_uuid() as root_id,
   gen_random_uuid() as manager_id,
+  gen_random_uuid() as recovery_target_id,
   (select id from public.room_types where is_active order by name limit 1) as first_type_id,
   (select id from public.room_types where is_active order by name offset 1 limit 1) as second_type_id,
   gen_random_uuid() as room_one_id,
@@ -26,6 +27,12 @@ select
   '00000000-0000-0000-0000-000000000000'::uuid, manager_id, 'authenticated', 'authenticated',
   'pwb-manager@campus.local', crypt('PwbManagerPassword123!', gen_salt('bf')), now(),
   '{"provider":"email","providers":["email"]}'::jsonb, '{"full_name":"PWB Manager"}'::jsonb, now(), now()
+from feature_context
+union all
+select
+  '00000000-0000-0000-0000-000000000000'::uuid, recovery_target_id, 'authenticated', 'authenticated',
+  'pwb-recovery@campus.local', crypt('PwbRecoveryPassword123!', gen_salt('bf')), now(),
+  '{"provider":"email","providers":["email"]}'::jsonb, '{"full_name":"PWB Recovery"}'::jsonb, now(), now()
 from feature_context;
 
 insert into public.user_roles (user_id, role)
@@ -301,6 +308,10 @@ select is(
 );
 select set_config('role', 'service_role', true);
 select set_config('request.jwt.claim.role', 'service_role', true);
+select lives_ok(
+  $$select public.mark_personnel_password_reconciliation_required((select operation_id from password_result_write_failure_context), 'auth_result_recording_failed')$$,
+  'a completed external Auth result-write failure is explicitly marked before reconciliation'
+);
 select is(
   (public.reconcile_personnel_password_operation((select operation_id from password_result_write_failure_context))->>'outcome'),
   'committed',
@@ -347,6 +358,10 @@ select is(
 );
 select set_config('role', 'service_role', true);
 select set_config('request.jwt.claim.role', 'service_role', true);
+select lives_ok(
+  $$select public.mark_personnel_password_reconciliation_required((select operation_id from password_begin_failure_context), 'auth_update_not_started')$$,
+  'pre-Auth begin failure is explicitly marked before safe reconciliation'
+);
 select is(
   (public.reconcile_personnel_password_operation((select operation_id from password_begin_failure_context))->>'outcome'),
   'auth_failed',
@@ -507,6 +522,183 @@ select ok(
   and has_function_privilege('authenticated', 'public.list_basic_medical_schedule_confirmation_states(uuid[])', 'EXECUTE')
   and has_function_privilege('authenticated', 'public.update_catalog_rooms_batch(jsonb)', 'EXECUTE'),
   'sensitive personnel and catalog batch RPCs are authenticated-only'
+);
+
+-- A second Root browser must never terminate an Auth call that is still in
+-- flight.  These deterministic rows use only a local Auth hash fixture; no
+-- plaintext password or token is stored in the operation/evidence tables.
+select set_config('role', 'authenticated', true);
+select set_config('request.jwt.claims', json_build_object('sub', (select root_id from feature_context), 'role', 'authenticated')::text, true);
+create temporary table password_stale_context as
+select public.reserve_personnel_password_operation(
+  (select recovery_target_id from feature_context), 'password_reset'
+) as operation_id;
+grant select on password_stale_context to authenticated, service_role;
+select set_config('role', 'service_role', true);
+select set_config('request.jwt.claim.role', 'service_role', true);
+select lives_ok(
+  $$select public.begin_personnel_password_auth_update((select operation_id from password_stale_context))$$,
+  'fresh Auth-update-started operation has a durable pre-Auth marker'
+);
+select throws_ok(
+  $$select public.reconcile_personnel_password_operation((select operation_id from password_stale_context))$$,
+  '55000',
+  'PASSWORD_OPERATION_STILL_IN_PROGRESS',
+  'a second Root/service reconciliation cannot terminate a fresh Auth request'
+);
+select set_config('role', 'postgres', true);
+select ok(
+  (select status = 'auth_update_started' from public.personnel_password_operations where id = (select operation_id from password_stale_context))
+  and exists (select 1 from private.personnel_password_auth_evidence where operation_id = (select operation_id from password_stale_context)),
+  'denied in-flight reconciliation preserves the active status and private evidence'
+);
+select set_config('role', 'service_role', true);
+select set_config('request.jwt.claim.role', 'service_role', true);
+select ok(
+  not exists (select 1 from public.list_recoverable_personnel_password_operations() where id = (select operation_id from password_stale_context)),
+  'Root recovery queue hides a fresh Auth-update-started operation'
+);
+select set_config('role', 'postgres', true);
+update private.personnel_password_auth_evidence
+set auth_update_started_at = clock_timestamp() - interval '6 minutes'
+where operation_id = (select operation_id from password_stale_context);
+select set_config('role', 'service_role', true);
+select set_config('request.jwt.claim.role', 'service_role', true);
+select is(
+  public.reconcile_personnel_password_operation((select operation_id from password_stale_context))->>'outcome',
+  'auth_failed',
+  'stale Auth-update-started operation with unchanged Auth hash settles safely as auth_failed'
+);
+select set_config('role', 'postgres', true);
+select ok(
+  not exists (select 1 from private.personnel_password_auth_evidence where operation_id = (select operation_id from password_stale_context)),
+  'stale Auth failure removes pre-Auth evidence and releases the target reservation'
+);
+
+select set_config('role', 'authenticated', true);
+select set_config('request.jwt.claims', json_build_object('sub', (select root_id from feature_context), 'role', 'authenticated')::text, true);
+create temporary table password_stale_changed_context as
+select public.reserve_personnel_password_operation(
+  (select recovery_target_id from feature_context), 'password_reset'
+) as operation_id;
+grant select on password_stale_changed_context to authenticated, service_role;
+select set_config('role', 'service_role', true);
+select set_config('request.jwt.claim.role', 'service_role', true);
+select lives_ok(
+  $$select public.begin_personnel_password_auth_update((select operation_id from password_stale_changed_context))$$,
+  'stale changed-Auth fixture records a durable pre-Auth marker'
+);
+select set_config('role', 'postgres', true);
+update auth.users set encrypted_password = crypt('StaleObservedChange123!', gen_salt('bf'))
+where id = (select recovery_target_id from feature_context);
+update private.personnel_password_auth_evidence
+set auth_update_started_at = clock_timestamp() - interval '6 minutes'
+where operation_id = (select operation_id from password_stale_changed_context);
+select set_config('role', 'service_role', true);
+select set_config('request.jwt.claim.role', 'service_role', true);
+select is(
+  public.reconcile_personnel_password_operation((select operation_id from password_stale_changed_context))->>'outcome',
+  'committed',
+  'stale Auth-update-started operation with a changed Auth hash reconciles and commits'
+);
+select set_config('role', 'postgres', true);
+select ok(
+  not exists (select 1 from private.personnel_password_auth_evidence where operation_id = (select operation_id from password_stale_changed_context)),
+  'stale changed-Auth reconciliation removes private evidence only after terminal commit'
+);
+
+select set_config('role', 'authenticated', true);
+select set_config('request.jwt.claims', json_build_object('sub', (select root_id from feature_context), 'role', 'authenticated')::text, true);
+create temporary table password_stale_reserved_context as
+select public.reserve_personnel_password_operation(
+  (select recovery_target_id from feature_context), 'password_reset'
+) as operation_id;
+grant select on password_stale_reserved_context to authenticated, service_role;
+select set_config('role', 'postgres', true);
+update public.personnel_password_operations set created_at = clock_timestamp() - interval '6 minutes'
+where id = (select operation_id from password_stale_reserved_context);
+select set_config('role', 'service_role', true);
+select set_config('request.jwt.claim.role', 'service_role', true);
+select is(
+  public.reconcile_personnel_password_operation((select operation_id from password_stale_reserved_context))->>'outcome',
+  'auth_failed',
+  'stale reserved operation releases without pretending an Auth call occurred'
+);
+
+select set_config('role', 'authenticated', true);
+select set_config('request.jwt.claims', json_build_object('sub', (select root_id from feature_context), 'role', 'authenticated')::text, true);
+create temporary table password_stale_updated_context as
+select public.reserve_personnel_password_operation(
+  (select recovery_target_id from feature_context), 'password_reset'
+) as operation_id;
+grant select on password_stale_updated_context to authenticated, service_role;
+select set_config('role', 'service_role', true);
+select set_config('request.jwt.claim.role', 'service_role', true);
+select lives_ok(
+  $$select public.begin_personnel_password_auth_update((select operation_id from password_stale_updated_context))$$,
+  'stale auth-updated fixture begins an Auth phase'
+);
+select lives_ok(
+  $$select public.record_personnel_password_auth_result((select operation_id from password_stale_updated_context), true, null)$$,
+  'stale auth-updated fixture records completed Auth before simulated crash'
+);
+select set_config('role', 'postgres', true);
+update public.personnel_password_operations set auth_updated_at = clock_timestamp() - interval '6 minutes'
+where id = (select operation_id from password_stale_updated_context);
+select set_config('role', 'service_role', true);
+select set_config('request.jwt.claim.role', 'service_role', true);
+select is(
+  public.reconcile_personnel_password_operation((select operation_id from password_stale_updated_context))->>'outcome',
+  'committed',
+  'stale auth-updated operation commits without permanently blocking its target'
+);
+
+select set_config('role', 'authenticated', true);
+select set_config('request.jwt.claims', json_build_object('sub', (select root_id from feature_context), 'role', 'authenticated')::text, true);
+create temporary table password_immediate_reconcile_context as
+select public.reserve_personnel_password_operation(
+  (select recovery_target_id from feature_context), 'password_reset'
+) as operation_id;
+grant select on password_immediate_reconcile_context to authenticated, service_role;
+select set_config('role', 'service_role', true);
+select set_config('request.jwt.claim.role', 'service_role', true);
+select lives_ok(
+  $$select public.begin_personnel_password_auth_update((select operation_id from password_immediate_reconcile_context))$$,
+  'immediate reconciliation fixture begins Auth phase'
+);
+select lives_ok(
+  $$select public.mark_personnel_password_reconciliation_required((select operation_id from password_immediate_reconcile_context), 'auth_update_outcome_unknown')$$,
+  'explicitly compensated operation is immediately eligible for Root reconciliation'
+);
+select ok(
+  exists (select 1 from public.list_recoverable_personnel_password_operations() where id = (select operation_id from password_immediate_reconcile_context)),
+  'Root recovery queue exposes reconciliation-required operation immediately'
+);
+select is(
+  public.reconcile_personnel_password_operation((select operation_id from password_immediate_reconcile_context))->>'outcome',
+  'auth_failed',
+  'immediate reconciliation-required operation safely resolves against private evidence'
+);
+
+-- The form excludes Root, but the database trigger remains the authoritative
+-- boundary when a caller bypasses every browser/server-action affordance.
+select set_config('role', 'postgres', true);
+select throws_ok(
+  $$insert into public.equipment_requests (
+      class_schedule_id, registrant_id, responsible_lecturer_id, semester,
+      phone_snapshot, email_snapshot, receive_at, return_at, created_by
+    ) values (
+      gen_random_uuid(),
+      (select root_id from feature_context),
+      (select root_id from feature_context),
+      'HK1', '0901234567', 'pwb-root@campus.local',
+      clock_timestamp() + interval '1 day',
+      clock_timestamp() + interval '1 day 1 hour',
+      (select root_id from feature_context)
+    )$$,
+  '42501',
+  'ROOT_ADMIN_OPERATIONAL_ASSIGNMENT_FORBIDDEN',
+  'the database rejects a direct equipment request assigning Root as responsible lecturer'
 );
 
 select * from finish();

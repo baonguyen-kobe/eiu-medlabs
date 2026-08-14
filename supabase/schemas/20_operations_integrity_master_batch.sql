@@ -511,8 +511,59 @@ begin
 end;
 $$;
 
--- Retry only a durably recorded completed Auth phase; no password material is
--- accepted, stored, or re-sent by this reconciliation operation.
+-- Fresh reservation and Auth phases may still have an external Auth call in
+-- flight.  Only an explicitly compensated operation is immediately safe for
+-- reconciliation; crash recovery for any active phase is delayed by this
+-- server-owned threshold.  Keeping this decision in Postgres prevents a
+-- second Root browser from racing the request that owns the Auth call.
+create or replace function private.personnel_password_operation_is_stale(
+  operation public.personnel_password_operations
+)
+returns boolean language sql volatile security definer set search_path = '' as $$
+  select case operation.status
+    when 'reserved' then operation.created_at <= clock_timestamp() - interval '5 minutes'
+    when 'auth_update_started' then coalesce(
+      (select evidence.auth_update_started_at
+       from private.personnel_password_auth_evidence evidence
+       where evidence.operation_id = operation.id),
+      operation.created_at
+    ) <= clock_timestamp() - interval '5 minutes'
+    when 'auth_updated' then coalesce(operation.auth_updated_at, operation.created_at)
+      <= clock_timestamp() - interval '5 minutes'
+    else false
+  end;
+$$;
+
+-- The Root screen consumes only this service-authorized, server-filtered
+-- recovery queue.  It deliberately contains no hashes, Auth error detail,
+-- reset values, tokens, or other private evidence.
+create or replace function public.list_recoverable_personnel_password_operations()
+returns table (
+  id uuid,
+  correlation_id uuid,
+  action text,
+  status text,
+  created_at timestamptz,
+  target_full_name text,
+  target_email text
+)
+language plpgsql volatile security definer set search_path = '' as $$
+begin
+  perform private.assert_personnel_password_operation_service();
+  return query
+  select operations.id, operations.correlation_id, operations.action,
+    operations.status, operations.created_at, profiles.full_name, profiles.email
+  from public.personnel_password_operations operations
+  join public.profiles profiles on profiles.id = operations.target_user_id
+  where operations.status = 'reconciliation_required'
+    or (operations.status in ('reserved', 'auth_update_started', 'auth_updated')
+      and (select private.personnel_password_operation_is_stale(operations)))
+  order by operations.created_at;
+end;
+$$;
+
+-- Retry only a durably recorded completed Auth phase or a stale crash
+-- recovery.  No password material is accepted, stored, or re-sent here.
 create or replace function public.reconcile_personnel_password_operation(target_operation_id uuid)
 returns jsonb language plpgsql security definer set search_path = '' as $$
 declare operation public.personnel_password_operations%rowtype; current_auth_hash text; evidence private.personnel_password_auth_evidence%rowtype;
@@ -520,6 +571,23 @@ begin
   perform private.assert_personnel_password_operation_service();
   select * into operation from public.personnel_password_operations where id = target_operation_id for update;
   if not found then raise exception 'PASSWORD_OPERATION_NOT_FOUND' using errcode = 'P0002'; end if;
+  if operation.status <> 'reconciliation_required'
+    and not (operation.status in ('reserved', 'auth_update_started', 'auth_updated')
+      and (select private.personnel_password_operation_is_stale(operation))) then
+    raise exception 'PASSWORD_OPERATION_STILL_IN_PROGRESS' using errcode = '55000';
+  end if;
+  -- A stale reservation proves Auth was never begun, so it is safe to release
+  -- without inspecting an Auth hash.  The same narrow path is used only when
+  -- the application durably recorded that beginning the Auth phase failed.
+  if operation.status = 'reserved'
+    or (operation.status = 'reconciliation_required'
+      and operation.auth_updated_at is null
+      and operation.last_error = 'auth_update_not_started') then
+    update public.personnel_password_operations set status = 'auth_failed', resolved_at = clock_timestamp(),
+      last_error = coalesce(last_error, 'auth_update_not_started') where id = target_operation_id;
+    delete from private.personnel_password_auth_evidence where operation_id = target_operation_id;
+    return jsonb_build_object('operation_id', target_operation_id, 'outcome', 'auth_failed');
+  end if;
   if operation.status in ('reserved','auth_update_started','reconciliation_required') and operation.auth_updated_at is null then
     select * into evidence from private.personnel_password_auth_evidence where operation_id = target_operation_id for update;
     if evidence.operation_id is null then raise exception 'PASSWORD_OPERATION_RECONCILIATION_UNSAFE' using errcode = '22023'; end if;
@@ -683,8 +751,8 @@ begin
 end;
 $$;
 
-revoke all on function private.is_operationally_assignable(uuid), private.assert_operationally_assignable(uuid), private.guard_operational_assignment(), private.can_manage_email_notifications(), private.assert_catalog_room_capacity(integer), private.assert_personnel_password_operation_service() from public, anon, authenticated;
-revoke all on function public.cancel_basic_medical_session(uuid,text), public.invalidate_basic_medical_session_confirmation(uuid,text), public.list_basic_medical_schedule_confirmation_states(uuid[]), public.list_operational_people(), public.list_operational_shift_assignees(), public.reserve_personnel_password_operation(uuid,text), public.begin_personnel_password_auth_update(uuid), public.record_personnel_password_auth_result(uuid,boolean,text), public.commit_personnel_password_operation(uuid), public.mark_personnel_password_reconciliation_required(uuid,text), public.reconcile_personnel_password_operation(uuid) from public, anon, authenticated;
+revoke all on function private.is_operationally_assignable(uuid), private.assert_operationally_assignable(uuid), private.guard_operational_assignment(), private.can_manage_email_notifications(), private.assert_catalog_room_capacity(integer), private.assert_personnel_password_operation_service(), private.personnel_password_operation_is_stale(public.personnel_password_operations) from public, anon, authenticated;
+revoke all on function public.cancel_basic_medical_session(uuid,text), public.invalidate_basic_medical_session_confirmation(uuid,text), public.list_basic_medical_schedule_confirmation_states(uuid[]), public.list_operational_people(), public.list_operational_shift_assignees(), public.reserve_personnel_password_operation(uuid,text), public.begin_personnel_password_auth_update(uuid), public.record_personnel_password_auth_result(uuid,boolean,text), public.commit_personnel_password_operation(uuid), public.mark_personnel_password_reconciliation_required(uuid,text), public.reconcile_personnel_password_operation(uuid), public.list_recoverable_personnel_password_operations() from public, anon, authenticated;
 revoke all on function public.set_personnel_email_notification_capability(uuid,boolean) from public, anon;
 grant execute on function public.cancel_basic_medical_session(uuid,text), public.invalidate_basic_medical_session_confirmation(uuid,text), public.list_basic_medical_schedule_confirmation_states(uuid[]), public.list_operational_people(), public.list_operational_shift_assignees(), public.reserve_personnel_password_operation(uuid,text), public.set_personnel_email_notification_capability(uuid,boolean) to authenticated;
-grant execute on function public.begin_personnel_password_auth_update(uuid), public.record_personnel_password_auth_result(uuid,boolean,text), public.commit_personnel_password_operation(uuid), public.mark_personnel_password_reconciliation_required(uuid,text), public.reconcile_personnel_password_operation(uuid) to service_role;
+grant execute on function public.begin_personnel_password_auth_update(uuid), public.record_personnel_password_auth_result(uuid,boolean,text), public.commit_personnel_password_operation(uuid), public.mark_personnel_password_reconciliation_required(uuid,text), public.reconcile_personnel_password_operation(uuid), public.list_recoverable_personnel_password_operations() to service_role;
