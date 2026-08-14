@@ -156,7 +156,7 @@ insert into public.class_schedules (
     '10000000-0000-0000-0000-000000000001',
     'NUR 101', 'Thăm khám thể chất',
     '20000000-0000-0000-0000-000000000001',
-    (select id from public.profiles where email = 'admin@campus.local'),
+    (select id from public.profiles where email = 'importer@campus.local'),
     null, '2026-08-07', '07:30', '11:30',
     'manual', 'published', null,
     (select id from public.profiles where email = 'admin@campus.local'),

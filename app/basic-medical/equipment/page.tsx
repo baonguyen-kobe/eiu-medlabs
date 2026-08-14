@@ -1,8 +1,11 @@
 import {
+  applyBasicMedicalCatalogReconciliation,
   createBasicMedicalCatalogItem,
   importBasicMedicalEquipment,
+  previewBasicMedicalCatalogReconciliation,
 } from "@/app/basic-medical/equipment/actions";
 import { BasicMedicalEquipmentManager } from "@/components/basic-medical-equipment-manager";
+import { CatalogReconciliationImport } from "@/components/catalog-reconciliation-import";
 import { Download, UploadCloud } from "@/components/icons";
 import { WorkspaceShell } from "@/components/workspace-shell";
 import type {
@@ -48,6 +51,7 @@ export default async function BasicMedicalEquipmentPage({
     allowBasicMedicalAccess,
     canImportSchedules,
     canManagePersonnel,
+    canManageEmailNotifications,
     canManageBasicMedical,
   } = await getViewer();
   const roomTypeCodes = roomTypes.map(({ code }) => code);
@@ -112,6 +116,7 @@ export default async function BasicMedicalEquipmentPage({
       allowBasicMedicalAccess={allowBasicMedicalAccess}
       canImportSchedules={canImportSchedules}
       canManagePersonnel={canManagePersonnel}
+      canManageEmailNotifications={canManageEmailNotifications}
       title="Danh sách thiết bị Y cơ sở"
       description="Quản lý thiết bị riêng theo từng phòng, tình trạng Tốt/Hư và lịch sử thay đổi."
     >
@@ -223,7 +228,7 @@ export default async function BasicMedicalEquipmentPage({
             <div className="form-grid equipment-catalog-create-grid">
               {[
                 ["item_name", "Tên thiết bị và vật tư *"],
-                ["commercial_name", "Tên thương mại"],
+                ["commercial_name", "Tên thương mại *"],
                 ["item_type", "Loại"],
                 ["country_of_origin", "Nước SX"],
                 ["manufacturer", "Hãng"],
@@ -272,14 +277,10 @@ export default async function BasicMedicalEquipmentPage({
               >
                 <UploadCloud size={17} aria-hidden="true" /> Import mới
               </button>
-              <button
-                type="submit"
-                className="button equipment-import-all"
-                name="mode"
-                value="all"
-              >
-                <UploadCloud size={17} aria-hidden="true" /> Import tất cả
-              </button>
+              <CatalogReconciliationImport
+                preview={previewBasicMedicalCatalogReconciliation}
+                apply={applyBasicMedicalCatalogReconciliation}
+              />
               <a
                 className="button equipment-export-all"
                 href="/api/basic-medical-equipment-export"

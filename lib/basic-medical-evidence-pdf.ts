@@ -199,7 +199,7 @@ export async function createBasicMedicalEvidencePdf(
     doc,
     "Trạng thái",
     evidence.invalidated_at
-      ? `Đã vô hiệu · ${value(evidence.invalidated_reason)}`
+      ? `Đã vô hiệu · ${formatSignedAt(evidence.invalidated_at)} · ${value(evidence.invalidated_by_name_snapshot)} · ${value(evidence.invalidated_reason)}`
       : "Đang có hiệu lực",
     y,
   );

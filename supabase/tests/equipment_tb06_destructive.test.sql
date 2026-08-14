@@ -6,8 +6,8 @@ select plan(17);
 insert into public.profile_room_types (profile_id, room_type_id)
 select p.id, '40000000-0000-0000-0000-000000000001'::uuid
 from public.profiles p
-where p.id in ('10000000-0000-0000-0000-000000000001'::uuid, '10000000-0000-0000-0000-000000000002'::uuid)
-   or lower(p.email) in ('admin@campus.local', 'bao.nguyen@eiu.edu.vn', 'staff@campus.local')
+where p.id in ('10000000-0000-0000-0000-000000000001'::uuid, '10000000-0000-0000-0000-000000000002'::uuid, '10000000-0000-0000-0000-000000000003'::uuid)
+   or lower(p.email) in ('admin@campus.local', 'bao.nguyen@eiu.edu.vn', 'staff@campus.local', 'giangvien@campus.local')
 on conflict do nothing;
 
 update public.profiles set phone = '0901234567' where id = '10000000-0000-0000-0000-000000000001'::uuid or lower(email) = 'admin@campus.local';
@@ -24,7 +24,7 @@ values (
   '90000000-0000-0000-0000-000000000010'::uuid,
   (select id from public.courses where room_type_id = '40000000-0000-0000-0000-000000000001'::uuid limit 1),
   (select id from public.rooms where room_type_id = '40000000-0000-0000-0000-000000000001'::uuid limit 1),
-  coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid),
+  coalesce((select id from public.profiles where lower(email) = 'giangvien@campus.local'), '10000000-0000-0000-0000-000000000003'::uuid),
   current_date + interval '8 days', '07:30', '11:30', 25, 'NURS-TB06', 'Kỹ năng TB06', 'published', now(),
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid), 'manual',
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid)
@@ -35,7 +35,7 @@ values (
   '90000000-0000-0000-0000-000000000011'::uuid,
   (select id from public.courses where room_type_id = '40000000-0000-0000-0000-000000000001'::uuid limit 1),
   (select id from public.rooms where room_type_id = '40000000-0000-0000-0000-000000000001'::uuid limit 1),
-  coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid),
+  coalesce((select id from public.profiles where lower(email) = 'giangvien@campus.local'), '10000000-0000-0000-0000-000000000003'::uuid),
   current_date + interval '9 days', '07:30', '11:30', 25, 'NURS-TB06-HD', 'Kỹ năng Hard Delete', 'published', now(),
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid), 'manual',
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid)
@@ -52,7 +52,7 @@ select lives_ok(
     select public.create_equipment_request_with_items(
       '90000000-0000-0000-0000-000000000010'::uuid,
       'HK1',
-      coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid),
+      coalesce((select id from public.profiles where lower(email) = 'giangvien@campus.local'), '10000000-0000-0000-0000-000000000003'::uuid),
       ((current_date + interval '8 days')::date::text || ' 09:00:00 Asia/Ho_Chi_Minh')::timestamptz,
       ((current_date + interval '8 days')::date::text || ' 11:00:00 Asia/Ho_Chi_Minh')::timestamptz,
       'Request for soft cancel test',
@@ -139,7 +139,7 @@ select lives_ok(
     select public.create_equipment_request_with_items(
       '90000000-0000-0000-0000-000000000011'::uuid,
       'HK1',
-      coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid),
+      coalesce((select id from public.profiles where lower(email) = 'giangvien@campus.local'), '10000000-0000-0000-0000-000000000003'::uuid),
       ((current_date + interval '9 days')::date::text || ' 09:00:00 Asia/Ho_Chi_Minh')::timestamptz,
       ((current_date + interval '9 days')::date::text || ' 11:00:00 Asia/Ho_Chi_Minh')::timestamptz,
       'Request for hard delete test',

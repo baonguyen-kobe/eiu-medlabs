@@ -14,26 +14,35 @@ function resultUrl(kind: "notice" | "error", message: string) {
   return `/email-notifications?${kind}=${encodeURIComponent(message)}`;
 }
 
+async function emailManagerContext() {
+  const supabase = await createClient();
+  const { data: claims } = await supabase.auth.getClaims();
+  const userId = claims?.claims?.sub;
+  if (!userId) redirect("/login");
+  const [{ data: roles }, { data: profile }] = await Promise.all([
+    supabase.from("user_roles").select("role").eq("user_id", userId),
+    supabase
+      .from("profiles")
+      .select("can_manage_email_notifications")
+      .eq("id", userId)
+      .maybeSingle(),
+  ]);
+  const isAdmin = (roles ?? []).some(({ role }) => role === "admin");
+  const canManage =
+    isAdmin ||
+    ((roles ?? []).some(({ role }) => role === "staff") &&
+      Boolean(profile?.can_manage_email_notifications));
+  return { supabase, isAdmin, canManage };
+}
+
 export async function retryFailedEmail(formData: FormData) {
   const notificationId = String(formData.get("id") ?? "");
   if (!/^[0-9a-f-]{36}$/i.test(notificationId)) {
     redirect(resultUrl("error", "Email thông báo không hợp lệ."));
   }
-  const supabase = await createClient();
-  const { data: claims } = await supabase.auth.getClaims();
-  const userId = claims?.claims?.sub;
-  if (!userId) redirect("/login");
-  const { data: roleRows } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId);
+  const { canManage } = await emailManagerContext();
   const deliveryMode = await getEmailDeliveryMode();
-  const testRecipient = getEmailTestRecipient();
-  const roles = (roleRows ?? []).map(({ role }) => role);
-  const canRetry =
-    deliveryMode !== "off" &&
-    (roles.includes("admin") ||
-      (deliveryMode === "live" && roles.includes("staff")));
+  const canRetry = deliveryMode !== "off" && canManage;
   if (!canRetry) {
     redirect(resultUrl("error", "Bạn không có quyền gửi lại email."));
   }
@@ -45,7 +54,7 @@ export async function retryFailedEmail(formData: FormData) {
       ? resultUrl(
           "notice",
           deliveryMode === "test"
-            ? `Đã gửi bản kiểm thử đến ${testRecipient}; người nhận gốc không nhận email.`
+            ? "Đã gửi bản kiểm thử; người nhận gốc không nhận email."
             : "Đã gửi lại email thành công.",
         )
       : resultUrl(

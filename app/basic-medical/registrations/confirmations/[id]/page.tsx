@@ -69,6 +69,7 @@ export default async function BasicMedicalConfirmationEvidencePage({
       allowBasicMedicalAccess={viewer.allowBasicMedicalAccess}
       canImportSchedules={viewer.canImportSchedules}
       canManagePersonnel={viewer.canManagePersonnel}
+      canManageEmailNotifications={viewer.canManageEmailNotifications}
       title="BẰNG CHỨNG XÁC NHẬN Y CƠ SỞ"
       description="Tài liệu lịch sử chỉ sử dụng dữ liệu đã chụp tại thời điểm ký."
     >
@@ -92,6 +93,9 @@ export default async function BasicMedicalConfirmationEvidencePage({
           <strong>Xác nhận đã vô hiệu</strong>
           <br />
           {evidence.invalidated_reason || "Không có lý do được ghi nhận."}
+          {evidence.invalidated_by_name_snapshot
+            ? ` · ${evidence.invalidated_by_name_snapshot}`
+            : null}
           {evidence.invalidated_at
             ? ` · ${dateTimeFormatter.format(new Date(evidence.invalidated_at))}`
             : null}

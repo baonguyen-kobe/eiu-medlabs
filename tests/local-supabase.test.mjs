@@ -1247,6 +1247,16 @@ test("chuyển email Off chỉ suppress pending, không đổi row đang process
         })
       ).error,
     );
+    // Make this notification the deterministic first claim candidate; unrelated
+    // queued rows must not turn this race-condition test into a batch-order test.
+    assert.ifError(
+      (
+        await service
+          .from("email_notifications")
+          .update({ created_at: "2000-01-01T00:00:00.000Z" })
+          .eq("id", id)
+      ).error,
+    );
     assert.ifError(
       (await service.rpc("claim_email_notifications", { batch_size: 1 })).error,
     );
@@ -1277,7 +1287,7 @@ test("Người xem chỉ đọc lịch và nhận email theo loại phòng đã 
   const admin = await signIn("admin@campus.local", "LocalAdmin123!");
   const email = "viewer-" + crypto.randomUUID() + "@campus.local";
   const password = "LocalViewer123!";
-  const scheduleId = crypto.randomUUID();
+  let scheduleId;
   const { data: created, error: createUserError } =
     await service.auth.admin.createUser({
       email,
@@ -1346,7 +1356,7 @@ test("Người xem chỉ đọc lịch và nhận email theo loại phòng đã 
         target_student_count: 20,
       });
     assert.ifError(scheduleError);
-    const scheduleId = createdSchedule.id;
+    scheduleId = createdSchedule.id;
 
     const forbiddenReschedule = await viewer.supabase.rpc("reschedule_class", {
       target_schedule_id: scheduleId,
@@ -1384,7 +1394,12 @@ test("Người xem chỉ đọc lịch và nhận email theo loại phòng đã 
     assert.ifError(notificationError);
     assert.ok(notification);
   } finally {
-    await serviceClient().from("class_schedules").delete().eq("id", scheduleId);
+    if (scheduleId) {
+      await serviceClient()
+        .from("class_schedules")
+        .delete()
+        .eq("id", scheduleId);
+    }
     await service.auth.admin.deleteUser(viewerId);
   }
 });
@@ -2654,6 +2669,13 @@ test("direct equipment RPC luôn xác minh giảng viên phụ trách và độ 
   const admin = await signIn("admin@campus.local", "LocalAdmin123!");
   const staff = await signIn("staff@campus.local", "LocalStaff123!");
   const lecturer = await signIn("giangvien@campus.local", "LocalLecturer123!");
+  const { data: staffProfile, error: staffProfileError } = await service
+    .from("profiles")
+    .select("phone")
+    .eq("id", staff.user.id)
+    .single();
+  assert.ifError(staffProfileError);
+  assert.ok(staffProfile);
   const scheduleId = crypto.randomUUID();
   const catalogId = crypto.randomUUID();
   try {
@@ -2732,6 +2754,10 @@ test("direct equipment RPC luôn xác minh giảng viên phụ trách và độ 
     assert.ok(oversizedNote.error);
     assert.equal(oversizedNote.error.code, "22023");
   } finally {
+    await service
+      .from("profiles")
+      .update({ phone: staffProfile.phone })
+      .eq("id", staff.user.id);
     // Use serviceClient() since DELETE privilege is revoked from authenticated role
     await serviceClient()
       .from("equipment_requests")
@@ -2999,6 +3025,14 @@ test("RLS giới hạn Y cơ sở, số sinh viên bắt buộc và đổi ngày
 
 test("Admin xóa được danh mục khi chỉ còn lịch hoặc ca đã hủy", async () => {
   const admin = await signIn("admin@campus.local", "LocalAdmin123!");
+  const { data: operationalStaff, error: operationalStaffError } =
+    await serviceClient()
+      .from("profiles")
+      .select("id")
+      .eq("email", "staff@campus.local")
+      .single();
+  assert.ifError(operationalStaffError);
+  assert.ok(operationalStaff);
   const roomId = crypto.randomUUID();
   const courseId = crypto.randomUUID();
   const courseRoomId = crypto.randomUUID();
@@ -3136,7 +3170,7 @@ test("Admin xóa được danh mục khi chỉ còn lịch hoặc ca đã hủy"
       (
         await admin.supabase.from("staff_shifts").insert({
           id: shiftId,
-          staff_id: admin.user.id,
+          staff_id: operationalStaff.id,
           shift_date: "2042-08-22",
           start_time: "07:30",
           end_time: "11:30",

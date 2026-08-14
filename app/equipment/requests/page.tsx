@@ -20,6 +20,7 @@ export default async function EquipmentRequestsPage({
     allowBasicMedicalAccess,
     canImportSchedules,
     canManagePersonnel,
+    canManageEmailNotifications,
   } = await getViewer();
   if (!roles.some((role) => ["admin", "staff"].includes(role))) {
     redirect("/equipment/mine");
@@ -48,6 +49,7 @@ export default async function EquipmentRequestsPage({
       allowBasicMedicalAccess={allowBasicMedicalAccess}
       canImportSchedules={canImportSchedules}
       canManagePersonnel={canManagePersonnel}
+      canManageEmailNotifications={canManageEmailNotifications}
       title="Phiếu thiết bị"
       description="Toàn bộ phiếu thiết bị đã đăng ký, dành cho Admin và Staff quản lý phòng."
     >

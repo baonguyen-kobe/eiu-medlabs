@@ -30,6 +30,7 @@ export default async function ImportsPage({
     allowBasicMedicalAccess,
     canImportSchedules,
     canManagePersonnel,
+    canManageEmailNotifications,
   } = await getViewer();
   if (
     !roles.includes("admin") &&
@@ -67,6 +68,7 @@ export default async function ImportsPage({
       allowBasicMedicalAccess={allowBasicMedicalAccess}
       canImportSchedules={canImportSchedules}
       canManagePersonnel={canManagePersonnel}
+      canManageEmailNotifications={canManageEmailNotifications}
       title="Lịch sử import"
       description="Theo dõi số dòng đã tạo, cảnh báo, lỗi và dữ liệu trùng."
       actions={

@@ -14,7 +14,10 @@ import { useRouter } from "next/navigation";
 import {
   confirmBasicMedicalSession,
   cancelBasicMedicalRegistration,
+  cancelBasicMedicalSession,
+  invalidateBasicMedicalSessionConfirmation,
 } from "@/app/basic-medical/registrations/actions";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { Trash2 } from "@/components/icons";
 import { formatBasicMedicalRegistrationCode } from "@/lib/basic-medical-registration-code";
@@ -23,6 +26,7 @@ import {
   createBasicMedicalConfirmationTimerLifecycle,
   isBasicMedicalConfirmationTooEarly,
   type BasicMedicalRegistrationListItem,
+  type BasicMedicalSessionConfirmation,
   type BasicMedicalRegistrationSessionItem,
   type BasicMedicalRoomInventoryItem,
 } from "@/lib/basic-medical-equipment";
@@ -531,6 +535,123 @@ function SessionStatus({
   );
 }
 
+function SessionAdministrativeActions({
+  session,
+  confirmation,
+  registration,
+}: {
+  session: BasicMedicalRegistrationSessionItem;
+  confirmation?: BasicMedicalSessionConfirmation;
+  registration: BasicMedicalRegistrationListItem;
+}) {
+  const [invalidateOpen, setInvalidateOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [cancellationReason, setCancellationReason] = useState("");
+  const [isPending, startTransition] = useTransition();
+
+  if (session.class_schedules?.schedule_status === "cancelled") return null;
+  if (!confirmation) {
+    const formId = `cancel-session-${session.id}`;
+    return (
+      <>
+        <form id={formId} action={cancelBasicMedicalSession}>
+          <input type="hidden" name="session_id" value={session.id} />
+        </form>
+        <button
+          type="button"
+          className="button button-danger basic-medical-confirm-button"
+          onClick={() => setCancelOpen(true)}
+        >
+          Hủy lớp
+        </button>
+        <ConfirmDialog
+          open={cancelOpen}
+          title="Hủy buổi học Y cơ sở?"
+          description="Chỉ hủy đúng buổi đã chọn; các buổi khác của Phiếu Y cơ sở không thay đổi."
+          confirmLabel="Hủy buổi học"
+          pending={isPending}
+          onCancel={() => setCancelOpen(false)}
+          onConfirm={() => {
+            if (!cancellationReason.trim()) return;
+            startTransition(() => {
+              const form = document.getElementById(
+                formId,
+              ) as HTMLFormElement | null;
+              if (!form) return;
+              const input = document.createElement("input");
+              input.type = "hidden";
+              input.name = "reason";
+              input.value = cancellationReason.trim();
+              form.append(input);
+              form.requestSubmit();
+            });
+          }}
+        >
+          <label className="form-field">
+            <span>Lý do hủy buổi học *</span>
+            <input
+              value={cancellationReason}
+              required
+              onChange={(event) => setCancellationReason(event.target.value)}
+              placeholder="Nhập lý do bắt buộc"
+            />
+          </label>
+        </ConfirmDialog>
+      </>
+    );
+  }
+  const formId = `invalidate-confirmation-${confirmation.id}`;
+  return (
+    <>
+      <form id={formId} action={invalidateBasicMedicalSessionConfirmation}>
+        <input type="hidden" name="confirmation_id" value={confirmation.id} />
+      </form>
+      <button
+        type="button"
+        className="button button-warning basic-medical-confirm-button"
+        disabled={isPending}
+        onClick={() => setInvalidateOpen(true)}
+      >
+        Vô hiệu hóa xác nhận
+      </button>
+      <ConfirmDialog
+        open={invalidateOpen}
+        title="Vô hiệu hóa xác nhận buổi học?"
+        description={`${registration.courses?.course_code ?? "Môn học"} · ${registration.courses?.course_name ?? ""} | ${formatDate(session.class_schedules?.schedule_date)} · ${formatTime(session.class_schedules?.start_time)}–${formatTime(session.class_schedules?.end_time)} | ${registration.rooms?.building_code ?? ""} ${registration.rooms?.room_code ?? ""}${registration.rooms?.room_name ? ` – ${registration.rooms.room_name}` : ""} | Người ký: ${confirmation.signer_name_snapshot ?? "Không xác định"} lúc ${dateTimeFormatter.format(new Date(confirmation.signed_at))}. Chữ ký và bằng chứng gốc sẽ được giữ nguyên.`}
+        confirmLabel="Vô hiệu hóa"
+        pending={isPending}
+        onCancel={() => setInvalidateOpen(false)}
+        onConfirm={() => {
+          if (!reason.trim()) return;
+          startTransition(() => {
+            const form = document.getElementById(
+              formId,
+            ) as HTMLFormElement | null;
+            if (!form) return;
+            const input = document.createElement("input");
+            input.type = "hidden";
+            input.name = "reason";
+            input.value = reason.trim();
+            form.append(input);
+            form.requestSubmit();
+          });
+        }}
+      >
+        <label className="form-field">
+          <span>Lý do vô hiệu hóa *</span>
+          <input
+            value={reason}
+            required
+            onChange={(event) => setReason(event.target.value)}
+            placeholder="Nhập lý do bắt buộc"
+          />
+        </label>
+      </ConfirmDialog>
+    </>
+  );
+}
+
 export function BasicMedicalRegistrationList({
   registrations,
   inventories,
@@ -815,6 +936,13 @@ export function BasicMedicalRegistrationList({
                                             setActive({ registration, session })
                                           }
                                         />
+                                        {canDelete ? (
+                                          <SessionAdministrativeActions
+                                            session={session}
+                                            confirmation={confirmation}
+                                            registration={registration}
+                                          />
+                                        ) : null}
                                       </td>
                                     </tr>
                                   );
@@ -852,6 +980,7 @@ export function BasicMedicalRegistrationList({
                 signer_id: viewerId,
                 invalidated_at: null,
                 invalidated_reason: null,
+                signer_name_snapshot: null,
                 signer: null,
               }),
             );

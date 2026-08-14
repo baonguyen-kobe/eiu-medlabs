@@ -40,6 +40,7 @@ export default async function BasicMedicalRegistrationsPage({
     allowBasicMedicalAccess,
     canImportSchedules,
     canManagePersonnel,
+    canManageEmailNotifications,
     canManageBasicMedical,
   } = await getViewer();
   const roomTypeCodes = roomTypes.map(({ code }) => code);
@@ -87,7 +88,7 @@ export default async function BasicMedicalRegistrationsPage({
       ? await supabase
           .from("basic_medical_registrations")
           .select(
-            "id,registration_code,created_at,academic_year,semester,start_date,end_date,student_count,note,cancelled_at,cancelled_by,cancel_reason,courses(course_code,course_name),rooms(id,room_code,building_code,room_name),registrant:profiles!basic_medical_registrations_registrant_id_fkey(full_name),responsible:profiles!basic_medical_registrations_responsible_lecturer_id_fkey(full_name),basic_medical_registration_sessions(id,session_number,lesson_title,teaching_lecturer_id,teaching:profiles!basic_medical_registration_sessions_teaching_lecturer_id_fkey(full_name),class_schedules(schedule_date,start_time,end_time,schedule_status),confirmations:basic_medical_session_confirmations(id,signer_id,signed_at,invalidated_at,invalidated_reason,signer:profiles!basic_medical_session_confirmations_signer_id_fkey(full_name)))",
+            "id,registration_code,created_at,academic_year,semester,start_date,end_date,student_count,note,cancelled_at,cancelled_by,cancel_reason,courses(course_code,course_name),rooms(id,room_code,building_code,room_name),registrant:profiles!basic_medical_registrations_registrant_id_fkey(full_name),responsible:profiles!basic_medical_registrations_responsible_lecturer_id_fkey(full_name),basic_medical_registration_sessions(id,session_number,lesson_title,teaching_lecturer_id,teaching:profiles!basic_medical_registration_sessions_teaching_lecturer_id_fkey(full_name),class_schedules(schedule_date,start_time,end_time,schedule_status),confirmations:basic_medical_session_confirmations(id,signer_id,signer_name_snapshot,signed_at,invalidated_at,invalidated_by,invalidated_by_name_snapshot,invalidated_reason))",
           )
           .in("id", registrationIds)
       : { data: [], error: null };
@@ -125,6 +126,7 @@ export default async function BasicMedicalRegistrationsPage({
       allowBasicMedicalAccess={allowBasicMedicalAccess}
       canImportSchedules={canImportSchedules}
       canManagePersonnel={canManagePersonnel}
+      canManageEmailNotifications={canManageEmailNotifications}
       title="Phiếu Y cơ sở"
       description="Theo dõi xác nhận từng buổi học và tình trạng thiết bị trong phòng."
     >
@@ -195,7 +197,7 @@ export default async function BasicMedicalRegistrationsPage({
           (inventoryRows ?? []) as unknown as BasicMedicalRoomInventoryItem[]
         }
         viewerId={userId}
-        canDelete={canDelete}
+        canDelete={canDelete && roles.includes("admin")}
         evidenceEnabled={isBasicMedicalConfirmationEvidenceEnabled()}
       />
       <PaginationLinks

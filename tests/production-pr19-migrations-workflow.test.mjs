@@ -8,7 +8,7 @@ const workflow = await readFile(
     import.meta.url,
   ),
   "utf8",
-);
+).then((contents) => contents.replace(/\r\n/g, "\n"));
 
 const approvedPrePr19Versions = [
   "20260810160016",

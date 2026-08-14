@@ -233,6 +233,7 @@ export default async function NewBasicMedicalSchedulePage({
     allowBasicMedicalAccess,
     canImportSchedules,
     canManagePersonnel,
+    canManageEmailNotifications,
   } = viewer;
   const roomTypeCodes = roomTypes.map(({ code }) => code);
   if (
@@ -367,6 +368,7 @@ export default async function NewBasicMedicalSchedulePage({
       allowBasicMedicalAccess={allowBasicMedicalAccess}
       canImportSchedules={canImportSchedules}
       canManagePersonnel={canManagePersonnel}
+      canManageEmailNotifications={canManageEmailNotifications}
       title="Tạo lịch Y cơ sở"
       description="Phiếu đăng ký nhiều buổi thực hành Y cơ sở."
     >

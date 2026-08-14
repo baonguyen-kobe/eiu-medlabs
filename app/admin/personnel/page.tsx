@@ -38,27 +38,33 @@ export default async function PersonnelPage({
   const { supabase, userId, authority } = await requirePersonnelManager();
   const query = await searchParams;
   const currentPage = normalizePage(query.page);
-  const [{ data: roomTypes }, { data: personnelRows, error: personnelError }] =
-    await Promise.all([
-      supabase
-        .from("room_types")
-        .select("id,code,name")
-        .eq("is_active", true)
-        .order("name"),
-      supabase.rpc("admin_list_personnel", {
-        target_query: query.q?.trim() || null,
-        target_role: query.role && query.role !== "all" ? query.role : null,
-        target_import_permission: query.import_permission ?? "all",
-        target_status: query.status ?? "all",
-        target_page: currentPage,
-        target_page_size: TABLE_PAGE_SIZE,
-      }),
-    ]);
+  const authAdmin = createAdminClient();
+  const [
+    { data: roomTypes },
+    { data: personnelRows, error: personnelError },
+    { data: passwordReconciliationRows },
+  ] = await Promise.all([
+    supabase
+      .from("room_types")
+      .select("id,code,name")
+      .eq("is_active", true)
+      .order("name"),
+    supabase.rpc("admin_list_personnel", {
+      target_query: query.q?.trim() || null,
+      target_role: query.role && query.role !== "all" ? query.role : null,
+      target_import_permission: query.import_permission ?? "all",
+      target_status: query.status ?? "all",
+      target_page: currentPage,
+      target_page_size: TABLE_PAGE_SIZE,
+    }),
+    authority.is_root_administrator
+      ? authAdmin.rpc("list_recoverable_personnel_password_operations")
+      : Promise.resolve({ data: [] }),
+  ]);
   const rows = (personnelRows ?? []) as Array<
     PersonnelListItem & { total_count: number }
   >;
   const totalItems = Number(rows[0]?.total_count ?? 0);
-  const authAdmin = createAdminClient();
   const passwordCapableById = new Map(
     await Promise.all(
       rows.map(async (row) => {
@@ -69,6 +75,18 @@ export default async function PersonnelPage({
           ...(data.user?.identities ?? []).map((identity) => identity.provider),
         ]);
         return [row.id, providers.has("email")] as const;
+      }),
+    ),
+  );
+  const emailCapabilityById = new Map(
+    await Promise.all(
+      rows.map(async (row) => {
+        const { data } = await authAdmin
+          .from("profiles")
+          .select("can_manage_email_notifications")
+          .eq("id", row.id)
+          .maybeSingle();
+        return [row.id, Boolean(data?.can_manage_email_notifications)] as const;
       }),
     ),
   );
@@ -238,11 +256,42 @@ export default async function PersonnelPage({
           return {
             ...row,
             password_capable: passwordCapableById.get(row.id) ?? false,
+            can_manage_email_notifications:
+              emailCapabilityById.get(row.id) ?? false,
           };
         })}
         roomTypes={roomTypes ?? []}
         viewerId={userId}
         viewerIsRoot={authority.is_root_administrator}
+        passwordReconciliationItems={
+          (
+            (passwordReconciliationRows ?? []) as Array<{
+              id: string;
+              correlation_id: string;
+              action: string;
+              status: string;
+              created_at: string;
+              target_full_name: string | null;
+              target_email: string | null;
+            }>
+          ).map((operation) => ({
+            ...operation,
+            target:
+              operation.target_full_name || operation.target_email
+                ? {
+                    full_name: operation.target_full_name ?? "Nhân sự",
+                    email: operation.target_email ?? "",
+                  }
+                : null,
+          })) as Array<{
+            id: string;
+            correlation_id: string;
+            action: string;
+            status: string;
+            created_at: string;
+            target: { full_name: string; email: string } | null;
+          }>
+        }
       />
       {!rows.length ? (
         <p className="panel-empty">Không tìm thấy nhân sự phù hợp.</p>

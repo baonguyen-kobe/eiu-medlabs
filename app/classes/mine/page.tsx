@@ -31,6 +31,8 @@ export default async function MyClassesPage({
     allowBasicMedicalAccess,
     canImportSchedules,
     canManagePersonnel,
+    isRootAdministrator,
+    canManageEmailNotifications,
   } = await getViewer();
   const roomTypeCodes = roomTypes.map(({ code }) => code);
   if (!canUseSkillsWorkspace(roles, roomTypeCodes)) {
@@ -93,6 +95,7 @@ export default async function MyClassesPage({
       allowBasicMedicalAccess={allowBasicMedicalAccess}
       canImportSchedules={canImportSchedules}
       canManagePersonnel={canManagePersonnel}
+      canManageEmailNotifications={canManageEmailNotifications}
       title="Lớp của tôi"
       description="Theo dõi lớp đã nhận và rút lớp chưa bắt đầu khi cần."
     >
@@ -102,6 +105,7 @@ export default async function MyClassesPage({
         viewerId={userId}
         roles={roles}
         range={range}
+        isRootAdministrator={isRootAdministrator}
       />
     </WorkspaceShell>
   );

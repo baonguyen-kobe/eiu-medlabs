@@ -102,8 +102,18 @@ test("list query never serializes signature and gates invalidated evidence links
   const selectEnd = registrationsPage.indexOf('",', selectStart);
   const select = registrationsPage.slice(selectStart, selectEnd);
   assert.doesNotMatch(select, /signature_data/);
-  assert.match(select, /invalidated_at,invalidated_reason/);
+  assert.match(
+    select,
+    /invalidated_at,invalidated_by,invalidated_by_name_snapshot,invalidated_reason/,
+  );
   assert.match(registrationList, /Xác nhận đã vô hiệu/);
+  assert.match(registrationList, /confirmation\.signer_name_snapshot/);
+  assert.doesNotMatch(registrationList, /confirmation\.signer\?\.full_name/);
+  assert.match(registrationsPage, /signer_name_snapshot/);
+  assert.doesNotMatch(
+    registrationsPage,
+    /signer:profiles!basic_medical_session_confirmations_signer_id_fkey/,
+  );
   assert.match(
     registrationList,
     /basic-medical\/registrations\/confirmations\/\$\{historical\.id\}/,

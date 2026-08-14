@@ -15,7 +15,7 @@ export default async function EmailNotificationsPage({
 }) {
   const query = await searchParams;
   const viewer = await getViewer();
-  if (!viewer.roles.some((role) => ["admin", "staff"].includes(role))) {
+  if (!viewer.canManageEmailNotifications) {
     redirect("/dashboard");
   }
   const admin = createAdminClient();
@@ -29,9 +29,8 @@ export default async function EmailNotificationsPage({
     deliverySettings?.delivery_mode === "test"
       ? deliverySettings.delivery_mode
       : "off";
-  const testRecipient = getEmailTestRecipient();
   const isAdmin = viewer.roles.includes("admin");
-  if (deliveryMode === "test" && !isAdmin) redirect("/dashboard");
+  const testRecipient = isAdmin ? getEmailTestRecipient() : null;
   const currentPage = normalizePage(query.page);
   const { from, to } = paginationRange(currentPage);
   const { data: notifications, count } = await admin
@@ -51,12 +50,15 @@ export default async function EmailNotificationsPage({
       allowBasicMedicalAccess={viewer.allowBasicMedicalAccess}
       canImportSchedules={viewer.canImportSchedules}
       canManagePersonnel={viewer.canManagePersonnel}
+      canManageEmailNotifications={viewer.canManageEmailNotifications}
       title="Email thông báo"
       description={
         deliveryMode === "off"
           ? "Hệ thống đang tắt gửi email. Thông báo mới chỉ được ghi nhận và không gọi Apps Script."
           : deliveryMode === "test"
-            ? `Chế độ kiểm thử chỉ dành cho Admin; email thực tế chỉ gửi đến ${testRecipient}.`
+            ? isAdmin
+              ? `Chế độ kiểm thử; email thực tế chỉ gửi đến ${testRecipient}.`
+              : "Chế độ kiểm thử đang hoạt động; người nhận gốc không nhận email."
             : "Lịch sử email thông báo. Email thất bại chỉ được gửi lại khi Admin hoặc Chuyên viên bấm Gửi lại."
       }
     >
@@ -80,7 +82,9 @@ export default async function EmailNotificationsPage({
             {deliveryMode === "off"
               ? "Không gửi email đến người nhận gốc hoặc email kiểm thử. Email bị bỏ qua sẽ không được gửi dồn khi bật lại."
               : deliveryMode === "test"
-                ? `Người nhận gốc không nhận email. Toàn bộ bản kiểm thử chỉ gửi đến ${testRecipient} để Admin kiểm tra nội dung.`
+                ? isAdmin
+                  ? `Người nhận gốc không nhận email. Toàn bộ bản kiểm thử chỉ gửi đến ${testRecipient} để Admin kiểm tra nội dung.`
+                  : "Người nhận gốc không nhận email trong chế độ kiểm thử."
                 : "Thông báo mới được gửi thật qua Apps Script đến người nhận."}
           </p>
         </div>
@@ -111,6 +115,7 @@ export default async function EmailNotificationsPage({
         <EmailNotificationTable
           notifications={notifications ?? []}
           isAdmin={isAdmin}
+          canRetry={viewer.canManageEmailNotifications}
           deliveryMode={deliveryMode}
         />
         {!notifications?.length ? (

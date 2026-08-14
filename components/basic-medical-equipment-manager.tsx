@@ -12,12 +12,12 @@ import {
   type BasicMedicalCatalogInput,
 } from "@/app/basic-medical/equipment/actions";
 import { SearchableCombobox } from "@/components/searchable-combobox";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import type {
   BasicMedicalConditionLogItem,
   BasicMedicalEquipmentCatalogItem,
   BasicMedicalRoomInventoryItem,
 } from "@/lib/basic-medical-equipment";
-import { parseBasicMedicalInventoryQuantityEdit } from "@/lib/basic-medical-inventory-edit.mjs";
 
 type Tab = "inventory" | "rooms" | "damaged" | "logs";
 type Room = {
@@ -103,6 +103,9 @@ function InventoryTab({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [notice, setNotice] = useState<Notice>(null);
   const [isPending, startTransition] = useTransition();
+  const [bulkAction, setBulkAction] = useState<
+    "activate" | "deactivate" | "delete" | null
+  >(null);
 
   function run(
     action: () => Promise<{ ok: boolean; message: string }>,
@@ -116,6 +119,31 @@ function InventoryTab({
         router.refresh();
       }
     });
+  }
+
+  function applyBulkAction() {
+    const selectedIds = [...selected];
+    if (!bulkAction || !selectedIds.length) return;
+    const action = bulkAction;
+    run(
+      () =>
+        action === "delete"
+          ? deleteBasicMedicalCatalogItems(selectedIds)
+          : setBasicMedicalCatalogActive(selectedIds, action === "activate"),
+      () => {
+        setCatalog((rows) =>
+          action === "delete"
+            ? rows.filter((row) => !selectedIds.includes(row.id))
+            : rows.map((row) =>
+                selectedIds.includes(row.id)
+                  ? { ...row, is_active: action === "activate" }
+                  : row,
+              ),
+        );
+        setSelected(new Set());
+        setBulkAction(null);
+      },
+    );
   }
 
   return (
@@ -158,19 +186,7 @@ function InventoryTab({
                 className="button equipment-catalog-disable"
                 type="button"
                 disabled={!selected.size || isPending}
-                onClick={() =>
-                  run(
-                    () => setBasicMedicalCatalogActive([...selected], false),
-                    () =>
-                      setCatalog((rows) =>
-                        rows.map((row) =>
-                          selected.has(row.id)
-                            ? { ...row, is_active: false }
-                            : row,
-                        ),
-                      ),
-                  )
-                }
+                onClick={() => setBulkAction("deactivate")}
               >
                 Ngừng sử dụng
               </button>
@@ -178,19 +194,7 @@ function InventoryTab({
                 className="button button-primary"
                 type="button"
                 disabled={!selected.size || isPending}
-                onClick={() =>
-                  run(
-                    () => setBasicMedicalCatalogActive([...selected], true),
-                    () =>
-                      setCatalog((rows) =>
-                        rows.map((row) =>
-                          selected.has(row.id)
-                            ? { ...row, is_active: true }
-                            : row,
-                        ),
-                      ),
-                  )
-                }
+                onClick={() => setBulkAction("activate")}
               >
                 Kích hoạt
               </button>
@@ -198,21 +202,28 @@ function InventoryTab({
                 className="button equipment-catalog-delete"
                 type="button"
                 disabled={!selected.size || isPending}
-                onClick={() =>
-                  run(
-                    () => deleteBasicMedicalCatalogItems([...selected]),
-                    () =>
-                      setCatalog((rows) =>
-                        rows.filter((row) => !selected.has(row.id)),
-                      ),
-                  )
-                }
+                onClick={() => setBulkAction("delete")}
               >
                 Xóa
               </button>
             </div>
           </div>
         ) : null}
+        <ConfirmDialog
+          open={bulkAction !== null}
+          title={
+            bulkAction === "deactivate"
+              ? `Ngừng sử dụng ${selected.size} thiết bị?`
+              : bulkAction === "activate"
+                ? `Kích hoạt ${selected.size} thiết bị?`
+                : `Xóa ${selected.size} thiết bị?`
+          }
+          description="Thao tác chỉ áp dụng đúng các thiết bị đã chọn."
+          confirmLabel="Xác nhận"
+          pending={isPending}
+          onCancel={() => setBulkAction(null)}
+          onConfirm={applyBulkAction}
+        />
         <div className="responsive-table equipment-catalog-table-wrap">
           <table className="data-table basic-medical-catalog-table">
             <thead>
@@ -366,6 +377,8 @@ function RoomInventoryTab({
   const router = useRouter();
   const [notice, setNotice] = useState<Notice>(null);
   const [isPending, startTransition] = useTransition();
+  const [stockAdjustment, setStockAdjustment] =
+    useState<BasicMedicalRoomInventoryItem | null>(null);
 
   function run(action: () => Promise<{ ok: boolean; message: string }>) {
     startTransition(async () => {
@@ -440,44 +453,7 @@ function RoomInventoryTab({
                       <button
                         type="button"
                         className="text-action"
-                        onClick={() => {
-                          const totalRaw = prompt(
-                            "Tổng số lượng",
-                            String(item.total_quantity),
-                          );
-                          if (totalRaw === null) return;
-                          const damagedRaw = prompt(
-                            "Số lượng Hư",
-                            String(item.damaged_quantity),
-                          );
-                          if (damagedRaw === null) return;
-                          const staged = parseBasicMedicalInventoryQuantityEdit(
-                            totalRaw,
-                            damagedRaw,
-                          );
-                          if (
-                            !staged.ok ||
-                            staged.totalQuantity === undefined ||
-                            staged.damagedQuantity === undefined
-                          ) {
-                            setNotice({
-                              ok: false,
-                              message:
-                                staged.message ?? "Số lượng không hợp lệ.",
-                            });
-                            return;
-                          }
-                          run(() =>
-                            saveBasicMedicalRoomInventory({
-                              inventoryId: item.id,
-                              roomId: item.room_id,
-                              catalogItemId: item.catalog_item_id,
-                              totalQuantity: staged.totalQuantity,
-                              damagedQuantity: staged.damagedQuantity,
-                              note: "Cập nhật tại danh sách thiết bị Y cơ sở",
-                            }),
-                          );
-                        }}
+                        onClick={() => setStockAdjustment(item)}
                       >
                         Sửa số lượng
                       </button>
@@ -494,6 +470,28 @@ function RoomInventoryTab({
           </p>
         ) : null}
       </section>
+      {stockAdjustment ? (
+        <InventoryAdjustmentDialog
+          item={stockAdjustment}
+          mode="stock"
+          pending={isPending}
+          onCancel={() => setStockAdjustment(null)}
+          onSave={(totalQuantity, damagedQuantity, note) =>
+            run(async () => {
+              const result = await saveBasicMedicalRoomInventory({
+                inventoryId: stockAdjustment.id,
+                roomId: stockAdjustment.room_id,
+                catalogItemId: stockAdjustment.catalog_item_id,
+                totalQuantity,
+                damagedQuantity,
+                note,
+              });
+              if (result.ok) setStockAdjustment(null);
+              return result;
+            })
+          }
+        />
+      ) : null}
     </div>
   );
 }
@@ -626,30 +624,8 @@ function DamagedTab({
   const router = useRouter();
   const [notice, setNotice] = useState<Notice>(null);
   const [isPending, startTransition] = useTransition();
-  function adjust(item: BasicMedicalRoomInventoryItem) {
-    const good = Number(prompt("Số lượng Tốt", String(item.good_quantity)));
-    const damaged = Number(
-      prompt("Số lượng Hư", String(item.damaged_quantity)),
-    );
-    const note = prompt("Lý do điều chỉnh")?.trim() ?? "";
-    if (
-      !Number.isInteger(good) ||
-      !Number.isInteger(damaged) ||
-      good < 0 ||
-      damaged < 0
-    )
-      return;
-    startTransition(async () => {
-      const result = await adjustBasicMedicalInventoryCondition({
-        inventoryId: item.id,
-        goodQuantity: good,
-        damagedQuantity: damaged,
-        note,
-      });
-      setNotice(result);
-      if (result.ok) router.refresh();
-    });
-  }
+  const [conditionAdjustment, setConditionAdjustment] =
+    useState<BasicMedicalRoomInventoryItem | null>(null);
   return (
     <section className="data-panel basic-medical-list-panel">
       {notice ? (
@@ -708,7 +684,7 @@ function DamagedTab({
                       className="button button-warning"
                       type="button"
                       disabled={isPending}
-                      onClick={() => adjust(item)}
+                      onClick={() => setConditionAdjustment(item)}
                     >
                       Sửa Tốt/Hư
                     </button>
@@ -722,7 +698,112 @@ function DamagedTab({
       {!inventories.length ? (
         <p className="panel-empty">Không có thiết bị đang được báo Hư.</p>
       ) : null}
+      {conditionAdjustment ? (
+        <InventoryAdjustmentDialog
+          item={conditionAdjustment}
+          mode="condition"
+          pending={isPending}
+          onCancel={() => setConditionAdjustment(null)}
+          onSave={(_total, damagedQuantity, note) => {
+            startTransition(async () => {
+              const result = await adjustBasicMedicalInventoryCondition({
+                inventoryId: conditionAdjustment.id,
+                goodQuantity:
+                  conditionAdjustment.total_quantity - damagedQuantity,
+                damagedQuantity,
+                note,
+              });
+              setNotice(result);
+              if (result.ok) {
+                setConditionAdjustment(null);
+                router.refresh();
+              }
+            });
+          }}
+        />
+      ) : null}
     </section>
+  );
+}
+
+function InventoryAdjustmentDialog({
+  item,
+  mode,
+  pending,
+  onCancel,
+  onSave,
+}: {
+  item: BasicMedicalRoomInventoryItem;
+  mode: "stock" | "condition";
+  pending: boolean;
+  onCancel: () => void;
+  onSave: (
+    totalQuantity: number,
+    damagedQuantity: number,
+    note: string,
+  ) => void;
+}) {
+  const [total, setTotal] = useState(String(item.total_quantity));
+  const [damaged, setDamaged] = useState(String(item.damaged_quantity));
+  const [note, setNote] = useState("");
+  const totalValue = Number(total);
+  const damagedValue = Number(damaged);
+  const valid =
+    Number.isInteger(totalValue) &&
+    Number.isInteger(damagedValue) &&
+    totalValue >= 0 &&
+    damagedValue >= 0 &&
+    damagedValue <= totalValue &&
+    Boolean(note.trim());
+  return (
+    <ConfirmDialog
+      open
+      title={mode === "stock" ? "Điều chỉnh Tổng" : "Điều chỉnh Tốt/Hư"}
+      description={`Hiện tại: Tổng ${item.total_quantity} · Tốt ${item.good_quantity} · Hư ${item.damaged_quantity}. Mới: Tổng ${totalValue || 0} · Tốt ${Math.max(0, totalValue - damagedValue) || 0} · Hư ${damagedValue || 0}.`}
+      confirmLabel="Lưu"
+      tone="primary"
+      pending={pending}
+      onCancel={onCancel}
+      onConfirm={() => valid && onSave(totalValue, damagedValue, note.trim())}
+    >
+      <div className="basic-medical-inventory-form">
+        {mode === "stock" ? (
+          <label>
+            <span>Tổng mới *</span>
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={total}
+              onChange={(event) => setTotal(event.target.value)}
+            />
+          </label>
+        ) : (
+          <p>
+            Tổng hiện tại: <strong>{item.total_quantity}</strong>
+          </p>
+        )}
+        <label>
+          <span>Hư *</span>
+          <input
+            type="number"
+            min="0"
+            max={mode === "stock" ? totalValue : item.total_quantity}
+            step="1"
+            value={damaged}
+            onChange={(event) => setDamaged(event.target.value)}
+          />
+        </label>
+        <label>
+          <span>Ghi chú / Lý do *</span>
+          <input
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            required
+          />
+        </label>
+      </div>
+    </ConfirmDialog>
   );
 }
 

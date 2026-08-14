@@ -6,7 +6,9 @@ import { useRouter } from "next/navigation";
 import {
   deleteEquipmentCatalogItems,
   disableEquipmentCatalogItems,
+  applyEquipmentCatalogReconciliation,
   importEquipmentCatalog,
+  previewEquipmentCatalogReconciliation,
   setEquipmentCatalogActive,
   updateEquipmentCatalogItems,
   type EquipmentCatalogInput,
@@ -22,6 +24,8 @@ import {
   X,
 } from "@/components/icons";
 import { PaginationControls } from "@/components/pagination-controls";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { CatalogReconciliationImport } from "@/components/catalog-reconciliation-import";
 import { TABLE_PAGE_SIZE, totalPagesFor } from "@/lib/pagination";
 
 export type EquipmentCatalogItem = EquipmentCatalogInput & {
@@ -84,6 +88,7 @@ export function EquipmentCatalogManager({
   );
   const [mode, setMode] = useState<CatalogMode>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [confirmApply, setConfirmApply] = useState(false);
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const [statusFilter, setStatusFilter] = useState("");
@@ -247,14 +252,6 @@ export function EquipmentCatalogManager({
       (mode !== "activate" && mode !== "disable" && mode !== "delete")
     )
       return;
-    if (
-      mode === "delete" &&
-      !window.confirm(
-        `Xóa vĩnh viễn ${ids.length} thiết bị đã chọn? Thiết bị đã dùng trong phiếu sẽ không thể xóa.`,
-      )
-    ) {
-      return;
-    }
     startTransition(async () => {
       const result =
         mode === "activate"
@@ -315,13 +312,10 @@ export function EquipmentCatalogManager({
           >
             <Download size={17} /> Tải template
           </Link>
-          <button
-            className="button equipment-import-all"
-            name="mode"
-            value="all"
-          >
-            <UploadCloud size={17} /> Import tất cả
-          </button>
+          <CatalogReconciliationImport
+            preview={previewEquipmentCatalogReconciliation}
+            apply={applyEquipmentCatalogReconciliation}
+          />
           <button
             className="button equipment-import-new"
             name="mode"
@@ -494,7 +488,7 @@ export function EquipmentCatalogManager({
               type="button"
               className="button"
               disabled={!selectedIds.size || isPending}
-              onClick={applySelection}
+              onClick={() => setConfirmApply(true)}
             >
               {isPending
                 ? "Đang xử lý…"
@@ -506,6 +500,19 @@ export function EquipmentCatalogManager({
             </button>
           </div>
         ) : null}
+
+        <ConfirmDialog
+          open={confirmApply}
+          title={`${mode === "disable" ? "Ngừng sử dụng" : mode === "activate" ? "Kích hoạt" : "Xóa"} ${selectedIds.size} thiết bị?`}
+          description="Thao tác chỉ áp dụng một lần cho đúng các thiết bị đã chọn."
+          tone={mode === "activate" ? "primary" : "danger"}
+          pending={isPending}
+          onCancel={() => setConfirmApply(false)}
+          onConfirm={() => {
+            setConfirmApply(false);
+            applySelection();
+          }}
+        />
 
         {notice ? (
           <p

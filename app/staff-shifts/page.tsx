@@ -15,6 +15,7 @@ import { StaffShiftRoster } from "@/components/staff-shift-roster";
 import { WorkspaceShell } from "@/components/workspace-shell";
 import { businessToday } from "@/lib/business-time";
 import { getViewer } from "@/lib/viewer";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 type ShiftView = "week" | "month";
 type ShiftTab = "patterns" | "manage";
@@ -33,6 +34,8 @@ export default async function StaffShiftsPage({
     allowBasicMedicalAccess,
     canImportSchedules,
     canManagePersonnel,
+    canManageEmailNotifications,
+    isRootAdministrator,
   } = await getViewer();
   const query = await searchParams;
   const parsedDate = query.date ? parseISO(query.date) : businessToday();
@@ -62,49 +65,52 @@ export default async function StaffShiftsPage({
       ? `Tháng ${format(baseDate, "MM/yyyy")}`
       : `${format(periodStart, "dd/MM")} – ${format(periodEnd, "dd/MM/yyyy")}`;
 
-  const [
-    { data: shifts },
-    { data: patterns },
-    { data: people },
-    { data: roleRows },
-  ] = await Promise.all([
-    supabase
-      .from("staff_shifts")
-      .select(
-        "id, staff_id, shift_date, start_time, end_time, shift_type, status",
-      )
-      .gte("shift_date", periodStartText)
-      .lte("shift_date", periodEndText)
-      .order("shift_date")
-      .order("start_time"),
-    supabase
-      .from("staff_shift_patterns")
-      .select(
-        "id, staff_id, weekday, start_time, end_time, shift_type, effective_from, effective_to",
-      )
-      .eq("is_active", true)
-      .lte("effective_from", periodEndText)
-      .or(`effective_to.is.null,effective_to.gte.${periodStartText}`)
-      .order("weekday")
-      .order("start_time"),
-    supabase.rpc("list_active_people"),
-    supabase
-      .from("user_roles")
-      .select("user_id, role")
-      .in("role", ["staff", "admin"]),
-  ]);
+  const [{ data: shifts }, { data: patterns }, { data: people }] =
+    await Promise.all([
+      supabase
+        .from("staff_shifts")
+        .select(
+          "id, staff_id, shift_date, start_time, end_time, shift_type, status",
+        )
+        .gte("shift_date", periodStartText)
+        .lte("shift_date", periodEndText)
+        .order("shift_date")
+        .order("start_time"),
+      supabase
+        .from("staff_shift_patterns")
+        .select(
+          "id, staff_id, weekday, start_time, end_time, shift_type, effective_from, effective_to",
+        )
+        .eq("is_active", true)
+        .lte("effective_from", periodEndText)
+        .or(`effective_to.is.null,effective_to.gte.${periodStartText}`)
+        .order("weekday")
+        .order("start_time"),
+      supabase.rpc("list_operational_shift_assignees"),
+    ]);
 
-  const activePeople = (people ?? []) as Array<{
+  const operationalShiftAssignees = (people ?? []) as Array<{
     id: string;
     full_name: string;
     title: string | null;
   }>;
+  const referencedStaffIds = [
+    ...(shifts ?? []).map((shift) => shift.staff_id),
+    ...(patterns ?? []).map((pattern) => pattern.staff_id),
+  ];
+  const { data: historicalPeople } = referencedStaffIds.length
+    ? await createAdminClient()
+        .from("profiles")
+        .select("id,full_name")
+        .in("id", [...new Set(referencedStaffIds)])
+    : { data: [] };
   const peopleById = new Map(
-    activePeople.map((person) => [person.id, person.full_name]),
+    [
+      ...operationalShiftAssignees,
+      ...((historicalPeople ?? []) as Array<{ id: string; full_name: string }>),
+    ].map((person) => [person.id, person.full_name]),
   );
-  const eligibleIds = new Set((roleRows ?? []).map(({ user_id }) => user_id));
-  const assignees = activePeople
-    .filter((person) => eligibleIds.has(person.id))
+  const assignees = operationalShiftAssignees
     .sort((a, b) => a.full_name.localeCompare(b.full_name, "vi"))
     .map((person) => ({ id: person.id, fullName: person.full_name }));
 
@@ -116,6 +122,7 @@ export default async function StaffShiftsPage({
       allowBasicMedicalAccess={allowBasicMedicalAccess}
       canImportSchedules={canImportSchedules}
       canManagePersonnel={canManagePersonnel}
+      canManageEmailNotifications={canManageEmailNotifications}
       title="Lịch trực"
       description="Đăng ký lịch cố định hoặc quản lý người trực theo tuần và tháng."
     >
@@ -137,7 +144,10 @@ export default async function StaffShiftsPage({
         periodLabel={periodLabel}
         view={view}
         tab={tab}
-        canSelfRegister={roles.includes("staff") || roles.includes("admin")}
+        canSelfRegister={
+          !isRootAdministrator &&
+          (roles.includes("staff") || roles.includes("admin"))
+        }
         canManage={roles.includes("admin")}
       />
     </WorkspaceShell>

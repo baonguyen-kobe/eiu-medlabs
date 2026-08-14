@@ -8,7 +8,7 @@ const workflow = await readFile(
     import.meta.url,
   ),
   "utf8",
-);
+).then((contents) => contents.replace(/\r\n/g, "\n"));
 
 test("production test-catalog cleanup is fixed, main-only, and dispatch-only", () => {
   assert.match(workflow, /^on:\n  workflow_dispatch:\s*$/m);

@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { expect, test, type Page } from "@playwright/test";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -50,6 +51,46 @@ function serviceClient(config: LocalServiceConfig) {
   });
 }
 
+function localSql(sql: string) {
+  const listed = spawnSync(
+    "docker",
+    [
+      "ps",
+      "--filter",
+      "label=com.supabase.cli.project=lich-truc-app",
+      "--format",
+      "{{.Names}}",
+    ],
+    { encoding: "utf8" },
+  );
+  const databases = listed.stdout
+    .split(/\r?\n/)
+    .filter((name) => name.startsWith("supabase_db_"));
+  if (listed.status !== 0 || databases.length !== 1) {
+    throw new Error("REFUSING_AMBIGUOUS_LOCAL_SUPABASE_DATABASE");
+  }
+  const result = spawnSync(
+    "docker",
+    [
+      "exec",
+      "-i",
+      databases[0],
+      "psql",
+      "-U",
+      "postgres",
+      "-d",
+      "postgres",
+      "-v",
+      "ON_ERROR_STOP=1",
+    ],
+    { input: sql, encoding: "utf8" },
+  );
+  if (result.status !== 0) {
+    throw new Error(result.stderr || result.stdout || "LOCAL_SQL_FAILED");
+  }
+  return result.stdout.trim();
+}
+
 async function login(
   page: Page,
   email: string,
@@ -81,12 +122,14 @@ async function createManualSchedule(
         name: "Tìm và chọn giảng viên thứ nhất",
       }),
     );
-    await page
+    const lecturerOptions = page
       .getByRole("listbox")
       .getByRole("option")
-      .filter({ hasNotText: "Chưa chọn giảng viên" })
-      .first()
-      .click();
+      .filter({ hasNotText: "Chưa chọn giảng viên" });
+    await expect(lecturerOptions.filter({ hasText: "Nguyễn An" })).toHaveCount(
+      0,
+    );
+    await lecturerOptions.first().click();
   }
   await page.locator('select[name="room_id"]').selectOption({ index: 1 });
   await page.locator('input[name="schedule_date"]').fill(date);
@@ -222,14 +265,19 @@ async function createUnscopedTeachingAssistant(
         .upsert({ user_id: id, role: "teaching_assistant" })
     ).error,
   ).toBeNull();
+  const basicMedicalRoomTypeId = "40000000-0000-0000-0000-000000000002";
+  localSql(`
+    begin;
+    delete from public.profile_room_types where profile_id = '${id}';
+    insert into public.profile_room_types (profile_id, room_type_id)
+    values ('${id}', '${basicMedicalRoomTypeId}');
+    commit;
+  `);
   expect(
-    (
-      await service
-        .from("profile_room_types")
-        .update({ room_type_id: "40000000-0000-0000-0000-000000000002" })
-        .eq("profile_id", id)
-    ).error,
-  ).toBeNull();
+    localSql(
+      `select room_type_id from public.profile_room_types where profile_id = '${id}';`,
+    ),
+  ).toContain(basicMedicalRoomTypeId);
   return { id, email, password };
 }
 

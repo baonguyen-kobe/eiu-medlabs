@@ -113,6 +113,62 @@ test("Root và Bảo thấy Personnel, Admin thường bị ẩn menu và redire
   await expect(page).toHaveURL(/\/dashboard$/);
 });
 
+test("Personnel edit drawer remains usable at the required desktop viewports", async ({
+  page,
+}) => {
+  await loginAsAdmin(page);
+  for (const viewport of [
+    { width: 1440, height: 1000 },
+    { width: 1280, height: 800 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/admin/personnel");
+    await expect(page.locator(".personnel-table")).toBeVisible();
+    const staffRow = page
+      .locator(".personnel-table tbody tr")
+      .filter({ hasText: "staff@campus.local" });
+    await expect(staffRow).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.documentElement.scrollWidth <= window.innerWidth,
+        ),
+      )
+      .toBe(true);
+    await staffRow.getByRole("button", { name: "Sửa" }).click();
+    const drawer = page.getByRole("dialog", { name: "Chỉnh sửa nhân sự" });
+    await expect(drawer).toBeVisible();
+    await expect(drawer.getByText("Mật khẩu", { exact: true })).toBeVisible();
+    await expect(
+      drawer.getByText("Vai trò chính", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      drawer.getByText("Phạm vi phụ trách", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      drawer.getByLabel("Quản lý Email Notifications"),
+    ).toBeVisible();
+    const body = drawer.locator(".personnel-drawer-body");
+    await expect
+      .poll(() =>
+        body.evaluate((element) => element.scrollHeight > element.clientHeight),
+      )
+      .toBe(true);
+    await body.evaluate((element) => element.scrollTo(0, element.scrollHeight));
+    await expect(
+      drawer.getByRole("button", { name: "Lưu thay đổi" }),
+    ).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.documentElement.scrollWidth <= window.innerWidth,
+        ),
+      )
+      .toBe(true);
+    await drawer.getByRole("button", { name: "Đóng" }).click();
+  }
+});
+
 test("personnel reconciler actual integration test (N-MEDIUM-01)", async ({
   request,
 }) => {

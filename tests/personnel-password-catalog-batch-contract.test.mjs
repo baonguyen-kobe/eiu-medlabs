@@ -69,7 +69,12 @@ test("password operations are server-authorized, fail closed, and sanitized", ()
   assert.match(forcedPassword, /PASSWORD_CHANGE_REQUIRED/);
   assert.match(proxy, /PASSWORD_CHANGE_REQUIRED/);
   assert.match(actions, /auth\.admin\.updateUserById/);
-  assert.match(actions, /reserve_personnel_password_change/);
+  assert.match(actions, /reserve_personnel_password_operation/);
+  assert.match(actions, /record_personnel_password_auth_result/);
+  assert.match(actions, /commit_personnel_password_operation/);
+  assert.match(actions, /mark_personnel_password_reconciliation_required/);
+  assert.match(actions, /reconcilePersonnelPasswordOperation/);
+  assert.match(actions, /reconcile_personnel_password_operation/);
   assert.match(passwordActions, /providers\.has\("email"\)/);
   assert.match(passwordActions, /passwordRecoveryRedirectUrl/);
   assert.doesNotMatch(passwordActions, /NEXT_PUBLIC_SITE_URL/);

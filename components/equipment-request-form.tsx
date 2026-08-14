@@ -72,6 +72,8 @@ export type EquipmentRequestInitialData = {
   classId: string;
   semester: string;
   responsibleLecturerId: string;
+  requiresResponsibleLecturerReplacement?: boolean;
+  historicalResponsibleLecturerName?: string | null;
   receiveDate: string;
   receiveTime: string;
   returnDate: string;
@@ -157,6 +159,7 @@ export function EquipmentRequestForm({
   registrantId,
   registrantName,
   registrantEmail,
+  registrantIsOperationallyAssignable,
   skillSuggestions,
   today,
   initialData,
@@ -169,6 +172,7 @@ export function EquipmentRequestForm({
   registrantId: string;
   registrantName: string;
   registrantEmail: string;
+  registrantIsOperationallyAssignable: boolean;
   skillSuggestions: string[];
   today: string;
   initialData?: EquipmentRequestInitialData;
@@ -298,8 +302,21 @@ export function EquipmentRequestForm({
             : person.full_name,
       })),
     ];
-    return [...new Map(options.map((person) => [person.id, person])).values()];
-  }, [lecturers, registrantId, registrantName]);
+    return [
+      ...new Map(options.map((person) => [person.id, person])).values(),
+    ].filter(
+      (person) =>
+        registrantIsOperationallyAssignable || person.id !== registrantId,
+    );
+  }, [
+    lecturers,
+    registrantId,
+    registrantIsOperationallyAssignable,
+    registrantName,
+  ]);
+  const defaultResponsibleLecturerId =
+    initialData?.responsibleLecturerId ??
+    (registrantIsOperationallyAssignable ? registrantId : "");
   const payload = useMemo(
     () =>
       skills.flatMap((skill) =>
@@ -648,8 +665,11 @@ export function EquipmentRequestForm({
             <select
               name="responsible_lecturer_id"
               required
-              defaultValue={initialData?.responsibleLecturerId ?? registrantId}
+              defaultValue={defaultResponsibleLecturerId}
             >
+              <option value="" disabled>
+                Select a responsible lecturer
+              </option>
               {responsibleOptions.map((person) => (
                 <option key={person.id} value={person.id}>
                   {person.full_name}
@@ -658,6 +678,15 @@ export function EquipmentRequestForm({
             </select>
           </label>
         </div>
+        {initialData?.requiresResponsibleLecturerReplacement ? (
+          <p className="form-error" role="alert">
+            Tài khoản Root Admin không thể được phân công vận hành. Vui lòng
+            chọn người thay thế.
+            {initialData.historicalResponsibleLecturerName
+              ? ` Phân công lịch sử: ${initialData.historicalResponsibleLecturerName}.`
+              : ""}
+          </p>
+        ) : null}
       </section>
 
       <section>

@@ -64,8 +64,8 @@ $$;
 insert into public.profile_room_types (profile_id, room_type_id)
 select p.id, '40000000-0000-0000-0000-000000000001'::uuid
 from public.profiles p
-where p.id in ('10000000-0000-0000-0000-000000000001'::uuid, '10000000-0000-0000-0000-000000000002'::uuid)
-   or lower(p.email) in ('admin@campus.local', 'bao.nguyen@eiu.edu.vn')
+where p.id in ('10000000-0000-0000-0000-000000000001'::uuid, '10000000-0000-0000-0000-000000000002'::uuid, '10000000-0000-0000-0000-000000000003'::uuid)
+   or lower(p.email) in ('admin@campus.local', 'bao.nguyen@eiu.edu.vn', 'giangvien@campus.local')
 on conflict do nothing;
 
 update public.profiles set phone = '0901234567' where id = '10000000-0000-0000-0000-000000000001'::uuid or lower(email) = 'admin@campus.local';
@@ -82,7 +82,7 @@ values (
   '90000000-0000-0000-0000-000000000001'::uuid,
   (select id from public.courses where room_type_id = '40000000-0000-0000-0000-000000000001'::uuid limit 1),
   (select id from public.rooms where room_type_id = '40000000-0000-0000-0000-000000000001'::uuid limit 1),
-  coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid),
+  coalesce((select id from public.profiles where lower(email) = 'giangvien@campus.local'), '10000000-0000-0000-0000-000000000003'::uuid),
   current_date + interval '7 days', '07:30', '11:30', 25, 'NURS-101', 'Kỹ năng ĐD', 'published', now(),
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid), 'manual',
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid)
@@ -94,7 +94,7 @@ values (
   '90000000-0000-0000-0000-000000000002'::uuid,
   (select id from public.courses where room_type_id = '40000000-0000-0000-0000-000000000001'::uuid limit 1),
   (select id from public.rooms where room_type_id = '40000000-0000-0000-0000-000000000001'::uuid limit 1),
-  coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid),
+  coalesce((select id from public.profiles where lower(email) = 'giangvien@campus.local'), '10000000-0000-0000-0000-000000000003'::uuid),
   private.get_test_late_schedule_date(), '07:30', '11:30', 25, 'NURS-101', 'Kỹ năng ĐD', 'published', now(),
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid), 'manual',
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid)
@@ -106,7 +106,7 @@ values (
   '90000000-0000-0000-0000-000000000003'::uuid,
   (select id from public.courses where room_type_id = '40000000-0000-0000-0000-000000000001'::uuid limit 1),
   (select id from public.rooms where room_type_id = '40000000-0000-0000-0000-000000000001'::uuid limit 1),
-  coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid),
+  coalesce((select id from public.profiles where lower(email) = 'giangvien@campus.local'), '10000000-0000-0000-0000-000000000003'::uuid),
   private.get_test_late_schedule_date(), '12:30', '16:30', 25, 'NURS-101', 'Kỹ năng ĐD', 'published', now(),
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid), 'manual',
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid)
@@ -118,7 +118,7 @@ values (
   '90000000-0000-0000-0000-000000000004'::uuid,
   (select id from public.courses where room_type_id = '40000000-0000-0000-0000-000000000001'::uuid limit 1),
   (select id from public.rooms where room_type_id = '40000000-0000-0000-0000-000000000001'::uuid limit 1),
-  coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid),
+  coalesce((select id from public.profiles where lower(email) = 'giangvien@campus.local'), '10000000-0000-0000-0000-000000000003'::uuid),
   current_date + interval '10 days', '07:30', '11:30', 25, 'NURS-101', 'Kỹ năng ĐD', 'published', now(),
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid), 'manual',
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid)
@@ -129,7 +129,7 @@ values (
   '90000000-0000-0000-0000-000000000005'::uuid,
   (select id from public.courses where room_type_id = '40000000-0000-0000-0000-000000000001'::uuid limit 1),
   (select id from public.rooms where room_type_id = '40000000-0000-0000-0000-000000000001'::uuid limit 1),
-  coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid),
+  coalesce((select id from public.profiles where lower(email) = 'giangvien@campus.local'), '10000000-0000-0000-0000-000000000003'::uuid),
   current_date + interval '11 days', '07:30', '11:30', 25, 'NURS-101', 'Kỹ năng ĐD', 'published', now(),
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid), 'manual',
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid)
@@ -163,7 +163,7 @@ select lives_ok(
     select public.create_equipment_request_with_items(
       '90000000-0000-0000-0000-000000000001'::uuid,
       'HK1',
-      coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid),
+      coalesce((select id from public.profiles where lower(email) = 'giangvien@campus.local'), '10000000-0000-0000-0000-000000000003'::uuid),
       ((current_date + interval '7 days')::date::text || ' 09:00:00 Asia/Ho_Chi_Minh')::timestamptz,
       ((current_date + interval '7 days')::date::text || ' 11:00:00 Asia/Ho_Chi_Minh')::timestamptz,
       'Ghi chú on-time',
@@ -194,7 +194,7 @@ select lives_ok(
     select public.create_equipment_request_with_items(
       '90000000-0000-0000-0000-000000000002'::uuid,
       'HK1',
-      coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid),
+      coalesce((select id from public.profiles where lower(email) = 'giangvien@campus.local'), '10000000-0000-0000-0000-000000000003'::uuid),
       private.get_test_late_receive_at(),
       private.get_test_late_return_at(),
       'Ghi chú trễ',
@@ -226,7 +226,7 @@ select lives_ok(
       (select id from public.equipment_requests where class_schedule_id = '90000000-0000-0000-0000-000000000001'::uuid),
       '90000000-0000-0000-0000-000000000001'::uuid,
       'HK1',
-      coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid),
+      coalesce((select id from public.profiles where lower(email) = 'giangvien@campus.local'), '10000000-0000-0000-0000-000000000003'::uuid),
       ((current_date + interval '7 days')::date::text || ' 09:00:00 Asia/Ho_Chi_Minh')::timestamptz,
       ((current_date + interval '7 days')::date::text || ' 11:00:00 Asia/Ho_Chi_Minh')::timestamptz,
       'Đã sửa ghi chú',
@@ -329,7 +329,7 @@ select set_config('request.jwt.claims', json_build_object('sub', coalesce((selec
 select public.create_equipment_request_with_items(
   '90000000-0000-0000-0000-000000000004'::uuid,
   'HK1',
-  coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid),
+  coalesce((select id from public.profiles where lower(email) = 'giangvien@campus.local'), '10000000-0000-0000-0000-000000000003'::uuid),
   ((current_date + interval '10 days')::date::text || ' 09:00:00 Asia/Ho_Chi_Minh')::timestamptz,
   ((current_date + interval '10 days')::date::text || ' 11:00:00 Asia/Ho_Chi_Minh')::timestamptz,
   'OFF mode request',

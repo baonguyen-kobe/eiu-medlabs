@@ -426,11 +426,22 @@ export async function adminCancelClass(
     return { ok: false, message: "Lớp học không còn khả dụng." };
   }
   if (schedule.basic_medical_registration_id) {
+    const { data: session, error: sessionError } = await context.supabase
+      .from("basic_medical_registration_sessions")
+      .select("id")
+      .eq("class_schedule_id", scheduleId)
+      .maybeSingle();
+    if (sessionError || !session) {
+      return {
+        ok: false,
+        message: "Không xác định được buổi Y cơ sở liên kết để hủy.",
+      };
+    }
     const { error } = await context.supabase.rpc(
-      "cancel_basic_medical_registration",
+      "cancel_basic_medical_session",
       {
-        target_registration_id: schedule.basic_medical_registration_id,
-        target_reason: null,
+        target_session_id: session.id,
+        target_reason: "Hủy từ lịch chung bởi quản trị viên.",
       },
     );
     if (error)
@@ -439,7 +450,7 @@ export async function adminCancelClass(
     after(processPendingScheduleEmails);
     return {
       ok: true,
-      message: "Đã hủy Phiếu Y cơ sở và đồng bộ các lịch liên kết.",
+      message: "Đã hủy đúng một buổi Y cơ sở và lưu lại lịch sử thay đổi.",
     };
   }
   const { error } = await context.supabase.rpc("cancel_class_schedule", {
@@ -452,20 +463,87 @@ export async function adminCancelClass(
   return { ok: true, message: "Đã hủy lớp và lưu lại lịch sử thay đổi." };
 }
 
+async function basicMedicalSessionForAdminAction(
+  scheduleId: string,
+  context: Awaited<ReturnType<typeof requireAdminAction>>,
+) {
+  if (!context) return null;
+  const { data: session, error } = await context.supabase
+    .from("basic_medical_registration_sessions")
+    .select("id")
+    .eq("class_schedule_id", scheduleId)
+    .maybeSingle();
+  return error ? null : session;
+}
+
+export async function adminCancelBasicMedicalSession(
+  scheduleId: string,
+  reason: string,
+): Promise<ActionResult> {
+  const context = await requireAdminAction();
+  if (!context) return { ok: false, message: "Chỉ Admin được hủy lớp." };
+  const normalizedReason = reason.trim();
+  if (!normalizedReason) {
+    return { ok: false, message: "Vui lòng nhập Lý do hủy buổi học." };
+  }
+  const session = await basicMedicalSessionForAdminAction(scheduleId, context);
+  if (!session) {
+    return {
+      ok: false,
+      message: "Không xác định được buổi Y cơ sở liên kết để hủy.",
+    };
+  }
+  const { error } = await context.supabase.rpc("cancel_basic_medical_session", {
+    target_session_id: session.id,
+    target_reason: normalizedReason,
+  });
+  if (error)
+    return { ok: false, message: friendlyDatabaseError(error.message) };
+  revalidateScheduleViews();
+  revalidatePath("/basic-medical/registrations");
+  after(processPendingScheduleEmails);
+  return { ok: true, message: "Đã hủy đúng một buổi Y cơ sở." };
+}
+
+export async function adminInvalidateBasicMedicalSessionConfirmation(
+  confirmationId: string,
+  reason: string,
+): Promise<ActionResult> {
+  const context = await requireAdminAction();
+  if (!context)
+    return { ok: false, message: "Chỉ Admin được vô hiệu hóa xác nhận." };
+  const normalizedReason = reason.trim();
+  if (!normalizedReason) {
+    return { ok: false, message: "Vui lòng nhập Lý do vô hiệu hóa." };
+  }
+  const { error } = await context.supabase.rpc(
+    "invalidate_basic_medical_session_confirmation",
+    { target_confirmation_id: confirmationId, target_reason: normalizedReason },
+  );
+  if (error)
+    return { ok: false, message: friendlyDatabaseError(error.message) };
+  revalidateScheduleViews();
+  revalidatePath("/basic-medical/registrations");
+  return {
+    ok: true,
+    message: "Đã vô hiệu hóa xác nhận; bằng chứng gốc được giữ nguyên.",
+  };
+}
+
 export async function adminReassignShift(
   shiftId: string,
   staffId: string,
 ): Promise<ActionResult> {
   const context = await requireAdminAction();
   if (!context) return { ok: false, message: "Chỉ Admin được đổi lịch trực." };
-  const { data: eligibleRole } = await context.supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", staffId)
-    .in("role", ["staff", "admin"])
-    .limit(1)
-    .maybeSingle();
-  if (!eligibleRole)
+  const { data: operationalAssignees, error: assigneeError } =
+    await context.supabase.rpc("list_operational_shift_assignees");
+  if (
+    assigneeError ||
+    !(operationalAssignees ?? []).some(
+      (candidate: { id: string }) => candidate.id === staffId,
+    )
+  )
     return { ok: false, message: "Người được chọn phải là Staff hoặc Admin." };
 
   const { data, error } = await context.supabase
@@ -498,14 +576,14 @@ export async function adminCreateShift(
     return { ok: false, message: "Ngày trực không hợp lệ." };
   }
 
-  const { data: eligibleRole } = await context.supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", staffId)
-    .in("role", ["staff", "admin"])
-    .limit(1)
-    .maybeSingle();
-  if (!eligibleRole)
+  const { data: operationalAssignees, error: assigneeError } =
+    await context.supabase.rpc("list_operational_shift_assignees");
+  if (
+    assigneeError ||
+    !(operationalAssignees ?? []).some(
+      (candidate: { id: string }) => candidate.id === staffId,
+    )
+  )
     return { ok: false, message: "Người được chọn phải là Staff hoặc Admin." };
 
   const startTime = shiftType === "MORNING" ? "08:30" : "13:30";

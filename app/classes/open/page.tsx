@@ -33,6 +33,8 @@ export default async function OpenClassesPage({
     allowBasicMedicalAccess,
     canImportSchedules,
     canManagePersonnel,
+    isRootAdministrator,
+    canManageEmailNotifications,
   } = await getViewer();
   const roomTypeCodes = roomTypes.map(({ code }) => code);
   if (!canUseSkillsWorkspace(roles, roomTypeCodes)) {
@@ -127,6 +129,7 @@ export default async function OpenClassesPage({
       allowBasicMedicalAccess={allowBasicMedicalAccess}
       canImportSchedules={canImportSchedules}
       canManagePersonnel={canManagePersonnel}
+      canManageEmailNotifications={canManageEmailNotifications}
       title="Lớp đang mở"
       description={`Toàn bộ lớp từ ${range.from.split("-").reverse().join("/")} đến ${range.to.split("-").reverse().join("/")}.`}
       actions={
@@ -150,6 +153,7 @@ export default async function OpenClassesPage({
           label: `${room.room_code} · ${room.building_code}`,
           roomTypeId: room.room_type_id,
         }))}
+        isRootAdministrator={isRootAdministrator}
       />
     </WorkspaceShell>
   );

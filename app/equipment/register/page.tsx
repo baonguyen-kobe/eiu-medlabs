@@ -11,6 +11,7 @@ import {
 } from "@/lib/equipment-request-code";
 import { NURSING_SKILLS_ROOM_TYPE_ID } from "@/lib/room-types";
 import { getViewer } from "@/lib/viewer";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type { EquipmentLateApprovalStatus } from "@/lib/equipment-requests";
 import {
   canUseSkillsWorkspace,
@@ -186,6 +187,8 @@ function buildInitialData(
   mode: RequestMode,
   userId: string,
   selectedScheduleId: string,
+  viewerIsRoot: boolean,
+  rootAdministratorId: string | null,
 ): EquipmentRequestInitialData {
   const receive = dateTimeInputParts(source.receive_at);
   const returned = dateTimeInputParts(source.return_at);
@@ -213,7 +216,16 @@ function buildInitialData(
     classId: mode === "copy" ? selectedScheduleId : source.class_schedule_id,
     semester: source.semester,
     responsibleLecturerId:
-      mode === "copy" ? userId : source.responsible_lecturer_id,
+      mode === "copy"
+        ? viewerIsRoot
+          ? ""
+          : userId
+        : source.responsible_lecturer_id === rootAdministratorId
+          ? ""
+          : source.responsible_lecturer_id,
+    requiresResponsibleLecturerReplacement:
+      mode === "edit" && source.responsible_lecturer_id === rootAdministratorId,
+    historicalResponsibleLecturerName: source.responsible?.full_name ?? null,
     receiveDate: mode === "copy" ? "" : receive.date,
     receiveTime: receive.time,
     returnDate: mode === "copy" ? "" : returned.date,
@@ -242,6 +254,8 @@ export default async function EquipmentRegisterPage({
     allowBasicMedicalAccess,
     canImportSchedules,
     canManagePersonnel,
+    canManageEmailNotifications,
+    isRootAdministrator,
   } = viewer;
   const roomTypeCodes = roomTypes.map(({ code }) => code);
   if (!canUseSkillsWorkspace(roles, roomTypeCodes)) {
@@ -290,6 +304,7 @@ export default async function EquipmentRegisterPage({
     { data: priorItems },
     { data: requestOptionRows },
     sourceResult,
+    { data: rootPrincipal },
   ] = await Promise.all([
     supabase
       .from("class_schedules")
@@ -330,6 +345,11 @@ export default async function EquipmentRegisterPage({
       .order("created_at", { ascending: false })
       .limit(200),
     sourcePromise,
+    createAdminClient()
+      .from("system_security_principals")
+      .select("root_admin_id")
+      .eq("singleton", true)
+      .maybeSingle(),
   ]);
 
   const canManageAll = roles.some((role) => ["admin", "staff"].includes(role));
@@ -396,7 +416,14 @@ export default async function EquipmentRegisterPage({
 
   const initialData =
     mode && canUseSource && source
-      ? buildInitialData(source, mode, userId, query.schedule ?? "")
+      ? buildInitialData(
+          source,
+          mode,
+          userId,
+          query.schedule ?? "",
+          isRootAdministrator,
+          rootPrincipal?.root_admin_id ?? null,
+        )
       : undefined;
   const editingAnotherRegistrant =
     initialData?.mode === "edit" && source?.registrant_id !== userId;
@@ -428,6 +455,7 @@ export default async function EquipmentRegisterPage({
       allowBasicMedicalAccess={allowBasicMedicalAccess}
       canImportSchedules={canImportSchedules}
       canManagePersonnel={canManagePersonnel}
+      canManageEmailNotifications={canManageEmailNotifications}
       title="Đăng ký thiết bị"
       description="Phiếu trang thiết bị thực hành cho lớp Skills lab."
     >
@@ -450,6 +478,9 @@ export default async function EquipmentRegisterPage({
         registrantId={formRegistrantId}
         registrantName={formRegistrantName}
         registrantEmail={formRegistrantEmail}
+        registrantIsOperationallyAssignable={
+          formRegistrantId !== rootPrincipal?.root_admin_id
+        }
         skillSuggestions={skillSuggestions}
         today={businessTodayString()}
         initialData={initialData}

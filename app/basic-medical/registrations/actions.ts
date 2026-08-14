@@ -10,6 +10,58 @@ function registrationsUrl(kind: "notice" | "error", message: string) {
   return `/basic-medical/registrations?${kind}=${encodeURIComponent(message)}`;
 }
 
+export async function cancelBasicMedicalSession(formData: FormData) {
+  const sessionId = String(formData.get("session_id") ?? "");
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (!/^[0-9a-f-]{36}$/i.test(sessionId) || !reason) {
+    redirect(registrationsUrl("error", "Buổi học Y cơ sở không hợp lệ."));
+  }
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("cancel_basic_medical_session", {
+    target_session_id: sessionId,
+    target_reason: reason,
+  });
+  if (error) {
+    const message = error.message.includes("INVALIDATION_REQUIRED")
+      ? "Buổi học đã được xác nhận. Hãy vô hiệu hóa xác nhận trước khi hủy."
+      : "Không thể hủy buổi học đã chọn.";
+    redirect(registrationsUrl("error", message));
+  }
+  after(processPendingScheduleEmails);
+  revalidatePath("/basic-medical/registrations");
+  revalidatePath("/basic-medical/schedules");
+  revalidatePath("/class-schedules");
+  redirect(registrationsUrl("notice", "Đã hủy đúng một buổi học Y cơ sở."));
+}
+
+export async function invalidateBasicMedicalSessionConfirmation(
+  formData: FormData,
+) {
+  const confirmationId = String(formData.get("confirmation_id") ?? "");
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (!/^[0-9a-f-]{36}$/i.test(confirmationId) || !reason) {
+    redirect(registrationsUrl("error", "Vui lòng nhập Lý do vô hiệu hóa."));
+  }
+  const supabase = await createClient();
+  const { error } = await supabase.rpc(
+    "invalidate_basic_medical_session_confirmation",
+    { target_confirmation_id: confirmationId, target_reason: reason },
+  );
+  if (error) {
+    redirect(registrationsUrl("error", "Không thể vô hiệu hóa xác nhận."));
+  }
+  revalidatePath("/basic-medical/registrations");
+  revalidatePath(
+    `/basic-medical/registrations/confirmations/${confirmationId}`,
+  );
+  redirect(
+    registrationsUrl(
+      "notice",
+      "Đã vô hiệu hóa xác nhận; bằng chứng gốc được giữ nguyên.",
+    ),
+  );
+}
+
 export async function cancelBasicMedicalRegistration(formData: FormData) {
   const registrationId = String(formData.get("id") ?? "");
   if (!/^[0-9a-f-]{36}$/i.test(registrationId)) {

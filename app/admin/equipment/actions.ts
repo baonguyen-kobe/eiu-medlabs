@@ -25,6 +25,58 @@ export type EquipmentCatalogActionResult = {
   message: string;
 };
 
+export type CatalogReconciliationPreview = {
+  updated: number;
+  reactivated: number;
+  inserted: number;
+  deactivated: number;
+  deleted: number;
+  fingerprint: string;
+};
+
+export async function previewEquipmentCatalogReconciliation(
+  rows: EquipmentCatalogInput[],
+): Promise<CatalogReconciliationPreview> {
+  const supabase = await requireCatalogManager();
+  const { data, error } = await supabase.rpc("preview_catalog_reconciliation", {
+    target_domain: "skills",
+    target_rows: rows,
+  });
+  if (error) throw new Error("CATALOG_RECONCILIATION_PREVIEW_FAILED");
+  return data as CatalogReconciliationPreview;
+}
+
+export async function applyEquipmentCatalogReconciliation(
+  rows: EquipmentCatalogInput[],
+  fingerprint: string,
+): Promise<EquipmentCatalogActionResult> {
+  const supabase = await requireCatalogManager();
+  const { error } = await supabase.rpc("apply_catalog_reconciliation", {
+    target_domain: "skills",
+    target_rows: rows,
+    target_fingerprint: fingerprint,
+  });
+  if (error?.message.includes("CATALOG_RECONCILIATION_STALE_PREVIEW"))
+    return {
+      ok: false,
+      message: "Dữ liệu đã thay đổi; vui lòng xem lại preview.",
+    };
+  if (error)
+    return {
+      ok: false,
+      message:
+        error.code === "42501"
+          ? "Bạn không có quyền đối soát danh mục."
+          : error.code === "22023" ||
+              error.code === "23503" ||
+              error.code === "23505"
+            ? "Dữ liệu danh mục không hợp lệ hoặc còn đang được tham chiếu."
+            : "Không thể đối soát danh mục.",
+    };
+  revalidatePath("/admin/equipment");
+  return { ok: true, message: "Đã đối soát danh mục thiết bị theo file." };
+}
+
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -344,15 +396,12 @@ export async function importEquipmentCatalog(formData: FormData) {
       "/admin/equipment?error=File+import+kh%C3%B4ng+%C4%91%C6%B0%E1%BB%A3c+v%C6%B0%E1%BB%A3t+qu%C3%A1+10+MB",
     );
   }
-  if (
-    !/\.(csv|xlsx)$/i.test(file.name) ||
-    !["all", "new"].includes(requestedMode)
-  ) {
+  if (!/\.(csv|xlsx)$/i.test(file.name) || requestedMode !== "new") {
     redirect(
       "/admin/equipment?error=Ch%E1%BB%89+h%E1%BB%97+tr%E1%BB%A3+file+CSV+ho%E1%BA%B7c+XLSX",
     );
   }
-  const mode: "all" | "new" = requestedMode === "all" ? "all" : "new";
+  const mode = "new" as const;
 
   try {
     const XLSX = await import("@e965/xlsx");
@@ -427,7 +476,7 @@ export async function importEquipmentCatalog(formData: FormData) {
       }
     }
     revalidatePath("/admin/equipment");
-    const label = mode === "all" ? "cập nhật/thêm" : "thêm mới";
+    const label = "thêm mới";
     redirect(
       `/admin/equipment?notice=${encodeURIComponent(`Đã ${label} ${payload.length} thiết bị từ ${file.name}.`)}`,
     );

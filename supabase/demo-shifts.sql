@@ -12,7 +12,7 @@ insert into public.staff_shifts (
   ),
   (
     '50000000-0000-0000-0000-000000000002',
-    (select id from public.profiles where email = 'admin@campus.local'),
+    (select id from public.profiles where email = 'staff@campus.local'),
     '2026-07-30', '13:30', '16:30', 'AFTERNOON',
     '30000000-0000-0000-0000-000000000002', null,
     'scheduled', 'self_registered',
@@ -64,7 +64,7 @@ insert into public.staff_shift_patterns (
   ),
   (
     '60000000-0000-0000-0000-000000000003',
-    (select id from public.profiles where email = 'admin@campus.local'),
+    (select id from public.profiles where email = 'staff@campus.local'),
     3, '08:30', '11:30', 'MORNING', '2026-07-01', '2026-09-30',
     'Hỗ trợ điều phối giữa tuần',
     (select id from public.profiles where email = 'admin@campus.local')

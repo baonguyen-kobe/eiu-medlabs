@@ -11,6 +11,7 @@ import {
   updateCatalogRoom,
   updateCatalogRoomsBatch,
 } from "@/app/admin/actions";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 
 type RoomType = { id: string; name: string; is_active: boolean };
 type CatalogItem = {
@@ -59,6 +60,10 @@ export function CatalogBatchManager({
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [notice, setNotice] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [activeConfirmation, setActiveConfirmation] = useState<boolean | null>(
+    null,
+  );
+  const [deleteTarget, setDeleteTarget] = useState<CatalogItem | null>(null);
   const allSelected = items.length > 0 && selected.length === items.length;
   const editingItems = useMemo(
     () => items.filter((item) => editing.includes(item.id)),
@@ -111,6 +116,8 @@ export function CatalogBatchManager({
     });
   }
 
+  const itemLabel = kind === "rooms" ? "phòng" : "môn học";
+
   function save() {
     if (!editingItems.length || pending) return;
     startTransition(async () => {
@@ -127,6 +134,16 @@ export function CatalogBatchManager({
               roomTypeId: draft.roomTypeId,
             };
           });
+          if (
+            input.some(
+              (room) =>
+                room.capacity !== null &&
+                (!Number.isInteger(room.capacity) || room.capacity < 1),
+            )
+          ) {
+            setNotice("Sức chứa phải là số nguyên từ 1 trở lên hoặc để trống.");
+            return;
+          }
           if (input.length === 1) await updateCatalogRoom(input[0]);
           else await updateCatalogRoomsBatch(input);
         } else {
@@ -172,22 +189,20 @@ export function CatalogBatchManager({
         setEditing([]);
         setDrafts({});
         setNotice("Đã lưu thay đổi.");
-      } catch {
+      } catch (error) {
         setNotice(
-          "Không thể lưu. Mọi thay đổi trong lô đã được từ chối an toàn.",
+          error instanceof Error &&
+            error.message.includes("INVALID_ROOM_CAPACITY")
+            ? "Sức chứa phải là số nguyên từ 1 trở lên hoặc để trống."
+            : "Không thể lưu. Mọi thay đổi trong lô đã được từ chối an toàn.",
         );
       }
     });
   }
 
-  function remove(item: CatalogItem) {
-    if (
-      pending ||
-      !window.confirm(
-        "Xóa mục này? Thao tác chỉ thành công khi không có dữ liệu liên quan.",
-      )
-    )
-      return;
+  function remove() {
+    const item = deleteTarget;
+    if (!item || pending) return;
     startTransition(async () => {
       try {
         const formData = new FormData();
@@ -198,6 +213,7 @@ export function CatalogBatchManager({
           value.filter((candidate) => candidate.id !== item.id),
         );
         setSelected((value) => value.filter((id) => id !== item.id));
+        setDeleteTarget(null);
         setNotice("Đã xóa mục.");
       } catch {
         setNotice("Không thể xóa mục có dữ liệu liên quan.");
@@ -213,7 +229,7 @@ export function CatalogBatchManager({
           className="button button-secondary"
           type="button"
           disabled={!selected.length || pending}
-          onClick={() => applyActive(false)}
+          onClick={() => setActiveConfirmation(false)}
         >
           Ngừng dùng
         </button>
@@ -229,7 +245,7 @@ export function CatalogBatchManager({
           className="button button-secondary"
           type="button"
           disabled={!selected.length || pending}
-          onClick={() => applyActive(true)}
+          onClick={() => setActiveConfirmation(true)}
         >
           Kích hoạt
         </button>
@@ -239,6 +255,28 @@ export function CatalogBatchManager({
           {notice}
         </p>
       ) : null}
+      <ConfirmDialog
+        open={activeConfirmation !== null}
+        title={`${activeConfirmation ? "Kích hoạt" : "Ngừng sử dụng"} ${selected.length} ${itemLabel}?`}
+        description="Thao tác chỉ áp dụng một lần cho đúng các mục đang chọn."
+        tone={activeConfirmation ? "primary" : "danger"}
+        pending={pending}
+        onCancel={() => setActiveConfirmation(null)}
+        onConfirm={() => {
+          if (activeConfirmation === null) return;
+          applyActive(activeConfirmation);
+          setActiveConfirmation(null);
+        }}
+      />
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title={`Xóa ${itemLabel} này?`}
+        description="Thao tác chỉ thành công khi không có dữ liệu liên quan."
+        tone="danger"
+        pending={pending}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={remove}
+      />
       <div
         className="responsive-table"
         role="region"
@@ -313,7 +351,7 @@ export function CatalogBatchManager({
                     className="table-action delete-action"
                     type="button"
                     disabled={pending}
-                    onClick={() => remove(item)}
+                    onClick={() => setDeleteTarget(item)}
                   >
                     Xóa
                   </button>
