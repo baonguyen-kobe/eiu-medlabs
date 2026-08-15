@@ -214,6 +214,43 @@ test("authorized evidence page and PDF use immutable display snapshots without r
     `);
 
     await login(page, lecturerEmail, password);
+    expect(config.publishableKey).toBeTruthy();
+    const lecturerClient = createClient(
+      config.supabaseUrl!,
+      config.publishableKey!,
+      { auth: { persistSession: false, autoRefreshToken: false } },
+    );
+    const { error: lecturerLoginError } =
+      await lecturerClient.auth.signInWithPassword({
+        email: lecturerEmail,
+        password,
+      });
+    expect(lecturerLoginError).toBeNull();
+    const { data: registrationRows, error: registrationLoadError } =
+      await lecturerClient
+        .from("basic_medical_registrations")
+        .select(
+          "id,basic_medical_registration_sessions(id,confirmations:basic_medical_session_confirmations(id,signer_name_snapshot,signed_at,invalidated_at,invalidated_by,invalidated_by_name_snapshot,invalidated_reason))",
+        )
+        .eq("id", ids.registration);
+    expect(registrationLoadError).toBeNull();
+    expect(
+      registrationRows?.[0]?.basic_medical_registration_sessions?.[0]
+        ?.confirmations?.[0]?.signer_name_snapshot,
+    ).toBe(`Giảng viên snapshot ${suffix}`);
+    expect(JSON.stringify(registrationRows)).not.toContain(validSignature);
+
+    await page.goto(
+      `/basic-medical/registrations?status=all&q=CURRENT-${suffix}`,
+    );
+    await expect(page.getByText(/permission denied/i)).toHaveCount(0);
+    await expect(
+      page.locator(".basic-medical-registration-table"),
+    ).toContainText(`CURRENT-${suffix}`);
+    await expect(
+      page.locator(".basic-medical-registration-table .request-status"),
+    ).toContainText("Hoàn thành");
+
     const before = evidenceCounts(ids.confirmation);
     await page.goto(
       `/basic-medical/registrations/confirmations/${ids.confirmation}`,
