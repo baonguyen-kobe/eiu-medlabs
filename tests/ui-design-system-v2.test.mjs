@@ -250,7 +250,7 @@ test("Skills and Basic Medical calendars share a safe drawer inset", async () =>
   );
   assert.match(
     css,
-    /\.detail-drawer\s*\{[\s\S]*width: min\(440px, 100%\)[\s\S]*padding: 24px 32px/,
+    /\.detail-drawer\s*\{[\s\S]*width: min\(480px, 100%\)[\s\S]*padding: 24px 32px/,
   );
   assert.match(
     css,
