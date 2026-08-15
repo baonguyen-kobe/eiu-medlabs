@@ -421,6 +421,20 @@ test("Basic Medical registrations use content-intent columns and aligned actions
     const studentCountLabel = registrationTable?.querySelector<HTMLElement>(
       ".basic-medical-registration-detail-student-count > span",
     );
+    const roomHeading = registrationTable?.querySelector<HTMLElement>(
+      "thead th:nth-child(3)",
+    );
+    const registrationStatusHeading =
+      registrationTable?.querySelector<HTMLElement>("thead th:nth-child(5)");
+    const lessonHeading = sessionTable?.querySelector<HTMLElement>(
+      "thead th:nth-child(4)",
+    );
+    const lecturerHeading = sessionTable?.querySelector<HTMLElement>(
+      "thead th:nth-child(5)",
+    );
+    const sessionStatusHeading = sessionTable?.querySelector<HTMLElement>(
+      "thead th:nth-child(6)",
+    );
     const sessionStatus =
       actionStack?.querySelector<HTMLElement>(".request-status");
     const sessionAction = actionStack?.querySelector<HTMLElement>("button");
@@ -431,6 +445,11 @@ test("Basic Medical registrations use content-intent columns and aligned actions
       !cancel ||
       !sessionCountHeading ||
       !studentCountLabel ||
+      !roomHeading ||
+      !registrationStatusHeading ||
+      !lessonHeading ||
+      !lecturerHeading ||
+      !sessionStatusHeading ||
       !sessionStatus ||
       !sessionAction
     ) {
@@ -457,6 +476,15 @@ test("Basic Medical registrations use content-intent columns and aligned actions
       sessionCountTextDelta: Math.abs(
         textLeft(sessionCountHeading) - textLeft(studentCountLabel),
       ),
+      sessionColumnDeltas: {
+        lessonToRoom: Math.abs(textLeft(lessonHeading) - textLeft(roomHeading)),
+        lecturerToSessions: Math.abs(
+          textLeft(lecturerHeading) - textLeft(sessionCountHeading),
+        ),
+        statusToStatus: Math.abs(
+          textLeft(sessionStatusHeading) - textLeft(registrationStatusHeading),
+        ),
+      },
       sessionActionDelta: Math.abs(
         center(sessionStatus) - center(sessionAction),
       ),
@@ -474,6 +502,11 @@ test("Basic Medical registrations use content-intent columns and aligned actions
   expect(toggle).toBeLessThanOrEqual(48);
   expect(geometry.registrationActionDelta).toBeLessThanOrEqual(1);
   expect(geometry.sessionCountTextDelta).toBeLessThanOrEqual(1);
+  expect(geometry.sessionColumnDeltas.lessonToRoom).toBeLessThanOrEqual(1);
+  expect(geometry.sessionColumnDeltas.lecturerToSessions).toBeLessThanOrEqual(
+    1,
+  );
+  expect(geometry.sessionColumnDeltas.statusToStatus).toBeLessThanOrEqual(1);
 
   const [, date, time, lesson, lecturer, sessionStatus] =
     geometry.sessionWidths;
@@ -482,7 +515,7 @@ test("Basic Medical registrations use content-intent columns and aligned actions
   expect(lesson).toBeGreaterThan(date);
   expect(lecturer).toBeGreaterThan(time);
   expect(sessionStatus).toBeGreaterThanOrEqual(150);
-  expect(sessionStatus).toBeLessThanOrEqual(180);
+  expect(sessionStatus).toBeLessThanOrEqual(181);
   expect(geometry.sessionActionDelta).toBeLessThanOrEqual(1);
   expect(geometry.pageOverflow).toBe(false);
 

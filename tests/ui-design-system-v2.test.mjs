@@ -165,9 +165,15 @@ test("Basic Medical registration layout keeps content-intent columns and action 
     css,
     /\.basic-medical-registration-detail-grid\s*\{[\s\S]*grid-template-columns: 18\.5% 17\.5% 20% 14% 14\.31% 12% 3\.69%/,
   );
+  assert.match(css, /\.basic-medical-session-col-time\s*\{[\s\S]*width: 19%/);
+  assert.match(css, /\.basic-medical-session-col-lesson\s*\{[\s\S]*width: 20%/);
   assert.match(
     css,
-    /\.basic-medical-session-col-lesson,[\s\S]*\.basic-medical-session-col-lecturer\s*\{[\s\S]*width: 27%/,
+    /\.basic-medical-session-col-lecturer\s*\{[\s\S]*width: 28%/,
+  );
+  assert.match(
+    css,
+    /\.basic-medical-session-table th:last-child\s*\{[\s\S]*text-align: left/,
   );
   assert.match(registrationList, /<th>Trạng thái \/ Thao tác<\/th>/);
 });
