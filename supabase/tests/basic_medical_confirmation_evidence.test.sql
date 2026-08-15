@@ -1,5 +1,5 @@
 begin;
-select plan(22);
+select plan(31);
 
 create temp table y06_context (
   admin_id uuid,
@@ -185,6 +185,29 @@ select ok(
 );
 
 select ok(
+  has_column_privilege(
+    'authenticated', 'public.basic_medical_session_confirmations',
+    'signer_name_snapshot', 'SELECT'
+  ),
+  'authenticated can read the required signer display snapshot column'
+);
+
+select ok(
+  not has_table_privilege(
+    'authenticated', 'public.basic_medical_session_confirmations', 'SELECT'
+  ),
+  'the signer display snapshot grant does not restore full-table selection'
+);
+
+select ok(
+  not has_column_privilege(
+    'anon', 'public.basic_medical_session_confirmations',
+    'signer_name_snapshot', 'SELECT'
+  ),
+  'anonymous clients do not gain signer display snapshot access'
+);
+
+select ok(
   position('security definer' in lower(pg_get_functiondef(
     'public.get_basic_medical_confirmation_evidence(uuid)'::regprocedure
   ))) > 0
@@ -218,6 +241,12 @@ select lives_ok(
   )$$,
   'Admin can read authorized evidence'
 );
+select is(
+  (select signer_name_snapshot from public.basic_medical_session_confirmations
+   where id = (select confirmation_id from y06_context)),
+  'Y06 Lecturer',
+  'Admin can read the signer snapshot only for an already authorized confirmation row'
+);
 
 select set_config(
   'request.jwt.claims',
@@ -229,6 +258,12 @@ select lives_ok(
   )$$,
   'Basic-Medical-scoped Viewer can read a visible registration evidence record'
 );
+select is(
+  (select signer_name_snapshot from public.basic_medical_session_confirmations
+   where id = (select confirmation_id from y06_context)),
+  'Y06 Lecturer',
+  'Basic-Medical-scoped Viewer can read the signer snapshot on an existing visible row'
+);
 
 select set_config(
   'request.jwt.claims',
@@ -239,6 +274,12 @@ select lives_ok(
     (select confirmation_id from y06_context)
   )$$,
   'registration lecturer can read evidence under the existing ownership contract'
+);
+select is(
+  (select signer_name_snapshot from public.basic_medical_session_confirmations
+   where id = (select confirmation_id from y06_context)),
+  'Y06 Lecturer',
+  'registration Lecturer can read the signer snapshot on an existing visible row'
 );
 
 select is(
@@ -360,6 +401,14 @@ select throws_ok(
   'P0002', 'CONFIRMATION_EVIDENCE_NOT_FOUND',
   'unscoped Staff receives the same not-found response as a missing record'
 );
+select is(
+  coalesce((
+    select signer_name_snapshot from public.basic_medical_session_confirmations
+    where id = (select confirmation_id from y06_context)
+  ), ''),
+  '',
+  'out-of-scope authenticated user gains no confirmation row from the column grant'
+);
 
 select set_config(
   'request.jwt.claims',
@@ -371,6 +420,14 @@ select throws_ok(
   )$$,
   'P0002', 'CONFIRMATION_EVIDENCE_NOT_FOUND',
   'inactive scoped Viewer cannot read evidence'
+);
+select is(
+  coalesce((
+    select signer_name_snapshot from public.basic_medical_session_confirmations
+    where id = (select confirmation_id from y06_context)
+  ), ''),
+  '',
+  'inactive scoped user gains no confirmation row from the column grant'
 );
 
 select set_config(
@@ -384,6 +441,12 @@ select throws_ok(
 );
 
 select set_config('role', 'anon', true);
+select throws_ok(
+  $$select signer_name_snapshot from public.basic_medical_session_confirmations
+    where id = (select confirmation_id from y06_context)$$,
+  '42501', 'permission denied for table basic_medical_session_confirmations',
+  'anonymous clients cannot read the signer snapshot directly'
+);
 select throws_ok(
   $$select public.get_basic_medical_confirmation_evidence(
     (select confirmation_id from y06_context)
