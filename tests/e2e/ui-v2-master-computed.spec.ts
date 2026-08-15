@@ -289,9 +289,10 @@ test("table shells, counters, and catalog action slots retain Master geometry", 
       "border-radius",
       "12px",
     );
+    await page.setViewportSize({ width: 1366, height: 720 });
     const [brand, firstHeading] = await page
       .locator(
-        ".workspace-sidebar .brand-lockup, .workspace-sidebar .nav-heading",
+        ".workspace-sidebar .brand-copy, .workspace-sidebar .nav-heading",
       )
       .evaluateAll((elements) =>
         elements.slice(0, 2).map((element) => {
@@ -300,6 +301,7 @@ test("table shells, counters, and catalog action slots retain Master geometry", 
         }),
       );
     expect(firstHeading.top - brand.bottom).toBeGreaterThanOrEqual(0);
+    await page.setViewportSize({ width: 1440, height: 1000 });
     await assertTableRightEdge(page, {
       shell: ".overview-schedule-panel",
       viewport: ".overview-schedule-panel .responsive-table",

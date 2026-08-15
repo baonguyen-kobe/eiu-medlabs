@@ -9289,8 +9289,13 @@ body {
 }
 
 .workspace-sidebar .brand-lockup {
+  flex: 0 0 auto;
   min-height: 0;
   padding: 0 8px 20px;
+}
+
+.workspace-sidebar .workspace-nav {
+  flex: 1 1 0;
 }
 
 .workspace-sidebar .brand-mark {
