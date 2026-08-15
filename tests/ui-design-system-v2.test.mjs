@@ -358,10 +358,8 @@ test("UI V2 personnel structure follows the approved table and drawer order", as
   assert.doesNotMatch(personnel, /person-avatar initials-avatar/);
   assert.doesNotMatch(personnel, /employee_code\?\.trim\(\)/);
   assert.doesNotMatch(personnel, /item\.id\.slice\(/);
-  assert.match(
-    personnelPage,
-    /select\("employee_code,can_manage_email_notifications"\)/,
-  );
+  assert.match(personnelPage, /select\("can_manage_email_notifications"\)/);
+  assert.doesNotMatch(personnelPage, /employee_code/);
   assert.match(
     master,
     /`Mã` displays initials derived from `full_name`[\s\S]*`Họ và tên` shows the full name only/,

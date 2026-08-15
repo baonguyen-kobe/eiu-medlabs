@@ -16,7 +16,6 @@ import { BASIC_MEDICAL_ROOM_TYPE_ID } from "@/lib/room-types";
 
 export type PersonnelListItem = {
   id: string;
-  employee_code?: string | null;
   email: string;
   full_name: string;
   phone: string | null;

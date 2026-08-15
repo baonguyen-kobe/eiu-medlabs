@@ -110,7 +110,7 @@ test("human-readable evidence values are prospective snapshots, not render-time 
   );
 });
 
-test("registration list preserves the approved embedded confirmation contract", () => {
+test("list query never serializes signature and gates invalidated evidence links", () => {
   const selectStart = registrationsPage.indexOf(
     '"id,registration_code,created_at',
   );
@@ -118,11 +118,18 @@ test("registration list preserves the approved embedded confirmation contract", 
   const selectEnd = registrationsPage.indexOf('",', selectStart);
   const select = registrationsPage.slice(selectStart, selectEnd);
   assert.doesNotMatch(select, /signature_data/);
-  assert.match(select, /basic_medical_session_confirmations/);
+  assert.match(
+    select,
+    /invalidated_at,invalidated_by,invalidated_by_name_snapshot,invalidated_reason/,
+  );
   assert.match(registrationList, /Xác nhận đã vô hiệu/);
   assert.match(registrationList, /confirmation\.signer_name_snapshot/);
   assert.doesNotMatch(registrationList, /confirmation\.signer\?\.full_name/);
   assert.match(registrationsPage, /signer_name_snapshot/);
+  assert.doesNotMatch(
+    registrationsPage,
+    /signer:profiles!basic_medical_session_confirmations_signer_id_fkey/,
+  );
   assert.match(
     registrationList,
     /basic-medical\/registrations\/confirmations\/\$\{historical\.id\}/,
