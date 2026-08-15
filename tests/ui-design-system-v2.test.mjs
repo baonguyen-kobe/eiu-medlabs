@@ -36,6 +36,7 @@ test("UI V2 keeps the approved semantic visual foundation", async () => {
 test("UI V2 shared chrome and data primitives use canonical Master geometry", async () => {
   const css = await source("app/globals.css");
   const catalog = await source("components/equipment-catalog-manager.tsx");
+  const master = await source("docs/UI_DESIGN_SYSTEM_V2_MASTER.md");
 
   for (const token of [
     "width: 244px",
@@ -47,7 +48,7 @@ test("UI V2 shared chrome and data primitives use canonical Master geometry", as
     "backdrop-filter: blur(14px)",
     "height: 44px",
     "padding: 14px 16px",
-    "text-align: center",
+    "text-align: left",
     "width: 275px",
     "width: 145px",
     "width: 52px",
@@ -67,6 +68,15 @@ test("UI V2 shared chrome and data primitives use canonical Master geometry", as
     css,
     /\.equipment-catalog-col-name,[\s\S]*\.equipment-catalog-col-commercial-name \{[\s\S]*width: 275px/,
   );
+  assert.match(
+    css,
+    /\.data-table th,[\s\S]*\.preview-table-wrap table th \{[\s\S]*text-align: left/,
+  );
+  assert.match(
+    master,
+    /# 14\.[\s\S]*All textual Data Table headers[\s\S]*text-align: left[\s\S]*Do not globally\s+center textual headers/,
+  );
+  assert.doesNotMatch(master, /text-align: center/);
   assert.match(catalog, /<colgroup>/);
   assert.match(catalog, /equipment-catalog-col-select/);
   assert.match(catalog, /equipment-catalog-col-commercial-name/);
@@ -96,6 +106,7 @@ test("UI V2 personnel structure follows the approved table and drawer order", as
   const personnel = await source("components/personnel-management-list.tsx");
   const personnelPage = await source("app/admin/personnel/page.tsx");
   const dashboard = await source("app/dashboard/page.tsx");
+  const master = await source("docs/UI_DESIGN_SYSTEM_V2_MASTER.md");
   for (const heading of [
     "Mã",
     "Họ và tên",
@@ -119,11 +130,18 @@ test("UI V2 personnel structure follows the approved table and drawer order", as
   assert.match(confirmationDialog, /event\.key !== "Tab"/);
   assert.match(confirmationDialog, /last\.focus\(\)/);
   assert.match(confirmationDialog, /first\.focus\(\)/);
-  assert.match(personnel, /employee_code\?\.trim\(\) \|\| "—"/);
+  assert.match(personnel, /getNameInitials\(item\.full_name\)/);
+  assert.match(personnel, /className="personnel-name"/);
+  assert.doesNotMatch(personnel, /person-avatar initials-avatar/);
+  assert.doesNotMatch(personnel, /employee_code\?\.trim\(\)/);
   assert.doesNotMatch(personnel, /item\.id\.slice\(/);
   assert.match(
     personnelPage,
     /select\("employee_code,can_manage_email_notifications"\)/,
+  );
+  assert.match(
+    master,
+    /`Mã` displays initials derived from `full_name`[\s\S]*`Họ và tên` shows the full name only/,
   );
   assert.doesNotMatch(dashboard, /Xin chào/);
 });

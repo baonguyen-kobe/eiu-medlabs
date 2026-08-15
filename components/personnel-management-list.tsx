@@ -550,20 +550,12 @@ export function PersonnelManagementList({
             {items.map((item) => (
               <tr key={item.id}>
                 <td className="personnel-code mono">
-                  {item.employee_code?.trim() || "—"}
+                  {getNameInitials(item.full_name)}
                 </td>
                 <td>
-                  <span className="personnel-identity">
-                    <span
-                      className="person-avatar initials-avatar"
-                      aria-hidden="true"
-                    >
-                      {getNameInitials(item.full_name)}
-                    </span>
-                    <span>
-                      <strong>{item.full_name}</strong>
-                      {item.title ? <small>{item.title}</small> : null}
-                    </span>
+                  <span className="personnel-name">
+                    <strong>{item.full_name}</strong>
+                    {item.title ? <small>{item.title}</small> : null}
                   </span>
                 </td>
                 <td className="personnel-email">{item.email}</td>

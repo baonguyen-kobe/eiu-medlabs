@@ -9087,21 +9087,19 @@ body,
   letter-spacing: 0.02em;
 }
 
-.personnel-identity {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+.personnel-name {
+  display: grid;
+  gap: 2px;
   min-width: 230px;
 }
 
-.personnel-identity > span:last-child,
 .personnel-badges {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
 
-.personnel-identity small {
+.personnel-name small {
   display: block;
   color: #6f6a62;
 }
@@ -9641,7 +9639,7 @@ textarea:focus-visible {
   font-size: 13px;
   font-weight: 700;
   line-height: 1.35;
-  text-align: center;
+  text-align: left;
   text-transform: none;
   vertical-align: middle;
   white-space: nowrap;
@@ -9655,7 +9653,7 @@ textarea:focus-visible {
 .responsive-table table th,
 .preview-table-wrap table th {
   padding: 14px 16px;
-  text-align: center;
+  text-align: left;
   vertical-align: middle;
 }
 

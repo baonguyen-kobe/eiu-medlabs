@@ -626,10 +626,10 @@ Table local horizontal scroll: ALLOWED
 
 # 14. TABLE HEADER ALIGNMENT MASTER — FINAL
 
-Tất cả Data Table header:
+All textual Data Table headers:
 
 ```text
-text-align: center
+text-align: left
 vertical-align: middle
 padding: 14px 16px
 font-size: 13px
@@ -637,9 +637,10 @@ font-weight: 700
 white-space: nowrap
 ```
 
-Header phải căn giữa theo cột.
-
-Không để header căn trái.
+Canonical rule: all textual column headers are LEFT-aligned and start at the
+same horizontal inset as their corresponding body content. Do not globally
+center textual headers. Selection/checkbox columns and intentionally unlabeled
+control headers may remain control-centered when appropriate.
 
 ---
 
@@ -902,6 +903,14 @@ Columns:
 ```
 
 Chức danh nằm dưới Họ tên.
+
+`Mã` displays initials derived from `full_name` using the canonical
+`getNameInitials()` behavior (for example, `Lê Hoàng Minh` → `LHM` and
+`Nguyễn Nhật Bảo` → `NNB`). It is a compact text identifier and is not this
+table's `employee_code`.
+
+`Họ và tên` shows the full name only as primary text, with title underneath
+when present. It does not show initials or an avatar.
 
 Example:
 

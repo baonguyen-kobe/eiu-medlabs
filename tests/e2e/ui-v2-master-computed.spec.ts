@@ -202,7 +202,7 @@ test("canonical UI V2 shared geometry is applied in computed styles", async ({
 
     await page.goto("/admin/equipment", { waitUntil: "networkidle" });
     const table = page.locator(".equipment-catalog-table");
-    await expect(table.locator("th").first()).toHaveCSS("text-align", "center");
+    await expect(table.locator("th").first()).toHaveCSS("text-align", "left");
     await expect(table.locator("th").first()).toHaveCSS("padding", "14px 16px");
     await expect(table.locator("td").first()).toHaveCSS("padding", "14px 16px");
     await expect(
@@ -247,6 +247,10 @@ test("table shells, counters, and catalog action slots retain Master geometry", 
 }) => {
   const dashboardFixtureId = await createDashboardScheduleFixture();
   const equipmentFixtureId = crypto.randomUUID();
+  const titleFixtureEmail = `ui-v2-title-${crypto.randomUUID()}@campus.local`;
+  const titleFixtureName = "UI V2 Title Fixture";
+  const titleFixtureTitle = "Điều phối viên";
+  let titleFixtureId: string | null = null;
   const { error: equipmentFixtureError } = await serviceDb
     .from("equipment_catalog")
     .insert({
@@ -258,6 +262,36 @@ test("table shells, counters, and catalog action slots retain Master geometry", 
     });
   if (equipmentFixtureError) throw equipmentFixtureError;
   try {
+    const { data: titleFixture, error: titleFixtureError } =
+      await serviceDb.auth.admin.createUser({
+        email: titleFixtureEmail,
+        password: "LocalTitleFixture123!",
+        email_confirm: true,
+      });
+    if (titleFixtureError || !titleFixture.user) {
+      throw (
+        titleFixtureError ?? new Error("Personnel title fixture is missing")
+      );
+    }
+    titleFixtureId = titleFixture.user.id;
+    const [{ error: titleProfileError }, { error: titleRoleError }] =
+      await Promise.all([
+        serviceDb
+          .from("profiles")
+          .update({
+            full_name: titleFixtureName,
+            title: titleFixtureTitle,
+            is_active: true,
+          })
+          .eq("id", titleFixtureId),
+        serviceDb
+          .from("user_roles")
+          .insert({ user_id: titleFixtureId, role: "staff" }),
+      ]);
+    if (titleProfileError || titleRoleError) {
+      throw titleProfileError ?? titleRoleError;
+    }
+
     await loginAsAdmin(page);
     await page.setViewportSize({ width: 1440, height: 1000 });
 
@@ -307,6 +341,10 @@ test("table shells, counters, and catalog action slots retain Master geometry", 
       viewport: ".overview-schedule-panel .responsive-table",
       table: ".overview-schedule-table",
     });
+    await expect(page.locator(".overview-schedule-table th").first()).toHaveCSS(
+      "text-align",
+      "left",
+    );
 
     await page.goto("/admin/equipment", { waitUntil: "networkidle" });
     const catalogCount = page.locator(
@@ -336,6 +374,10 @@ test("table shells, counters, and catalog action slots retain Master geometry", 
     await expect(requestCount).toHaveCSS("display", "inline-flex");
     await expect(requestCount).toHaveCSS("align-items", "center");
     await expect(requestCount).toHaveCSS("justify-content", "center");
+    await expect(page.locator(".equipment-request-table th").first()).toHaveCSS(
+      "text-align",
+      "left",
+    );
 
     await page.goto("/admin/personnel", { waitUntil: "networkidle" });
     const personnelCount = page.locator(".personnel-result-count");
@@ -347,8 +389,19 @@ test("table shells, counters, and catalog action slots retain Master geometry", 
     await expect(personnelTable).toHaveCSS("scrollbar-gutter", "auto");
     await expect(personnelTable.locator("th").first()).toHaveCSS(
       "text-align",
-      "center",
+      "left",
     );
+    const personnelRow = personnelTable
+      .locator("tbody tr")
+      .filter({ hasText: "L\u00ea Ho\u00e0ng Minh" })
+      .first();
+    await expect(personnelRow).toBeVisible();
+    const personnelCells = personnelRow.locator("td");
+    await expect(personnelCells.nth(0)).toHaveText("LHM");
+    await expect(personnelCells.nth(1)).toContainText(
+      "L\u00ea Ho\u00e0ng Minh",
+    );
+    await expect(personnelCells.nth(1)).not.toContainText("LHM");
     await expect(personnelTable).toHaveCSS("padding-right", "0px");
     await assertTableRightEdge(page, {
       shell: ".personnel-table-wrap",
@@ -356,6 +409,18 @@ test("table shells, counters, and catalog action slots retain Master geometry", 
       table: ".personnel-table",
       ownsVisualShell: true,
     });
+
+    await page.goto(
+      `/admin/personnel?q=${encodeURIComponent(titleFixtureEmail)}`,
+      { waitUntil: "networkidle" },
+    );
+    const titleRow = page
+      .locator(".personnel-table tbody tr")
+      .filter({ hasText: titleFixtureEmail });
+    await expect(titleRow).toBeVisible();
+    const titleCells = titleRow.locator("td");
+    await expect(titleCells.nth(1)).toContainText(titleFixtureName);
+    await expect(titleCells.nth(1)).toContainText(titleFixtureTitle);
 
     const assertStableCatalogActions = async (route: string) => {
       await page.goto(route, { waitUntil: "networkidle" });
@@ -442,5 +507,8 @@ test("table shells, counters, and catalog action slots retain Master geometry", 
       .from("class_schedules")
       .delete()
       .eq("id", dashboardFixtureId);
+    if (titleFixtureId) {
+      await serviceDb.auth.admin.deleteUser(titleFixtureId);
+    }
   }
 });
