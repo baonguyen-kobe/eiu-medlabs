@@ -415,6 +415,12 @@ test("Basic Medical registrations use content-intent columns and aligned actions
     const actionStack = sessionTable?.querySelector<HTMLElement>(
       ".basic-medical-session-action-stack",
     );
+    const sessionCountHeading = registrationTable?.querySelector<HTMLElement>(
+      "thead th:nth-child(4)",
+    );
+    const studentCountLabel = registrationTable?.querySelector<HTMLElement>(
+      ".basic-medical-registration-detail-student-count > span",
+    );
     const sessionStatus =
       actionStack?.querySelector<HTMLElement>(".request-status");
     const sessionAction = actionStack?.querySelector<HTMLElement>("button");
@@ -423,6 +429,8 @@ test("Basic Medical registrations use content-intent columns and aligned actions
       !sessionTable ||
       !status ||
       !cancel ||
+      !sessionCountHeading ||
+      !studentCountLabel ||
       !sessionStatus ||
       !sessionAction
     ) {
@@ -431,6 +439,11 @@ test("Basic Medical registrations use content-intent columns and aligned actions
     const center = (element: HTMLElement) => {
       const rect = element.getBoundingClientRect();
       return (rect.left + rect.right) / 2;
+    };
+    const textLeft = (element: HTMLElement) => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      return range.getBoundingClientRect().left;
     };
     const widths = (table: HTMLTableElement) =>
       [...table.querySelectorAll<HTMLTableCellElement>("thead th")].map(
@@ -441,6 +454,9 @@ test("Basic Medical registrations use content-intent columns and aligned actions
       registrationWidths: widths(registrationTable),
       sessionWidths: widths(sessionTable),
       registrationActionDelta: Math.abs(center(status) - center(cancel)),
+      sessionCountTextDelta: Math.abs(
+        textLeft(sessionCountHeading) - textLeft(studentCountLabel),
+      ),
       sessionActionDelta: Math.abs(
         center(sessionStatus) - center(sessionAction),
       ),
@@ -457,6 +473,7 @@ test("Basic Medical registrations use content-intent columns and aligned actions
   expect(toggle).toBeGreaterThanOrEqual(36);
   expect(toggle).toBeLessThanOrEqual(48);
   expect(geometry.registrationActionDelta).toBeLessThanOrEqual(1);
+  expect(geometry.sessionCountTextDelta).toBeLessThanOrEqual(1);
 
   const [, date, time, lesson, lecturer, sessionStatus] =
     geometry.sessionWidths;

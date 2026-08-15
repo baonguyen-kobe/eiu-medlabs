@@ -8738,11 +8738,6 @@ body,
   justify-content: center;
 }
 
-.basic-medical-registration-table td:nth-child(4),
-.basic-medical-registration-table th:nth-child(4) {
-  text-align: center;
-}
-
 .basic-medical-registration-table td:nth-child(5) {
   text-align: center;
 }
