@@ -665,6 +665,19 @@ Control bên trong cell:
 - không negative margin
 - `width:100%` chỉ trong content box
 - giữ safe inset khoảng 16px nếu đủ chỗ
+- Acceptance phải đo geometry thực tế của child/content, không chỉ
+  `getComputedStyle(td).paddingLeft`. Với control/content đại diện, cả inset
+  trái và phải từ cell edge phải `>= 16px` (tolerance tối đa 1px cho border /
+  subpixel). `width:100%` phải đi cùng `max-width:100%` (hoặc logical
+  equivalent) và `box-sizing:border-box`; wrapper không được dùng negative
+  margin, `calc(100% + ...)`, translate hoặc absolute positioning để tràn ra
+  ngoài content box.
+
+Canonical visible contract:
+
+```text
+cell edge | >=16px | content / control | >=16px | cell edge
+```
 
 ---
 

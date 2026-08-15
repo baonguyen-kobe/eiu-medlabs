@@ -36,6 +36,7 @@ test("UI V2 keeps the approved semantic visual foundation", async () => {
 test("UI V2 shared chrome and data primitives use canonical Master geometry", async () => {
   const css = await source("app/globals.css");
   const catalog = await source("components/equipment-catalog-manager.tsx");
+  const classList = await source("components/class-registration-list.tsx");
   const master = await source("docs/UI_DESIGN_SYSTEM_V2_MASTER.md");
 
   for (const token of [
@@ -73,13 +74,33 @@ test("UI V2 shared chrome and data primitives use canonical Master geometry", as
     /\.data-table th,[\s\S]*\.preview-table-wrap table th \{[\s\S]*text-align: left/,
   );
   assert.match(
+    css,
+    /td\s*:is\(input, select, textarea, \.inline-time-editor\)\s*\{[\s\S]*max-inline-size: 100%[\s\S]*margin-inline: 0/,
+  );
+  assert.match(
+    css,
+    /\.class-registration-table-open\s*\{[\s\S]*width: 1485px[\s\S]*min-width: 1485px/,
+  );
+  assert.match(
+    css,
+    /\.class-list-panel \.responsive-table\s*\{[\s\S]*contain: paint[\s\S]*overflow-x: auto/,
+  );
+  assert.match(
     master,
     /# 14\.[\s\S]*All textual Data Table headers[\s\S]*text-align: left[\s\S]*Do not globally\s+center textual headers/,
+  );
+  assert.match(
+    master,
+    /Acceptance ph[^\n]*geometry th[^\n]*child\/content[\s\S]*cell edge \| >=16px \| content \/ control \| >=16px \| cell edge/,
   );
   assert.doesNotMatch(master, /text-align: center/);
   assert.match(catalog, /<colgroup>/);
   assert.match(catalog, /equipment-catalog-col-select/);
   assert.match(catalog, /equipment-catalog-col-commercial-name/);
+  assert.match(
+    classList,
+    /<colgroup>[\s\S]*class-registration-col-date[\s\S]*class-registration-col-time[\s\S]*class-registration-col-room[\s\S]*class-registration-col-student-count/,
+  );
 });
 
 test("UI V2 keeps equipment controls and wide request tables inside local viewports", async () => {

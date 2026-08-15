@@ -414,7 +414,21 @@ export function ClassRegistrationList({
         aria-label="Danh sách lớp; vuốt ngang để xem đầy đủ"
         tabIndex={0}
       >
-        <table className="data-table class-registration-table">
+        <table
+          className={`data-table class-registration-table class-registration-table-${mode}`}
+        >
+          <colgroup>
+            <col className="class-registration-col-date" />
+            <col className="class-registration-col-time" />
+            <col className="class-registration-col-course-code" />
+            <col className="class-registration-col-course-name" />
+            <col className="class-registration-col-room" />
+            <col className="class-registration-col-student-count" />
+            {mode === "open" ? (
+              <col className="class-registration-col-lecturers" />
+            ) : null}
+            <col className="class-registration-col-actions" />
+          </colgroup>
           <thead>
             <tr>
               <th>Ngày</th>
@@ -514,7 +528,7 @@ export function ClassRegistrationList({
                       item.roomLabel
                     )}
                   </td>
-                  <td>
+                  <td className="class-registration-student-count-cell">
                     {canAssign ? (
                       <input
                         className="student-count-input"

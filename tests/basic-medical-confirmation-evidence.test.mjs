@@ -8,6 +8,8 @@ const [
   evidencePage,
   registrationsPage,
   registrationList,
+  registrationStatesMigration,
+  registrationStatesSchema,
 ] = await Promise.all([
   readFile(
     new URL(
@@ -37,6 +39,20 @@ const [
   readFile(
     new URL(
       "../components/basic-medical-registration-list.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  ),
+  readFile(
+    new URL(
+      "../supabase/migrations/20260815031151_basic_medical_registration_confirmation_states.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  ),
+  readFile(
+    new URL(
+      "../supabase/schemas/21_basic_medical_registration_confirmation_states.sql",
       import.meta.url,
     ),
     "utf8",
@@ -94,7 +110,7 @@ test("human-readable evidence values are prospective snapshots, not render-time 
   );
 });
 
-test("list query never serializes signature and gates invalidated evidence links", () => {
+test("registration list uses a scoped confirmation-state contract, never a direct table embed", () => {
   const selectStart = registrationsPage.indexOf(
     '"id,registration_code,created_at',
   );
@@ -102,10 +118,27 @@ test("list query never serializes signature and gates invalidated evidence links
   const selectEnd = registrationsPage.indexOf('",', selectStart);
   const select = registrationsPage.slice(selectStart, selectEnd);
   assert.doesNotMatch(select, /signature_data/);
+  assert.doesNotMatch(select, /basic_medical_session_confirmations/);
   assert.match(
-    select,
-    /invalidated_at,invalidated_by,invalidated_by_name_snapshot,invalidated_reason/,
+    registrationsPage,
+    /\.rpc\(\s*"list_basic_medical_registration_confirmation_states"/,
   );
+  for (const sql of [registrationStatesMigration, registrationStatesSchema]) {
+    assert.match(sql, /security definer\s+set search_path = ''/i);
+    assert.match(
+      sql,
+      /private\.can_view_basic_medical_registration\(sessions\.registration_id\)/,
+    );
+    assert.doesNotMatch(sql, /signature_data/);
+    assert.match(
+      sql,
+      /revoke all on function public\.list_basic_medical_registration_confirmation_states\(uuid\[\]\)\s+from public, anon, authenticated/,
+    );
+    assert.match(
+      sql,
+      /grant execute on function public\.list_basic_medical_registration_confirmation_states\(uuid\[\]\)\s+to authenticated/,
+    );
+  }
   assert.match(registrationList, /Xác nhận đã vô hiệu/);
   assert.match(registrationList, /confirmation\.signer_name_snapshot/);
   assert.doesNotMatch(registrationList, /confirmation\.signer\?\.full_name/);

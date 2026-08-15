@@ -116,6 +116,55 @@
   vertical-align: middle;
 }
 
+/* Column intents leave a little usable content-box room around the inline
+   controls, matching the Room column without changing the shared 16px cell
+   inset. Wide tables stay inside their existing local scroll viewport. */
+.class-registration-table {
+  table-layout: fixed;
+}
+
+.class-registration-table-open {
+  width: 1485px;
+  min-width: 1485px;
+}
+
+.class-registration-table-mine {
+  width: 1225px;
+  min-width: 1225px;
+}
+
+.class-registration-table .class-registration-col-date {
+  width: 178px;
+}
+
+.class-registration-table .class-registration-col-time {
+  width: 285px;
+}
+
+.class-registration-table .class-registration-col-course-code {
+  width: 118px;
+}
+
+.class-registration-table .class-registration-col-course-name {
+  width: 230px;
+}
+
+.class-registration-table .class-registration-col-room {
+  width: 140px;
+}
+
+.class-registration-table .class-registration-col-student-count {
+  width: 126px;
+}
+
+.class-registration-table .class-registration-col-lecturers {
+  width: 260px;
+}
+
+.class-registration-table .class-registration-col-actions {
+  width: 148px;
+}
+
 @media (max-width: 900px) {
   .kpi-grid.kpi-grid-three {
     grid-template-columns: 1fr;
@@ -5054,10 +5103,14 @@ select {
 }
 
 .class-list-panel {
+  min-width: 0;
+  max-width: 100%;
   overflow: visible;
 }
 
 .class-list-panel .responsive-table {
+  display: block;
+  contain: paint;
   overflow-x: auto;
   border-radius: 0 0 var(--radius-md) var(--radius-md);
 }
@@ -6915,6 +6968,10 @@ body,
 
 .student-count-input {
   width: 76px;
+}
+
+.class-registration-table td.class-registration-student-count-cell {
+  text-align: center;
 }
 
 .registration-card-list {
@@ -9577,6 +9634,7 @@ textarea:focus-visible {
 .personnel-table-wrap,
 .equipment-catalog-table-wrap {
   width: 100%;
+  min-width: 0;
   max-width: 100%;
   overflow-x: auto;
   overflow-y: hidden;
@@ -9663,6 +9721,23 @@ textarea:focus-visible {
 .responsive-table table td,
 .preview-table-wrap table td {
   padding: 14px 16px;
+}
+
+/* A table control may fill its cell, but only the cell content box.  Keep this
+   shared with the Master cell inset rather than compensating in individual
+   pages, so wide form controls cannot erase the visible 16px safe inset. */
+:where(
+    .data-table,
+    .personnel-table,
+    .admin-table,
+    .responsive-table table,
+    .preview-table-wrap table
+  )
+  td
+  :is(input, select, textarea, .inline-time-editor) {
+  box-sizing: border-box;
+  max-inline-size: 100%;
+  margin-inline: 0;
 }
 
 :where(

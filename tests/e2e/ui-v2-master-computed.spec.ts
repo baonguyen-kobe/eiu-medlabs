@@ -1,5 +1,5 @@
 import nextEnv from "@next/env";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { clickUntilState } from "./helpers/interaction-readiness";
 
@@ -101,6 +101,87 @@ async function assertTableRightEdge(
   ).toBeLessThanOrEqual(1);
 }
 
+type CellInset = {
+  label: string;
+  left: number;
+  right: number;
+  tdPaddingLeft: string;
+  tdPaddingRight: string;
+  childBoxSizing: string;
+  childMaxInlineSize: string;
+  childMaxWidth: string;
+  childWidth: number;
+  tdContentWidth: number;
+  wrapperWidth: number | null;
+  marginLeft: string;
+  marginRight: string;
+};
+
+async function measureTableCellInset(
+  locator: Locator,
+  label: string,
+  textOnly = false,
+): Promise<CellInset> {
+  return locator.evaluate(
+    (element, { label: currentLabel, textOnly: isTextOnly }) => {
+      const cell = element.closest("td");
+      if (!cell) throw new Error(`Missing table cell for ${currentLabel}`);
+
+      const textRange = (() => {
+        if (!isTextOnly) return null;
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+        const textNode = walker.nextNode();
+        if (!textNode?.textContent?.trim()) {
+          throw new Error(`Missing visible text for ${currentLabel}`);
+        }
+        const range = document.createRange();
+        range.selectNodeContents(textNode);
+        return range;
+      })();
+      const targetRect = (textRange ?? element).getBoundingClientRect();
+      const cellRect = cell.getBoundingClientRect();
+      const childStyle = getComputedStyle(element);
+      const immediateWrapper = element.parentElement;
+      const wrapperRect =
+        immediateWrapper && immediateWrapper !== cell
+          ? immediateWrapper.getBoundingClientRect()
+          : null;
+      const cellStyle = getComputedStyle(cell);
+
+      return {
+        label: currentLabel,
+        left: targetRect.left - cellRect.left,
+        right: cellRect.right - targetRect.right,
+        tdPaddingLeft: cellStyle.paddingLeft,
+        tdPaddingRight: cellStyle.paddingRight,
+        childBoxSizing: childStyle.boxSizing,
+        childMaxInlineSize: childStyle.maxInlineSize,
+        childMaxWidth: childStyle.maxWidth,
+        childWidth: targetRect.width,
+        tdContentWidth:
+          cell.clientWidth -
+          Number.parseFloat(cellStyle.paddingLeft) -
+          Number.parseFloat(cellStyle.paddingRight),
+        wrapperWidth: wrapperRect?.width ?? null,
+        marginLeft: childStyle.marginLeft,
+        marginRight: childStyle.marginRight,
+      };
+    },
+    { label, textOnly },
+  );
+}
+
+function expectSafeTableInset(inset: CellInset) {
+  // One pixel allows borders and sub-pixel rounding but not a content-box leak.
+  expect(inset.left, `${inset.label} left inset`).toBeGreaterThanOrEqual(15);
+  expect(inset.right, `${inset.label} right inset`).toBeGreaterThanOrEqual(15);
+  expect(inset.tdPaddingLeft).toBe("16px");
+  expect(inset.tdPaddingRight).toBe("16px");
+  expect(inset.childBoxSizing).toBe("border-box");
+  expect(inset.marginLeft).toBe("0px");
+  expect(inset.marginRight).toBe("0px");
+}
+
 async function createDashboardScheduleFixture() {
   const scheduleId = crypto.randomUUID();
   const [courseResult, roomResult, principalsResult] = await Promise.all([
@@ -164,6 +245,83 @@ async function createDashboardScheduleFixture() {
   if (error) throw error;
   return scheduleId;
 }
+
+test("form-table controls and text retain the Master visible 16px safe inset", async ({
+  page,
+}, testInfo) => {
+  const scheduleId = await createDashboardScheduleFixture();
+  const date = new Date();
+  date.setDate(date.getDate() + 1);
+  const scheduleDate = date.toISOString().slice(0, 10);
+
+  try {
+    await loginAsAdmin(page);
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto(`/classes/open?period=day&date=${scheduleDate}`, {
+      waitUntil: "networkidle",
+    });
+
+    const row = page.locator(".class-registration-table tbody tr").first();
+    await expect(row.locator('input[type="date"]')).toBeVisible();
+    const cells = row.locator("td");
+    const measurements = await Promise.all([
+      measureTableCellInset(row.locator('input[type="date"]'), "Date"),
+      measureTableCellInset(row.locator('input[type="time"]').first(), "Time"),
+      measureTableCellInset(row.locator("select").first(), "Room select"),
+      measureTableCellInset(
+        row.locator('input[type="number"]'),
+        "Student count",
+      ),
+      measureTableCellInset(
+        cells.nth(2).locator("strong"),
+        "Course code",
+        true,
+      ),
+      measureTableCellInset(cells.nth(3), "Course name", true),
+    ]);
+
+    for (const measurement of measurements) expectSafeTableInset(measurement);
+    for (const measurement of measurements.slice(0, 4)) {
+      expect(
+        measurement.childMaxInlineSize === "100%" ||
+          measurement.childMaxWidth === "100%",
+      ).toBe(true);
+      if (measurement.wrapperWidth !== null) {
+        expect(measurement.wrapperWidth).toBeLessThanOrEqual(
+          measurement.tdContentWidth + 1,
+        );
+      }
+    }
+    for (const measurement of measurements.slice(0, 4)) {
+      expect(
+        measurement.right,
+        `${measurement.label} keeps visual room beyond the Master inset`,
+      ).toBeGreaterThanOrEqual(24);
+    }
+    const studentCount = measurements.find(
+      (measurement) => measurement.label === "Student count",
+    );
+    expect(studentCount).toBeDefined();
+    expect(
+      Math.abs((studentCount?.left ?? 0) - (studentCount?.right ?? 0)),
+      "Student count control is visually centered in its table cell",
+    ).toBeLessThanOrEqual(1);
+    await page.setViewportSize({ width: 1100, height: 900 });
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.documentElement.scrollWidth <= window.innerWidth,
+        ),
+      )
+      .toBe(true);
+    await testInfo.attach("table-body-safe-insets.json", {
+      body: JSON.stringify(measurements, null, 2),
+      contentType: "application/json",
+    });
+  } finally {
+    await serviceDb.from("class_schedules").delete().eq("id", scheduleId);
+  }
+});
 
 test("canonical UI V2 shared geometry is applied in computed styles", async ({
   page,
