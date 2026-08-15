@@ -7659,6 +7659,46 @@ body,
   text-align: center !important;
 }
 
+.email-notification-table {
+  table-layout: fixed;
+}
+
+.email-notification-col-select {
+  width: 52px;
+}
+
+.email-notification-col-time {
+  width: 7%;
+}
+
+.email-notification-col-recipient {
+  width: 35%;
+}
+
+.email-notification-col-content {
+  width: 16%;
+}
+
+.email-notification-col-status {
+  width: 12%;
+}
+
+.email-notification-col-attempts {
+  width: 6%;
+}
+
+.email-notification-col-error {
+  width: 19%;
+}
+
+.email-notification-col-action {
+  width: 5%;
+}
+
+.email-notification-table .status-pill {
+  white-space: nowrap;
+}
+
 .email-notification-select-column input {
   width: 17px;
   height: 17px;

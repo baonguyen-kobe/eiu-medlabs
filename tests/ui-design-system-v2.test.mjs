@@ -219,6 +219,26 @@ test("Basic Medical registration and sessions share one master grid", async () =
   assert.match(registrationList, /<th>Trạng thái \/ Thao tác<\/th>/);
 });
 
+test("Email notification table preserves a single-line delivery status", async () => {
+  const css = await source("app/globals.css");
+  const table = await source("components/email-notification-table.tsx");
+
+  for (const token of [
+    "email-notification-col-time",
+    "email-notification-col-status",
+    "email-notification-col-error",
+  ]) {
+    assert.match(table, new RegExp(token));
+    assert.match(css, new RegExp(`\\.${token}`));
+  }
+  assert.match(css, /\.email-notification-col-time\s*\{[\s\S]*width: 7%/);
+  assert.match(css, /\.email-notification-col-status\s*\{[\s\S]*width: 12%/);
+  assert.match(
+    css,
+    /\.email-notification-table \.status-pill\s*\{[\s\S]*white-space: nowrap/,
+  );
+});
+
 test("UI V2 personnel structure follows the approved table and drawer order", async () => {
   const personnel = await source("components/personnel-management-list.tsx");
   const personnelPage = await source("app/admin/personnel/page.tsx");
