@@ -1,9 +1,8 @@
 import nextEnv from "@next/env";
-import { existsSync, readFileSync } from "node:fs";
-import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import * as XLSX from "@e965/xlsx";
+import { clickUntilState } from "./helpers/interaction-readiness";
 
 nextEnv.loadEnvConfig(process.cwd());
 
@@ -14,20 +13,19 @@ const serviceDb = createClient(
 );
 const e2eAdminEmail = process.env.E2E_ADMIN_EMAIL ?? "admin@campus.local";
 const e2eAdminPassword = process.env.E2E_ADMIN_PASSWORD ?? "LocalAdmin123!";
-const actualImportWorkbookPath = path.resolve(
-  process.cwd(),
-  "..",
-  "..",
-  "..",
-  "Import.xlsx",
-);
 
 async function loginAsAdmin(page: Page) {
   await page.goto("/login");
-  await page.locator('input[name="email"]').fill(e2eAdminEmail);
-  await page.locator('input[name="password"]').fill(e2eAdminPassword);
-  await page.getByRole("button", { name: "Đăng nhập", exact: true }).click();
-  await expect(page).toHaveURL(/\/dashboard$/);
+  const email = page.locator('input[name="email"]');
+  const password = page.locator('input[name="password"]');
+  await clickUntilState(
+    page.getByRole("button", { name: "Đăng nhập", exact: true }),
+    () => expect(page).toHaveURL(/\/dashboard$/, { timeout: 1_000 }),
+    async () => {
+      await email.fill(e2eAdminEmail);
+      await password.fill(e2eAdminPassword);
+    },
+  );
 }
 
 async function expectDownload(page: Page, linkName: string, filename: string) {
@@ -169,21 +167,29 @@ test("authenticated admin receives a safe diagnostic for an invalid catalog RPC 
   }
 });
 
-test("the actual local Import.xlsx is rejected by the client parser before preview", async ({
+test("a portable XLSX matching the actual Course workbook is rejected before preview", async ({
   page,
 }) => {
-  test.skip(
-    !existsSync(actualImportWorkbookPath),
-    "The owner-provided local Import.xlsx is not available in this checkout.",
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(
+    workbook,
+    XLSX.utils.json_to_sheet(
+      Array.from({ length: 26 }, (_, index) => ({
+        "Mã môn": `M${String(index + 1).padStart(3, "0")}`,
+        "Tên môn học": `Môn học ${index + 1}`,
+      })),
+    ),
+    "Môn",
   );
-  const workbook = XLSX.read(readFileSync(actualImportWorkbookPath), {
+  const payload = XLSX.write(workbook, {
+    bookType: "xlsx",
     type: "buffer",
   });
-  const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-  const sourceRows = XLSX.utils.sheet_to_json<Array<unknown>>(firstSheet, {
-    header: 1,
-    defval: "",
-  });
+  const decoded = XLSX.read(payload, { type: "buffer" });
+  const sourceRows = XLSX.utils.sheet_to_json<Array<unknown>>(
+    decoded.Sheets[decoded.SheetNames[0]],
+    { header: 1, defval: "" },
+  );
   expect(sourceRows[0]).toEqual(["Mã môn", "Tên môn học"]);
   expect(sourceRows).toHaveLength(27);
 
@@ -197,7 +203,12 @@ test("the actual local Import.xlsx is rejected by the client parser before previ
   });
   await page
     .locator('.catalog-import-all-action input[type="file"]')
-    .setInputFiles(actualImportWorkbookPath);
+    .setInputFiles({
+      name: "Import.xlsx",
+      mimeType:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      buffer: payload,
+    });
 
   await expect(
     page.getByText("Mỗi dòng cần có Tên thiết bị, Tên thương mại và ĐVT.", {

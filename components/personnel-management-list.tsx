@@ -361,7 +361,6 @@ export function PersonnelManagementList({
       );
       setOriginal(clone(saved));
       setDraft(clone(saved));
-      setEmailCapability(Boolean(saved.can_manage_email_notifications));
     });
   }
 

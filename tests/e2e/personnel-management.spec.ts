@@ -25,10 +25,16 @@ const e2eAdminProfileEmail =
 
 async function loginAsAdmin(page: Page) {
   await page.goto("/login");
-  await page.locator('input[name="email"]').fill(e2eAdminEmail);
-  await page.locator('input[name="password"]').fill(e2eAdminPassword);
-  await page.locator('button[type="submit"]').click();
-  await expect(page).toHaveURL(/\/dashboard$/);
+  const email = page.locator('input[name="email"]');
+  const password = page.locator('input[name="password"]');
+  await clickUntilState(
+    page.locator('button[type="submit"]'),
+    () => expect(page).toHaveURL(/\/dashboard$/, { timeout: 1_000 }),
+    async () => {
+      await email.fill(e2eAdminEmail);
+      await password.fill(e2eAdminPassword);
+    },
+  );
 }
 
 async function login(page: Page, email: string, password: string) {
@@ -316,20 +322,24 @@ test("removing Staff preserves the raw email capability like production", async 
     await drawer.getByLabel("Chuyên viên").uncheck();
     await drawer.getByRole("button", { name: "Lưu thay đổi" }).click();
     await expect(drawer.getByText("Đã lưu", { exact: true })).toBeVisible();
-    await page.reload({ waitUntil: "networkidle" });
+    // The access_version page key remounts after a successful mutation. Reopen
+    // the current drawer without reloading the page, as production does.
+    await expect(drawer).toHaveCount(0);
     const reopened = await openStaffDrawer(page, fixture.email);
+    await reopened.getByLabel("Chuyên viên").check();
     await expect(
       reopened.getByLabel("Quản lý Email Notifications"),
-    ).toHaveCount(0);
-    await expect(
-      reopened.getByRole("button", { name: "Lưu thay đổi" }),
-    ).toBeDisabled();
+    ).toBeChecked();
     const { data: persisted } = await serviceDb
       .from("profiles")
       .select("can_manage_email_notifications")
       .eq("id", fixture.id)
       .single();
     expect(persisted?.can_manage_email_notifications).toBe(true);
+    await reopened.getByRole("button", { name: "Đóng" }).click();
+    const discard = page.getByRole("dialog", { name: "Bỏ thay đổi chưa lưu?" });
+    await expect(discard).toBeVisible();
+    await discard.getByRole("button", { name: "Bỏ thay đổi" }).click();
   } finally {
     await serviceDb.auth.admin.deleteUser(fixture.id);
   }
