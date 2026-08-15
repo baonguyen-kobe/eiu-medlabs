@@ -451,8 +451,9 @@ test("Basic Medical registrations use content-intent columns and aligned actions
   const [course, period, room, sessions, status, toggle] =
     geometry.registrationWidths;
   expect(course).toBeGreaterThan(period);
-  expect(course).toBeGreaterThan(room);
-  expect(sessions).toBeLessThan(status);
+  expect(room).toBeGreaterThan(course);
+  expect(sessions).toBeGreaterThan(room);
+  expect(sessions).toBeGreaterThan(status);
   expect(toggle).toBeGreaterThanOrEqual(36);
   expect(toggle).toBeLessThanOrEqual(48);
   expect(geometry.registrationActionDelta).toBeLessThanOrEqual(1);

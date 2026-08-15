@@ -8715,19 +8715,19 @@ body,
 }
 
 .basic-medical-registration-col-course {
-  width: 32%;
+  width: 18.5%;
 }
 .basic-medical-registration-col-period {
-  width: 19%;
+  width: 17.5%;
 }
 .basic-medical-registration-col-room {
   width: 20%;
 }
 .basic-medical-registration-col-sessions {
-  width: 8%;
+  width: 28%;
 }
 .basic-medical-registration-col-status {
-  width: 17%;
+  width: 12%;
 }
 .basic-medical-registration-col-toggle {
   width: 4%;
@@ -8743,13 +8743,12 @@ body,
   text-align: center;
 }
 
-.basic-medical-registration-table td:nth-child(5),
-.basic-medical-registration-table th:nth-child(5) {
+.basic-medical-registration-table td:nth-child(5) {
   text-align: center;
 }
 
 .basic-medical-registration-detail-grid {
-  grid-template-columns: 32% 19% 20% 8% 17% 4%;
+  grid-template-columns: 18.5% 17.5% 20% 14% 14.31% 12% 3.69%;
   align-items: start;
   gap: 14px 0;
 }
@@ -8760,21 +8759,17 @@ body,
 
 .basic-medical-registration-detail-grid
   > :is(
-    .basic-medical-registration-detail-identity,
+    .basic-medical-registration-detail-code,
     .basic-medical-registration-detail-registrant,
     .basic-medical-registration-detail-responsible,
+    .basic-medical-registration-detail-student-count,
+    .basic-medical-registration-detail-note,
     .basic-medical-registration-detail-action
   ) {
   padding-inline: 16px;
 }
 
-.basic-medical-registration-detail-identity,
-.basic-medical-registration-detail-registrant {
-  display: grid;
-  gap: 12px;
-}
-
-.basic-medical-registration-detail-identity {
+.basic-medical-registration-detail-code {
   grid-column: 1;
 }
 
@@ -8783,12 +8778,20 @@ body,
 }
 
 .basic-medical-registration-detail-responsible {
-  grid-column: 3 / span 2;
+  grid-column: 3;
+}
+
+.basic-medical-registration-detail-student-count {
+  grid-column: 4;
+}
+
+.basic-medical-registration-detail-note {
+  grid-column: 5;
 }
 
 .basic-medical-registration-detail-action {
   display: grid;
-  grid-column: 5;
+  grid-column: 6;
   justify-items: center;
 }
 

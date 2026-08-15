@@ -150,6 +150,9 @@ test("Basic Medical registration layout keeps content-intent columns and action 
     "basic-medical-registration-col-sessions",
     "basic-medical-registration-col-status",
     "basic-medical-registration-col-toggle",
+    "basic-medical-registration-detail-code",
+    "basic-medical-registration-detail-student-count",
+    "basic-medical-registration-detail-note",
     "basic-medical-registration-detail-action",
     "basic-medical-session-col-lesson",
     "basic-medical-session-col-lecturer",
@@ -160,7 +163,7 @@ test("Basic Medical registration layout keeps content-intent columns and action 
   }
   assert.match(
     css,
-    /\.basic-medical-registration-detail-grid\s*\{[\s\S]*grid-template-columns: 32% 19% 20% 8% 17% 4%/,
+    /\.basic-medical-registration-detail-grid\s*\{[\s\S]*grid-template-columns: 18\.5% 17\.5% 20% 14% 14\.31% 12% 3\.69%/,
   );
   assert.match(
     css,

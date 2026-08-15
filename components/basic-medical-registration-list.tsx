@@ -828,38 +828,34 @@ export function BasicMedicalRegistrationList({
                       <td colSpan={6}>
                         <div className="equipment-request-details">
                           <div className="equipment-request-detail-grid basic-medical-registration-detail-grid">
-                            <div className="basic-medical-registration-detail-identity">
-                              <div>
-                                <span>Mã phiếu</span>
-                                <strong className="mono">
-                                  {formatBasicMedicalRegistrationCode(
-                                    registration.registration_code,
-                                  )}
-                                </strong>
-                              </div>
-                              <div>
-                                <span>Số sinh viên</span>
-                                <strong>{registration.student_count}</strong>
-                              </div>
+                            <div className="basic-medical-registration-detail-code">
+                              <span>Mã phiếu</span>
+                              <strong className="mono">
+                                {formatBasicMedicalRegistrationCode(
+                                  registration.registration_code,
+                                )}
+                              </strong>
                             </div>
                             <div className="basic-medical-registration-detail-registrant">
-                              <div>
-                                <span>Người đăng ký</span>
-                                <strong>
-                                  {registration.registrant?.full_name}
-                                </strong>
-                              </div>
-                              <div>
-                                <span>Ghi chú</span>
-                                <strong>
-                                  {registration.note || "Không có ghi chú"}
-                                </strong>
-                              </div>
+                              <span>Người đăng ký</span>
+                              <strong>
+                                {registration.registrant?.full_name}
+                              </strong>
                             </div>
                             <div className="basic-medical-registration-detail-responsible">
                               <span>Giảng viên phụ trách</span>
                               <strong>
                                 {registration.responsible?.full_name}
+                              </strong>
+                            </div>
+                            <div className="basic-medical-registration-detail-student-count">
+                              <span>Số sinh viên</span>
+                              <strong>{registration.student_count}</strong>
+                            </div>
+                            <div className="basic-medical-registration-detail-note">
+                              <span>Ghi chú</span>
+                              <strong>
+                                {registration.note || "Không có ghi chú"}
                               </strong>
                             </div>
                             {canDelete && !isCancelled ? (
