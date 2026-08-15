@@ -406,6 +406,9 @@ test("Basic Medical registrations and sessions use shared master-grid anchors", 
     const cancel = registrationTable?.querySelector<HTMLElement>(
       ".basic-medical-registration-detail-action .button",
     );
+    const registrationStatus = registrationTable?.querySelector<HTMLElement>(
+      ".equipment-request-table-row td:nth-child(5) .request-status",
+    );
     const actionStack = sessionTable?.querySelector<HTMLElement>(
       ".basic-medical-session-action-stack",
     );
@@ -444,10 +447,13 @@ test("Basic Medical registrations and sessions use shared master-grid anchors", 
       sessionStatusHeading,
     ] = sessionHeadings;
     const sessionAction = actionStack?.querySelector<HTMLElement>("button");
+    const sessionStatus =
+      actionStack?.querySelector<HTMLElement>(".request-status");
     if (
       !registrationTable ||
       !sessionTable ||
       !cancel ||
+      !registrationStatus ||
       !actionStack ||
       !lecturerCell ||
       !registrantLabel ||
@@ -463,7 +469,8 @@ test("Basic Medical registrations and sessions use shared master-grid anchors", 
       !sessionLessonHeading ||
       !sessionLecturerHeading ||
       !sessionStatusHeading ||
-      !sessionAction
+      !sessionAction ||
+      !sessionStatus
     ) {
       throw new Error("Basic Medical layout controls are missing");
     }
@@ -528,6 +535,12 @@ test("Basic Medical registrations and sessions use shared master-grid anchors", 
         sessionActionToStatus: Math.abs(
           left(sessionAction) - textLeft(sessionStatusHeading),
         ),
+        registrationBadgeToStatus: Math.abs(
+          left(registrationStatus) - textLeft(registrationStatusHeading),
+        ),
+        sessionBadgeToStatus: Math.abs(
+          left(sessionStatus) - textLeft(sessionStatusHeading),
+        ),
       },
       pageOverflow: document.documentElement.scrollWidth > window.innerWidth,
     };
@@ -555,6 +568,12 @@ test("Basic Medical registrations and sessions use shared master-grid anchors", 
   expect(
     geometry.contentAnchorDeltas.sessionActionToStatus,
   ).toBeLessThanOrEqual(1);
+  expect(
+    geometry.contentAnchorDeltas.registrationBadgeToStatus,
+  ).toBeLessThanOrEqual(1);
+  expect(geometry.contentAnchorDeltas.sessionBadgeToStatus).toBeLessThanOrEqual(
+    1,
+  );
 
   const [index, date, time, lesson, lecturer, sessionStatus] =
     geometry.sessionWidths;

@@ -8748,13 +8748,13 @@ body,
 
 .basic-medical-registration-status-control {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 6px;
 }
 
 .basic-medical-registration-status-control .request-status {
-  grid-column: 2;
+  grid-column: 1;
 }
 
 .basic-medical-registration-status-control .equipment-request-chevron {
@@ -8882,10 +8882,6 @@ body,
   display: grid;
   justify-items: start;
   gap: 8px;
-}
-
-.basic-medical-session-action-stack .request-status {
-  justify-self: center;
 }
 
 .basic-medical-session-status {
