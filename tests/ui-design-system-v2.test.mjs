@@ -207,6 +207,11 @@ test("Basic Medical registration and sessions share one master grid", async () =
     /\.basic-medical-session-action-stack\s*\{[\s\S]*justify-items: start/,
   );
   assert.match(registrationList, /colSpan=\{5\}/);
+  assert.match(registrationList, /onClick=\{toggleRegistration\}/);
+  assert.match(
+    css,
+    /\.basic-medical-registration-table \.equipment-request-table-row\s*\{[\s\S]*cursor: pointer/,
+  );
   assert.match(
     css,
     /\.basic-medical-session-table th:last-child\s*\{[\s\S]*text-align: left/,

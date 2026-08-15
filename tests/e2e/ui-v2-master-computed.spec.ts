@@ -388,11 +388,11 @@ test("Basic Medical registrations and sessions use shared master-grid anchors", 
   await page.goto("/basic-medical/registrations", { waitUntil: "networkidle" });
 
   const registrationTable = page.locator(".basic-medical-registration-table");
-  const firstRegistrationButton = registrationTable
-    .locator(".equipment-request-course-button")
+  const firstRegistrationRow = registrationTable
+    .locator(".equipment-request-table-row")
     .first();
-  await expect(firstRegistrationButton).toBeVisible();
-  await firstRegistrationButton.click();
+  await expect(firstRegistrationRow).toBeVisible();
+  await firstRegistrationRow.locator("td:nth-child(2)").click();
 
   const sessionTable = page.locator(".basic-medical-session-table");
   await expect(sessionTable).toBeVisible();
@@ -584,9 +584,14 @@ test("Basic Medical registrations and sessions use shared master-grid anchors", 
   expect(sessionStatus).toBeCloseTo(status, 0);
   expect(geometry.pageOverflow).toBe(false);
 
+  await firstRegistrationRow.locator("td:nth-child(3)").click();
+  await expect(sessionTable).toBeHidden();
+  await firstRegistrationRow.locator("td:nth-child(4)").click();
+  await expect(sessionTable).toBeVisible();
+
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/basic-medical/registrations", { waitUntil: "networkidle" });
-  await expect(firstRegistrationButton).toBeVisible();
+  await expect(firstRegistrationRow).toBeVisible();
   const mobileGeometry = await page.evaluate(() => {
     const viewport = document.querySelector<HTMLElement>(
       ".basic-medical-registration-panel > .responsive-table",

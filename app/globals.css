@@ -8746,6 +8746,10 @@ body,
   text-align: center;
 }
 
+.basic-medical-registration-table .equipment-request-table-row {
+  cursor: pointer;
+}
+
 .basic-medical-registration-status-control {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;

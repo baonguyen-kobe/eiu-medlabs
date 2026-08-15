@@ -753,22 +753,27 @@ export function BasicMedicalRegistrationList({
                 );
               const isCancelled = Boolean(registration.cancelled_at);
               const isOpen = expanded.has(registration.id);
+              const toggleRegistration = () =>
+                setExpanded((current) => {
+                  const next = new Set(current);
+                  if (next.has(registration.id)) next.delete(registration.id);
+                  else next.add(registration.id);
+                  return next;
+                });
               return (
                 <tbody key={registration.id}>
-                  <tr className="equipment-request-table-row">
+                  <tr
+                    className="equipment-request-table-row"
+                    onClick={toggleRegistration}
+                  >
                     <td>
                       <button
                         type="button"
                         className="equipment-request-course-button"
-                        onClick={() =>
-                          setExpanded((current) => {
-                            const next = new Set(current);
-                            if (next.has(registration.id))
-                              next.delete(registration.id);
-                            else next.add(registration.id);
-                            return next;
-                          })
-                        }
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          toggleRegistration();
+                        }}
                       >
                         <strong>{registration.courses?.course_code}</strong>
                         <span>{registration.courses?.course_name}</span>
@@ -806,15 +811,10 @@ export function BasicMedicalRegistrationList({
                           type="button"
                           className={`equipment-request-chevron${isOpen ? " is-open" : ""}`}
                           aria-label={isOpen ? "Thu gọn phiếu" : "Mở phiếu"}
-                          onClick={() =>
-                            setExpanded((current) => {
-                              const next = new Set(current);
-                              if (next.has(registration.id))
-                                next.delete(registration.id);
-                              else next.add(registration.id);
-                              return next;
-                            })
-                          }
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            toggleRegistration();
+                          }}
                         >
                           ⌄
                         </button>
