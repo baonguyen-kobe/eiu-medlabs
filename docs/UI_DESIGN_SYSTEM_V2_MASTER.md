@@ -6,46 +6,73 @@ USER-APPROVED UI AUTHORITY
 Canonical path:
 docs/UI_DESIGN_SYSTEM_V2_MASTER.md
 
-Authority priority:
-
-1. Existing business/security requirements
-2. This Master
-3. Approved Page Overrides contained in this Master
-4. Existing approved production visual where this Master is silent
-5. Existing implementation / legacy CSS
-6. Generic UI/UX recommendations
-
-Governance:
-
-When the user approves a UI/UX rule change, update this file first. Do not create another competing Master.
-
 Last updated:
-2026-08-14
+2026-08-15
 
 ---
 
-# 0. SOURCE OF TRUTH — THỨ TỰ ƯU TIÊN
+# 0. AUTHORITY, INHERITANCE, AND GOVERNANCE
 
-Khi có xung đột, áp dụng đúng thứ tự:
+## 0.1 Precedence
+
+When rules conflict, apply this order:
 
 ```text
-1. Business/security requirement đã tồn tại
-2. This Master
-3. Approved Page Overrides contained in this Master
-4. Existing production visual nếu không mâu thuẫn MASTER
-5. Existing code / legacy CSS
-6. Generic UI/UX recommendation
+1. Existing business/security requirements
+2. Global UI Master
+3. Component / Family Master
+4. Approved Page Override
+5. Approved production visual when this Master is silent
+6. Existing implementation / legacy CSS
+7. Generic UI/UX recommendations
 ```
 
-Không được nói:
+The first four levels are defined in this document. A lower level cannot
+weaken a higher level unless the higher level explicitly permits that override.
 
-> “Code cũ đang vậy nên giữ.”
+## 0.2 Classification and inheritance
 
-Không được nói:
+### Level 1 — Global UI Master
 
-> “V2 hiện đại hơn nên đổi.”
+Use for application-wide visual contracts: tokens, typography, layout,
+controls, focus, table shell behavior, table body safe inset, and responsive
+overflow rules.
 
-Nếu MASTER đã có exact value thì dùng exact value.
+### Level 2 — Component / Family Master
+
+Use for repeated component families: Data Tables, catalog actions/imports,
+toolbars, calendars, Personnel management, and dialogs/drawers. Family rules
+inherit Global UI Master rules.
+
+### Level 3 — Approved Page Override
+
+Use only for a page's information architecture, semantic columns, or
+explicitly approved action arrangement. A Page Override changes only the rule
+it names. It still inherits global and family rules such as table shell,
+header alignment, body safe inset, typography, focus, and responsive behavior.
+
+## 0.3 Design decision placement
+
+When the user approves a UI correction:
+
+```text
+1. Classify it: Global, Component / Family, or Page Override.
+2. Update this canonical Master at that level first.
+3. Implement the UI.
+4. Add or update regression coverage.
+5. Report the rule and the affected scope.
+```
+
+Do not turn every correction into a page-specific CSS exception. Do not create
+another competing Master. This document records design intent and measurable
+contracts, not selector accidents.
+
+## 0.4 Business-logic firewall
+
+This Master does not define authorization, role permissions, database or RPC
+behavior, state transitions, email/outbox rules, or migration behavior. When a
+UI depends on such a rule, it may reference the existing business requirement
+without redefining it.
 
 ---
 
@@ -259,6 +286,9 @@ Rules:
 - Không bỏ gold left accent.
 - Không đổi Sidebar thành flat blue.
 - Chỉ chuẩn hóa spacing, không redesign visual identity.
+- Brand/logo, product title, and the first navigation group must occupy
+  separate vertical space. They must not overlap, clip, or be pulled together
+  with negative margins, transforms, or absolute positioning.
 
 ---
 
@@ -525,6 +555,11 @@ Rules:
 
 # 13. TABLE MASTER — CRITICAL
 
+Table shell, textual header alignment, body-cell safe inset, and responsive
+local-scroll behavior are Global UI Master contracts. A family or page may
+override semantic column meaning, content intent, or an explicitly approved
+action arrangement; it does not replace these shared table contracts.
+
 ## Structure
 
 ```text
@@ -789,6 +824,10 @@ same icon size/gap
 
 # 19. CATALOG ACTION MASTER — FINAL
 
+This is a Component / Family Master. Catalog pages inherit the Global Control,
+Toolbar, Table, Action Button, and Responsive Masters unless this section
+explicitly changes a catalog-family behavior.
+
 Áp dụng cho:
 
 - Danh mục thiết bị
@@ -914,6 +953,10 @@ Tablet/mobile:
 
 # 22. PERSONNEL TABLE OVERRIDE — FINAL
 
+Inherits the Table Master. This override defines Personnel column semantics and
+content hierarchy only; it does not redefine shared shell, header, body inset,
+typography, focus, or responsive behavior.
+
 Columns:
 
 ```text
@@ -1011,6 +1054,27 @@ Keep:
 
 Skills/Y chỉ khác data/business fields, không khác visual shell.
 
+## Calendar detail drawer family
+
+Skills and Basic Medical share the same detail-drawer family. The drawer is a
+visual editing/inspection pattern; its fields inherit the Global Form and
+Control rules.
+
+- Desktop drawer width is `min(480px, 100%)`; mobile continues to fit the
+  viewport.
+- Label/value rows use one shared grid. Labels align with the first value row;
+  a multi-lecturer field keeps the second choice aligned to the value column on
+  desktop.
+- Room values use the same body/control typography as other field values; do
+  not apply code/mono typography merely because a room label contains a code.
+- Native date, time, and select controls retain their native affordances and
+  must have sufficient inline space for their rendered locale value and icon.
+  They must never clip or overflow the drawer.
+- At a narrow mobile width, a time range may stack its start/end controls and a
+  secondary lecturer choice may use a full row when that is necessary to keep
+  all text visible. This is a responsive family behavior, not a page-specific
+  exception.
+
 ---
 
 # 25. DASHBOARD OVERRIDE
@@ -1063,6 +1127,10 @@ Chỉ inherit:
 ---
 
 # 27. PHIẾU Y CƠ SỞ OVERRIDE
+
+Inherits the Table, Action Button, Calendar, and Responsive Masters. This
+override defines the approved registration/session information architecture
+and shared-grid anchors only.
 
 Current layout cần standardize.
 
@@ -1148,6 +1216,10 @@ Inherit:
 
 # 30. IMPORT MASTER — FINAL
 
+This is a Component / Family Master for repeated import workflows. It defines
+the user-facing wizard and preview experience, not file-processing, mutation,
+or authorization semantics.
+
 `Import lịch Skills lab` là Import Master.
 
 Wizard:
@@ -1179,9 +1251,10 @@ Apply to:
 
 ---
 
-# 31. CATALOG IMPORT ALL — FINAL BUSINESS/UX REQUIREMENT
+# 31. CATALOG IMPORT ALL — FINAL UX REQUIREMENT
 
-`Import tất cả` uses reconciliation semantics internally, but the preview modal is primarily for:
+`Import tất cả` opens the existing application preview. The preview modal is
+primarily for:
 
 > Xem dữ liệu trong FILE sắp import trước khi áp dụng.
 
@@ -1192,7 +1265,7 @@ Import tất cả
 → native file chooser
 → select CSV/XLSX
 → validate and parse
-→ obtain server-authoritative reconciliation preview/fingerprint
+→ obtain the existing application preview
 → automatically open preview modal
 → user reviews file rows
 → Hủy or Import tất cả
@@ -1226,28 +1299,10 @@ Model
 
 Do NOT require visible reconciliation KPI cards `Cập nhật`, `Thêm mới`, `Kích hoạt lại`, `Ngừng sử dụng`, or `Xóa` inside this preview modal.
 
-The backend may still calculate reconciliation information for server-authoritative planning, fingerprint generation, stale-preview protection, internal validation, and audit. Those counts are not mandatory user-facing preview content.
-
-## Apply semantics remain unchanged
-
-Existing identity present in file:
-
-- preserve UUID;
-- update metadata; and
-- reactivate if needed.
-
-New identity: insert.
-
-Current catalog identity absent from file:
-
-- referenced/history exists: `Ngừng sử dụng`;
-- truly orphan: may delete according to existing approved semantics.
-
-Apply remains atomic, server-authoritative, and fingerprint protected.
-
-`Hủy` performs zero mutation.
-
-If database/catalog state changes after preview, reject stale preview. Do not silently execute a different plan; the user must obtain a fresh preview before retrying.
+The UI must present safe, mapped validation or stale-preview feedback and keep
+the preview open when the existing business contract rejects an apply. The
+underlying reconciliation, identity, mutation, authorization, and
+stale-protection semantics remain outside this UI Master.
 
 ---
 
@@ -1405,6 +1460,10 @@ Desktop productivity first
 Tablet/mobile fully operable
 ```
 
+Apply the shared layout, table, control, and drawer contracts first. Add a
+page override only for an explicitly approved information-architecture need;
+do not use a page-specific exception to avoid fixing a repeated family issue.
+
 Desktop:
 
 - dense
@@ -1514,7 +1573,7 @@ Must visually inspect:
 - section badge
 - table rounded edge
 - right-edge gutter
-- table header center
+- textual table header left alignment
 - cell padding
 - equipment column proportions
 - filter alignment
@@ -1667,7 +1726,7 @@ This task is DONE only when:
 - Topbar is white and 82px;
 - Page title exact Master;
 - Section badge exact Master;
-- Table header centered;
+- Textual Table headers aligned left;
 - cells have safe inset;
 - table shell rounded 4 corners;
 - no right-edge white gutter;
@@ -1692,8 +1751,7 @@ This task is DONE only when:
 - Import Master remains 5-step;
 - Import All automatically opens a file-row preview before apply;
 - Import All file contents are visible before mutation;
-- Import All reconciliation semantics remain server-authoritative;
-- Import All keeps fingerprint/stale-preview protection; and
+- Import All keeps its existing safe stale-preview feedback; and
 - Import All reconciliation KPI cards are NOT required in the preview UI;
 - no page-level horizontal overflow;
 - representative visual checks pass;
@@ -1715,15 +1773,5 @@ If current local implementation conflicts with this MASTER, **MASTER wins**.
 
 ---
 
-# MASTER GOVERNANCE
-
-1. This file is the canonical UI/UX authority for MedLabs.
-2. Future approved UI/UX changes update this file first.
-3. Implementation prompts should reference this file rather than reproducing the entire Design System.
-4. If current UI implementation conflicts with this Master, Master wins unless an existing business/security requirement has higher authority.
-5. An explicit new user-approved rule supersedes an older UI rule. Update the canonical file so the repository remains the authority.
-6. Do not create competing Master files.
-7. Historical UI docs remain context only where they conflict with this Master.
-8. Review actual/computed UI outcome, not merely source presence.
-9. Shared primitive/pattern correction takes precedence over page-specific CSS patching when the same problem exists across a component family.
-10. Legitimate business workflow differences use Page Overrides; they do not create a separate visual language.
+Governance, classification, inheritance, and correction placement are
+canonical in Section 0; do not duplicate them in a page or component section.

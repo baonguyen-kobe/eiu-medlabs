@@ -409,3 +409,41 @@ test("final Master correction keeps table ownership, counters, and stable catalo
   assert.match(catalogImport, /role="alert"/);
   assert.match(catalogImport, /stalePreviewMessage/);
 });
+
+test("UI V2 Master places repeated rules above family and page overrides", async () => {
+  const master = await source("docs/UI_DESIGN_SYSTEM_V2_MASTER.md");
+
+  assert.match(
+    master,
+    /Existing business\/security requirements[\s\S]*Global UI Master[\s\S]*Component \/ Family Master[\s\S]*Approved Page Override/,
+  );
+  assert.match(
+    master,
+    /A Page Override changes only the rule\s+it names\.[\s\S]*inherits global and family rules/,
+  );
+  assert.match(
+    master,
+    /1\. Classify it: Global, Component \/ Family, or Page Override\.[\s\S]*4\. Add or update regression coverage\./,
+  );
+  assert.match(
+    master,
+    /This Master does not define authorization, role permissions, database or RPC[\s\S]*migration behavior/,
+  );
+  assert.match(
+    master,
+    /Table shell, textual header alignment, body-cell safe inset, and responsive[\s\S]*Global UI Master contracts/,
+  );
+  assert.match(
+    master,
+    /This is a Component \/ Family Master\. Catalog pages inherit the Global Control/,
+  );
+  assert.match(
+    master,
+    /Inherits the Table Master\. This override defines Personnel column semantics/,
+  );
+  assert.match(
+    master,
+    /Calendar detail drawer family[\s\S]*Native date, time, and select controls[\s\S]*must never clip or overflow the drawer/,
+  );
+  assert.doesNotMatch(master, /table header center|Table header centered/i);
+});
