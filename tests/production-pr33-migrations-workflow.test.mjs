@@ -10,10 +10,11 @@ const workflow = await readFile(
   "utf8",
 ).then((contents) => contents.replace(/\r\n/g, "\n"));
 
-const targets = ["20260813160000", "20260813161000"];
+const targets = ["20260813160000", "20260813161000", "20260815131138"];
 const blobs = [
   "0b2fdf2608e523aed26416b290d8120e5f858e37",
   "49b9d767dd8f403dcfef6686ff1fe59d5ca8848d",
+  "d0f8cb795af46ab676238ab74099f3008f7baf22",
 ];
 const pr2 = [
   "20260809120000",
@@ -56,9 +57,36 @@ test("PR33 production migration rail is fixed, main-only, and credential-safe", 
   );
 });
 
-test("PR33 rail pins only the two reviewed migrations and excludes frozen PR2", () => {
+test("PR33 rail pins exactly the three reviewed migrations and excludes frozen PR2", () => {
   for (const value of [...targets, ...blobs, ...pr2])
     assert.match(workflow, new RegExp(value));
+  const targetLists = [
+    ...workflow.matchAll(/readonly target_versions=\(([\s\S]*?)\)/g),
+  ].map((match) =>
+    [...match[1].matchAll(/"(\d{14})"/g)].map((value) => value[1]),
+  );
+  assert.equal(targetLists.length, 2);
+  for (const targetList of targetLists) assert.deepEqual(targetList, targets);
+  const targetFiles = workflow.match(
+    /readonly target_files=\(([\s\S]*?)\)/,
+  )?.[1];
+  assert.ok(targetFiles);
+  assert.deepEqual(
+    [...targetFiles.matchAll(/"([^"\n]+\.sql)"/g)].map((value) => value[1]),
+    [
+      "20260813160000_operations_integrity_master_batch.sql",
+      "20260813161000_catalog_reconciliation_preview_apply.sql",
+      "20260815131138_grant_basic_medical_confirmation_signer_snapshot.sql",
+    ],
+  );
+  const targetBlobs = workflow.match(
+    /readonly target_blobs=\(([\s\S]*?)\)/,
+  )?.[1];
+  assert.ok(targetBlobs);
+  assert.deepEqual(
+    [...targetBlobs.matchAll(/"([0-9a-f]{40})"/g)].map((value) => value[1]),
+    blobs,
+  );
   assert.match(workflow, /git hash-object "\$file"/);
   assert.match(workflow, /frozen PR #2 migration is already applied remotely/);
   assert.match(workflow, /frozen PR #2 migration is present locally/);
@@ -122,4 +150,58 @@ test("dry run and postcheck mechanically constrain the only normal push", () => 
   ]) {
     assert.doesNotMatch(workflow.toLowerCase(), new RegExp(forbidden));
   }
+});
+
+test("signer snapshot permissions are fail-closed before and after the only push", () => {
+  const signerPreflightIndex = workflow.indexOf(
+    "Preflight signer snapshot permissions without mutation",
+  );
+  const dryRunIndex = workflow.indexOf("supabase db push --linked --dry-run");
+  const pushIndex = workflow.indexOf("supabase db push --linked\n");
+  const historyPostcheckIndex = workflow.indexOf(
+    "Verify the exact final migration history",
+  );
+  const signerPostcheckIndex = workflow.indexOf(
+    "Verify signer snapshot permissions after migration",
+  );
+  assert.ok(
+    signerPreflightIndex >= 0 &&
+      signerPreflightIndex < dryRunIndex &&
+      signerPostcheckIndex > historyPostcheckIndex &&
+      signerPostcheckIndex > pushIndex,
+  );
+  for (const assertion of [
+    "authenticated_signer_name_snapshot_select",
+    "authenticated_signature_data_select",
+    "authenticated_table_select",
+    "anon_signer_name_snapshot_select",
+    "rls_enabled",
+    "has_column_privilege(",
+    "has_table_privilege(",
+    "c.relrowsecurity",
+    "SIGNER_PERMISSION_PREFLIGHT_FAILED",
+    "SIGNER_PERMISSION_POSTCHECK_FAILED",
+  ]) {
+    assert.match(workflow, new RegExp(assertion.replace(/[()]/g, "\\$&")));
+  }
+  const signerPreflight = workflow.slice(signerPreflightIndex, dryRunIndex);
+  const signerPostcheck = workflow.slice(signerPostcheckIndex);
+  assert.match(
+    signerPreflight,
+    /authenticated_signer_name_snapshot_select: false/,
+  );
+  assert.match(
+    signerPostcheck,
+    /authenticated_signer_name_snapshot_select: true/,
+  );
+  for (const expectedFalse of [
+    "authenticated_signature_data_select",
+    "authenticated_table_select",
+    "anon_signer_name_snapshot_select",
+  ]) {
+    assert.match(signerPreflight, new RegExp(`${expectedFalse}: false`));
+    assert.match(signerPostcheck, new RegExp(`${expectedFalse}: false`));
+  }
+  assert.match(signerPreflight, /rls_enabled: true/);
+  assert.match(signerPostcheck, /rls_enabled: true/);
 });
