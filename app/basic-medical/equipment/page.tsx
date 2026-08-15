@@ -6,7 +6,8 @@ import {
 } from "@/app/basic-medical/equipment/actions";
 import { BasicMedicalEquipmentManager } from "@/components/basic-medical-equipment-manager";
 import { CatalogReconciliationImport } from "@/components/catalog-reconciliation-import";
-import { Download, UploadCloud } from "@/components/icons";
+import { CatalogImportNew } from "@/components/catalog-import-new";
+import { Download } from "@/components/icons";
 import { WorkspaceShell } from "@/components/workspace-shell";
 import type {
   BasicMedicalConditionLogItem,
@@ -253,15 +254,7 @@ export default async function BasicMedicalEquipmentPage({
             </button>
           </form>
 
-          <form
-            action={importBasicMedicalEquipment}
-            className="data-panel equipment-catalog-import"
-          >
-            <label className="equipment-import-file">
-              <UploadCloud size={20} aria-hidden="true" />
-              <span>File CSV hoặc XLSX</span>
-              <input name="file" type="file" accept=".csv,.xlsx" required />
-            </label>
+          <section className="data-panel equipment-catalog-import">
             <div className="equipment-import-actions">
               <a
                 className="button equipment-template-download"
@@ -269,14 +262,7 @@ export default async function BasicMedicalEquipmentPage({
               >
                 <Download size={17} aria-hidden="true" /> Tải template
               </a>
-              <button
-                type="submit"
-                className="button equipment-import-new"
-                name="mode"
-                value="new"
-              >
-                <UploadCloud size={17} aria-hidden="true" /> Import mới
-              </button>
+              <CatalogImportNew action={importBasicMedicalEquipment} />
               <CatalogReconciliationImport
                 preview={previewBasicMedicalCatalogReconciliation}
                 apply={applyBasicMedicalCatalogReconciliation}
@@ -288,7 +274,7 @@ export default async function BasicMedicalEquipmentPage({
                 <Download size={17} aria-hidden="true" /> Export tất cả
               </a>
             </div>
-          </form>
+          </section>
         </div>
       ) : null}
       <BasicMedicalEquipmentManager

@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRef, useState, useTransition } from "react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { UploadCloud } from "@/components/icons";
 
@@ -14,15 +13,19 @@ type Row = {
   model: string | null;
   unit: string;
 };
-
-type Preview = {
-  updated: number;
-  reactivated: number;
-  inserted: number;
-  deactivated: number;
-  deleted: number;
-  fingerprint: string;
-};
+type Preview = { fingerprint: string };
+type PreviewResult =
+  | { ok: true; preview: Preview }
+  | { ok: false; reason: "permission" | "invalid" | "unavailable" };
+type PreviewFailureReason = "permission" | "invalid" | "unavailable";
+const maxFileBytes = 10 * 1024 * 1024;
+const maxRows = 5_000;
+const previewPageSize = 25;
+const rowCountErrorMessage = "File phải có từ 1 đến 5000 dòng dữ liệu.";
+const requiredFieldsErrorMessage =
+  "Mỗi dòng cần có Tên thiết bị, Tên thương mại và ĐVT.";
+const stalePreviewMessage =
+  "Dữ liệu danh mục đã thay đổi. Hãy chọn lại file để xem trước bản mới.";
 
 const normalize = (value: unknown) =>
   String(value ?? "")
@@ -32,58 +35,62 @@ const normalize = (value: unknown) =>
     .replace(/đ/g, "d")
     .replace(/[^a-z0-9]+/g, "")
     .trim();
-
 const text = (value: unknown) => String(value ?? "").trim() || null;
-const maxFileBytes = 10 * 1024 * 1024;
-const maxRows = 5_000;
-const rowCountErrorMessage = "File phải có từ 1 đến 5000 dòng dữ liệu.";
-const requiredFieldsErrorMessage =
-  "Mỗi dòng cần có Tên thiết bị, Tên thương mại và ĐVT.";
-const genericImportErrorMessage = "Không thể đọc file import.";
 
-function localParserErrorMessage(error: unknown) {
-  if (
-    error instanceof Error &&
+function safeParserError(error: unknown) {
+  return error instanceof Error &&
     [rowCountErrorMessage, requiredFieldsErrorMessage].includes(error.message)
-  ) {
-    return error.message;
-  }
-  return genericImportErrorMessage;
+    ? error.message
+    : "Không thể đọc file import.";
+}
+
+function safeApplyError(message: string) {
+  return message.includes("CATALOG_RECONCILIATION_STALE_PREVIEW") ||
+    message.includes("Dữ liệu đã thay đổi")
+    ? stalePreviewMessage
+    : "Không thể áp dụng file import. Dữ liệu không thay đổi.";
+}
+
+function safePreviewError(reason: PreviewFailureReason) {
+  if (reason === "permission")
+    return "Bạn không có quyền kiểm tra danh mục này.";
+  if (reason === "invalid")
+    return "Dữ liệu trong file không hợp lệ. Vui lòng kiểm tra lại Tên thương mại và các trường bắt buộc.";
+  return "Không thể kiểm tra dữ liệu trên máy chủ. Dữ liệu chưa được thay đổi.";
 }
 
 export function CatalogReconciliationImport({
   preview,
   apply,
 }: {
-  preview: (rows: Row[]) => Promise<Preview>;
+  preview: (rows: Row[]) => Promise<PreviewResult>;
   apply: (
     rows: Row[],
     fingerprint: string,
-  ) => Promise<{
-    ok: boolean;
-    message: string;
-  }>;
+  ) => Promise<{ ok: boolean; message: string }>;
 }) {
-  const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [rows, setRows] = useState<Row[] | null>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [previewPage, setPreviewPage] = useState(0);
   const [plan, setPlan] = useState<Preview | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [modalNotice, setModalNotice] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const resetPreview = () => {
+    setRows(null);
+    setFileName(null);
+    setPlan(null);
+    setPreviewPage(0);
+    setModalNotice(null);
+  };
 
   async function readFile(file: File | null) {
-    if (!file) {
-      setNotice("Vui lòng chọn file CSV hoặc XLSX.");
-      return;
-    }
-    if (!/\.(csv|xlsx)$/i.test(file.name)) {
-      setNotice("Chỉ hỗ trợ file CSV hoặc XLSX.");
-      return;
-    }
-    if (file.size > maxFileBytes) {
-      setNotice("File đối soát không được lớn hơn 10 MB.");
-      return;
-    }
-
+    if (!file) return;
+    if (!/\.(csv|xlsx)$/i.test(file.name))
+      return setNotice("Chỉ hỗ trợ file CSV hoặc XLSX.");
+    if (file.size > maxFileBytes)
+      return setNotice("File import không được lớn hơn 10 MB.");
     try {
       const XLSX = await import("@e965/xlsx");
       const buffer = await file.arrayBuffer();
@@ -94,9 +101,8 @@ export function CatalogReconciliationImport({
         workbook.Sheets[workbook.SheetNames[0]],
         { defval: "", raw: false },
       );
-      if (!raw.length || raw.length > maxRows) {
+      if (!raw.length || raw.length > maxRows)
         throw new Error(rowCountErrorMessage);
-      }
       const parsed = raw.map((source) => {
         const fields = new Map(
           Object.entries(source).map(([key, value]) => [
@@ -109,9 +115,8 @@ export function CatalogReconciliationImport({
         const item_name = pick("tenthietbivavattu", "tenthietbi", "itemname");
         const commercial_name = pick("tenthuongmai", "commercialname");
         const unit = pick("dvt", "donvitinh", "unit");
-        if (!item_name || !commercial_name || !unit) {
+        if (!item_name || !commercial_name || !unit)
           throw new Error(requiredFieldsErrorMessage);
-        }
         return {
           item_name,
           commercial_name,
@@ -123,74 +128,174 @@ export function CatalogReconciliationImport({
         };
       });
       setRows(parsed);
+      setFileName(file.name);
+      setPreviewPage(0);
       setPlan(null);
-      setNotice(`${parsed.length} dòng đã sẵn sàng để preview.`);
+      setNotice(null);
+      setModalNotice(null);
+      startTransition(async () => {
+        try {
+          const result = await preview(parsed);
+          if (result.ok) {
+            setPlan(result.preview);
+            return;
+          }
+          setPlan(null);
+          setModalNotice(safePreviewError(result.reason));
+        } catch {
+          setPlan(null);
+          setModalNotice(
+            "Không thể kiểm tra dữ liệu trên máy chủ. Dữ liệu chưa được thay đổi.",
+          );
+        }
+      });
     } catch (error) {
-      setRows(null);
-      setPlan(null);
-      setNotice(localParserErrorMessage(error));
+      resetPreview();
+      setNotice(safeParserError(error));
     }
   }
 
   return (
-    <div className="equipment-import-actions">
-      <label className="button equipment-import-all">
-        <UploadCloud size={17} /> Chọn file đối soát
+    <div className="equipment-import-actions catalog-import-all-action">
+      <label
+        className="button equipment-import-all"
+        role="button"
+        tabIndex={0}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            fileInputRef.current?.click();
+          }
+        }}
+      >
+        <UploadCloud size={17} /> Import tất cả
         <input
+          ref={fileInputRef}
+          aria-hidden="true"
           className="sr-only"
+          tabIndex={-1}
           type="file"
           accept=".csv,.xlsx"
-          onChange={(event) => void readFile(event.target.files?.[0] ?? null)}
+          onChange={(event) => {
+            void readFile(event.target.files?.[0] ?? null);
+            event.currentTarget.value = "";
+          }}
         />
       </label>
-      <button
-        className="button equipment-import-all"
-        type="button"
-        disabled={!rows || pending}
-        onClick={() =>
-          rows &&
-          startTransition(async () => {
-            try {
-              setPlan(await preview(rows));
-              setNotice(null);
-            } catch {
-              setNotice("Không thể preview file.");
-            }
-          })
-        }
-      >
-        Preview đối soát
-      </button>
       {notice ? <span className="field-note">{notice}</span> : null}
       <ConfirmDialog
-        open={Boolean(plan)}
-        title="Áp dụng đối soát danh mục?"
+        open={Boolean(rows && fileName)}
+        title="Import tất cả"
         description={
-          plan
-            ? `${plan.updated} cập nhật · ${plan.inserted} thêm mới · ${plan.reactivated} kích hoạt lại · ${plan.deactivated} ngừng sử dụng · ${plan.deleted} xóa vĩnh viễn.`
-            : ""
+          fileName && rows ? `${fileName} · ${rows.length} dòng dữ liệu` : ""
         }
-        confirmLabel="Áp dụng"
+        cancelLabel="Hủy"
+        confirmLabel="Import tất cả"
+        tone="primary"
         pending={pending}
-        onCancel={() => setPlan(null)}
+        confirmDisabled={!plan}
+        className="catalog-import-preview-dialog"
+        onCancel={resetPreview}
         onConfirm={() =>
           rows &&
           plan &&
           startTransition(async () => {
             try {
               const result = await apply(rows, plan.fingerprint);
-              setNotice(result.message);
               if (result.ok) {
-                setPlan(null);
-                setRows(null);
-                router.refresh();
+                setNotice(result.message);
+                resetPreview();
+                window.location.reload();
+                return;
               }
+              setPlan(null);
+              setModalNotice(safeApplyError(result.message));
             } catch {
-              setNotice("Không thể áp dụng đối soát danh mục.");
+              setPlan(null);
+              setModalNotice(
+                "Không thể áp dụng file import. Dữ liệu không thay đổi.",
+              );
             }
           })
         }
-      />
+      >
+        <div className="catalog-import-preview">
+          {modalNotice ? (
+            <p className="action-feedback" role="alert">
+              {modalNotice}
+            </p>
+          ) : null}
+          <p className="field-note">
+            Đây là dữ liệu trong file bạn chuẩn bị import.
+          </p>
+          <div
+            className="preview-table-wrap"
+            role="region"
+            aria-label="Dữ liệu file import"
+            tabIndex={0}
+          >
+            <table className="preview-table">
+              <thead>
+                <tr>
+                  <th>Tên thiết bị và vật tư</th>
+                  <th>Tên thương mại</th>
+                  <th>Loại</th>
+                  <th>Nước SX</th>
+                  <th>Hãng</th>
+                  <th>Model</th>
+                  <th>ĐVT</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows
+                  ?.slice(
+                    previewPage * previewPageSize,
+                    (previewPage + 1) * previewPageSize,
+                  )
+                  .map((row, index) => (
+                    <tr key={`${row.commercial_name}-${index}`}>
+                      <td>{row.item_name}</td>
+                      <td>{row.commercial_name}</td>
+                      <td>{row.item_type ?? "—"}</td>
+                      <td>{row.country_of_origin ?? "—"}</td>
+                      <td>{row.manufacturer ?? "—"}</td>
+                      <td>{row.model ?? "—"}</td>
+                      <td>{row.unit}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+          {rows && rows.length > previewPageSize ? (
+            <nav
+              className="pagination-controls"
+              aria-label="Phân trang dữ liệu file"
+            >
+              <span className="field-note">
+                Dòng {previewPage * previewPageSize + 1}–
+                {Math.min((previewPage + 1) * previewPageSize, rows.length)} /{" "}
+                {rows.length}
+              </span>
+              <button
+                className="button button-secondary"
+                type="button"
+                disabled={previewPage === 0}
+                onClick={() => setPreviewPage((current) => current - 1)}
+              >
+                Trước
+              </button>
+              <button
+                className="button button-secondary"
+                type="button"
+                disabled={(previewPage + 1) * previewPageSize >= rows.length}
+                onClick={() => setPreviewPage((current) => current + 1)}
+              >
+                Sau
+              </button>
+            </nav>
+          ) : null}
+        </div>
+      </ConfirmDialog>
     </div>
   );
 }

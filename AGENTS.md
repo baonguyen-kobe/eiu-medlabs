@@ -41,6 +41,10 @@ For new or substantially modified source files, treat 350 lines as a review sign
 - Use the web-design-guidelines skill for explicit UI/UX or accessibility reviews.
 - Use OpenSpec for cross-cutting features, breaking behavior, schema/security changes, or work that needs a durable proposal. Small fixes and localized UI changes should remain direct.
 
+## Canonical UI/UX authority
+
+For every MedLabs UI/UX implementation or review task, read `docs/UI_DESIGN_SYSTEM_V2_MASTER.md` before modifying UI. After existing business/security requirements, it is the canonical UI authority. Do not recreate or copy the full Master into prompts or new files; when the user approves a UI rule change, update this file first and then implement against it.
+
 OpenSpec lifecycle:
 
 1. `$openspec-propose` for a large change.

@@ -902,7 +902,7 @@ export function Dashboard({
               {selectedEvent.room ? (
                 <div>
                   <dt>Phòng</dt>
-                  <dd className="mono">
+                  <dd>
                     {selectedEvent.type === "class" &&
                     canEditClassDetails &&
                     calendarKind !== "basic_medical" ? (

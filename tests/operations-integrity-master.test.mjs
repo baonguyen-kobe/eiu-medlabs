@@ -234,16 +234,20 @@ test("catalog reconciliation is previewed and atomically applied in both domains
   );
   assert.match(skillsActions, /previewEquipmentCatalogReconciliation/);
   assert.match(basicActions, /previewBasicMedicalCatalogReconciliation/);
-  assert.match(skillsActions, /CATALOG_RECONCILIATION_PREVIEW_FAILED/);
-  assert.match(basicActions, /CATALOG_RECONCILIATION_PREVIEW_FAILED/);
+  assert.match(skillsActions, /catalog_reconciliation_preview_failed/);
+  assert.match(basicActions, /catalog_reconciliation_preview_failed/);
   assert.match(skillsActions, /requestedMode !== "new"/);
   assert.match(basicActions, /mode !== "new"/);
-  assert.match(importUi, /Preview đối soát/);
-  assert.match(importUi, /router\.refresh\(\)/);
+  assert.match(importUi, /<UploadCloud size=\{17\} \/> Import tất cả/);
+  assert.match(importUi, /const result = await preview\(parsed\)/);
+  assert.match(importUi, /setPlan\(result\.preview\)/);
+  assert.match(importUi, /safePreviewError\(result\.reason\)/);
+  assert.match(importUi, /confirmLabel="Import tất cả"/);
+  assert.doesNotMatch(importUi, /Chọn file đối soát|Preview đối soát/);
+  assert.match(importUi, /window\.location\.reload\(\)/);
   for (const localMessage of [
-    "Vui lòng chọn file CSV hoặc XLSX.",
     "Chỉ hỗ trợ file CSV hoặc XLSX.",
-    "File đối soát không được lớn hơn 10 MB.",
+    "File import không được lớn hơn 10 MB.",
     "Mỗi dòng cần có Tên thiết bị, Tên thương mại và ĐVT.",
   ]) {
     assert.match(importUi, new RegExp(localMessage));
@@ -254,9 +258,9 @@ test("catalog reconciliation is previewed and atomically applied in both domains
   );
   assert.match(
     importUi,
-    /function localParserErrorMessage\(error: unknown\)[\s\S]*return genericImportErrorMessage/,
+    /function safeParserError\(error: unknown\)[\s\S]*Không thể đọc file import\./,
   );
-  assert.match(importUi, /setNotice\(localParserErrorMessage\(error\)\)/);
+  assert.match(importUi, /setNotice\(safeParserError\(error\)\)/);
   assert.doesNotMatch(importUi, /setNotice\(error\.message\)/);
   assert.match(migration, /catalog_item_id_snapshot/);
   assert.match(migration, /'referenced',referenced/);

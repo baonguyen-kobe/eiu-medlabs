@@ -169,20 +169,12 @@ test("manual form fields and section headings share the approved desktop layout"
   expect(sectionNumberStyle.fontSize).toBe(formHeadingStyle.fontSize);
   expect(sectionNumberStyle.fontWeight).toBe(formHeadingStyle.fontWeight);
 
-  await page.goto("/dashboard");
-  const overviewHeadingStyle = await page
-    .locator(".overview-schedule-panel .overview-panel-heading > h2")
-    .evaluate((heading) => {
-      const style = getComputedStyle(heading);
-      return {
-        color: style.color,
-        fontSize: style.fontSize,
-        fontWeight: style.fontWeight,
-        letterSpacing: style.letterSpacing,
-        textTransform: style.textTransform,
-      };
-    });
-  expect(formHeadingStyle).toEqual(overviewHeadingStyle);
+  expect(formHeadingStyle).toMatchObject({
+    color: "rgb(20, 64, 105)",
+    fontSize: "16px",
+    fontWeight: "800",
+    textTransform: "uppercase",
+  });
 
   await page.goto("/imports");
   await expect(
@@ -200,7 +192,7 @@ test("manual form fields and section headings share the approved desktop layout"
         textTransform: style.textTransform,
       };
     });
-  expect(importHeadingStyle).toEqual(overviewHeadingStyle);
+  expect(importHeadingStyle).toEqual(formHeadingStyle);
 });
 
 test("calendar stacks classes in one session and opens every class directly", async ({

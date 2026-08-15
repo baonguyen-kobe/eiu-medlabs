@@ -34,6 +34,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { AppRole } from "@/lib/viewer";
 import { logout } from "@/app/login/actions";
 import { getNameInitials } from "@/lib/person-name";
+import { PageHeader } from "@/components/patterns/page-header";
 import {
   canCreateBasicMedicalSchedules,
   canImportBasicMedicalSchedules,
@@ -648,23 +649,23 @@ export function WorkspaceShell({
       ) : null}
 
       <main className="workspace-main">
-        <header className="workspace-topbar">
-          <button
-            aria-controls="workspace-navigation"
-            aria-expanded={sidebarOpen}
-            className="icon-button menu-button"
-            onClick={() => setSidebarOpen(true)}
-            aria-label="Mở menu"
-            ref={menuButtonRef}
-          >
-            <Menu size={21} />
-          </button>
-          <div>
-            <h1>{title}</h1>
-            {description ? <p>{description}</p> : null}
-          </div>
-          {actions ? <div className="workspace-actions">{actions}</div> : null}
-        </header>
+        <PageHeader
+          menu={
+            <button
+              aria-controls="workspace-navigation"
+              aria-expanded={sidebarOpen}
+              className="icon-button menu-button"
+              onClick={() => setSidebarOpen(true)}
+              aria-label="Mở menu"
+              ref={menuButtonRef}
+            >
+              <Menu size={21} />
+            </button>
+          }
+          title={title}
+          description={description}
+          actions={actions}
+        />
         <div className="workspace-content page-container">{children}</div>
       </main>
     </div>

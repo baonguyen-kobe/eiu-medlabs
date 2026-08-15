@@ -11,6 +11,8 @@ export function ConfirmDialog({
   cancelLabel = "Quay lại",
   tone = "danger",
   pending = false,
+  confirmDisabled = false,
+  className,
   children,
   onConfirm,
   onCancel,
@@ -22,6 +24,8 @@ export function ConfirmDialog({
   cancelLabel?: string;
   tone?: "danger" | "primary";
   pending?: boolean;
+  confirmDisabled?: boolean;
+  className?: string;
   children?: ReactNode;
   onConfirm: () => void;
   onCancel: () => void;
@@ -29,6 +33,7 @@ export function ConfirmDialog({
   const titleId = useId();
   const descriptionId = useId();
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -38,7 +43,36 @@ export function ConfirmDialog({
     cancelRef.current?.focus();
 
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape" && !pending) onCancel();
+      if (event.key === "Escape" && !pending) {
+        onCancel();
+        return;
+      }
+
+      if (event.key !== "Tab") return;
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+      const focusable = Array.from(
+        dialog.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((element) => !element.hasAttribute("hidden"));
+      if (focusable.length === 0) {
+        event.preventDefault();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      if (event.shiftKey) {
+        if (active === first || !dialog.contains(active)) {
+          event.preventDefault();
+          last.focus();
+        }
+      } else if (active === last || !dialog.contains(active)) {
+        event.preventDefault();
+        first.focus();
+      }
     }
 
     document.addEventListener("keydown", handleKeyDown);
@@ -61,7 +95,8 @@ export function ConfirmDialog({
         disabled={pending}
       />
       <section
-        className="confirm-dialog"
+        ref={dialogRef}
+        className={`confirm-dialog${className ? ` ${className}` : ""}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -89,7 +124,7 @@ export function ConfirmDialog({
             type="button"
             className={`button ${tone === "danger" ? "button-danger" : "button-primary"}`}
             onClick={onConfirm}
-            disabled={pending}
+            disabled={pending || confirmDisabled}
           >
             {pending ? "Đang xử lý…" : confirmLabel}
           </button>

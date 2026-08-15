@@ -44,35 +44,38 @@ export default async function CoursesPage({
       {query.error ? (
         <p className="action-feedback error">{query.error}</p>
       ) : null}
-      <form
-        action={createCourse}
-        className="admin-create-form admin-create-course"
-      >
-        <label>
-          Mã môn học
-          <input name="course_code" required placeholder="NUR 301" />
-        </label>
-        <label>
-          Tên môn học
-          <input name="course_name" required placeholder="Tên môn học" />
-        </label>
-        <label>
-          Loại
-          <select name="room_type_id" required defaultValue="">
-            <option value="" disabled>
-              Chọn Loại
-            </option>
-            {(roomTypes ?? [])
-              .filter(({ is_active }) => is_active)
-              .map((roomType) => (
-                <option key={roomType.id} value={roomType.id}>
-                  {roomType.name}
-                </option>
-              ))}
-          </select>
-        </label>
-        <button className="button button-primary">Thêm môn học</button>
-      </form>
+      <details className="catalog-manual-add">
+        <summary>+ Thêm môn học</summary>
+        <form
+          action={createCourse}
+          className="admin-create-form admin-create-course"
+        >
+          <label>
+            Mã môn học
+            <input name="course_code" required placeholder="NUR 301" />
+          </label>
+          <label>
+            Tên môn học
+            <input name="course_name" required placeholder="Tên môn học" />
+          </label>
+          <label>
+            Loại
+            <select name="room_type_id" required defaultValue="">
+              <option value="" disabled>
+                Chọn Loại
+              </option>
+              {(roomTypes ?? [])
+                .filter(({ is_active }) => is_active)
+                .map((roomType) => (
+                  <option key={roomType.id} value={roomType.id}>
+                    {roomType.name}
+                  </option>
+                ))}
+            </select>
+          </label>
+          <button className="button button-primary">Thêm môn học</button>
+        </form>
+      </details>
       <CatalogBatchManager
         kind="courses"
         initialItems={(courses ?? []).map((course) => ({

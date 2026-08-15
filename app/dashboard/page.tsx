@@ -134,7 +134,7 @@ export default async function DashboardPage() {
       canManagePersonnel={canManagePersonnel}
       canManageEmailNotifications={canManageEmailNotifications}
       title="Tổng quan"
-      description={`Hôm nay ${formatBusinessDate(todayText)} · Xin chào ${fullName}`}
+      description={`Hôm nay ${formatBusinessDate(todayText)}`}
       actions={
         canCreate ? (
           <>

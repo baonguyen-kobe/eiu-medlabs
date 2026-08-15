@@ -90,6 +90,16 @@ export function EmailNotificationTable({
         tabIndex={0}
       >
         <table className="data-table catalog-data-table email-notification-table">
+          <colgroup>
+            {isAdmin ? <col className="email-notification-col-select" /> : null}
+            <col className="email-notification-col-time" />
+            <col className="email-notification-col-recipient" />
+            <col className="email-notification-col-content" />
+            <col className="email-notification-col-status" />
+            <col className="email-notification-col-attempts" />
+            <col className="email-notification-col-error" />
+            <col className="email-notification-col-action" />
+          </colgroup>
           <thead>
             <tr>
               {isAdmin ? (

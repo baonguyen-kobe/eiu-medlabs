@@ -246,7 +246,11 @@ export default async function PersonnelPage({
           </select>
         </label>
         <button className="button button-secondary">Lọc</button>
-        <span>{totalItems} nhân sự</span>
+        <span className="inline-toolbar-count-slot">
+          <span className="personnel-result-count inline-toolbar-count">
+            {totalItems} nhân sự
+          </span>
+        </span>
       </form>
 
       <PersonnelManagementList

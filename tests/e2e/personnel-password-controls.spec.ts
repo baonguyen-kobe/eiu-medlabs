@@ -88,8 +88,14 @@ test("Personnel reset forces an email-password account through password change b
       .getByRole("textbox", { name: "Mật khẩu mới", exact: true })
       .fill("RootCustom123!");
     await drawer.getByLabel("Xác nhận mật khẩu mới").fill("RootCustom123!");
-    page.once("dialog", (dialog) => dialog.accept());
     await drawer.getByRole("button", { name: "Đổi mật khẩu" }).click();
+    const customPasswordDialog = page.getByRole("dialog", {
+      name: "Đổi mật khẩu với quyền Root?",
+    });
+    await expect(customPasswordDialog).toBeVisible();
+    await customPasswordDialog
+      .getByRole("button", { name: "Đổi mật khẩu", exact: true })
+      .click();
     await expect(drawer.getByRole("status")).toContainText("Đã đổi mật khẩu");
 
     await page.context().clearCookies();
@@ -104,8 +110,14 @@ test("Personnel reset forces an email-password account through password change b
     await clickUntilState(row.getByRole("button", { name: "Sửa" }), () =>
       expect(drawer).toBeVisible({ timeout: 1_000 }),
     );
-    page.once("dialog", (dialog) => dialog.accept());
     await drawer.getByRole("button", { name: "Đặt lại mật khẩu" }).click();
+    const resetPasswordDialog = page.getByRole("dialog", {
+      name: "Đặt lại mật khẩu?",
+    });
+    await expect(resetPasswordDialog).toBeVisible();
+    await resetPasswordDialog
+      .getByRole("button", { name: "Đặt lại mật khẩu", exact: true })
+      .click();
     await expect(drawer.getByRole("status")).toContainText("mật khẩu tạm thời");
 
     const { data: forcedProfile } = await serviceDb

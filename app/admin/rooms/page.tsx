@@ -50,40 +50,46 @@ export default async function RoomsPage({
       {query.error ? (
         <p className="action-feedback error">{query.error}</p>
       ) : null}
-      <form action={createRoom} className="admin-create-form admin-create-room">
-        <label>
-          Mã phòng
-          <input name="room_code" required placeholder="301" />
-        </label>
-        <label>
-          Tòa nhà
-          <input name="building_code" required placeholder="A3" />
-        </label>
-        <label>
-          Tên phòng
-          <input name="room_name" placeholder="Phòng học 301" />
-        </label>
-        <label>
-          Loại phòng
-          <select name="room_type_id" required defaultValue="">
-            <option value="" disabled>
-              Chọn Loại phòng
-            </option>
-            {(roomTypes ?? [])
-              .filter(({ is_active }) => is_active)
-              .map((roomType) => (
-                <option key={roomType.id} value={roomType.id}>
-                  {roomType.name}
-                </option>
-              ))}
-          </select>
-        </label>
-        <label>
-          Sức chứa
-          <input name="capacity" type="number" min="1" />
-        </label>
-        <button className="button button-primary">Thêm phòng</button>
-      </form>
+      <details className="catalog-manual-add">
+        <summary>+ Thêm phòng</summary>
+        <form
+          action={createRoom}
+          className="admin-create-form admin-create-room"
+        >
+          <label>
+            Mã phòng
+            <input name="room_code" required placeholder="301" />
+          </label>
+          <label>
+            Tòa nhà
+            <input name="building_code" required placeholder="A3" />
+          </label>
+          <label>
+            Tên phòng
+            <input name="room_name" placeholder="Phòng học 301" />
+          </label>
+          <label>
+            Loại phòng
+            <select name="room_type_id" required defaultValue="">
+              <option value="" disabled>
+                Chọn Loại phòng
+              </option>
+              {(roomTypes ?? [])
+                .filter(({ is_active }) => is_active)
+                .map((roomType) => (
+                  <option key={roomType.id} value={roomType.id}>
+                    {roomType.name}
+                  </option>
+                ))}
+            </select>
+          </label>
+          <label>
+            Sức chứa
+            <input name="capacity" type="number" min="1" />
+          </label>
+          <button className="button button-primary">Thêm phòng</button>
+        </form>
+      </details>
       <CatalogBatchManager
         kind="rooms"
         initialItems={(rooms ?? []).map((room) => ({

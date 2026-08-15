@@ -59,6 +59,11 @@ export async function getViewer() {
     name: string;
   }>;
 
+  const isRootAdministrator = Boolean(
+    (personnelAuthority as { is_root_administrator?: boolean } | null)
+      ?.is_root_administrator,
+  );
+
   return {
     supabase,
     userId,
@@ -71,7 +76,11 @@ export async function getViewer() {
     roles,
     roomTypes,
     allowBasicMedicalAccess: profile?.allow_basic_medical_access ?? false,
-    canImportSchedules: profile?.can_import_schedules ?? false,
+    // This is the effective viewer permission. Every active Admin, including
+    // the canonical Root Administrator, can import independently of the
+    // optional profile capability toggle.
+    canImportSchedules:
+      roles.includes("admin") || (profile?.can_import_schedules ?? false),
     canManageEmailNotifications:
       roles.includes("admin") ||
       (roles.includes("staff") &&
@@ -80,10 +89,7 @@ export async function getViewer() {
       (personnelAuthority as { can_manage_personnel?: boolean } | null)
         ?.can_manage_personnel,
     ),
-    isRootAdministrator: Boolean(
-      (personnelAuthority as { is_root_administrator?: boolean } | null)
-        ?.is_root_administrator,
-    ),
+    isRootAdministrator,
     canManageBasicMedical: Boolean(
       (
         basicMedicalAuthority as {

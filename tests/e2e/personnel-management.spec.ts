@@ -15,13 +15,26 @@ const adminDb = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
   { auth: { autoRefreshToken: false, persistSession: false } },
 );
+const e2eAdminEmail = process.env.E2E_ADMIN_EMAIL ?? "admin@campus.local";
+const e2eAdminPassword = process.env.E2E_ADMIN_PASSWORD ?? "LocalAdmin123!";
+const e2eAdminAuthEmail =
+  process.env.E2E_ADMIN_AUTH_EMAIL ??
+  (e2eAdminEmail === "admin" ? "admin@medlabs.local" : e2eAdminEmail);
+const e2eAdminProfileEmail =
+  process.env.E2E_ADMIN_PROFILE_EMAIL ?? "admin@campus.local";
 
 async function loginAsAdmin(page: Page) {
   await page.goto("/login");
-  await page.locator('input[name="email"]').fill("admin@campus.local");
-  await page.locator('input[name="password"]').fill("LocalAdmin123!");
-  await page.locator('button[type="submit"]').click();
-  await expect(page).toHaveURL(/\/dashboard$/);
+  const email = page.locator('input[name="email"]');
+  const password = page.locator('input[name="password"]');
+  await clickUntilState(
+    page.locator('button[type="submit"]'),
+    () => expect(page).toHaveURL(/\/dashboard$/, { timeout: 1_000 }),
+    async () => {
+      await email.fill(e2eAdminEmail);
+      await password.fill(e2eAdminPassword);
+    },
+  );
 }
 
 async function login(page: Page, email: string, password: string) {
@@ -34,8 +47,8 @@ async function login(page: Page, email: string, password: string) {
 
 async function deletePersonnel(email: string) {
   await adminDb.auth.signInWithPassword({
-    email: "admin@campus.local",
-    password: "LocalAdmin123!",
+    email: e2eAdminAuthEmail,
+    password: e2eAdminPassword,
   });
   const { data } = await adminDb
     .from("profiles")
@@ -49,6 +62,7 @@ test("personnel drawer saves role, import capability and lock atomically", async
   page,
 }) => {
   const email = `personnel-e2e-${crypto.randomUUID()}@campus.local`;
+  const phone = `09${Date.now().toString().slice(-8)}`;
   await loginAsAdmin(page);
   try {
     await page.goto("/admin/personnel");
@@ -57,7 +71,7 @@ test("personnel drawer saves role, import capability and lock atomically", async
     await createForm.locator('input[name="full_name"]').fill("Trợ giảng E2E");
     await createForm.locator('input[name="email"]').fill(email);
     await createForm.locator('input[name="password"]').fill("LocalQa123!");
-    await createForm.locator('input[name="phone"]').fill("0900999888");
+    await createForm.locator('input[name="phone"]').fill(phone);
     await createForm
       .locator('input[name="roles"][value="teaching_assistant"]')
       .check();
@@ -75,8 +89,21 @@ test("personnel drawer saves role, import capability and lock atomically", async
     );
     await drawer.getByLabel("Cho phép nhập lịch").uncheck();
     await drawer.getByLabel("Đang hoạt động").uncheck();
-    page.once("dialog", (dialog) => dialog.accept());
     await drawer.getByRole("button", { name: "Lưu thay đổi" }).click();
+    const confirmation = page.locator(".confirm-dialog");
+    await expect(confirmation).toContainText("Khóa tài khoản?");
+    await expect(
+      confirmation.getByRole("button", { name: "Quay lại" }),
+    ).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(
+      confirmation.getByRole("button", { name: "Khóa tài khoản" }),
+    ).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(
+      confirmation.getByRole("button", { name: "Quay lại" }),
+    ).toBeFocused();
+    await confirmation.getByRole("button", { name: "Khóa tài khoản" }).click();
 
     await expect(drawer.getByRole("status")).toContainText(
       "Đã cập nhật nhân sự.",
@@ -97,7 +124,7 @@ test("Root và Bảo thấy Personnel, Admin thường bị ẩn menu và redire
   await expect(page).toHaveURL(/\/admin\/personnel/);
   const rootRow = page
     .locator(".personnel-table tbody tr")
-    .filter({ hasText: "admin@campus.local" });
+    .filter({ hasText: e2eAdminProfileEmail });
   await expect(rootRow).toContainText("Root Administrator");
   await expect(rootRow.getByRole("button", { name: "Xem" })).toBeVisible();
   const managerRow = page
@@ -138,7 +165,9 @@ test("Personnel edit drawer remains usable at the required desktop viewports", a
     await staffRow.getByRole("button", { name: "Sửa" }).click();
     const drawer = page.getByRole("dialog", { name: "Chỉnh sửa nhân sự" });
     await expect(drawer).toBeVisible();
-    await expect(drawer.getByText("Mật khẩu", { exact: true })).toBeVisible();
+    await expect(
+      drawer.getByText("Mật khẩu / Bảo mật", { exact: true }),
+    ).toBeVisible();
     await expect(
       drawer.getByText("Vai trò chính", { exact: true }),
     ).toBeVisible();
@@ -169,6 +198,153 @@ test("Personnel edit drawer remains usable at the required desktop viewports", a
   }
 });
 
+async function openStaffDrawer(page: Page, email: string) {
+  const staffRow = page
+    .locator(".personnel-table tbody tr")
+    .filter({ hasText: email });
+  await expect(staffRow).toBeVisible();
+  await staffRow.getByRole("button", { name: "Sửa" }).click();
+  return page.getByRole("dialog", { name: "Chỉnh sửa nhân sự" });
+}
+
+async function createStaffParityFixture(canManageEmailNotifications: boolean) {
+  const email = `personnel-parity-${crypto.randomUUID()}@campus.local`;
+  const { data: created, error: createError } =
+    await serviceDb.auth.admin.createUser({
+      email,
+      password: "LocalParity123!",
+      email_confirm: true,
+    });
+  if (createError || !created.user) {
+    throw createError ?? new Error("Unable to create Personnel parity fixture");
+  }
+  const { data: roomType, error: roomTypeError } = await serviceDb
+    .from("room_types")
+    .select("id")
+    .eq("is_active", true)
+    .limit(1)
+    .single();
+  if (roomTypeError || !roomType) {
+    await serviceDb.auth.admin.deleteUser(created.user.id);
+    throw roomTypeError ?? new Error("Missing active room type fixture");
+  }
+  const [roleResult, scopeResult, profileResult] = await Promise.all([
+    serviceDb
+      .from("user_roles")
+      .insert({ user_id: created.user.id, role: "staff" }),
+    serviceDb.from("profile_room_types").upsert(
+      {
+        profile_id: created.user.id,
+        room_type_id: roomType.id,
+        receive_schedule_emails: false,
+      },
+      { onConflict: "profile_id,room_type_id" },
+    ),
+    serviceDb
+      .from("profiles")
+      .update({
+        full_name: "Nhân sự parity local",
+        is_active: true,
+        can_manage_email_notifications: canManageEmailNotifications,
+      })
+      .eq("id", created.user.id),
+  ]);
+  const setupError =
+    roleResult.error ?? scopeResult.error ?? profileResult.error;
+  if (setupError) {
+    await serviceDb.auth.admin.deleteUser(created.user.id);
+    throw setupError;
+  }
+  return { email, id: created.user.id };
+}
+
+test("email notification capability alone keeps the production dirty boundary", async ({
+  page,
+}) => {
+  const fixture = await createStaffParityFixture(false);
+
+  await loginAsAdmin(page);
+  await page.goto("/admin/personnel");
+  try {
+    await page.goto(`/admin/personnel?q=${encodeURIComponent(fixture.email)}`);
+    const drawer = await openStaffDrawer(page, fixture.email);
+    const capability = drawer.getByLabel("Quản lý Email Notifications");
+    const save = drawer.getByRole("button", { name: "Lưu thay đổi" });
+    await expect(save).toBeDisabled();
+    await capability.setChecked(true);
+    await expect(save).toBeDisabled();
+    await drawer.getByRole("button", { name: "Đóng" }).click();
+    await expect(
+      page.getByRole("dialog", { name: "Bỏ thay đổi chưa lưu?" }),
+    ).toHaveCount(0);
+
+    const { data: persisted } = await serviceDb
+      .from("profiles")
+      .select("can_manage_email_notifications")
+      .eq("id", fixture.id)
+      .single();
+    expect(persisted?.can_manage_email_notifications).toBe(false);
+  } finally {
+    await serviceDb.auth.admin.deleteUser(fixture.id);
+  }
+});
+
+test("email notification capability-only close does not open a discard confirmation", async ({
+  page,
+}) => {
+  const fixture = await createStaffParityFixture(false);
+
+  await loginAsAdmin(page);
+  try {
+    await page.goto(`/admin/personnel?q=${encodeURIComponent(fixture.email)}`);
+    const drawer = await openStaffDrawer(page, fixture.email);
+    const capability = drawer.getByLabel("Quản lý Email Notifications");
+    await capability.setChecked(true);
+    await drawer.getByRole("button", { name: "Đóng" }).click();
+    await expect(
+      page.getByRole("dialog", { name: "Bỏ thay đổi chưa lưu?" }),
+    ).toHaveCount(0);
+    await expect(drawer).toHaveCount(0);
+  } finally {
+    await serviceDb.auth.admin.deleteUser(fixture.id);
+  }
+});
+
+test("removing Staff preserves the raw email capability like production", async ({
+  page,
+}) => {
+  const fixture = await createStaffParityFixture(true);
+  await loginAsAdmin(page);
+  try {
+    await page.goto(`/admin/personnel?q=${encodeURIComponent(fixture.email)}`);
+    const drawer = await openStaffDrawer(page, fixture.email);
+    await drawer.getByLabel("Giảng viên").check();
+    await drawer.getByLabel("Chuyên viên").uncheck();
+    await drawer.getByRole("button", { name: "Lưu thay đổi" }).click();
+    await expect(drawer.getByText("Đã lưu", { exact: true })).toBeVisible();
+    // The access_version page key remounts after a successful mutation. Reopen
+    // the current drawer without reloading the page, as production does.
+    await expect(drawer).toHaveCount(0);
+    const reopened = await openStaffDrawer(page, fixture.email);
+    await reopened.getByLabel("Chuyên viên").check();
+    await expect(
+      reopened.getByLabel("Quản lý Email Notifications"),
+    ).toBeChecked();
+    const { data: persisted } = await serviceDb
+      .from("profiles")
+      .select("can_manage_email_notifications")
+      .eq("id", fixture.id)
+      .single();
+    expect(persisted?.can_manage_email_notifications).toBe(true);
+    await reopened.getByRole("button", { name: "Đóng" }).click();
+    const discard = page.getByRole("dialog", { name: "Bỏ thay đổi chưa lưu?" });
+    await expect(discard).toBeVisible();
+    await discard.getByRole("button", { name: "Bỏ thay đổi" }).click();
+  } finally {
+    await serviceDb.auth.admin.deleteUser(fixture.id);
+  }
+});
+
 test("personnel reconciler actual integration test (N-MEDIUM-01)", async ({
   request,
 }) => {
@@ -195,8 +371,8 @@ test("personnel reconciler actual integration test (N-MEDIUM-01)", async ({
 
     // Sign in as root temporarily to get session
     const { error: rootAuthError } = await rootDb.auth.signInWithPassword({
-      email: "admin@campus.local",
-      password: "LocalAdmin123!",
+      email: e2eAdminAuthEmail,
+      password: e2eAdminPassword,
     });
     expect(rootAuthError).toBeNull();
 
