@@ -37,14 +37,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          readonly target_versions=("20260813160000" "20260813161000")
+          readonly target_versions=("20260813160000" "20260813161000" "20260815131138")
           readonly target_files=(
             "20260813160000_operations_integrity_master_batch.sql"
             "20260813161000_catalog_reconciliation_preview_apply.sql"
+            "20260815131138_grant_basic_medical_confirmation_signer_snapshot.sql"
           )
           readonly target_blobs=(
             "0b2fdf2608e523aed26416b290d8120e5f858e37"
             "49b9d767dd8f403dcfef6686ff1fe59d5ca8848d"
+            "d0f8cb795af46ab676238ab74099f3008f7baf22"
           )
           readonly forbidden_versions=(
             "20260809120000" "20260809130000" "20260809140000"
@@ -81,7 +83,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          readonly target_versions=("20260813160000" "20260813161000")
+          readonly target_versions=("20260813160000" "20260813161000" "20260815131138")
           readonly forbidden_versions=(
             "20260809120000" "20260809130000" "20260809140000"
             "20260809150000" "20260809160000" "20260810000000"
@@ -155,6 +157,64 @@ jobs:
           }
           NODE
 
+      - name: Preflight signer snapshot permissions without mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/pr33-signer-permissions-preflight.sql" <<'SQL'
+          select jsonb_build_object(
+            'authenticated_signer_name_snapshot_select', has_column_privilege(
+              'authenticated',
+              'public.basic_medical_session_confirmations',
+              'signer_name_snapshot',
+              'select'
+            ),
+            'authenticated_signature_data_select', has_column_privilege(
+              'authenticated',
+              'public.basic_medical_session_confirmations',
+              'signature_data',
+              'select'
+            ),
+            'authenticated_table_select', has_table_privilege(
+              'authenticated',
+              'public.basic_medical_session_confirmations',
+              'select'
+            ),
+            'anon_signer_name_snapshot_select', has_column_privilege(
+              'anon',
+              'public.basic_medical_session_confirmations',
+              'signer_name_snapshot',
+              'select'
+            ),
+            'rls_enabled', coalesce((
+              select c.relrowsecurity
+              from pg_class c
+              join pg_namespace n on n.oid = c.relnamespace
+              where n.nspname = 'public'
+                and c.relname = 'basic_medical_session_confirmations'
+            ), false)
+          ) as signer_permissions;
+          SQL
+          npx --no-install supabase db query --linked --output-format json --file "$RUNNER_TEMP/pr33-signer-permissions-preflight.sql" > "$RUNNER_TEMP/pr33-signer-permissions-before.json"
+          RUNNER_TEMP="$RUNNER_TEMP" node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const result = JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP, 'pr33-signer-permissions-before.json'), 'utf8'));
+          const raw = result?.[0]?.signer_permissions ?? result?.rows?.[0]?.signer_permissions ?? result?.signer_permissions;
+          const permissions = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          const required = {
+            authenticated_signer_name_snapshot_select: false,
+            authenticated_signature_data_select: false,
+            authenticated_table_select: false,
+            anon_signer_name_snapshot_select: false,
+            rls_enabled: true,
+          };
+          if (!permissions || Object.entries(required).some(([key, value]) => permissions[key] !== value)) {
+            throw new Error('SIGNER_PERMISSION_PREFLIGHT_FAILED');
+          }
+          console.log('Signer snapshot permission preflight: PASS');
+          NODE
+
       - name: Dry-run and assert the exact ordered pending set
         shell: bash
         run: |
@@ -188,7 +248,7 @@ jobs:
             echo "POST_PUSH_MIGRATION_VERIFICATION_FAILED: remote history differs from the exact reviewed local history."
             exit 1
           fi
-          for version in 20260813160000 20260813161000; do
+          for version in 20260813160000 20260813161000 20260815131138; do
             if ! printf '%s\n' "${remote_versions[@]}" | grep -Fxq "$version"; then
               echo "POST_PUSH_MIGRATION_VERIFICATION_FAILED: reviewed migration is missing remotely."
               exit 1
@@ -210,3 +270,61 @@ jobs:
             echo "POST_PUSH_MIGRATION_VERIFICATION_FAILED: remote history gained an unexpected migration."
             exit 1
           fi
+
+      - name: Verify signer snapshot permissions after migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/pr33-signer-permissions-postcheck.sql" <<'SQL'
+          select jsonb_build_object(
+            'authenticated_signer_name_snapshot_select', has_column_privilege(
+              'authenticated',
+              'public.basic_medical_session_confirmations',
+              'signer_name_snapshot',
+              'select'
+            ),
+            'authenticated_signature_data_select', has_column_privilege(
+              'authenticated',
+              'public.basic_medical_session_confirmations',
+              'signature_data',
+              'select'
+            ),
+            'authenticated_table_select', has_table_privilege(
+              'authenticated',
+              'public.basic_medical_session_confirmations',
+              'select'
+            ),
+            'anon_signer_name_snapshot_select', has_column_privilege(
+              'anon',
+              'public.basic_medical_session_confirmations',
+              'signer_name_snapshot',
+              'select'
+            ),
+            'rls_enabled', coalesce((
+              select c.relrowsecurity
+              from pg_class c
+              join pg_namespace n on n.oid = c.relnamespace
+              where n.nspname = 'public'
+                and c.relname = 'basic_medical_session_confirmations'
+            ), false)
+          ) as signer_permissions;
+          SQL
+          npx --no-install supabase db query --linked --output-format json --file "$RUNNER_TEMP/pr33-signer-permissions-postcheck.sql" > "$RUNNER_TEMP/pr33-signer-permissions-after.json"
+          RUNNER_TEMP="$RUNNER_TEMP" node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const result = JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP, 'pr33-signer-permissions-after.json'), 'utf8'));
+          const raw = result?.[0]?.signer_permissions ?? result?.rows?.[0]?.signer_permissions ?? result?.signer_permissions;
+          const permissions = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          const required = {
+            authenticated_signer_name_snapshot_select: true,
+            authenticated_signature_data_select: false,
+            authenticated_table_select: false,
+            anon_signer_name_snapshot_select: false,
+            rls_enabled: true,
+          };
+          if (!permissions || Object.entries(required).some(([key, value]) => permissions[key] !== value)) {
+            throw new Error('SIGNER_PERMISSION_POSTCHECK_FAILED');
+          }
+          console.log('Signer snapshot permission postcheck: PASS');
+          NODE
