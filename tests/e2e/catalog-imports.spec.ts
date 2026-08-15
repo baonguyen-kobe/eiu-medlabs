@@ -224,6 +224,7 @@ test("a portable XLSX matching the actual Course workbook is rejected before pre
 test("local Root administrator has both Skills and Basic Medical workspaces", async ({
   page,
 }) => {
+  test.setTimeout(90_000);
   const { data: principal, error: principalError } = await serviceDb
     .from("system_security_principals")
     .select("root_admin_id")
@@ -233,52 +234,101 @@ test("local Root administrator has both Skills and Basic Medical workspaces", as
     throw principalError ?? new Error("Missing local Root administrator");
   }
 
-  const actor = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
-    { auth: { autoRefreshToken: false, persistSession: false } },
-  );
-  const { data: signIn, error: signInError } =
-    await actor.auth.signInWithPassword({
-      email: e2eAdminEmail === "admin" ? "admin@medlabs.local" : e2eAdminEmail,
-      password: e2eAdminPassword,
-    });
-  expect(signInError).toBeNull();
-  expect(signIn.user?.id).toBe(principal.root_admin_id);
-  try {
-    const [
-      { data: personnelAuthority, error: personnelError },
-      { data: roles },
-    ] = await Promise.all([
-      actor.rpc("get_personnel_authority_context"),
-      serviceDb
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", principal.root_admin_id),
-    ]);
-    expect(personnelError).toBeNull();
-    expect(personnelAuthority?.is_root_administrator).toBe(true);
-    expect(roles?.map((row) => row.role)).toContain("admin");
-  } finally {
-    await actor.auth.signOut();
+  const { data: originalProfile, error: profileError } = await serviceDb
+    .from("profiles")
+    .select("can_import_schedules,can_manage_email_notifications")
+    .eq("id", principal.root_admin_id)
+    .single();
+  if (profileError || !originalProfile) {
+    throw profileError ?? new Error("Missing local Root administrator profile");
   }
 
-  await loginAsAdmin(page);
-  for (const route of [
-    "/class-schedules",
-    "/basic-medical/schedules",
-    "/basic-medical/new",
-    "/basic-medical/import",
-  ]) {
-    await page.goto(route, { waitUntil: "networkidle" });
-    await expect(page).toHaveURL(new RegExp(`${route}$`));
+  const { error: capabilityResetError } = await serviceDb
+    .from("profiles")
+    .update({
+      can_import_schedules: false,
+      can_manage_email_notifications: false,
+    })
+    .eq("id", principal.root_admin_id);
+  if (capabilityResetError) throw capabilityResetError;
+
+  try {
+    const actor = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+      { auth: { autoRefreshToken: false, persistSession: false } },
+    );
+    try {
+      const { data: signIn, error: signInError } =
+        await actor.auth.signInWithPassword({
+          email:
+            e2eAdminEmail === "admin" ? "admin@medlabs.local" : e2eAdminEmail,
+          password: e2eAdminPassword,
+        });
+      expect(signInError).toBeNull();
+      expect(signIn.user?.id).toBe(principal.root_admin_id);
+      const [
+        { data: personnelAuthority, error: personnelError },
+        { data: roles },
+      ] = await Promise.all([
+        actor.rpc("get_personnel_authority_context"),
+        serviceDb
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", principal.root_admin_id),
+      ]);
+      expect(personnelError).toBeNull();
+      expect(personnelAuthority?.is_root_administrator).toBe(true);
+      expect(roles?.map((row) => row.role)).toContain("admin");
+    } finally {
+      await actor.auth.signOut();
+    }
+
+    await loginAsAdmin(page);
+    for (const route of [
+      "/dashboard",
+      "/class-schedules",
+      "/schedule-entry/new",
+      "/schedule-entry/import",
+      "/imports",
+      "/basic-medical/schedules",
+      "/basic-medical/new",
+      "/basic-medical/import",
+      "/basic-medical/registrations",
+      "/admin/personnel",
+      "/admin/equipment",
+      "/admin/courses",
+      "/email-notifications",
+    ]) {
+      await page.goto(route, { waitUntil: "domcontentloaded" });
+      await expect(page).toHaveURL(new RegExp(`${route}$`));
+    }
+    await page.goto("/dashboard", { waitUntil: "domcontentloaded" });
+    await expect(
+      page.locator('.workspace-sidebar a[href="/class-schedules"]'),
+    ).toBeVisible();
+    await expect(
+      page.locator('.workspace-sidebar a[href="/basic-medical/schedules"]'),
+    ).toBeVisible();
+    await expect(
+      page.locator('.workspace-sidebar a[href="/schedule-entry/import"]'),
+    ).toBeVisible();
+    await expect(
+      page.locator('.workspace-sidebar a[href="/basic-medical/import"]'),
+    ).toBeVisible();
+    await expect(
+      page.locator('.workspace-sidebar a[href="/email-notifications"]'),
+    ).toBeVisible();
+    await expect(
+      page.locator('.workspace-sidebar a[href="/admin/personnel"]'),
+    ).toBeVisible();
+  } finally {
+    const { error: restoreError } = await serviceDb
+      .from("profiles")
+      .update(originalProfile)
+      .eq("id", principal.root_admin_id);
+    if (restoreError) throw restoreError;
   }
-  await expect(
-    page.locator('.workspace-sidebar a[href="/class-schedules"]'),
-  ).toBeVisible();
-  await expect(
-    page.locator('.workspace-sidebar a[href="/basic-medical/schedules"]'),
-  ).toBeVisible();
 });
 
 test("template và import danh mục môn học, phòng, thiết bị, nhân sự và Y cơ sở hoạt động", async ({
