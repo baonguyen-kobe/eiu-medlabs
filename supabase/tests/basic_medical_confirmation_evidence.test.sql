@@ -1,5 +1,5 @@
 begin;
-select plan(26);
+select plan(22);
 
 create temp table y06_context (
   admin_id uuid,
@@ -239,48 +239,6 @@ select lives_ok(
     (select confirmation_id from y06_context)
   )$$,
   'registration lecturer can read evidence under the existing ownership contract'
-);
-
-select lives_ok(
-  $$select public.list_basic_medical_registration_confirmation_states(
-    array[(select registration_id from y06_context)]
-  )$$,
-  'registration lecturer can read the narrow confirmation-state list contract'
-);
-
-select is(
-  (
-    select confirmation_id
-    from public.list_basic_medical_registration_confirmation_states(
-      array[(select registration_id from y06_context)]
-    )
-  ),
-  (select confirmation_id from y06_context),
-  'confirmation-state list returns the matching visible confirmation'
-);
-
-select is(
-  (
-    select signer_name_snapshot
-    from public.list_basic_medical_registration_confirmation_states(
-      array[(select registration_id from y06_context)]
-    )
-  ),
-  'Y06 Lecturer',
-  'confirmation-state list returns the immutable signer-name snapshot only'
-);
-
-select ok(
-  not has_function_privilege(
-    'anon',
-    'public.list_basic_medical_registration_confirmation_states(uuid[])',
-    'EXECUTE'
-  ) and has_function_privilege(
-    'authenticated',
-    'public.list_basic_medical_registration_confirmation_states(uuid[])',
-    'EXECUTE'
-  ),
-  'confirmation-state list is executable only by authenticated application users'
 );
 
 select is(

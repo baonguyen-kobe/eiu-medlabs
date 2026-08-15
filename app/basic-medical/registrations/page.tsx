@@ -25,19 +25,6 @@ type SearchParams = {
   error?: string;
 };
 
-type RegistrationConfirmationState = {
-  registration_id: string;
-  session_id: string;
-  confirmation_id: string;
-  signer_id: string;
-  signer_name_snapshot: string | null;
-  signed_at: string;
-  invalidated_at: string | null;
-  invalidated_by: string | null;
-  invalidated_by_name_snapshot: string | null;
-  invalidated_reason: string | null;
-};
-
 export default async function BasicMedicalRegistrationsPage({
   searchParams,
 }: {
@@ -101,31 +88,24 @@ export default async function BasicMedicalRegistrationsPage({
       ? await supabase
           .from("basic_medical_registrations")
           .select(
-            "id,registration_code,created_at,academic_year,semester,start_date,end_date,student_count,note,cancelled_at,cancelled_by,cancel_reason,courses(course_code,course_name),rooms(id,room_code,building_code,room_name),registrant:profiles!basic_medical_registrations_registrant_id_fkey(full_name),responsible:profiles!basic_medical_registrations_responsible_lecturer_id_fkey(full_name),basic_medical_registration_sessions(id,session_number,lesson_title,teaching_lecturer_id,teaching:profiles!basic_medical_registration_sessions_teaching_lecturer_id_fkey(full_name),class_schedules(schedule_date,start_time,end_time,schedule_status))",
+            "id,registration_code,created_at,academic_year,semester,start_date,end_date,student_count,note,cancelled_at,cancelled_by,cancel_reason,courses(course_code,course_name),rooms(id,room_code,building_code,room_name),registrant:profiles!basic_medical_registrations_registrant_id_fkey(full_name),responsible:profiles!basic_medical_registrations_responsible_lecturer_id_fkey(full_name),basic_medical_registration_sessions(id,session_number,lesson_title,teaching_lecturer_id,teaching:profiles!basic_medical_registration_sessions_teaching_lecturer_id_fkey(full_name),class_schedules(schedule_date,start_time,end_time,schedule_status),confirmations:basic_medical_session_confirmations(id,signer_id,signer_name_snapshot,signed_at,invalidated_at,invalidated_by,invalidated_by_name_snapshot,invalidated_reason))",
           )
           .in("id", registrationIds)
       : { data: [], error: null };
 
   const order = new Map(registrationIds.map((id, index) => [id, index]));
-  const registrationItems = (
+  const registrations = (
     (registrationRows ?? []) as unknown as BasicMedicalRegistrationListItem[]
   ).sort(
     (left, right) => (order.get(left.id) ?? 0) - (order.get(right.id) ?? 0),
   );
   const roomIds = [
     ...new Set(
-      registrationItems.flatMap((item) =>
-        item.rooms?.id ? [item.rooms.id] : [],
-      ),
+      registrations.flatMap((item) => (item.rooms?.id ? [item.rooms.id] : [])),
     ),
   ];
-  const confirmationStatesRequest = registrationIds.length
-    ? supabase.rpc("list_basic_medical_registration_confirmation_states", {
-        target_registration_ids: registrationIds,
-      })
-    : Promise.resolve({ data: [], error: null });
-  const inventoryRequest = roomIds.length
-    ? supabase
+  const { data: inventoryRows, error: inventoryError } = roomIds.length
+    ? await supabase
         .from("basic_medical_room_inventory")
         .select(
           "id,room_id,catalog_item_id,total_quantity,good_quantity,damaged_quantity,is_active,last_damage_reported_at,room:rooms(id,room_code,building_code,room_name),catalog:basic_medical_equipment_catalog!inner(id,item_name,commercial_name,item_type,country_of_origin,manufacturer,model,unit,is_active),last_damage_reporter:profiles!basic_medical_room_inventory_last_damage_reporter_id_fkey(full_name)",
@@ -134,43 +114,9 @@ export default async function BasicMedicalRegistrationsPage({
         .eq("is_active", true)
         .eq("catalog.is_active", true)
         .order("created_at")
-    : Promise.resolve({ data: [], error: null });
-  const [
-    { data: confirmationStateRows, error: confirmationStatesError },
-    { data: inventoryRows, error: inventoryError },
-  ] = await Promise.all([confirmationStatesRequest, inventoryRequest]);
+    : { data: [], error: null };
 
-  const confirmationsBySession = new Map<
-    string,
-    BasicMedicalRegistrationListItem["basic_medical_registration_sessions"][number]["confirmations"]
-  >();
-  for (const state of (confirmationStateRows ??
-    []) as RegistrationConfirmationState[]) {
-    const confirmations = confirmationsBySession.get(state.session_id) ?? [];
-    confirmations.push({
-      id: state.confirmation_id,
-      signer_id: state.signer_id,
-      signer_name_snapshot: state.signer_name_snapshot,
-      signed_at: state.signed_at,
-      invalidated_at: state.invalidated_at,
-      invalidated_by: state.invalidated_by,
-      invalidated_by_name_snapshot: state.invalidated_by_name_snapshot,
-      invalidated_reason: state.invalidated_reason,
-      signer: null,
-    });
-    confirmationsBySession.set(state.session_id, confirmations);
-  }
-  const registrations = registrationItems.map((registration) => ({
-    ...registration,
-    basic_medical_registration_sessions:
-      registration.basic_medical_registration_sessions.map((session) => ({
-        ...session,
-        confirmations: confirmationsBySession.get(session.id) ?? [],
-      })),
-  }));
-
-  const loadError =
-    listError ?? registrationError ?? confirmationStatesError ?? inventoryError;
+  const loadError = listError ?? registrationError ?? inventoryError;
 
   return (
     <WorkspaceShell
