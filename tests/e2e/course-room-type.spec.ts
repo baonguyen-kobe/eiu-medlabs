@@ -159,7 +159,10 @@ test("Admin edits and toggles selected Room and Course catalog rows through the 
         expect(checkbox).toBeChecked({ timeout: 1_000 }),
       );
     }
-    await page.getByRole("button", { name: "Sửa mục đã chọn" }).click();
+    await page
+      .locator(".equipment-catalog-toolbar")
+      .getByRole("button", { name: "Sửa", exact: true })
+      .click();
     const courseEditors = page.locator("tbody tr.is-editing");
     await expect(courseEditors).toHaveCount(2);
     await courseEditors
@@ -180,7 +183,10 @@ test("Admin edits and toggles selected Room and Course catalog rows through the 
     await clickUntilState(secondCourseCheckbox, () =>
       expect(secondCourseCheckbox).toBeChecked({ timeout: 1_000 }),
     );
-    await page.getByRole("button", { name: "Ngừng dùng" }).click();
+    await page
+      .locator(".equipment-catalog-toolbar")
+      .getByRole("button", { name: "Ngừng sử dụng", exact: true })
+      .click();
     const deactivateDialog = page.getByRole("dialog", {
       name: "Ngừng sử dụng 2 môn học?",
     });
@@ -198,7 +204,10 @@ test("Admin edits and toggles selected Room and Course catalog rows through the 
     if (coursesAfterCancelError) throw coursesAfterCancelError;
     expect(coursesAfterCancel?.every((course) => course.is_active)).toBe(true);
 
-    await page.getByRole("button", { name: "Ngừng dùng" }).click();
+    await page
+      .locator(".equipment-catalog-toolbar")
+      .getByRole("button", { name: "Ngừng sử dụng", exact: true })
+      .click();
     await page
       .getByRole("dialog", { name: "Ngừng sử dụng 2 môn học?" })
       .getByRole("button", { name: "Xác nhận" })
@@ -231,7 +240,10 @@ test("Admin edits and toggles selected Room and Course catalog rows through the 
         expect(checkbox).toBeChecked({ timeout: 1_000 }),
       );
     }
-    await page.getByRole("button", { name: "Sửa mục đã chọn" }).click();
+    await page
+      .locator(".equipment-catalog-toolbar")
+      .getByRole("button", { name: "Sửa", exact: true })
+      .click();
     const roomEditors = page.locator("tbody tr.is-editing");
     await expect(roomEditors).toHaveCount(2);
     await roomEditors.nth(0).getByLabel("Sức chứa").fill("25");

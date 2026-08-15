@@ -170,9 +170,9 @@ test("manual form fields and section headings share the approved desktop layout"
   expect(sectionNumberStyle.fontWeight).toBe(formHeadingStyle.fontWeight);
 
   expect(formHeadingStyle).toMatchObject({
-    color: "rgb(48, 48, 51)",
-    fontSize: "18px",
-    fontWeight: "700",
+    color: "rgb(20, 64, 105)",
+    fontSize: "16px",
+    fontWeight: "800",
     textTransform: "uppercase",
   });
 
