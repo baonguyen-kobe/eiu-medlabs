@@ -380,6 +380,115 @@ test("form-table controls and text retain the Master visible 16px safe inset", a
   }
 });
 
+test("Basic Medical registrations use content-intent columns and aligned actions", async ({
+  page,
+}) => {
+  await loginAsAdmin(page);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/basic-medical/registrations", { waitUntil: "networkidle" });
+
+  const registrationTable = page.locator(".basic-medical-registration-table");
+  const firstRegistrationButton = registrationTable
+    .locator(".equipment-request-course-button")
+    .first();
+  await expect(firstRegistrationButton).toBeVisible();
+  await firstRegistrationButton.click();
+
+  const sessionTable = page.locator(".basic-medical-session-table");
+  await expect(sessionTable).toBeVisible();
+  const geometry = await page.evaluate(() => {
+    const registrationTable = document.querySelector<HTMLTableElement>(
+      ".basic-medical-registration-table",
+    );
+    const sessionTable = document.querySelector<HTMLTableElement>(
+      ".basic-medical-session-table",
+    );
+    const firstRow = registrationTable?.querySelector<HTMLElement>(
+      ".equipment-request-table-row",
+    );
+    const status = firstRow?.querySelector<HTMLElement>(
+      "td:nth-child(5) .request-status",
+    );
+    const cancel = registrationTable?.querySelector<HTMLElement>(
+      ".basic-medical-registration-detail-action .button",
+    );
+    const actionStack = sessionTable?.querySelector<HTMLElement>(
+      ".basic-medical-session-action-stack",
+    );
+    const sessionStatus =
+      actionStack?.querySelector<HTMLElement>(".request-status");
+    const sessionAction = actionStack?.querySelector<HTMLElement>("button");
+    if (
+      !registrationTable ||
+      !sessionTable ||
+      !status ||
+      !cancel ||
+      !sessionStatus ||
+      !sessionAction
+    ) {
+      throw new Error("Basic Medical layout controls are missing");
+    }
+    const center = (element: HTMLElement) => {
+      const rect = element.getBoundingClientRect();
+      return (rect.left + rect.right) / 2;
+    };
+    const widths = (table: HTMLTableElement) =>
+      [...table.querySelectorAll<HTMLTableCellElement>("thead th")].map(
+        (cell) => cell.getBoundingClientRect().width,
+      );
+
+    return {
+      registrationWidths: widths(registrationTable),
+      sessionWidths: widths(sessionTable),
+      registrationActionDelta: Math.abs(center(status) - center(cancel)),
+      sessionActionDelta: Math.abs(
+        center(sessionStatus) - center(sessionAction),
+      ),
+      pageOverflow: document.documentElement.scrollWidth > window.innerWidth,
+    };
+  });
+
+  const [course, period, room, sessions, status, toggle] =
+    geometry.registrationWidths;
+  expect(course).toBeGreaterThan(period);
+  expect(course).toBeGreaterThan(room);
+  expect(sessions).toBeLessThan(status);
+  expect(toggle).toBeGreaterThanOrEqual(36);
+  expect(toggle).toBeLessThanOrEqual(48);
+  expect(geometry.registrationActionDelta).toBeLessThanOrEqual(1);
+
+  const [, date, time, lesson, lecturer, sessionStatus] =
+    geometry.sessionWidths;
+  expect(lesson).toBeGreaterThanOrEqual(220);
+  expect(lecturer).toBeGreaterThanOrEqual(220);
+  expect(lesson).toBeGreaterThan(date);
+  expect(lecturer).toBeGreaterThan(time);
+  expect(sessionStatus).toBeGreaterThanOrEqual(150);
+  expect(sessionStatus).toBeLessThanOrEqual(180);
+  expect(geometry.sessionActionDelta).toBeLessThanOrEqual(1);
+  expect(geometry.pageOverflow).toBe(false);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/basic-medical/registrations", { waitUntil: "networkidle" });
+  await expect(firstRegistrationButton).toBeVisible();
+  const mobileGeometry = await page.evaluate(() => {
+    const viewport = document.querySelector<HTMLElement>(
+      ".basic-medical-registration-panel > .responsive-table",
+    );
+    if (!viewport) {
+      throw new Error("Basic Medical responsive table viewport is missing");
+    }
+    return {
+      localScroll: viewport.scrollWidth > viewport.clientWidth,
+      overflowX: getComputedStyle(viewport).overflowX,
+      pageOverflow: document.documentElement.scrollWidth > window.innerWidth,
+    };
+  });
+  expect(mobileGeometry.localScroll).toBe(true);
+  expect(mobileGeometry.overflowX).toBe("auto");
+  expect(mobileGeometry.pageOverflow).toBe(false);
+});
+
 test("canonical UI V2 shared geometry is applied in computed styles", async ({
   page,
 }) => {

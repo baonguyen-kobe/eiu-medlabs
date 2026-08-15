@@ -8714,23 +8714,23 @@ body,
   table-layout: fixed;
 }
 
-.basic-medical-registration-table th:nth-child(1) {
-  width: 29%;
+.basic-medical-registration-col-course {
+  width: 32%;
 }
-.basic-medical-registration-table th:nth-child(2) {
+.basic-medical-registration-col-period {
   width: 19%;
 }
-.basic-medical-registration-table th:nth-child(3) {
+.basic-medical-registration-col-room {
   width: 20%;
 }
-.basic-medical-registration-table th:nth-child(4) {
-  width: 9%;
+.basic-medical-registration-col-sessions {
+  width: 8%;
 }
-.basic-medical-registration-table th:nth-child(5) {
+.basic-medical-registration-col-status {
   width: 17%;
 }
-.basic-medical-registration-table th:nth-child(6) {
-  width: 6%;
+.basic-medical-registration-col-toggle {
+  width: 4%;
 }
 
 .basic-medical-registration-table .request-status {
@@ -8748,11 +8748,106 @@ body,
   text-align: center;
 }
 
+.basic-medical-registration-detail-grid {
+  grid-template-columns: 32% 19% 20% 8% 17% 4%;
+  align-items: start;
+  gap: 14px 0;
+}
+
+.basic-medical-registration-panel .equipment-request-details {
+  padding-inline: 0;
+}
+
+.basic-medical-registration-detail-grid
+  > :is(
+    .basic-medical-registration-detail-identity,
+    .basic-medical-registration-detail-registrant,
+    .basic-medical-registration-detail-responsible,
+    .basic-medical-registration-detail-action
+  ) {
+  padding-inline: 16px;
+}
+
+.basic-medical-registration-detail-identity,
+.basic-medical-registration-detail-registrant {
+  display: grid;
+  gap: 12px;
+}
+
+.basic-medical-registration-detail-identity {
+  grid-column: 1;
+}
+
+.basic-medical-registration-detail-registrant {
+  grid-column: 2;
+}
+
+.basic-medical-registration-detail-responsible {
+  grid-column: 3 / span 2;
+}
+
+.basic-medical-registration-detail-action {
+  display: grid;
+  grid-column: 5;
+  justify-items: center;
+}
+
+.basic-medical-registration-detail-action form {
+  margin: 0;
+}
+
+.basic-medical-registration-detail-history {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 18px;
+  padding: 14px 16px 0;
+  border-top: 1px solid var(--line);
+}
+
+.basic-medical-registration-panel
+  .equipment-request-details
+  > .responsive-table {
+  margin-inline: 18px;
+}
+
+.basic-medical-session-table {
+  width: 100%;
+  min-width: 1060px;
+  table-layout: fixed;
+}
+
+.basic-medical-session-col-index {
+  width: 56px;
+}
+
+.basic-medical-session-col-date {
+  width: 130px;
+}
+
+.basic-medical-session-col-time {
+  width: 140px;
+}
+
+.basic-medical-session-col-lesson,
+.basic-medical-session-col-lecturer {
+  width: 27%;
+}
+
+.basic-medical-session-col-status {
+  width: 170px;
+}
+
 .basic-medical-session-table th:last-child,
 .basic-medical-session-table td:last-child {
-  width: 190px;
   text-align: center;
   vertical-align: middle;
+}
+
+.basic-medical-session-action-stack {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
 }
 
 .basic-medical-session-status {

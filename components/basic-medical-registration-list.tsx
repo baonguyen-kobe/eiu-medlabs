@@ -726,6 +726,14 @@ export function BasicMedicalRegistrationList({
       <div className="equipment-request-list-panel data-panel basic-medical-registration-panel">
         <div className="responsive-table">
           <table className="data-table equipment-request-table basic-medical-registration-table">
+            <colgroup>
+              <col className="basic-medical-registration-col-course" />
+              <col className="basic-medical-registration-col-period" />
+              <col className="basic-medical-registration-col-room" />
+              <col className="basic-medical-registration-col-sessions" />
+              <col className="basic-medical-registration-col-status" />
+              <col className="basic-medical-registration-col-toggle" />
+            </colgroup>
             <thead>
               <tr>
                 <th>Môn học</th>
@@ -819,39 +827,61 @@ export function BasicMedicalRegistrationList({
                     <tr className="equipment-request-detail-row">
                       <td colSpan={6}>
                         <div className="equipment-request-details">
-                          <div className="equipment-request-detail-grid">
-                            <div>
-                              <span>Mã phiếu</span>
-                              <strong className="mono">
-                                {formatBasicMedicalRegistrationCode(
-                                  registration.registration_code,
-                                )}
-                              </strong>
+                          <div className="equipment-request-detail-grid basic-medical-registration-detail-grid">
+                            <div className="basic-medical-registration-detail-identity">
+                              <div>
+                                <span>Mã phiếu</span>
+                                <strong className="mono">
+                                  {formatBasicMedicalRegistrationCode(
+                                    registration.registration_code,
+                                  )}
+                                </strong>
+                              </div>
+                              <div>
+                                <span>Số sinh viên</span>
+                                <strong>{registration.student_count}</strong>
+                              </div>
                             </div>
-                            <div>
-                              <span>Người đăng ký</span>
-                              <strong>
-                                {registration.registrant?.full_name}
-                              </strong>
+                            <div className="basic-medical-registration-detail-registrant">
+                              <div>
+                                <span>Người đăng ký</span>
+                                <strong>
+                                  {registration.registrant?.full_name}
+                                </strong>
+                              </div>
+                              <div>
+                                <span>Ghi chú</span>
+                                <strong>
+                                  {registration.note || "Không có ghi chú"}
+                                </strong>
+                              </div>
                             </div>
-                            <div>
+                            <div className="basic-medical-registration-detail-responsible">
                               <span>Giảng viên phụ trách</span>
                               <strong>
                                 {registration.responsible?.full_name}
                               </strong>
                             </div>
-                            <div>
-                              <span>Số sinh viên</span>
-                              <strong>{registration.student_count}</strong>
-                            </div>
-                            <div>
-                              <span>Ghi chú</span>
-                              <strong>
-                                {registration.note || "Không có ghi chú"}
-                              </strong>
-                            </div>
+                            {canDelete && !isCancelled ? (
+                              <div className="basic-medical-registration-detail-action">
+                                <form action={cancelBasicMedicalRegistration}>
+                                  <input
+                                    type="hidden"
+                                    name="id"
+                                    value={registration.id}
+                                  />
+                                  <ConfirmSubmitButton
+                                    className="button button-danger"
+                                    message={`Hủy phiếu ${registration.courses?.course_code ?? "Y cơ sở"}? Các lịch tương lai sẽ chuyển sang Đã hủy. Dữ liệu và lịch sử đã có được giữ lại.`}
+                                  >
+                                    <Trash2 size={17} aria-hidden="true" /> Hủy
+                                    phiếu
+                                  </ConfirmSubmitButton>
+                                </form>
+                              </div>
+                            ) : null}
                             {isCancelled ? (
-                              <>
+                              <div className="basic-medical-registration-detail-history">
                                 <div>
                                   <span>Thời điểm hủy</span>
                                   <strong>
@@ -867,27 +897,19 @@ export function BasicMedicalRegistrationList({
                                       "Không có lý do"}
                                   </strong>
                                 </div>
-                              </>
-                            ) : null}
-                            {canDelete && !isCancelled ? (
-                              <form action={cancelBasicMedicalRegistration}>
-                                <input
-                                  type="hidden"
-                                  name="id"
-                                  value={registration.id}
-                                />
-                                <ConfirmSubmitButton
-                                  className="button button-danger"
-                                  message={`Hủy phiếu ${registration.courses?.course_code ?? "Y cơ sở"}? Các lịch tương lai sẽ chuyển sang Đã hủy. Dữ liệu và lịch sử đã có được giữ lại.`}
-                                >
-                                  <Trash2 size={17} aria-hidden="true" /> Hủy
-                                  phiếu
-                                </ConfirmSubmitButton>
-                              </form>
+                              </div>
                             ) : null}
                           </div>
                           <div className="responsive-table">
                             <table className="data-table basic-medical-session-table">
+                              <colgroup>
+                                <col className="basic-medical-session-col-index" />
+                                <col className="basic-medical-session-col-date" />
+                                <col className="basic-medical-session-col-time" />
+                                <col className="basic-medical-session-col-lesson" />
+                                <col className="basic-medical-session-col-lecturer" />
+                                <col className="basic-medical-session-col-status" />
+                              </colgroup>
                               <thead>
                                 <tr>
                                   <th>#</th>
@@ -895,7 +917,7 @@ export function BasicMedicalRegistrationList({
                                   <th>Thời gian</th>
                                   <th>Tên bài TN-TH</th>
                                   <th>Giảng viên giảng dạy/hướng dẫn</th>
-                                  <th>Trạng thái</th>
+                                  <th>Trạng thái / Thao tác</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -922,27 +944,32 @@ export function BasicMedicalRegistrationList({
                                       </td>
                                       <td>{session.lesson_title}</td>
                                       <td>{session.teaching?.full_name}</td>
-                                      <td>
-                                        <SessionStatus
-                                          session={session}
-                                          confirmation={confirmation}
-                                          historicalConfirmations={
-                                            session.confirmations
-                                          }
-                                          evidenceEnabled={evidenceEnabled}
-                                          viewerId={viewerId}
-                                          now={confirmationNow}
-                                          onOpen={() =>
-                                            setActive({ registration, session })
-                                          }
-                                        />
-                                        {canDelete ? (
-                                          <SessionAdministrativeActions
+                                      <td className="basic-medical-session-action-cell">
+                                        <div className="basic-medical-session-action-stack">
+                                          <SessionStatus
                                             session={session}
                                             confirmation={confirmation}
-                                            registration={registration}
+                                            historicalConfirmations={
+                                              session.confirmations
+                                            }
+                                            evidenceEnabled={evidenceEnabled}
+                                            viewerId={viewerId}
+                                            now={confirmationNow}
+                                            onOpen={() =>
+                                              setActive({
+                                                registration,
+                                                session,
+                                              })
+                                            }
                                           />
-                                        ) : null}
+                                          {canDelete ? (
+                                            <SessionAdministrativeActions
+                                              session={session}
+                                              confirmation={confirmation}
+                                              registration={registration}
+                                            />
+                                          ) : null}
+                                        </div>
                                       </td>
                                     </tr>
                                   );

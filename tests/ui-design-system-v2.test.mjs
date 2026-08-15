@@ -139,6 +139,36 @@ test("UI V2 keeps equipment controls and wide request tables inside local viewpo
   );
 });
 
+test("Basic Medical registration layout keeps content-intent columns and action axes", async () => {
+  const css = await source("app/globals.css");
+  const registrationList = await source(
+    "components/basic-medical-registration-list.tsx",
+  );
+
+  for (const token of [
+    "basic-medical-registration-col-course",
+    "basic-medical-registration-col-sessions",
+    "basic-medical-registration-col-status",
+    "basic-medical-registration-col-toggle",
+    "basic-medical-registration-detail-action",
+    "basic-medical-session-col-lesson",
+    "basic-medical-session-col-lecturer",
+    "basic-medical-session-action-stack",
+  ]) {
+    assert.match(registrationList, new RegExp(token));
+    assert.match(css, new RegExp(`\\.${token}`));
+  }
+  assert.match(
+    css,
+    /\.basic-medical-registration-detail-grid\s*\{[\s\S]*grid-template-columns: 32% 19% 20% 8% 17% 4%/,
+  );
+  assert.match(
+    css,
+    /\.basic-medical-session-col-lesson,[\s\S]*\.basic-medical-session-col-lecturer\s*\{[\s\S]*width: 27%/,
+  );
+  assert.match(registrationList, /<th>Trạng thái \/ Thao tác<\/th>/);
+});
+
 test("UI V2 personnel structure follows the approved table and drawer order", async () => {
   const personnel = await source("components/personnel-management-list.tsx");
   const personnelPage = await source("app/admin/personnel/page.tsx");
