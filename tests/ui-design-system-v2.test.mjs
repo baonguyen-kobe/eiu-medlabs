@@ -139,7 +139,7 @@ test("UI V2 keeps equipment controls and wide request tables inside local viewpo
   );
 });
 
-test("Basic Medical registration layout keeps content-intent columns and action axes", async () => {
+test("Basic Medical registration and sessions share one master grid", async () => {
   const css = await source("app/globals.css");
   const registrationList = await source(
     "components/basic-medical-registration-list.tsx",
@@ -149,13 +149,14 @@ test("Basic Medical registration layout keeps content-intent columns and action 
     "basic-medical-registration-col-course",
     "basic-medical-registration-col-sessions",
     "basic-medical-registration-col-status",
-    "basic-medical-registration-col-toggle",
+    "basic-medical-registration-status-control",
     "basic-medical-registration-detail-code",
     "basic-medical-registration-detail-student-count",
     "basic-medical-registration-detail-note",
     "basic-medical-registration-detail-action",
     "basic-medical-session-col-lesson",
     "basic-medical-session-col-lecturer",
+    "basic-medical-session-viewport",
     "basic-medical-session-action-stack",
   ]) {
     assert.match(registrationList, new RegExp(token));
@@ -163,14 +164,37 @@ test("Basic Medical registration layout keeps content-intent columns and action 
   }
   assert.match(
     css,
-    /\.basic-medical-registration-detail-grid\s*\{[\s\S]*grid-template-columns: 30% 20% 26% 8\.31% 12% 3\.69%/,
+    /--basic-medical-track-1: 18\.41cqw;[\s\S]*--basic-medical-track-5: 17\.36cqw/,
   );
-  assert.match(css, /\.basic-medical-session-col-time\s*\{[\s\S]*width: 14%/);
-  assert.match(css, /\.basic-medical-session-col-lesson\s*\{[\s\S]*width: 27%/);
   assert.match(
     css,
-    /\.basic-medical-session-col-lecturer\s*\{[\s\S]*width: 26%/,
+    /\.basic-medical-registration-detail-grid\s*\{[\s\S]*var\(--basic-medical-track-1\)[\s\S]*var\(--basic-medical-track-5\)/,
   );
+  assert.match(
+    css,
+    /\.basic-medical-session-viewport\s*\{[\s\S]*margin-inline-start: var\(--basic-medical-session-inset\)[\s\S]*inline-size: calc\(100% - var\(--basic-medical-session-inset\)\)/,
+  );
+  assert.match(
+    css,
+    /\.basic-medical-session-col-index\s*\{[\s\S]*width: calc\(5\.55982cqw - 5\.436px\)/,
+  );
+  assert.match(
+    css,
+    /\.basic-medical-session-col-date\s*\{[\s\S]*width: calc\(12\.85018cqw - 12\.564px\)/,
+  );
+  assert.match(
+    css,
+    /\.basic-medical-session-col-time\s*\{[\s\S]*width: var\(--basic-medical-track-2\)/,
+  );
+  assert.match(
+    css,
+    /\.basic-medical-session-col-lesson\s*\{[\s\S]*width: var\(--basic-medical-track-3\)/,
+  );
+  assert.match(
+    css,
+    /\.basic-medical-session-col-lecturer\s*\{[\s\S]*width: var\(--basic-medical-track-4\)/,
+  );
+  assert.match(registrationList, /colSpan=\{5\}/);
   assert.match(
     css,
     /\.basic-medical-session-table th:last-child\s*\{[\s\S]*text-align: left/,

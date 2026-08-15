@@ -732,7 +732,6 @@ export function BasicMedicalRegistrationList({
               <col className="basic-medical-registration-col-room" />
               <col className="basic-medical-registration-col-sessions" />
               <col className="basic-medical-registration-col-status" />
-              <col className="basic-medical-registration-col-toggle" />
             </colgroup>
             <thead>
               <tr>
@@ -741,7 +740,6 @@ export function BasicMedicalRegistrationList({
                 <th>Phòng</th>
                 <th>Số buổi</th>
                 <th>Trạng thái</th>
-                <th aria-label="Mở chi tiết" />
               </tr>
             </thead>
             {registrations.map((registration) => {
@@ -793,39 +791,39 @@ export function BasicMedicalRegistrationList({
                       <span>{registration.rooms?.room_name || "—"}</span>
                     </td>
                     <td>{sessions.length}</td>
-                    <td>
-                      <span
-                        className={`request-status request-status-${isCancelled ? "gray" : isCompleted ? "green" : "red"}`}
-                      >
-                        {isCancelled
-                          ? "Đã hủy"
-                          : isCompleted
-                            ? "Hoàn thành"
-                            : "Chưa hoàn thành"}
-                      </span>
-                    </td>
-                    <td className="equipment-request-toggle-cell">
-                      <button
-                        type="button"
-                        className={`equipment-request-chevron${isOpen ? " is-open" : ""}`}
-                        aria-label={isOpen ? "Thu gọn phiếu" : "Mở phiếu"}
-                        onClick={() =>
-                          setExpanded((current) => {
-                            const next = new Set(current);
-                            if (next.has(registration.id))
-                              next.delete(registration.id);
-                            else next.add(registration.id);
-                            return next;
-                          })
-                        }
-                      >
-                        ⌄
-                      </button>
+                    <td className="basic-medical-registration-status-cell">
+                      <div className="basic-medical-registration-status-control">
+                        <span
+                          className={`request-status request-status-${isCancelled ? "gray" : isCompleted ? "green" : "red"}`}
+                        >
+                          {isCancelled
+                            ? "Đã hủy"
+                            : isCompleted
+                              ? "Hoàn thành"
+                              : "Chưa hoàn thành"}
+                        </span>
+                        <button
+                          type="button"
+                          className={`equipment-request-chevron${isOpen ? " is-open" : ""}`}
+                          aria-label={isOpen ? "Thu gọn phiếu" : "Mở phiếu"}
+                          onClick={() =>
+                            setExpanded((current) => {
+                              const next = new Set(current);
+                              if (next.has(registration.id))
+                                next.delete(registration.id);
+                              else next.add(registration.id);
+                              return next;
+                            })
+                          }
+                        >
+                          ⌄
+                        </button>
+                      </div>
                     </td>
                   </tr>
                   {isOpen ? (
                     <tr className="equipment-request-detail-row">
-                      <td colSpan={6}>
+                      <td colSpan={5}>
                         <div className="equipment-request-details">
                           <div className="equipment-request-detail-grid basic-medical-registration-detail-grid">
                             <div className="basic-medical-registration-detail-code">
@@ -896,7 +894,7 @@ export function BasicMedicalRegistrationList({
                               </div>
                             ) : null}
                           </div>
-                          <div className="responsive-table">
+                          <div className="responsive-table basic-medical-session-viewport">
                             <table className="data-table basic-medical-session-table">
                               <colgroup>
                                 <col className="basic-medical-session-col-index" />

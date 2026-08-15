@@ -380,11 +380,11 @@ test("form-table controls and text retain the Master visible 16px safe inset", a
   }
 });
 
-test("Basic Medical registrations use content-intent columns and aligned actions", async ({
+test("Basic Medical registrations and sessions use shared master-grid anchors", async ({
   page,
 }) => {
   await loginAsAdmin(page);
-  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.setViewportSize({ width: 1620, height: 1000 });
   await page.goto("/basic-medical/registrations", { waitUntil: "networkidle" });
 
   const registrationTable = page.locator(".basic-medical-registration-table");
@@ -415,26 +415,37 @@ test("Basic Medical registrations use content-intent columns and aligned actions
     const actionStack = sessionTable?.querySelector<HTMLElement>(
       ".basic-medical-session-action-stack",
     );
-    const sessionCountHeading = registrationTable?.querySelector<HTMLElement>(
-      "thead th:nth-child(4)",
-    );
-    const studentCountLabel = registrationTable?.querySelector<HTMLElement>(
-      ".basic-medical-registration-detail-student-count > span",
-    );
     const registrantLabel = registrationTable?.querySelector<HTMLElement>(
       ".basic-medical-registration-detail-registrant > span",
     );
     const responsibleLabel = registrationTable?.querySelector<HTMLElement>(
       ".basic-medical-registration-detail-responsible > span",
     );
-    const roomHeading = registrationTable?.querySelector<HTMLElement>(
-      "thead th:nth-child(3)",
-    );
-    const registrationStatusHeading =
-      registrationTable?.querySelector<HTMLElement>("thead th:nth-child(5)");
-    const sessionStatusHeading = sessionTable?.querySelector<HTMLElement>(
-      "thead th:nth-child(6)",
-    );
+    const registrationHeadings = registrationTable
+      ? [
+          ...registrationTable.querySelectorAll<HTMLElement>(
+            ":scope > thead th",
+          ),
+        ]
+      : [];
+    const sessionHeadings = sessionTable
+      ? [...sessionTable.querySelectorAll<HTMLElement>(":scope > thead th")]
+      : [];
+    const [
+      registrationCourseHeading,
+      registrationTimeHeading,
+      registrationRoomHeading,
+      registrationSessionsHeading,
+      registrationStatusHeading,
+    ] = registrationHeadings;
+    const [
+      sessionIndexHeading,
+      sessionDateHeading,
+      sessionTimeHeading,
+      sessionLessonHeading,
+      sessionLecturerHeading,
+      sessionStatusHeading,
+    ] = sessionHeadings;
     const sessionStatus =
       actionStack?.querySelector<HTMLElement>(".request-status");
     const sessionAction = actionStack?.querySelector<HTMLElement>("button");
@@ -443,12 +454,18 @@ test("Basic Medical registrations use content-intent columns and aligned actions
       !sessionTable ||
       !status ||
       !cancel ||
-      !sessionCountHeading ||
-      !studentCountLabel ||
       !registrantLabel ||
       !responsibleLabel ||
-      !roomHeading ||
+      !registrationCourseHeading ||
+      !registrationTimeHeading ||
+      !registrationRoomHeading ||
+      !registrationSessionsHeading ||
       !registrationStatusHeading ||
+      !sessionIndexHeading ||
+      !sessionDateHeading ||
+      !sessionTimeHeading ||
+      !sessionLessonHeading ||
+      !sessionLecturerHeading ||
       !sessionStatusHeading ||
       !sessionStatus ||
       !sessionAction
@@ -465,35 +482,52 @@ test("Basic Medical registrations use content-intent columns and aligned actions
       return range.getBoundingClientRect().left;
     };
     const widths = (table: HTMLTableElement) =>
-      [...table.querySelectorAll<HTMLTableCellElement>("thead th")].map(
-        (cell) => cell.getBoundingClientRect().width,
-      );
+      [
+        ...table.querySelectorAll<HTMLTableCellElement>(":scope > thead th"),
+      ].map((cell) => cell.getBoundingClientRect().width);
+    const left = (element: HTMLElement) => element.getBoundingClientRect().left;
 
     return {
       registrationWidths: widths(registrationTable),
       sessionWidths: widths(sessionTable),
       registrationActionDelta: Math.abs(center(status) - center(cancel)),
-      sessionCountTextDelta: Math.abs(
-        textLeft(sessionCountHeading) - textLeft(studentCountLabel),
-      ),
       summaryAnchorDeltas: {
         registrantToPeriod: Math.abs(
-          textLeft(registrantLabel) -
-            textLeft(
-              registrationTable.querySelector<HTMLElement>(
-                "thead th:nth-child(2)",
-              )!,
-            ),
+          textLeft(registrantLabel) - textLeft(registrationTimeHeading),
         ),
         responsibleToRoom: Math.abs(
-          textLeft(responsibleLabel) - textLeft(roomHeading),
+          textLeft(responsibleLabel) - textLeft(registrationRoomHeading),
         ),
       },
-      sessionColumnDeltas: {
-        statusToStatus: Math.abs(
-          textLeft(sessionStatusHeading) - textLeft(registrationStatusHeading),
+      sharedAnchorPositions: {
+        registrationTime: left(registrationTimeHeading),
+        sessionTime: left(sessionTimeHeading),
+        registrationRoom: left(registrationRoomHeading),
+        sessionLesson: left(sessionLessonHeading),
+        registrationSessions: left(registrationSessionsHeading),
+        sessionLecturer: left(sessionLecturerHeading),
+        registrationStatus: left(registrationStatusHeading),
+        sessionStatus: left(sessionStatusHeading),
+      },
+      sharedAnchorDeltas: {
+        time: Math.abs(
+          left(registrationTimeHeading) - left(sessionTimeHeading),
+        ),
+        room: Math.abs(
+          left(registrationRoomHeading) - left(sessionLessonHeading),
+        ),
+        sessions: Math.abs(
+          left(registrationSessionsHeading) - left(sessionLecturerHeading),
+        ),
+        status: Math.abs(
+          left(registrationStatusHeading) - left(sessionStatusHeading),
         ),
       },
+      sessionFirstTrackDelta: Math.abs(
+        sessionIndexHeading.getBoundingClientRect().width +
+          sessionDateHeading.getBoundingClientRect().width -
+          (registrationCourseHeading.getBoundingClientRect().width - 18),
+      ),
       sessionActionDelta: Math.abs(
         center(sessionStatus) - center(sessionAction),
       ),
@@ -501,34 +535,30 @@ test("Basic Medical registrations use content-intent columns and aligned actions
     };
   });
 
-  const [course, period, room, sessions, status, toggle] =
-    geometry.registrationWidths;
-  expect(course).toBeGreaterThan(period);
-  expect(course).toBeGreaterThan(room);
-  expect(room).toBeGreaterThan(period);
-  expect(sessions).toBeLessThan(period);
-  expect(sessions).toBeLessThan(room);
-  expect(sessions).toBeLessThan(status);
-  expect(toggle).toBeGreaterThanOrEqual(36);
-  expect(toggle).toBeLessThanOrEqual(48);
+  const [course, period, room, sessions, status] = geometry.registrationWidths;
+  expect(course).toBeGreaterThan(200);
+  expect(period).toBeGreaterThan(200);
+  expect(room).toBeGreaterThan(200);
+  expect(sessions).toBeGreaterThan(250);
+  expect(status).toBeGreaterThan(200);
   expect(geometry.registrationActionDelta).toBeLessThanOrEqual(1);
-  expect(geometry.sessionCountTextDelta).toBeLessThanOrEqual(1);
   expect(geometry.summaryAnchorDeltas.registrantToPeriod).toBeLessThanOrEqual(
     1,
   );
   expect(geometry.summaryAnchorDeltas.responsibleToRoom).toBeLessThanOrEqual(1);
-  expect(geometry.sessionColumnDeltas.statusToStatus).toBeLessThanOrEqual(1);
+  expect(geometry.sharedAnchorDeltas.time).toBeLessThanOrEqual(2);
+  expect(geometry.sharedAnchorDeltas.room).toBeLessThanOrEqual(2);
+  expect(geometry.sharedAnchorDeltas.sessions).toBeLessThanOrEqual(2);
+  expect(geometry.sharedAnchorDeltas.status).toBeLessThanOrEqual(2);
+  expect(geometry.sessionFirstTrackDelta).toBeLessThanOrEqual(2);
 
-  const [, date, time, lesson, lecturer, sessionStatus] =
+  const [index, date, time, lesson, lecturer, sessionStatus] =
     geometry.sessionWidths;
-  expect(lesson).toBeGreaterThanOrEqual(250);
-  expect(lecturer).toBeGreaterThanOrEqual(250);
-  expect(lesson).toBeGreaterThan(date);
-  expect(lecturer).toBeGreaterThan(time);
-  expect(time).toBeLessThan(lesson);
-  expect(time).toBeLessThan(lecturer);
-  expect(sessionStatus).toBeGreaterThanOrEqual(150);
-  expect(sessionStatus).toBeLessThanOrEqual(181);
+  expect(index).toBeLessThan(date);
+  expect(time).toBeCloseTo(period, 0);
+  expect(lesson).toBeCloseTo(room, 0);
+  expect(lecturer).toBeCloseTo(sessions, 0);
+  expect(sessionStatus).toBeCloseTo(status, 0);
   expect(geometry.sessionActionDelta).toBeLessThanOrEqual(1);
   expect(geometry.pageOverflow).toBe(false);
 
