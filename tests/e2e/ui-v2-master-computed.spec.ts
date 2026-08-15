@@ -1,4 +1,5 @@
 import nextEnv from "@next/env";
+import { spawnSync } from "node:child_process";
 import { expect, test, type Locator } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { clickUntilState } from "./helpers/interaction-readiness";
@@ -10,6 +11,45 @@ const serviceDb = createClient(
   process.env.SUPABASE_SECRET_KEY!,
   { auth: { autoRefreshToken: false, persistSession: false } },
 );
+
+function localSql(sql: string) {
+  const listed = spawnSync(
+    "docker",
+    [
+      "ps",
+      "--filter",
+      "label=com.supabase.cli.project=lich-truc-app",
+      "--format",
+      "{{.Names}}",
+    ],
+    { encoding: "utf8" },
+  );
+  const databases = listed.stdout
+    .split(/\r?\n/)
+    .filter((name) => name.startsWith("supabase_db_"));
+  if (listed.status !== 0 || databases.length !== 1) {
+    throw new Error("REFUSING_AMBIGUOUS_LOCAL_SUPABASE_DATABASE");
+  }
+  const result = spawnSync(
+    "docker",
+    [
+      "exec",
+      "-i",
+      databases[0],
+      "psql",
+      "-U",
+      "postgres",
+      "-d",
+      "postgres",
+      "-v",
+      "ON_ERROR_STOP=1",
+      "-At",
+    ],
+    { input: sql, encoding: "utf8" },
+  );
+  if (result.status !== 0) throw new Error(result.stderr || "LOCAL_SQL_FAILED");
+  return result.stdout.trim();
+}
 
 async function loginAsAdmin(page: import("@playwright/test").Page) {
   await page.goto("/login");
@@ -383,231 +423,289 @@ test("form-table controls and text retain the Master visible 16px safe inset", a
 test("Basic Medical registrations and sessions use shared master-grid anchors", async ({
   page,
 }) => {
-  await loginAsAdmin(page);
-  await page.setViewportSize({ width: 1620, height: 1000 });
-  await page.goto("/basic-medical/registrations", { waitUntil: "networkidle" });
+  const suffix = crypto.randomUUID().slice(0, 8);
+  const ids = Object.fromEntries(
+    ["course", "room", "registration", "schedule", "session"].map((name) => [
+      name,
+      crypto.randomUUID(),
+    ]),
+  ) as Record<string, string>;
+  const courseCode = `GRID-${suffix}`;
+  const rootId = localSql(
+    "select root_admin_id from public.system_security_principals where singleton;",
+  );
+  const lecturerId = localSql(
+    "select id from public.profiles where email = 'giangvien@campus.local' limit 1;",
+  );
 
-  const registrationTable = page.locator(".basic-medical-registration-table");
-  const firstRegistrationRow = registrationTable
-    .locator(".equipment-request-table-row")
-    .first();
-  await expect(firstRegistrationRow).toBeVisible();
-  await firstRegistrationRow.locator("td:nth-child(2)").click();
+  try {
+    localSql(`
+      begin;
+      select set_config('app.basic_medical_registration_mutation', 'true', true);
+      insert into public.courses (id, course_code, course_name, room_type_id, is_active)
+      select '${ids.course}', '${courseCode}', 'Grid fixture ${suffix}', id, true
+      from public.room_types where code = 'basic_medical';
+      insert into public.rooms (id, room_code, building_code, room_name, room_type_id, capacity, is_active)
+      select '${ids.room}', 'GRID-${suffix}', 'E2E', 'Grid room ${suffix}', id, 20, true
+      from public.room_types where code = 'basic_medical';
+      insert into public.basic_medical_registrations
+        (id, academic_year, semester, start_date, end_date, course_id, room_id, student_count, registrant_id, responsible_lecturer_id, created_by)
+      values ('${ids.registration}', '2045-2046', 'HK1', '2045-08-11', '2045-08-11', '${ids.course}', '${ids.room}', 10, '${rootId}', '${lecturerId}', '${rootId}');
+      insert into public.class_schedules
+        (id, course_id, course_code_snapshot, course_name_snapshot, room_id, lecturer_id, schedule_date, start_time, end_time, source, schedule_status, student_count, basic_medical_registration_id, created_by, published_by, published_at)
+      values ('${ids.schedule}', '${ids.course}', '${courseCode}', 'Grid lesson ${suffix}', '${ids.room}', '${lecturerId}', '2045-08-11', '08:00', '10:00', 'manual', 'published', 10, '${ids.registration}', '${rootId}', '${rootId}', clock_timestamp());
+      insert into public.basic_medical_registration_sessions (id, registration_id, class_schedule_id, lesson_title, teaching_lecturer_id, session_number)
+      values ('${ids.session}', '${ids.registration}', '${ids.schedule}', 'Grid lesson ${suffix}', '${lecturerId}', 1);
+      commit;
+    `);
 
-  const sessionTable = page.locator(".basic-medical-session-table");
-  await expect(sessionTable).toBeVisible();
-  const geometry = await page.evaluate(() => {
-    const registrationTable = document.querySelector<HTMLTableElement>(
-      ".basic-medical-registration-table",
-    );
-    const sessionTable = document.querySelector<HTMLTableElement>(
-      ".basic-medical-session-table",
-    );
-    const cancel = registrationTable?.querySelector<HTMLElement>(
-      ".basic-medical-registration-detail-action .button",
-    );
-    const registrationStatus = registrationTable?.querySelector<HTMLElement>(
-      ".equipment-request-table-row td:nth-child(5) .request-status",
-    );
-    const actionStack = sessionTable?.querySelector<HTMLElement>(
-      ".basic-medical-session-action-stack",
-    );
-    const lecturerCell = sessionTable?.querySelector<HTMLElement>(
-      "tbody tr td:nth-child(5)",
-    );
-    const registrantLabel = registrationTable?.querySelector<HTMLElement>(
-      ".basic-medical-registration-detail-registrant > span",
-    );
-    const responsibleLabel = registrationTable?.querySelector<HTMLElement>(
-      ".basic-medical-registration-detail-responsible > span",
-    );
-    const registrationHeadings = registrationTable
-      ? [
-          ...registrationTable.querySelectorAll<HTMLElement>(
-            ":scope > thead th",
+    await loginAsAdmin(page);
+    await page.setViewportSize({ width: 1620, height: 1000 });
+    await page.goto("/basic-medical/registrations", {
+      waitUntil: "networkidle",
+    });
+
+    const registrationTable = page.locator(".basic-medical-registration-table");
+    const firstRegistrationRow = registrationTable
+      .locator(".equipment-request-table-row")
+      .filter({ hasText: courseCode });
+    await expect(firstRegistrationRow).toBeVisible();
+    await firstRegistrationRow.locator("td:nth-child(2)").click();
+
+    const sessionTable = page.locator(".basic-medical-session-table");
+    await expect(sessionTable).toBeVisible();
+    const geometry = await page.evaluate(() => {
+      const registrationTable = document.querySelector<HTMLTableElement>(
+        ".basic-medical-registration-table",
+      );
+      const sessionTable = document.querySelector<HTMLTableElement>(
+        ".basic-medical-session-table",
+      );
+      const cancel = registrationTable?.querySelector<HTMLElement>(
+        ".basic-medical-registration-detail-action .button",
+      );
+      const registrationStatus = registrationTable?.querySelector<HTMLElement>(
+        ".equipment-request-table-row td:nth-child(5) .request-status",
+      );
+      const actionStack = sessionTable?.querySelector<HTMLElement>(
+        ".basic-medical-session-action-stack",
+      );
+      const lecturerCell = sessionTable?.querySelector<HTMLElement>(
+        "tbody tr td:nth-child(5)",
+      );
+      const registrantLabel = registrationTable?.querySelector<HTMLElement>(
+        ".basic-medical-registration-detail-registrant > span",
+      );
+      const responsibleLabel = registrationTable?.querySelector<HTMLElement>(
+        ".basic-medical-registration-detail-responsible > span",
+      );
+      const registrationHeadings = registrationTable
+        ? [
+            ...registrationTable.querySelectorAll<HTMLElement>(
+              ":scope > thead th",
+            ),
+          ]
+        : [];
+      const sessionHeadings = sessionTable
+        ? [...sessionTable.querySelectorAll<HTMLElement>(":scope > thead th")]
+        : [];
+      const [
+        registrationCourseHeading,
+        registrationTimeHeading,
+        registrationRoomHeading,
+        registrationSessionsHeading,
+        registrationStatusHeading,
+      ] = registrationHeadings;
+      const [
+        sessionIndexHeading,
+        sessionDateHeading,
+        sessionTimeHeading,
+        sessionLessonHeading,
+        sessionLecturerHeading,
+        sessionStatusHeading,
+      ] = sessionHeadings;
+      const sessionAction = actionStack?.querySelector<HTMLElement>("button");
+      const sessionStatus =
+        actionStack?.querySelector<HTMLElement>(".request-status");
+      if (
+        !registrationTable ||
+        !sessionTable ||
+        !cancel ||
+        !registrationStatus ||
+        !actionStack ||
+        !lecturerCell ||
+        !registrantLabel ||
+        !responsibleLabel ||
+        !registrationCourseHeading ||
+        !registrationTimeHeading ||
+        !registrationRoomHeading ||
+        !registrationSessionsHeading ||
+        !registrationStatusHeading ||
+        !sessionIndexHeading ||
+        !sessionDateHeading ||
+        !sessionTimeHeading ||
+        !sessionLessonHeading ||
+        !sessionLecturerHeading ||
+        !sessionStatusHeading ||
+        !sessionAction ||
+        !sessionStatus
+      ) {
+        throw new Error("Basic Medical layout controls are missing");
+      }
+      const textLeft = (element: HTMLElement) => {
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        return range.getBoundingClientRect().left;
+      };
+      const widths = (table: HTMLTableElement) =>
+        [
+          ...table.querySelectorAll<HTMLTableCellElement>(":scope > thead th"),
+        ].map((cell) => cell.getBoundingClientRect().width);
+      const left = (element: HTMLElement) =>
+        element.getBoundingClientRect().left;
+
+      return {
+        registrationWidths: widths(registrationTable),
+        sessionWidths: widths(sessionTable),
+        summaryAnchorDeltas: {
+          registrantToPeriod: Math.abs(
+            textLeft(registrantLabel) - textLeft(registrationTimeHeading),
           ),
-        ]
-      : [];
-    const sessionHeadings = sessionTable
-      ? [...sessionTable.querySelectorAll<HTMLElement>(":scope > thead th")]
-      : [];
-    const [
-      registrationCourseHeading,
-      registrationTimeHeading,
-      registrationRoomHeading,
-      registrationSessionsHeading,
-      registrationStatusHeading,
-    ] = registrationHeadings;
-    const [
-      sessionIndexHeading,
-      sessionDateHeading,
-      sessionTimeHeading,
-      sessionLessonHeading,
-      sessionLecturerHeading,
-      sessionStatusHeading,
-    ] = sessionHeadings;
-    const sessionAction = actionStack?.querySelector<HTMLElement>("button");
-    const sessionStatus =
-      actionStack?.querySelector<HTMLElement>(".request-status");
-    if (
-      !registrationTable ||
-      !sessionTable ||
-      !cancel ||
-      !registrationStatus ||
-      !actionStack ||
-      !lecturerCell ||
-      !registrantLabel ||
-      !responsibleLabel ||
-      !registrationCourseHeading ||
-      !registrationTimeHeading ||
-      !registrationRoomHeading ||
-      !registrationSessionsHeading ||
-      !registrationStatusHeading ||
-      !sessionIndexHeading ||
-      !sessionDateHeading ||
-      !sessionTimeHeading ||
-      !sessionLessonHeading ||
-      !sessionLecturerHeading ||
-      !sessionStatusHeading ||
-      !sessionAction ||
-      !sessionStatus
-    ) {
-      throw new Error("Basic Medical layout controls are missing");
-    }
-    const textLeft = (element: HTMLElement) => {
-      const range = document.createRange();
-      range.selectNodeContents(element);
-      return range.getBoundingClientRect().left;
-    };
-    const widths = (table: HTMLTableElement) =>
-      [
-        ...table.querySelectorAll<HTMLTableCellElement>(":scope > thead th"),
-      ].map((cell) => cell.getBoundingClientRect().width);
-    const left = (element: HTMLElement) => element.getBoundingClientRect().left;
+          responsibleToRoom: Math.abs(
+            textLeft(responsibleLabel) - textLeft(registrationRoomHeading),
+          ),
+        },
+        sharedAnchorPositions: {
+          registrationTime: left(registrationTimeHeading),
+          sessionTime: left(sessionTimeHeading),
+          registrationRoom: left(registrationRoomHeading),
+          sessionLesson: left(sessionLessonHeading),
+          registrationSessions: left(registrationSessionsHeading),
+          sessionLecturer: left(sessionLecturerHeading),
+          registrationStatus: left(registrationStatusHeading),
+          sessionStatus: left(sessionStatusHeading),
+        },
+        sharedAnchorDeltas: {
+          time: Math.abs(
+            left(registrationTimeHeading) - left(sessionTimeHeading),
+          ),
+          room: Math.abs(
+            left(registrationRoomHeading) - left(sessionLessonHeading),
+          ),
+          sessions: Math.abs(
+            left(registrationSessionsHeading) - left(sessionLecturerHeading),
+          ),
+          status: Math.abs(
+            left(registrationStatusHeading) - left(sessionStatusHeading),
+          ),
+        },
+        sessionFirstTrackDelta: Math.abs(
+          sessionIndexHeading.getBoundingClientRect().width +
+            sessionDateHeading.getBoundingClientRect().width -
+            (registrationCourseHeading.getBoundingClientRect().width - 18),
+        ),
+        contentAnchorDeltas: {
+          lecturerToHeading: Math.abs(
+            textLeft(lecturerCell) - textLeft(sessionLecturerHeading),
+          ),
+          registrationActionToStatus: Math.abs(
+            left(cancel) - textLeft(registrationStatusHeading),
+          ),
+          sessionActionToStatus: Math.abs(
+            left(sessionAction) - textLeft(sessionStatusHeading),
+          ),
+          registrationBadgeToStatus: Math.abs(
+            left(registrationStatus) - textLeft(registrationStatusHeading),
+          ),
+          sessionBadgeToStatus: Math.abs(
+            left(sessionStatus) - textLeft(sessionStatusHeading),
+          ),
+        },
+        pageOverflow: document.documentElement.scrollWidth > window.innerWidth,
+      };
+    });
 
-    return {
-      registrationWidths: widths(registrationTable),
-      sessionWidths: widths(sessionTable),
-      summaryAnchorDeltas: {
-        registrantToPeriod: Math.abs(
-          textLeft(registrantLabel) - textLeft(registrationTimeHeading),
-        ),
-        responsibleToRoom: Math.abs(
-          textLeft(responsibleLabel) - textLeft(registrationRoomHeading),
-        ),
-      },
-      sharedAnchorPositions: {
-        registrationTime: left(registrationTimeHeading),
-        sessionTime: left(sessionTimeHeading),
-        registrationRoom: left(registrationRoomHeading),
-        sessionLesson: left(sessionLessonHeading),
-        registrationSessions: left(registrationSessionsHeading),
-        sessionLecturer: left(sessionLecturerHeading),
-        registrationStatus: left(registrationStatusHeading),
-        sessionStatus: left(sessionStatusHeading),
-      },
-      sharedAnchorDeltas: {
-        time: Math.abs(
-          left(registrationTimeHeading) - left(sessionTimeHeading),
-        ),
-        room: Math.abs(
-          left(registrationRoomHeading) - left(sessionLessonHeading),
-        ),
-        sessions: Math.abs(
-          left(registrationSessionsHeading) - left(sessionLecturerHeading),
-        ),
-        status: Math.abs(
-          left(registrationStatusHeading) - left(sessionStatusHeading),
-        ),
-      },
-      sessionFirstTrackDelta: Math.abs(
-        sessionIndexHeading.getBoundingClientRect().width +
-          sessionDateHeading.getBoundingClientRect().width -
-          (registrationCourseHeading.getBoundingClientRect().width - 18),
-      ),
-      contentAnchorDeltas: {
-        lecturerToHeading: Math.abs(
-          textLeft(lecturerCell) - textLeft(sessionLecturerHeading),
-        ),
-        registrationActionToStatus: Math.abs(
-          left(cancel) - textLeft(registrationStatusHeading),
-        ),
-        sessionActionToStatus: Math.abs(
-          left(sessionAction) - textLeft(sessionStatusHeading),
-        ),
-        registrationBadgeToStatus: Math.abs(
-          left(registrationStatus) - textLeft(registrationStatusHeading),
-        ),
-        sessionBadgeToStatus: Math.abs(
-          left(sessionStatus) - textLeft(sessionStatusHeading),
-        ),
-      },
-      pageOverflow: document.documentElement.scrollWidth > window.innerWidth,
-    };
-  });
-
-  const [course, period, room, sessions, status] = geometry.registrationWidths;
-  expect(course).toBeGreaterThan(200);
-  expect(period).toBeGreaterThan(200);
-  expect(room).toBeGreaterThan(200);
-  expect(sessions).toBeGreaterThan(250);
-  expect(status).toBeGreaterThan(200);
-  expect(geometry.summaryAnchorDeltas.registrantToPeriod).toBeLessThanOrEqual(
-    1,
-  );
-  expect(geometry.summaryAnchorDeltas.responsibleToRoom).toBeLessThanOrEqual(1);
-  expect(geometry.sharedAnchorDeltas.time).toBeLessThanOrEqual(2);
-  expect(geometry.sharedAnchorDeltas.room).toBeLessThanOrEqual(2);
-  expect(geometry.sharedAnchorDeltas.sessions).toBeLessThanOrEqual(2);
-  expect(geometry.sharedAnchorDeltas.status).toBeLessThanOrEqual(2);
-  expect(geometry.sessionFirstTrackDelta).toBeLessThanOrEqual(2);
-  expect(geometry.contentAnchorDeltas.lecturerToHeading).toBeLessThanOrEqual(1);
-  expect(
-    geometry.contentAnchorDeltas.registrationActionToStatus,
-  ).toBeLessThanOrEqual(1);
-  expect(
-    geometry.contentAnchorDeltas.sessionActionToStatus,
-  ).toBeLessThanOrEqual(1);
-  expect(
-    geometry.contentAnchorDeltas.registrationBadgeToStatus,
-  ).toBeLessThanOrEqual(1);
-  expect(geometry.contentAnchorDeltas.sessionBadgeToStatus).toBeLessThanOrEqual(
-    1,
-  );
-
-  const [index, date, time, lesson, lecturer, sessionStatus] =
-    geometry.sessionWidths;
-  expect(index).toBeLessThan(date);
-  expect(time).toBeCloseTo(period, 0);
-  expect(lesson).toBeCloseTo(room, 0);
-  expect(lecturer).toBeCloseTo(sessions, 0);
-  expect(sessionStatus).toBeCloseTo(status, 0);
-  expect(geometry.pageOverflow).toBe(false);
-
-  await firstRegistrationRow.locator("td:nth-child(3)").click();
-  await expect(sessionTable).toBeHidden();
-  await firstRegistrationRow.locator("td:nth-child(4)").click();
-  await expect(sessionTable).toBeVisible();
-
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/basic-medical/registrations", { waitUntil: "networkidle" });
-  await expect(firstRegistrationRow).toBeVisible();
-  const mobileGeometry = await page.evaluate(() => {
-    const viewport = document.querySelector<HTMLElement>(
-      ".basic-medical-registration-panel > .responsive-table",
+    const [course, period, room, sessions, status] =
+      geometry.registrationWidths;
+    expect(course).toBeGreaterThan(200);
+    expect(period).toBeGreaterThan(200);
+    expect(room).toBeGreaterThan(200);
+    expect(sessions).toBeGreaterThan(250);
+    expect(status).toBeGreaterThan(200);
+    expect(geometry.summaryAnchorDeltas.registrantToPeriod).toBeLessThanOrEqual(
+      1,
     );
-    if (!viewport) {
-      throw new Error("Basic Medical responsive table viewport is missing");
-    }
-    return {
-      localScroll: viewport.scrollWidth > viewport.clientWidth,
-      overflowX: getComputedStyle(viewport).overflowX,
-      pageOverflow: document.documentElement.scrollWidth > window.innerWidth,
-    };
-  });
-  expect(mobileGeometry.localScroll).toBe(true);
-  expect(mobileGeometry.overflowX).toBe("auto");
-  expect(mobileGeometry.pageOverflow).toBe(false);
+    expect(geometry.summaryAnchorDeltas.responsibleToRoom).toBeLessThanOrEqual(
+      1,
+    );
+    expect(geometry.sharedAnchorDeltas.time).toBeLessThanOrEqual(2);
+    expect(geometry.sharedAnchorDeltas.room).toBeLessThanOrEqual(2);
+    expect(geometry.sharedAnchorDeltas.sessions).toBeLessThanOrEqual(2);
+    expect(geometry.sharedAnchorDeltas.status).toBeLessThanOrEqual(2);
+    expect(geometry.sessionFirstTrackDelta).toBeLessThanOrEqual(2);
+    expect(geometry.contentAnchorDeltas.lecturerToHeading).toBeLessThanOrEqual(
+      1,
+    );
+    expect(
+      geometry.contentAnchorDeltas.registrationActionToStatus,
+    ).toBeLessThanOrEqual(1);
+    expect(
+      geometry.contentAnchorDeltas.sessionActionToStatus,
+    ).toBeLessThanOrEqual(1);
+    expect(
+      geometry.contentAnchorDeltas.registrationBadgeToStatus,
+    ).toBeLessThanOrEqual(1);
+    expect(
+      geometry.contentAnchorDeltas.sessionBadgeToStatus,
+    ).toBeLessThanOrEqual(1);
+
+    const [index, date, time, lesson, lecturer, sessionStatus] =
+      geometry.sessionWidths;
+    expect(index).toBeLessThan(date);
+    expect(time).toBeCloseTo(period, 0);
+    expect(lesson).toBeCloseTo(room, 0);
+    expect(lecturer).toBeCloseTo(sessions, 0);
+    expect(sessionStatus).toBeCloseTo(status, 0);
+    expect(geometry.pageOverflow).toBe(false);
+
+    await firstRegistrationRow.locator("td:nth-child(3)").click();
+    await expect(sessionTable).toBeHidden();
+    await firstRegistrationRow.locator("td:nth-child(4)").click();
+    await expect(sessionTable).toBeVisible();
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/basic-medical/registrations", {
+      waitUntil: "networkidle",
+    });
+    await expect(firstRegistrationRow).toBeVisible();
+    const mobileGeometry = await page.evaluate(() => {
+      const viewport = document.querySelector<HTMLElement>(
+        ".basic-medical-registration-panel > .responsive-table",
+      );
+      if (!viewport) {
+        throw new Error("Basic Medical responsive table viewport is missing");
+      }
+      return {
+        localScroll: viewport.scrollWidth > viewport.clientWidth,
+        overflowX: getComputedStyle(viewport).overflowX,
+        pageOverflow: document.documentElement.scrollWidth > window.innerWidth,
+      };
+    });
+    expect(mobileGeometry.localScroll).toBe(true);
+    expect(mobileGeometry.overflowX).toBe("auto");
+    expect(mobileGeometry.pageOverflow).toBe(false);
+  } finally {
+    localSql(`
+      begin;
+      select set_config('app.basic_medical_registration_mutation', 'true', true);
+      delete from public.basic_medical_registration_sessions where id = '${ids.session}';
+      delete from public.class_schedules where id = '${ids.schedule}';
+      delete from public.basic_medical_registrations where id = '${ids.registration}';
+      delete from public.rooms where id = '${ids.room}';
+      delete from public.courses where id = '${ids.course}';
+      commit;
+    `);
+  }
 });
 
 test("canonical UI V2 shared geometry is applied in computed styles", async ({

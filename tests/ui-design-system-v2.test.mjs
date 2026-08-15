@@ -139,6 +139,32 @@ test("UI V2 keeps equipment controls and wide request tables inside local viewpo
   );
 });
 
+test("Registration forms and equipment request filters keep distinct visual shells", async () => {
+  const css = await source("app/globals.css");
+  const scheduleForm = await source("components/schedule-form.tsx");
+  const basicMedicalForm = await source(
+    "components/basic-medical-registration-form.tsx",
+  );
+
+  assert.match(
+    css,
+    /\.class-filter-panel\.equipment-request-filters\s*\{[\s\S]*border-radius: var\(--radius-card\)[\s\S]*box-shadow: var\(--shadow-card\)/,
+  );
+  assert.match(
+    css,
+    /\.schedule-form\s*\{[\s\S]*display: grid[\s\S]*gap: 16px[\s\S]*overflow: visible/,
+  );
+  assert.match(
+    css,
+    /\.schedule-form > section\s*\{[\s\S]*background: var\(--surface\)[\s\S]*border-radius: var\(--radius-card\)[\s\S]*box-shadow: var\(--shadow-card\)/,
+  );
+  assert.match(scheduleForm, /className="schedule-form"/);
+  assert.match(
+    basicMedicalForm,
+    /className="schedule-form external-layout-form"/,
+  );
+});
+
 test("Basic Medical registration and sessions share one master grid", async () => {
   const css = await source("app/globals.css");
   const registrationList = await source(

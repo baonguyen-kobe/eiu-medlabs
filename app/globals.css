@@ -10576,6 +10576,36 @@ time,
   font-weight: 700;
 }
 
+/* Schedule-registration forms use independent information cards. The form
+   itself is only their layout owner, so adjacent sections never merge their
+   borders or shadows into one another. */
+.schedule-form {
+  display: grid;
+  gap: 16px;
+  overflow: visible;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.schedule-form > section {
+  padding: 24px 28px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+/* This filter row is its own visual shell, not a table header.  It therefore
+   owns all four rounded edges instead of inheriting a bottom divider only. */
+.class-filter-panel.equipment-request-filters {
+  border: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
 .import-layout .stepper {
   gap: 8px;
 }
