@@ -8,6 +8,8 @@ const [
   evidencePage,
   registrationsPage,
   registrationList,
+  signerSnapshotPermissionMigration,
+  signerSnapshotPermissionSchema,
 ] = await Promise.all([
   readFile(
     new URL(
@@ -37,6 +39,20 @@ const [
   readFile(
     new URL(
       "../components/basic-medical-registration-list.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  ),
+  readFile(
+    new URL(
+      "../supabase/migrations/20260815131138_grant_basic_medical_confirmation_signer_snapshot.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  ),
+  readFile(
+    new URL(
+      "../supabase/schemas/22_basic_medical_confirmation_signer_snapshot_permission.sql",
       import.meta.url,
     ),
     "utf8",
@@ -122,6 +138,24 @@ test("list query never serializes signature and gates invalidated evidence links
     registrationList,
     /evidenceEnabled\s*\? invalidatedConfirmations\.map/,
   );
+});
+
+test("signer display snapshot permission remains a narrow authenticated column grant", () => {
+  for (const sql of [
+    signerSnapshotPermissionMigration,
+    signerSnapshotPermissionSchema,
+  ]) {
+    assert.match(
+      sql,
+      /grant select \(signer_name_snapshot\)\s+on public\.basic_medical_session_confirmations\s+to authenticated/i,
+    );
+    assert.doesNotMatch(sql, /signature_data/i);
+    assert.doesNotMatch(
+      sql,
+      /grant select\s+on public\.basic_medical_session_confirmations/i,
+    );
+    assert.doesNotMatch(sql, /create policy|alter policy|drop policy/i);
+  }
 });
 
 test("server-rendered evidence page requests only the guarded RPC result", () => {
