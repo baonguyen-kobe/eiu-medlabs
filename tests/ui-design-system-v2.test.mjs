@@ -244,6 +244,10 @@ test("Skills and Basic Medical calendars share a safe drawer inset", async () =>
   const dashboard = await source("components/dashboard.tsx");
 
   assert.match(dashboard, /className="detail-drawer"/);
+  assert.doesNotMatch(
+    dashboard,
+    /<dd className="mono">[\s\S]*selectedEvent\.room/,
+  );
   assert.match(css, /\.detail-drawer\s*\{[\s\S]*padding: 24px 32px/);
   assert.match(
     css,
