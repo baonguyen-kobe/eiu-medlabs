@@ -8448,6 +8448,10 @@ body,
   align-items: start;
 }
 
+.detail-list > div:has(.drawer-lecturer-selects) > dt {
+  padding-block-start: 10px;
+}
+
 .detail-list :is(input, select) {
   box-sizing: border-box;
   min-height: 40px;
@@ -8456,6 +8460,46 @@ body,
 
 .detail-list :is(input[type="date"], input[type="time"], select) {
   padding-inline-end: 24px;
+}
+
+@media (max-width: 360px) {
+  .detail-drawer {
+    padding-inline-start: max(24px, env(safe-area-inset-left));
+    padding-inline-end: max(24px, env(safe-area-inset-right));
+  }
+
+  .detail-list > div {
+    grid-template-columns: 80px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .detail-list .drawer-time-editor {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .detail-list .drawer-time-editor > span {
+    display: none;
+  }
+
+  .detail-list .drawer-time-editor input {
+    min-width: 0;
+    padding-inline: 8px;
+    padding-inline-end: 18px;
+  }
+
+  .detail-list > div:has(.drawer-time-editor),
+  .detail-list > div:has(.drawer-lecturer-selects) {
+    grid-template-columns: 72px minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .detail-list .drawer-lecturer-selects select {
+    padding-inline: 8px;
+    padding-inline-end: 20px;
+  }
 }
 
 .searchable-combobox-list button {
@@ -8490,6 +8534,31 @@ body,
 .lecturer-name-list {
   display: grid;
   gap: 7px;
+}
+
+@media (max-width: 360px) {
+  .detail-list > div:has(.drawer-lecturer-selects) > dd,
+  .detail-list .drawer-lecturer-selects {
+    display: contents;
+  }
+
+  .detail-list > div:has(.drawer-lecturer-selects) > dt {
+    grid-column: 1;
+    grid-row: 1;
+    padding-block-start: 10px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  .detail-list .drawer-lecturer-selects select:first-child {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .detail-list .drawer-lecturer-selects select:last-child {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
 }
 
 .lecturer-comboboxes {

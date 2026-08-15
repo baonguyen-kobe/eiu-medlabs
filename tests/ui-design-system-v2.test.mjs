@@ -260,7 +260,27 @@ test("Skills and Basic Medical calendars share a safe drawer inset", async () =>
   );
   assert.match(
     css,
+    /\.detail-list > div:has\(\.drawer-lecturer-selects\) > dt\s*\{[\s\S]*padding-block-start: 10px/,
+  );
+  assert.match(
+    css,
     /\.detail-list :is\(input, select\)\s*\{[\s\S]*padding-inline: 11px/,
+  );
+  assert.match(
+    css,
+    /@media \(max-width: 360px\)[\s\S]*\.detail-list \.drawer-time-editor\s*\{[\s\S]*grid-template-columns: minmax\(0, 1fr\)[\s\S]*min-width: 0/,
+  );
+  assert.match(
+    css,
+    /\.detail-list \.drawer-time-editor input\s*\{[\s\S]*min-width: 0/,
+  );
+  assert.match(
+    css,
+    /\.detail-list > div:has\(\.drawer-lecturer-selects\) > dd,[\s\S]*\.detail-list \.drawer-lecturer-selects\s*\{[\s\S]*display: contents/,
+  );
+  assert.match(
+    css,
+    /\.detail-list \.drawer-lecturer-selects select:last-child\s*\{[\s\S]*grid-column: 1 \/ -1/,
   );
 });
 
