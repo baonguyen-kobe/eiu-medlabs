@@ -679,6 +679,18 @@ Canonical visible contract:
 cell edge | >=16px | content / control | >=16px | cell edge
 ```
 
+Table control internal inset:
+
+```text
+padding-inline-start: about 10–12px
+padding-inline-end:   about 10–12px minimum
+```
+
+Native date, time, and select controls may reserve a larger end inset for
+their calendar, clock, or dropdown affordance. Acceptance must verify both the
+cell-to-control geometry and the computed control padding; a `16px` table-cell
+padding alone is not sufficient.
+
 ---
 
 # 16. TABLE COLUMN INTENT SYSTEM

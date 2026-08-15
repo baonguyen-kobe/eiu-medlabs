@@ -9740,6 +9740,44 @@ textarea:focus-visible {
   margin-inline: 0;
 }
 
+/* Table controls need their own breathing room as well as the 16px cell
+   inset.  Native date/time/select affordances reserve a wider end inset so
+   their calendar, clock, and arrow remain comfortably inside the border. */
+:where(
+    .data-table,
+    .personnel-table,
+    .admin-table,
+    .responsive-table table,
+    .preview-table-wrap table
+  )
+  td
+  :where(
+    input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+    select,
+    textarea
+  ) {
+  padding-inline: 11px;
+}
+
+:where(
+    .data-table,
+    .personnel-table,
+    .admin-table,
+    .responsive-table table,
+    .preview-table-wrap table
+  )
+  td
+  :is(input[type="date"], input[type="time"], select) {
+  padding-inline-end: 20px;
+}
+
+.class-registration-table
+  td.class-registration-student-count-cell
+  .student-count-input {
+  padding-inline: 10px;
+  text-align: center;
+}
+
 :where(
     .data-table,
     .personnel-table,

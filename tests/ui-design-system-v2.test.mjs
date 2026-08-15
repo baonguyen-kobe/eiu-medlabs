@@ -79,6 +79,18 @@ test("UI V2 shared chrome and data primitives use canonical Master geometry", as
   );
   assert.match(
     css,
+    /td\s*:where\([\s\S]*input:not\(\[type="checkbox"\]\)[\s\S]*padding-inline: 11px/,
+  );
+  assert.match(
+    css,
+    /input\[type="date"\],[\s\S]*input\[type="time"\],[\s\S]*padding-inline-end: 20px/,
+  );
+  assert.match(
+    css,
+    /\.class-registration-table td\.class-registration-student-count-cell[\s\S]*padding-inline: 10px[\s\S]*text-align: center/,
+  );
+  assert.match(
+    css,
     /\.class-registration-table-open\s*\{[\s\S]*width: 1485px[\s\S]*min-width: 1485px/,
   );
   assert.match(
@@ -92,6 +104,10 @@ test("UI V2 shared chrome and data primitives use canonical Master geometry", as
   assert.match(
     master,
     /Acceptance ph[^\n]*geometry th[^\n]*child\/content[\s\S]*cell edge \| >=16px \| content \/ control \| >=16px \| cell edge/,
+  );
+  assert.match(
+    master,
+    /Table control internal inset:[\s\S]*padding-inline-start: about 10–12px[\s\S]*computed control padding/,
   );
   assert.doesNotMatch(master, /text-align: center/);
   assert.match(catalog, /<colgroup>/);

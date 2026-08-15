@@ -110,6 +110,9 @@ type CellInset = {
   childBoxSizing: string;
   childMaxInlineSize: string;
   childMaxWidth: string;
+  childPaddingInlineStart: string;
+  childPaddingInlineEnd: string;
+  childTextAlign: string;
   childWidth: number;
   tdContentWidth: number;
   wrapperWidth: number | null;
@@ -157,6 +160,9 @@ async function measureTableCellInset(
         childBoxSizing: childStyle.boxSizing,
         childMaxInlineSize: childStyle.maxInlineSize,
         childMaxWidth: childStyle.maxWidth,
+        childPaddingInlineStart: childStyle.paddingInlineStart,
+        childPaddingInlineEnd: childStyle.paddingInlineEnd,
+        childTextAlign: childStyle.textAlign,
         childWidth: targetRect.width,
         tdContentWidth:
           cell.clientWidth -
@@ -266,7 +272,14 @@ test("form-table controls and text retain the Master visible 16px safe inset", a
     const cells = row.locator("td");
     const measurements = await Promise.all([
       measureTableCellInset(row.locator('input[type="date"]'), "Date"),
-      measureTableCellInset(row.locator('input[type="time"]').first(), "Time"),
+      measureTableCellInset(
+        row.locator('input[type="time"]').first(),
+        "Start time",
+      ),
+      measureTableCellInset(
+        row.locator('input[type="time"]').nth(1),
+        "End time",
+      ),
       measureTableCellInset(row.locator("select").first(), "Room select"),
       measureTableCellInset(
         row.locator('input[type="number"]'),
@@ -281,7 +294,8 @@ test("form-table controls and text retain the Master visible 16px safe inset", a
     ]);
 
     for (const measurement of measurements) expectSafeTableInset(measurement);
-    for (const measurement of measurements.slice(0, 4)) {
+    const controls = measurements.slice(0, 5);
+    for (const measurement of controls) {
       expect(
         measurement.childMaxInlineSize === "100%" ||
           measurement.childMaxWidth === "100%",
@@ -292,11 +306,27 @@ test("form-table controls and text retain the Master visible 16px safe inset", a
         );
       }
     }
-    for (const measurement of measurements.slice(0, 4)) {
+    const nativeAffordances = new Set([
+      "Date",
+      "Start time",
+      "End time",
+      "Room select",
+    ]);
+    for (const measurement of controls) {
       expect(
-        measurement.right,
-        `${measurement.label} keeps visual room beyond the Master inset`,
-      ).toBeGreaterThanOrEqual(24);
+        Number.parseFloat(measurement.childPaddingInlineStart),
+        `${measurement.label} has an internal start inset`,
+      ).toBeGreaterThanOrEqual(10);
+      expect(
+        Number.parseFloat(measurement.childPaddingInlineEnd),
+        `${measurement.label} has an internal end inset`,
+      ).toBeGreaterThanOrEqual(10);
+      if (nativeAffordances.has(measurement.label)) {
+        expect(
+          Number.parseFloat(measurement.childPaddingInlineEnd),
+          `${measurement.label} reserves end clearance for its native affordance`,
+        ).toBeGreaterThanOrEqual(20);
+      }
     }
     const studentCount = measurements.find(
       (measurement) => measurement.label === "Student count",
@@ -306,6 +336,33 @@ test("form-table controls and text retain the Master visible 16px safe inset", a
       Math.abs((studentCount?.left ?? 0) - (studentCount?.right ?? 0)),
       "Student count control is visually centered in its table cell",
     ).toBeLessThanOrEqual(1);
+    expect(studentCount?.childTextAlign).toBe("center");
+    const lecturerMetrics = await row
+      .locator(".searchable-combobox-control")
+      .first()
+      .evaluate((control) => {
+        const rect = control.getBoundingClientRect();
+        const icons = control.querySelectorAll("svg");
+        const search = icons[0]?.getBoundingClientRect();
+        const chevron = icons[1]?.getBoundingClientRect();
+        if (!search || !chevron)
+          throw new Error("Missing lecturer control icons");
+        const style = getComputedStyle(control);
+        return {
+          paddingInlineStart: style.paddingInlineStart,
+          paddingInlineEnd: style.paddingInlineEnd,
+          searchLeft: search.left - rect.left,
+          chevronRight: rect.right - chevron.right,
+        };
+      });
+    expect(
+      Number.parseFloat(lecturerMetrics.paddingInlineStart),
+    ).toBeGreaterThanOrEqual(10);
+    expect(
+      Number.parseFloat(lecturerMetrics.paddingInlineEnd),
+    ).toBeGreaterThanOrEqual(10);
+    expect(lecturerMetrics.searchLeft).toBeGreaterThanOrEqual(10);
+    expect(lecturerMetrics.chevronRight).toBeGreaterThanOrEqual(10);
     await page.setViewportSize({ width: 1100, height: 900 });
     await expect
       .poll(() =>
