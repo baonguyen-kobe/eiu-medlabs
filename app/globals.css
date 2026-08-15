@@ -8715,16 +8715,16 @@ body,
 }
 
 .basic-medical-registration-col-course {
-  width: 18.5%;
+  width: 30%;
 }
 .basic-medical-registration-col-period {
-  width: 17.5%;
-}
-.basic-medical-registration-col-room {
   width: 20%;
 }
+.basic-medical-registration-col-room {
+  width: 26%;
+}
 .basic-medical-registration-col-sessions {
-  width: 28%;
+  width: 8%;
 }
 .basic-medical-registration-col-status {
   width: 12%;
@@ -8743,7 +8743,7 @@ body,
 }
 
 .basic-medical-registration-detail-grid {
-  grid-template-columns: 18.5% 17.5% 20% 14% 14.31% 12% 3.69%;
+  grid-template-columns: 30% 20% 26% 8.31% 12% 3.69%;
   align-items: start;
   gap: 14px 0;
 }
@@ -8781,12 +8781,14 @@ body,
 }
 
 .basic-medical-registration-detail-note {
-  grid-column: 5;
+  grid-column: 4 / span 2;
+  grid-row: 2;
+  padding-block-start: 2px;
 }
 
 .basic-medical-registration-detail-action {
   display: grid;
-  grid-column: 6;
+  grid-column: 5;
   justify-items: center;
 }
 
@@ -8824,15 +8826,15 @@ body,
 }
 
 .basic-medical-session-col-time {
-  width: 19%;
+  width: 14%;
 }
 
 .basic-medical-session-col-lesson {
-  width: 20%;
+  width: 27%;
 }
 
 .basic-medical-session-col-lecturer {
-  width: 28%;
+  width: 26%;
 }
 
 .basic-medical-session-col-status {

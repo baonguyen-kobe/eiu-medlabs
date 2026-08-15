@@ -421,17 +421,17 @@ test("Basic Medical registrations use content-intent columns and aligned actions
     const studentCountLabel = registrationTable?.querySelector<HTMLElement>(
       ".basic-medical-registration-detail-student-count > span",
     );
+    const registrantLabel = registrationTable?.querySelector<HTMLElement>(
+      ".basic-medical-registration-detail-registrant > span",
+    );
+    const responsibleLabel = registrationTable?.querySelector<HTMLElement>(
+      ".basic-medical-registration-detail-responsible > span",
+    );
     const roomHeading = registrationTable?.querySelector<HTMLElement>(
       "thead th:nth-child(3)",
     );
     const registrationStatusHeading =
       registrationTable?.querySelector<HTMLElement>("thead th:nth-child(5)");
-    const lessonHeading = sessionTable?.querySelector<HTMLElement>(
-      "thead th:nth-child(4)",
-    );
-    const lecturerHeading = sessionTable?.querySelector<HTMLElement>(
-      "thead th:nth-child(5)",
-    );
     const sessionStatusHeading = sessionTable?.querySelector<HTMLElement>(
       "thead th:nth-child(6)",
     );
@@ -445,10 +445,10 @@ test("Basic Medical registrations use content-intent columns and aligned actions
       !cancel ||
       !sessionCountHeading ||
       !studentCountLabel ||
+      !registrantLabel ||
+      !responsibleLabel ||
       !roomHeading ||
       !registrationStatusHeading ||
-      !lessonHeading ||
-      !lecturerHeading ||
       !sessionStatusHeading ||
       !sessionStatus ||
       !sessionAction
@@ -476,11 +476,20 @@ test("Basic Medical registrations use content-intent columns and aligned actions
       sessionCountTextDelta: Math.abs(
         textLeft(sessionCountHeading) - textLeft(studentCountLabel),
       ),
-      sessionColumnDeltas: {
-        lessonToRoom: Math.abs(textLeft(lessonHeading) - textLeft(roomHeading)),
-        lecturerToSessions: Math.abs(
-          textLeft(lecturerHeading) - textLeft(sessionCountHeading),
+      summaryAnchorDeltas: {
+        registrantToPeriod: Math.abs(
+          textLeft(registrantLabel) -
+            textLeft(
+              registrationTable.querySelector<HTMLElement>(
+                "thead th:nth-child(2)",
+              )!,
+            ),
         ),
+        responsibleToRoom: Math.abs(
+          textLeft(responsibleLabel) - textLeft(roomHeading),
+        ),
+      },
+      sessionColumnDeltas: {
         statusToStatus: Math.abs(
           textLeft(sessionStatusHeading) - textLeft(registrationStatusHeading),
         ),
@@ -495,25 +504,29 @@ test("Basic Medical registrations use content-intent columns and aligned actions
   const [course, period, room, sessions, status, toggle] =
     geometry.registrationWidths;
   expect(course).toBeGreaterThan(period);
-  expect(room).toBeGreaterThan(course);
-  expect(sessions).toBeGreaterThan(room);
-  expect(sessions).toBeGreaterThan(status);
+  expect(course).toBeGreaterThan(room);
+  expect(room).toBeGreaterThan(period);
+  expect(sessions).toBeLessThan(period);
+  expect(sessions).toBeLessThan(room);
+  expect(sessions).toBeLessThan(status);
   expect(toggle).toBeGreaterThanOrEqual(36);
   expect(toggle).toBeLessThanOrEqual(48);
   expect(geometry.registrationActionDelta).toBeLessThanOrEqual(1);
   expect(geometry.sessionCountTextDelta).toBeLessThanOrEqual(1);
-  expect(geometry.sessionColumnDeltas.lessonToRoom).toBeLessThanOrEqual(1);
-  expect(geometry.sessionColumnDeltas.lecturerToSessions).toBeLessThanOrEqual(
+  expect(geometry.summaryAnchorDeltas.registrantToPeriod).toBeLessThanOrEqual(
     1,
   );
+  expect(geometry.summaryAnchorDeltas.responsibleToRoom).toBeLessThanOrEqual(1);
   expect(geometry.sessionColumnDeltas.statusToStatus).toBeLessThanOrEqual(1);
 
   const [, date, time, lesson, lecturer, sessionStatus] =
     geometry.sessionWidths;
-  expect(lesson).toBeGreaterThanOrEqual(220);
-  expect(lecturer).toBeGreaterThanOrEqual(220);
+  expect(lesson).toBeGreaterThanOrEqual(250);
+  expect(lecturer).toBeGreaterThanOrEqual(250);
   expect(lesson).toBeGreaterThan(date);
   expect(lecturer).toBeGreaterThan(time);
+  expect(time).toBeLessThan(lesson);
+  expect(time).toBeLessThan(lecturer);
   expect(sessionStatus).toBeGreaterThanOrEqual(150);
   expect(sessionStatus).toBeLessThanOrEqual(181);
   expect(geometry.sessionActionDelta).toBeLessThanOrEqual(1);
