@@ -249,6 +249,10 @@ test("Skills and Basic Medical calendars share a safe drawer inset", async () =>
     css,
     /\.detail-list > div\s*\{[\s\S]*grid-template-columns: 110px 1fr/,
   );
+  assert.match(
+    css,
+    /max\(32px, env\(safe-area-inset-right\)\)[\s\S]*max\(32px, env\(safe-area-inset-left\)\)/,
+  );
 });
 
 test("UI V2 personnel structure follows the approved table and drawer order", async () => {

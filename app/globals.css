@@ -6362,10 +6362,10 @@ body,
     height: 100vh;
     height: 100dvh;
     overflow-y: auto;
-    padding: max(18px, env(safe-area-inset-top))
-      max(18px, env(safe-area-inset-right))
-      max(24px, env(safe-area-inset-bottom))
-      max(18px, env(safe-area-inset-left));
+    padding: max(24px, env(safe-area-inset-top))
+      max(32px, env(safe-area-inset-right))
+      max(32px, env(safe-area-inset-bottom))
+      max(32px, env(safe-area-inset-left));
     overscroll-behavior: contain;
   }
 
