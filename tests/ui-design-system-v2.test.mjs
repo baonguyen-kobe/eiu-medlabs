@@ -239,6 +239,18 @@ test("Email notification table preserves a single-line delivery status", async (
   );
 });
 
+test("Skills and Basic Medical calendars share a safe drawer inset", async () => {
+  const css = await source("app/globals.css");
+  const dashboard = await source("components/dashboard.tsx");
+
+  assert.match(dashboard, /className="detail-drawer"/);
+  assert.match(css, /\.detail-drawer\s*\{[\s\S]*padding: 24px 32px/);
+  assert.match(
+    css,
+    /\.detail-list > div\s*\{[\s\S]*grid-template-columns: 110px 1fr/,
+  );
+});
+
 test("UI V2 personnel structure follows the approved table and drawer order", async () => {
   const personnel = await source("components/personnel-management-list.tsx");
   const personnelPage = await source("app/admin/personnel/page.tsx");

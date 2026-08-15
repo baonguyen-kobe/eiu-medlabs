@@ -1858,7 +1858,7 @@ span.filter-control {
   inset: 0 0 0 auto;
   z-index: 80;
   width: min(410px, 100%);
-  padding: 24px;
+  padding: 24px 32px;
   background: white;
   box-shadow: -18px 0 50px rgb(15 43 45 / 18%);
   animation: drawer-in 180ms ease-out;
