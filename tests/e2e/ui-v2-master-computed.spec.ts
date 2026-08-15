@@ -403,17 +403,14 @@ test("Basic Medical registrations and sessions use shared master-grid anchors", 
     const sessionTable = document.querySelector<HTMLTableElement>(
       ".basic-medical-session-table",
     );
-    const firstRow = registrationTable?.querySelector<HTMLElement>(
-      ".equipment-request-table-row",
-    );
-    const status = firstRow?.querySelector<HTMLElement>(
-      "td:nth-child(5) .request-status",
-    );
     const cancel = registrationTable?.querySelector<HTMLElement>(
       ".basic-medical-registration-detail-action .button",
     );
     const actionStack = sessionTable?.querySelector<HTMLElement>(
       ".basic-medical-session-action-stack",
+    );
+    const lecturerCell = sessionTable?.querySelector<HTMLElement>(
+      "tbody tr td:nth-child(5)",
     );
     const registrantLabel = registrationTable?.querySelector<HTMLElement>(
       ".basic-medical-registration-detail-registrant > span",
@@ -446,14 +443,13 @@ test("Basic Medical registrations and sessions use shared master-grid anchors", 
       sessionLecturerHeading,
       sessionStatusHeading,
     ] = sessionHeadings;
-    const sessionStatus =
-      actionStack?.querySelector<HTMLElement>(".request-status");
     const sessionAction = actionStack?.querySelector<HTMLElement>("button");
     if (
       !registrationTable ||
       !sessionTable ||
-      !status ||
       !cancel ||
+      !actionStack ||
+      !lecturerCell ||
       !registrantLabel ||
       !responsibleLabel ||
       !registrationCourseHeading ||
@@ -467,15 +463,10 @@ test("Basic Medical registrations and sessions use shared master-grid anchors", 
       !sessionLessonHeading ||
       !sessionLecturerHeading ||
       !sessionStatusHeading ||
-      !sessionStatus ||
       !sessionAction
     ) {
       throw new Error("Basic Medical layout controls are missing");
     }
-    const center = (element: HTMLElement) => {
-      const rect = element.getBoundingClientRect();
-      return (rect.left + rect.right) / 2;
-    };
     const textLeft = (element: HTMLElement) => {
       const range = document.createRange();
       range.selectNodeContents(element);
@@ -490,7 +481,6 @@ test("Basic Medical registrations and sessions use shared master-grid anchors", 
     return {
       registrationWidths: widths(registrationTable),
       sessionWidths: widths(sessionTable),
-      registrationActionDelta: Math.abs(center(status) - center(cancel)),
       summaryAnchorDeltas: {
         registrantToPeriod: Math.abs(
           textLeft(registrantLabel) - textLeft(registrationTimeHeading),
@@ -528,9 +518,17 @@ test("Basic Medical registrations and sessions use shared master-grid anchors", 
           sessionDateHeading.getBoundingClientRect().width -
           (registrationCourseHeading.getBoundingClientRect().width - 18),
       ),
-      sessionActionDelta: Math.abs(
-        center(sessionStatus) - center(sessionAction),
-      ),
+      contentAnchorDeltas: {
+        lecturerToHeading: Math.abs(
+          textLeft(lecturerCell) - textLeft(sessionLecturerHeading),
+        ),
+        registrationActionToStatus: Math.abs(
+          left(cancel) - textLeft(registrationStatusHeading),
+        ),
+        sessionActionToStatus: Math.abs(
+          left(sessionAction) - textLeft(sessionStatusHeading),
+        ),
+      },
       pageOverflow: document.documentElement.scrollWidth > window.innerWidth,
     };
   });
@@ -541,7 +539,6 @@ test("Basic Medical registrations and sessions use shared master-grid anchors", 
   expect(room).toBeGreaterThan(200);
   expect(sessions).toBeGreaterThan(250);
   expect(status).toBeGreaterThan(200);
-  expect(geometry.registrationActionDelta).toBeLessThanOrEqual(1);
   expect(geometry.summaryAnchorDeltas.registrantToPeriod).toBeLessThanOrEqual(
     1,
   );
@@ -551,6 +548,13 @@ test("Basic Medical registrations and sessions use shared master-grid anchors", 
   expect(geometry.sharedAnchorDeltas.sessions).toBeLessThanOrEqual(2);
   expect(geometry.sharedAnchorDeltas.status).toBeLessThanOrEqual(2);
   expect(geometry.sessionFirstTrackDelta).toBeLessThanOrEqual(2);
+  expect(geometry.contentAnchorDeltas.lecturerToHeading).toBeLessThanOrEqual(1);
+  expect(
+    geometry.contentAnchorDeltas.registrationActionToStatus,
+  ).toBeLessThanOrEqual(1);
+  expect(
+    geometry.contentAnchorDeltas.sessionActionToStatus,
+  ).toBeLessThanOrEqual(1);
 
   const [index, date, time, lesson, lecturer, sessionStatus] =
     geometry.sessionWidths;
@@ -559,7 +563,6 @@ test("Basic Medical registrations and sessions use shared master-grid anchors", 
   expect(lesson).toBeCloseTo(room, 0);
   expect(lecturer).toBeCloseTo(sessions, 0);
   expect(sessionStatus).toBeCloseTo(status, 0);
-  expect(geometry.sessionActionDelta).toBeLessThanOrEqual(1);
   expect(geometry.pageOverflow).toBe(false);
 
   await page.setViewportSize({ width: 390, height: 844 });

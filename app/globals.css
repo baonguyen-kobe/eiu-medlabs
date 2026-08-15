@@ -8812,7 +8812,7 @@ body,
 .basic-medical-registration-detail-action {
   display: grid;
   grid-column: 5;
-  justify-items: center;
+  justify-items: start;
 }
 
 .basic-medical-registration-detail-action form {
@@ -8874,10 +8874,18 @@ body,
   vertical-align: middle;
 }
 
+.basic-medical-session-table td:nth-child(5) {
+  text-align: left;
+}
+
 .basic-medical-session-action-stack {
   display: grid;
-  justify-items: center;
+  justify-items: start;
   gap: 8px;
+}
+
+.basic-medical-session-action-stack .request-status {
+  justify-self: center;
 }
 
 .basic-medical-session-status {
