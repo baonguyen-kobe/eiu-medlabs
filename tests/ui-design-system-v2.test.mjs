@@ -248,7 +248,10 @@ test("Skills and Basic Medical calendars share a safe drawer inset", async () =>
     dashboard,
     /<dd className="mono">[\s\S]*selectedEvent\.room/,
   );
-  assert.match(css, /\.detail-drawer\s*\{[\s\S]*padding: 24px 32px/);
+  assert.match(
+    css,
+    /\.detail-drawer\s*\{[\s\S]*width: min\(440px, 100%\)[\s\S]*padding: 24px 32px/,
+  );
   assert.match(
     css,
     /\.detail-list > div\s*\{[\s\S]*grid-template-columns: 110px 1fr/,
@@ -288,7 +291,11 @@ test("Skills and Basic Medical calendars share a safe drawer inset", async () =>
   );
   assert.match(
     css,
-    /\.detail-list \.drawer-lecturer-selects select:nth-child\(2\)\s*\{[\s\S]*grid-column: 1 \/ -1/,
+    /\.detail-list \.drawer-lecturer-selects select:nth-child\(2\)\s*\{[\s\S]*grid-column: 2/,
+  );
+  assert.match(
+    css,
+    /@media \(max-width: 360px\)[\s\S]*\.detail-list \.drawer-lecturer-selects select:nth-child\(2\)\s*\{[\s\S]*grid-column: 1 \/ -1/,
   );
 });
 
