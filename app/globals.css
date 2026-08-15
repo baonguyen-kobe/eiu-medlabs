@@ -8440,6 +8440,24 @@ body,
   width: 100%;
 }
 
+.detail-list > div {
+  align-items: center;
+}
+
+.detail-list > div:has(.drawer-lecturer-selects) {
+  align-items: start;
+}
+
+.detail-list :is(input, select) {
+  box-sizing: border-box;
+  min-height: 40px;
+  padding-inline: 11px;
+}
+
+.detail-list :is(input[type="date"], input[type="time"], select) {
+  padding-inline-end: 24px;
+}
+
 .searchable-combobox-list button {
   width: 100%;
   min-height: 38px;
