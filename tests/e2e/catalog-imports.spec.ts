@@ -96,6 +96,130 @@ test("equipment catalog stale reconciliation keeps the preview open and blocks t
   }
 });
 
+test("equipment catalog preview preserves parsed rows when server validation rejects them", async ({
+  page,
+}) => {
+  const suffix = crypto.randomUUID().slice(0, 8);
+  await loginAsAdmin(page);
+  await page.goto("/admin/equipment", { waitUntil: "networkidle" });
+
+  await page
+    .locator('.catalog-import-all-action input[type="file"]')
+    .setInputFiles({
+      name: "catalog-server-validation.csv",
+      mimeType: "text/csv",
+      buffer: Buffer.from(
+        [
+          "Tên thiết bị và vật tư,Tên thương mại,ĐVT",
+          `Thiết bị A ${suffix},Tên thương mại ${suffix},Cái`,
+          `Thiết bị B ${suffix},tên thương mại ${suffix},Cái`,
+        ].join("\n"),
+        "utf8",
+      ),
+    });
+
+  const dialog = page.getByRole("dialog", { name: "Import tất cả" });
+  const apply = dialog.getByRole("button", {
+    name: "Import tất cả",
+    exact: true,
+  });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator(".preview-table tbody tr")).toHaveCount(2);
+  await expect(dialog.getByRole("alert")).toHaveText(
+    "Dữ liệu trong file không hợp lệ. Vui lòng kiểm tra lại Tên thương mại và các trường bắt buộc.",
+  );
+  await expect(apply).toBeDisabled();
+});
+
+test("local catalog root cause returns the required-field diagnostic to an authenticated admin", async () => {
+  const actor = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+  const { error: signInError } = await actor.auth.signInWithPassword({
+    email: e2eAdminEmail === "admin" ? "admin@medlabs.local" : e2eAdminEmail,
+    password: e2eAdminPassword,
+  });
+  expect(signInError).toBeNull();
+  try {
+    const { error } = await actor.rpc("preview_catalog_reconciliation", {
+      target_domain: "skills",
+      target_rows: [
+        {
+          item_name: "Thiết bị local thiếu dữ liệu",
+          commercial_name: "",
+          unit: "",
+        },
+      ],
+    });
+    expect(error?.code).toBe("22023");
+    expect(error?.message).toBe("CATALOG_COMMERCIAL_NAME_AND_UNIT_REQUIRED");
+  } finally {
+    await actor.auth.signOut();
+  }
+});
+
+test("local Root administrator has both Skills and Basic Medical workspaces", async ({
+  page,
+}) => {
+  const { data: principal, error: principalError } = await serviceDb
+    .from("system_security_principals")
+    .select("root_admin_id")
+    .eq("singleton", true)
+    .single();
+  if (principalError || !principal) {
+    throw principalError ?? new Error("Missing local Root administrator");
+  }
+
+  const actor = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+  const { data: signIn, error: signInError } =
+    await actor.auth.signInWithPassword({
+      email: e2eAdminEmail === "admin" ? "admin@medlabs.local" : e2eAdminEmail,
+      password: e2eAdminPassword,
+    });
+  expect(signInError).toBeNull();
+  expect(signIn.user?.id).toBe(principal.root_admin_id);
+  try {
+    const [
+      { data: personnelAuthority, error: personnelError },
+      { data: roles },
+    ] = await Promise.all([
+      actor.rpc("get_personnel_authority_context"),
+      serviceDb
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", principal.root_admin_id),
+    ]);
+    expect(personnelError).toBeNull();
+    expect(personnelAuthority?.is_root_administrator).toBe(true);
+    expect(roles?.map((row) => row.role)).toContain("admin");
+  } finally {
+    await actor.auth.signOut();
+  }
+
+  await loginAsAdmin(page);
+  for (const route of [
+    "/class-schedules",
+    "/basic-medical/schedules",
+    "/basic-medical/new",
+    "/basic-medical/import",
+  ]) {
+    await page.goto(route, { waitUntil: "networkidle" });
+    await expect(page).toHaveURL(new RegExp(`${route}$`));
+  }
+  await expect(
+    page.locator('.workspace-sidebar a[href="/class-schedules"]'),
+  ).toBeVisible();
+  await expect(
+    page.locator('.workspace-sidebar a[href="/basic-medical/schedules"]'),
+  ).toBeVisible();
+});
+
 test("template và import danh mục môn học, phòng, thiết bị, nhân sự và Y cơ sở hoạt động", async ({
   page,
 }) => {

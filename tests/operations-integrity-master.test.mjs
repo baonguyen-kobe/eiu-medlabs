@@ -234,12 +234,14 @@ test("catalog reconciliation is previewed and atomically applied in both domains
   );
   assert.match(skillsActions, /previewEquipmentCatalogReconciliation/);
   assert.match(basicActions, /previewBasicMedicalCatalogReconciliation/);
-  assert.match(skillsActions, /CATALOG_RECONCILIATION_PREVIEW_FAILED/);
-  assert.match(basicActions, /CATALOG_RECONCILIATION_PREVIEW_FAILED/);
+  assert.match(skillsActions, /catalog_reconciliation_preview_failed/);
+  assert.match(basicActions, /catalog_reconciliation_preview_failed/);
   assert.match(skillsActions, /requestedMode !== "new"/);
   assert.match(basicActions, /mode !== "new"/);
   assert.match(importUi, /<UploadCloud size=\{17\} \/> Import tất cả/);
-  assert.match(importUi, /setPlan\(await preview\(parsed\)\)/);
+  assert.match(importUi, /const result = await preview\(parsed\)/);
+  assert.match(importUi, /setPlan\(result\.preview\)/);
+  assert.match(importUi, /safePreviewError\(result\.reason\)/);
   assert.match(importUi, /confirmLabel="Import tất cả"/);
   assert.doesNotMatch(importUi, /Chọn file đối soát|Preview đối soát/);
   assert.match(importUi, /window\.location\.reload\(\)/);

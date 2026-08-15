@@ -29,16 +29,46 @@ export type BasicMedicalCatalogReconciliationPreview = {
   fingerprint: string;
 };
 
+export type BasicMedicalCatalogReconciliationPreviewResult =
+  | { ok: true; preview: BasicMedicalCatalogReconciliationPreview }
+  | { ok: false; reason: "permission" | "invalid" | "unavailable" };
+
+type BasicMedicalCatalogReconciliationPreviewFailureReason =
+  "permission" | "invalid" | "unavailable";
+
+function previewFailureReason(error: {
+  code?: string | null;
+}): BasicMedicalCatalogReconciliationPreviewFailureReason {
+  if (error.code === "42501") return "permission";
+  if (["22023", "23503", "23505"].includes(error.code ?? "")) return "invalid";
+  return "unavailable";
+}
+
 export async function previewBasicMedicalCatalogReconciliation(
   rows: BasicMedicalCatalogInput[],
-): Promise<BasicMedicalCatalogReconciliationPreview> {
+): Promise<BasicMedicalCatalogReconciliationPreviewResult> {
   const supabase = await requireManager();
   const { data, error } = await supabase.rpc("preview_catalog_reconciliation", {
     target_domain: "basic_medical",
     target_rows: rows,
   });
-  if (error) throw new Error("CATALOG_RECONCILIATION_PREVIEW_FAILED");
-  return data as BasicMedicalCatalogReconciliationPreview;
+  if (error) {
+    console.error("catalog_reconciliation_preview_failed", {
+      operation: "preview_catalog_reconciliation",
+      domain: "basic_medical",
+      error: {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+      },
+    });
+    return { ok: false, reason: previewFailureReason(error) };
+  }
+  return {
+    ok: true,
+    preview: data as BasicMedicalCatalogReconciliationPreview,
+  };
 }
 
 export async function applyBasicMedicalCatalogReconciliation(

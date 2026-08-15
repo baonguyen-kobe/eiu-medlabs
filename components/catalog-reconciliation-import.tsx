@@ -14,6 +14,10 @@ type Row = {
   unit: string;
 };
 type Preview = { fingerprint: string };
+type PreviewResult =
+  | { ok: true; preview: Preview }
+  | { ok: false; reason: "permission" | "invalid" | "unavailable" };
+type PreviewFailureReason = "permission" | "invalid" | "unavailable";
 const maxFileBytes = 10 * 1024 * 1024;
 const maxRows = 5_000;
 const previewPageSize = 25;
@@ -47,11 +51,19 @@ function safeApplyError(message: string) {
     : "Không thể áp dụng file import. Dữ liệu không thay đổi.";
 }
 
+function safePreviewError(reason: PreviewFailureReason) {
+  if (reason === "permission")
+    return "Bạn không có quyền kiểm tra danh mục này.";
+  if (reason === "invalid")
+    return "Dữ liệu trong file không hợp lệ. Vui lòng kiểm tra lại Tên thương mại và các trường bắt buộc.";
+  return "Không thể kiểm tra dữ liệu trên máy chủ. Dữ liệu chưa được thay đổi.";
+}
+
 export function CatalogReconciliationImport({
   preview,
   apply,
 }: {
-  preview: (rows: Row[]) => Promise<Preview>;
+  preview: (rows: Row[]) => Promise<PreviewResult>;
   apply: (
     rows: Row[],
     fingerprint: string,
@@ -123,10 +135,18 @@ export function CatalogReconciliationImport({
       setModalNotice(null);
       startTransition(async () => {
         try {
-          setPlan(await preview(parsed));
+          const result = await preview(parsed);
+          if (result.ok) {
+            setPlan(result.preview);
+            return;
+          }
+          setPlan(null);
+          setModalNotice(safePreviewError(result.reason));
         } catch {
-          resetPreview();
-          setNotice("Không thể kiểm tra file import.");
+          setPlan(null);
+          setModalNotice(
+            "Không thể kiểm tra dữ liệu trên máy chủ. Dữ liệu chưa được thay đổi.",
+          );
         }
       });
     } catch (error) {

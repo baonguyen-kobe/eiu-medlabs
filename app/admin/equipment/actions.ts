@@ -34,16 +34,43 @@ export type CatalogReconciliationPreview = {
   fingerprint: string;
 };
 
+export type CatalogReconciliationPreviewResult =
+  | { ok: true; preview: CatalogReconciliationPreview }
+  | { ok: false; reason: "permission" | "invalid" | "unavailable" };
+
+type CatalogReconciliationPreviewFailureReason =
+  "permission" | "invalid" | "unavailable";
+
+function previewFailureReason(error: {
+  code?: string | null;
+}): CatalogReconciliationPreviewFailureReason {
+  if (error.code === "42501") return "permission";
+  if (["22023", "23503", "23505"].includes(error.code ?? "")) return "invalid";
+  return "unavailable";
+}
+
 export async function previewEquipmentCatalogReconciliation(
   rows: EquipmentCatalogInput[],
-): Promise<CatalogReconciliationPreview> {
+): Promise<CatalogReconciliationPreviewResult> {
   const supabase = await requireCatalogManager();
   const { data, error } = await supabase.rpc("preview_catalog_reconciliation", {
     target_domain: "skills",
     target_rows: rows,
   });
-  if (error) throw new Error("CATALOG_RECONCILIATION_PREVIEW_FAILED");
-  return data as CatalogReconciliationPreview;
+  if (error) {
+    console.error("catalog_reconciliation_preview_failed", {
+      operation: "preview_catalog_reconciliation",
+      domain: "skills",
+      error: {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+      },
+    });
+    return { ok: false, reason: previewFailureReason(error) };
+  }
+  return { ok: true, preview: data as CatalogReconciliationPreview };
 }
 
 export async function applyEquipmentCatalogReconciliation(
