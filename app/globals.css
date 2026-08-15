@@ -6962,6 +6962,22 @@ body,
   gap: 6px;
 }
 
+.drawer-time-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 4px;
+  min-width: 0;
+}
+
+.drawer-time-editor input {
+  min-width: 0;
+}
+
+.detail-list .drawer-time-editor input[type="time"] {
+  padding-inline-start: 10px;
+  padding-inline-end: 16px;
+}
+
 .inline-time-editor {
   min-width: 245px;
 }
@@ -8536,28 +8552,28 @@ body,
   gap: 7px;
 }
 
-@media (max-width: 360px) {
-  .detail-list > div:has(.drawer-lecturer-selects) > dd,
-  .detail-list .drawer-lecturer-selects {
-    display: contents;
-  }
+.detail-list > div:has(.drawer-lecturer-selects) > dd,
+.detail-list .drawer-lecturer-selects {
+  display: contents;
+}
 
+.detail-list .drawer-lecturer-selects select:first-child:not(:last-child) {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.detail-list .drawer-lecturer-selects select:nth-child(2) {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+
+@media (max-width: 360px) {
   .detail-list > div:has(.drawer-lecturer-selects) > dt {
     grid-column: 1;
     grid-row: 1;
     padding-block-start: 10px;
     font-size: 13px;
     white-space: nowrap;
-  }
-
-  .detail-list .drawer-lecturer-selects select:first-child {
-    grid-column: 2;
-    grid-row: 1;
-  }
-
-  .detail-list .drawer-lecturer-selects select:last-child {
-    grid-column: 1 / -1;
-    grid-row: 2;
   }
 }
 
