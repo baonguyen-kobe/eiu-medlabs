@@ -70,14 +70,6 @@ function clone(item: PersonnelListItem): PersonnelListItem {
   };
 }
 
-function effectiveEmailCapability(
-  item: Pick<PersonnelListItem, "roles" | "can_manage_email_notifications">,
-) {
-  return Boolean(
-    item.roles.includes("staff") && item.can_manage_email_notifications,
-  );
-}
-
 export function PersonnelManagementList({
   initialItems,
   roomTypes,
@@ -109,12 +101,9 @@ export function PersonnelManagementList({
       ),
     [draft, original],
   );
-  const emailCapabilityDirty = Boolean(
-    original &&
-    effectiveEmailCapability(original) !==
-      Boolean(draft?.roles.includes("staff") && emailCapability),
-  );
-  const hasChanges = dirty || emailCapabilityDirty;
+  // Keep production's save boundary: the email capability is persisted only
+  // when an existing Personnel draft is saved.
+  const hasChanges = dirty;
   const basicMedicalEligible = Boolean(
     draft?.roles.some((role) =>
       ["lecturer", "teaching_assistant"].includes(role),
@@ -122,12 +111,9 @@ export function PersonnelManagementList({
   );
 
   function open(item: PersonnelListItem) {
-    const normalized = clone(item);
-    normalized.can_manage_email_notifications =
-      effectiveEmailCapability(normalized);
-    setOriginal(clone(normalized));
-    setDraft(clone(normalized));
-    setEmailCapability(normalized.can_manage_email_notifications);
+    setOriginal(clone(item));
+    setDraft(clone(item));
+    setEmailCapability(Boolean(item.can_manage_email_notifications));
     setResult(null);
   }
 
@@ -288,7 +274,6 @@ export function PersonnelManagementList({
     const canImportRole = next.some((value) =>
       ["staff", "lecturer", "teaching_assistant"].includes(value),
     );
-    if (!next.includes("staff")) setEmailCapability(false);
     setDraft({
       ...draft,
       roles: next,
@@ -370,8 +355,6 @@ export function PersonnelManagementList({
           });
           return;
         }
-      } else {
-        saved.can_manage_email_notifications = false;
       }
       setItems((current) =>
         current.map((item) => (item.id === saved.id ? clone(saved) : item)),

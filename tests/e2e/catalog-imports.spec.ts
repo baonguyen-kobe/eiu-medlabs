@@ -1,4 +1,6 @@
 import nextEnv from "@next/env";
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import * as XLSX from "@e965/xlsx";
@@ -12,6 +14,13 @@ const serviceDb = createClient(
 );
 const e2eAdminEmail = process.env.E2E_ADMIN_EMAIL ?? "admin@campus.local";
 const e2eAdminPassword = process.env.E2E_ADMIN_PASSWORD ?? "LocalAdmin123!";
+const actualImportWorkbookPath = path.resolve(
+  process.cwd(),
+  "..",
+  "..",
+  "..",
+  "Import.xlsx",
+);
 
 async function loginAsAdmin(page: Page) {
   await page.goto("/login");
@@ -131,7 +140,7 @@ test("equipment catalog preview preserves parsed rows when server validation rej
   await expect(apply).toBeDisabled();
 });
 
-test("local catalog root cause returns the required-field diagnostic to an authenticated admin", async () => {
+test("authenticated admin receives a safe diagnostic for an invalid catalog RPC payload", async () => {
   const actor = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
@@ -158,6 +167,47 @@ test("local catalog root cause returns the required-field diagnostic to an authe
   } finally {
     await actor.auth.signOut();
   }
+});
+
+test("the actual local Import.xlsx is rejected by the client parser before preview", async ({
+  page,
+}) => {
+  test.skip(
+    !existsSync(actualImportWorkbookPath),
+    "The owner-provided local Import.xlsx is not available in this checkout.",
+  );
+  const workbook = XLSX.read(readFileSync(actualImportWorkbookPath), {
+    type: "buffer",
+  });
+  const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+  const sourceRows = XLSX.utils.sheet_to_json<Array<unknown>>(firstSheet, {
+    header: 1,
+    defval: "",
+  });
+  expect(sourceRows[0]).toEqual(["Mã môn", "Tên môn học"]);
+  expect(sourceRows).toHaveLength(27);
+
+  await loginAsAdmin(page);
+  await page.goto("/admin/equipment", { waitUntil: "networkidle" });
+  const serverActions: string[] = [];
+  page.on("request", (request) => {
+    if (request.method() === "POST" && request.headers()["next-action"]) {
+      serverActions.push(request.url());
+    }
+  });
+  await page
+    .locator('.catalog-import-all-action input[type="file"]')
+    .setInputFiles(actualImportWorkbookPath);
+
+  await expect(
+    page.getByText("Mỗi dòng cần có Tên thiết bị, Tên thương mại và ĐVT.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Import tất cả" })).toHaveCount(
+    0,
+  );
+  expect(serverActions).toEqual([]);
 });
 
 test("local Root administrator has both Skills and Basic Medical workspaces", async ({

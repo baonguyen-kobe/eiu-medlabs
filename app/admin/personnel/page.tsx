@@ -262,7 +262,7 @@ export default async function PersonnelPage({
       </form>
 
       <PersonnelManagementList
-        key={`${currentPage}:${query.q ?? ""}:${query.role ?? "all"}:${query.import_permission ?? "all"}:${query.status ?? "all"}`}
+        key={`${currentPage}:${query.q ?? ""}:${query.role ?? "all"}:${query.import_permission ?? "all"}:${query.status ?? "all"}:${rows.map((row) => `${row.id}:${row.access_version}`).join("|")}`}
         initialItems={rows.map(({ total_count, ...row }) => {
           void total_count;
           return {

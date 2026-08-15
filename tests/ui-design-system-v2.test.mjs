@@ -174,9 +174,14 @@ test("final Master correction keeps table ownership, counters, and stable catalo
   assert.match(catalog, /catalog-master-action-group/);
   assert.match(catalog, /selected\.length !== 1/);
   assert.match(catalog, /editing\.length \? "Lưu chỉnh sửa" : "Sửa"/);
-  assert.match(personnel, /const emailCapabilityDirty/);
-  assert.match(personnel, /const hasChanges = dirty \|\| emailCapabilityDirty/);
-  assert.match(personnel, /function effectiveEmailCapability/);
+  assert.match(personnel, /const hasChanges = dirty;/);
+  assert.doesNotMatch(personnel, /emailCapabilityDirty/);
+  assert.doesNotMatch(personnel, /function effectiveEmailCapability/);
+  assert.doesNotMatch(personnel, /setEmailCapability\(false\)/);
+  assert.match(
+    personnelPage,
+    /rows\.map\(\(row\) => `\$\{row\.id\}:\$\{row\.access_version\}`\)\.join\("\\|"\)/,
+  );
   assert.match(
     personnelPage,
     /className="inline-toolbar-count-slot"[\s\S]*className="personnel-result-count inline-toolbar-count"/,
