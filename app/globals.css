@@ -4806,7 +4806,7 @@ body {
   font-weight: 650;
 }
 
-.class-result-count {
+.class-result-count-slot {
   margin-left: auto;
 }
 
@@ -4864,7 +4864,7 @@ body {
     width: 100%;
   }
 
-  .class-result-count {
+  .class-result-count-slot {
     width: 100%;
     margin-left: 0;
   }
@@ -6096,7 +6096,7 @@ body,
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   }
 
-  .class-result-count {
+  .class-result-count-slot {
     width: auto;
     margin: 0;
     justify-self: end;

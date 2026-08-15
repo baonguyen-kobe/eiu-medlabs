@@ -192,31 +192,136 @@ test("Personnel edit drawer remains usable at the required desktop viewports", a
   }
 });
 
-test("email notification capability alone requires an explicit save or discard", async ({
-  page,
-}) => {
-  await loginAsAdmin(page);
-  await page.goto("/admin/personnel");
+async function openStaffDrawer(page: Page) {
   const staffRow = page
     .locator(".personnel-table tbody tr")
     .filter({ hasText: "staff@campus.local" });
+  await expect(staffRow).toBeVisible();
   await staffRow.getByRole("button", { name: "Sửa" }).click();
-  const drawer = page.getByRole("dialog", { name: "Chỉnh sửa nhân sự" });
+  return page.getByRole("dialog", { name: "Chỉnh sửa nhân sự" });
+}
+
+test("email notification capability alone saves, persists, and returns the drawer to clean state", async ({
+  page,
+}) => {
+  const { data: original, error } = await serviceDb
+    .from("profiles")
+    .select("id,can_manage_email_notifications")
+    .eq("email", "staff@campus.local")
+    .single();
+  if (error || !original) throw error ?? new Error("Missing staff fixture");
+
+  await loginAsAdmin(page);
+  await page.goto("/admin/personnel");
+  try {
+    const drawer = await openStaffDrawer(page);
+    const capability = drawer.getByLabel("Quản lý Email Notifications");
+    const save = drawer.getByRole("button", { name: "Lưu thay đổi" });
+    const nextValue = !original.can_manage_email_notifications;
+    await expect(save).toBeDisabled();
+    await capability.setChecked(nextValue);
+    await expect(save).toBeEnabled();
+    await save.click();
+    await expect(drawer.getByText("Đã lưu", { exact: true })).toBeVisible();
+    await expect(save).toBeDisabled();
+    await drawer.getByRole("button", { name: "Đóng" }).click();
+    await expect(
+      page.getByRole("dialog", { name: "Bỏ thay đổi chưa lưu?" }),
+    ).toHaveCount(0);
+
+    const reopened = await openStaffDrawer(page);
+    await expect(
+      reopened.getByLabel("Quản lý Email Notifications"),
+    ).toBeChecked({ checked: nextValue });
+    await expect(
+      reopened.getByRole("button", { name: "Lưu thay đổi" }),
+    ).toBeDisabled();
+    await reopened.getByRole("button", { name: "Đóng" }).click();
+  } finally {
+    await serviceDb
+      .from("profiles")
+      .update({
+        can_manage_email_notifications: original.can_manage_email_notifications,
+      })
+      .eq("id", original.id);
+  }
+});
+
+test("email notification capability-only discard preserves the persisted value", async ({
+  page,
+}) => {
+  const { data: original, error } = await serviceDb
+    .from("profiles")
+    .select("can_manage_email_notifications")
+    .eq("email", "staff@campus.local")
+    .single();
+  if (error || !original) throw error ?? new Error("Missing staff fixture");
+
+  await loginAsAdmin(page);
+  await page.goto("/admin/personnel");
+  const drawer = await openStaffDrawer(page);
   const capability = drawer.getByLabel("Quản lý Email Notifications");
-  const save = drawer.getByRole("button", { name: "Lưu thay đổi" });
-  const initiallyChecked = await capability.isChecked();
-  await expect(save).toBeDisabled();
-  await capability.setChecked(!initiallyChecked);
-  await expect(save).toBeEnabled();
+  await capability.setChecked(!original.can_manage_email_notifications);
   await drawer.getByRole("button", { name: "Đóng" }).click();
   const discard = page.getByRole("dialog", { name: "Bỏ thay đổi chưa lưu?" });
   await expect(discard).toBeVisible();
   await discard.getByRole("button", { name: "Bỏ thay đổi" }).click();
   await expect(drawer).toHaveCount(0);
+  const { data: persisted } = await serviceDb
+    .from("profiles")
+    .select("can_manage_email_notifications")
+    .eq("email", "staff@campus.local")
+    .single();
+  expect(persisted?.can_manage_email_notifications).toBe(
+    original.can_manage_email_notifications,
+  );
+});
 
-  await staffRow.getByRole("button", { name: "Sửa" }).click();
-  expect(await capability.isChecked()).toBe(initiallyChecked);
-  await drawer.getByRole("button", { name: "Đóng" }).click();
+test("removing Staff never leaves a raw email capability effectively enabled or dirty", async ({
+  page,
+}) => {
+  const { data: profile } = await serviceDb
+    .from("profiles")
+    .select("id,can_manage_email_notifications")
+    .eq("email", "staff@campus.local")
+    .single();
+  if (!profile) throw new Error("Missing staff fixture");
+  const { data: originalRoles } = await serviceDb
+    .from("user_roles")
+    .select("user_id,role,created_by")
+    .eq("user_id", profile.id);
+
+  await serviceDb
+    .from("profiles")
+    .update({ can_manage_email_notifications: true })
+    .eq("id", profile.id);
+  await loginAsAdmin(page);
+  try {
+    await page.goto("/admin/personnel");
+    const drawer = await openStaffDrawer(page);
+    await drawer.getByLabel("Giảng viên").check();
+    await drawer.getByLabel("Chuyên viên").uncheck();
+    await drawer.getByRole("button", { name: "Lưu thay đổi" }).click();
+    await expect(drawer.getByText("Đã lưu", { exact: true })).toBeVisible();
+    await page.reload({ waitUntil: "networkidle" });
+    const reopened = await openStaffDrawer(page);
+    await expect(
+      reopened.getByLabel("Quản lý Email Notifications"),
+    ).toHaveCount(0);
+    await expect(
+      reopened.getByRole("button", { name: "Lưu thay đổi" }),
+    ).toBeDisabled();
+  } finally {
+    await serviceDb.from("user_roles").delete().eq("user_id", profile.id);
+    if (originalRoles?.length)
+      await serviceDb.from("user_roles").insert(originalRoles);
+    await serviceDb
+      .from("profiles")
+      .update({
+        can_manage_email_notifications: profile.can_manage_email_notifications,
+      })
+      .eq("id", profile.id);
+  }
 });
 
 test("personnel reconciler actual integration test (N-MEDIUM-01)", async ({

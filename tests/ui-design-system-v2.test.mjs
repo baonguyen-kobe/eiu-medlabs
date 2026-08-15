@@ -149,6 +149,8 @@ test("final Master correction keeps table ownership, counters, and stable catalo
   const master = await source("docs/UI_DESIGN_SYSTEM_V2_MASTER.md");
   const catalog = await source("components/catalog-batch-manager.tsx");
   const personnel = await source("components/personnel-management-list.tsx");
+  const personnelPage = await source("app/admin/personnel/page.tsx");
+  const classList = await source("components/class-registration-list.tsx");
   const catalogImport = await source(
     "components/catalog-reconciliation-import.tsx",
   );
@@ -174,6 +176,15 @@ test("final Master correction keeps table ownership, counters, and stable catalo
   assert.match(catalog, /editing\.length \? "Lưu chỉnh sửa" : "Sửa"/);
   assert.match(personnel, /const emailCapabilityDirty/);
   assert.match(personnel, /const hasChanges = dirty \|\| emailCapabilityDirty/);
+  assert.match(personnel, /function effectiveEmailCapability/);
+  assert.match(
+    personnelPage,
+    /className="inline-toolbar-count-slot"[\s\S]*className="personnel-result-count inline-toolbar-count"/,
+  );
+  assert.match(
+    classList,
+    /className="inline-toolbar-count-slot class-result-count-slot"[\s\S]*className="class-result-count inline-toolbar-count"/,
+  );
   assert.match(catalogImport, /const \[modalNotice, setModalNotice\]/);
   assert.match(catalogImport, /role="alert"/);
   assert.match(catalogImport, /stalePreviewMessage/);

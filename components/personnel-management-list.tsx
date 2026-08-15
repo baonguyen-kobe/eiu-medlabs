@@ -70,6 +70,14 @@ function clone(item: PersonnelListItem): PersonnelListItem {
   };
 }
 
+function effectiveEmailCapability(
+  item: Pick<PersonnelListItem, "roles" | "can_manage_email_notifications">,
+) {
+  return Boolean(
+    item.roles.includes("staff") && item.can_manage_email_notifications,
+  );
+}
+
 export function PersonnelManagementList({
   initialItems,
   roomTypes,
@@ -103,8 +111,8 @@ export function PersonnelManagementList({
   );
   const emailCapabilityDirty = Boolean(
     original &&
-    original.can_manage_email_notifications !==
-      (draft?.roles.includes("staff") ? emailCapability : false),
+    effectiveEmailCapability(original) !==
+      Boolean(draft?.roles.includes("staff") && emailCapability),
   );
   const hasChanges = dirty || emailCapabilityDirty;
   const basicMedicalEligible = Boolean(
@@ -114,9 +122,12 @@ export function PersonnelManagementList({
   );
 
   function open(item: PersonnelListItem) {
-    setOriginal(clone(item));
-    setDraft(clone(item));
-    setEmailCapability(Boolean(item.can_manage_email_notifications));
+    const normalized = clone(item);
+    normalized.can_manage_email_notifications =
+      effectiveEmailCapability(normalized);
+    setOriginal(clone(normalized));
+    setDraft(clone(normalized));
+    setEmailCapability(normalized.can_manage_email_notifications);
     setResult(null);
   }
 

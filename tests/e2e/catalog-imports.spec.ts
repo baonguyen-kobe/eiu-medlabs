@@ -42,6 +42,60 @@ async function workbookText(page: Page, url: string) {
     .join("\n");
 }
 
+test("equipment catalog stale reconciliation keeps the preview open and blocks the old plan", async ({
+  page,
+}) => {
+  const staleFixtureId = crypto.randomUUID();
+  const suffix = staleFixtureId.slice(0, 8);
+  await loginAsAdmin(page);
+  try {
+    await page.goto("/admin/equipment", { waitUntil: "networkidle" });
+    await page
+      .locator('.catalog-import-all-action input[type="file"]')
+      .setInputFiles({
+        name: "catalog-stale.csv",
+        mimeType: "text/csv",
+        buffer: Buffer.from(
+          [
+            "Tên thiết bị và vật tư,Tên thương mại,ĐVT",
+            `Thiết bị preview ${suffix},Thương mại preview ${suffix},Cái`,
+          ].join("\n"),
+          "utf8",
+        ),
+      });
+
+    const dialog = page.getByRole("dialog", { name: "Import tất cả" });
+    const apply = dialog.getByRole("button", {
+      name: "Import tất cả",
+      exact: true,
+    });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator(".preview-table")).toBeVisible();
+    await expect(apply).toBeEnabled();
+
+    const { error: mutationError } = await serviceDb
+      .from("equipment_catalog")
+      .insert({
+        id: staleFixtureId,
+        item_name: `Stale fingerprint ${suffix}`,
+        commercial_name: `Stale fingerprint ${suffix}`,
+        unit: "Cái",
+        is_active: true,
+      });
+    if (mutationError) throw mutationError;
+
+    await apply.click();
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("alert")).toHaveText(
+      "Dữ liệu danh mục đã thay đổi. Hãy chọn lại file để xem trước bản mới.",
+    );
+    await expect(dialog.locator(".preview-table")).toBeVisible();
+    await expect(apply).toBeDisabled();
+  } finally {
+    await serviceDb.from("equipment_catalog").delete().eq("id", staleFixtureId);
+  }
+});
+
 test("template và import danh mục môn học, phòng, thiết bị, nhân sự và Y cơ sở hoạt động", async ({
   page,
 }) => {

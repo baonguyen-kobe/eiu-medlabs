@@ -392,7 +392,11 @@ export function ClassRegistrationList({
             <Download size={17} /> {exporting ? "Đang xuất…" : "Export"}
           </button>
         ) : null}
-        <span className="class-result-count">{filtered.length} lớp</span>
+        <span className="inline-toolbar-count-slot class-result-count-slot">
+          <span className="class-result-count inline-toolbar-count">
+            {filtered.length} lớp
+          </span>
+        </span>
       </div>
 
       {message ? (
