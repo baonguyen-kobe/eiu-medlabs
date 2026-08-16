@@ -134,12 +134,35 @@ test("project proof is multi-signal and observations are read-only before reset"
   assert.match(workflow, /from storage\.objects/);
 });
 
-test("exactly one no-seed reset is the only destructive database command", () => {
-  assert.equal(
-    (workflow.match(/supabase db reset --linked --no-seed/g) ?? []).length,
-    1,
-  );
-  assert.equal((workflow.match(/supabase db reset --linked/g) ?? []).length, 1);
+test("exactly one noninteractive no-seed reset is the only destructive database command", () => {
+  const resetInvocations = workflow
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.includes("supabase db reset"));
+  assert.deepEqual(resetInvocations, [
+    "npx --no-install supabase db reset --linked --no-seed --yes",
+  ]);
+  assert.equal((workflow.match(/supabase db reset/g) ?? []).length, 1);
+  assert.doesNotMatch(resetInvocations[0], /[|<>]/);
+  for (const forbiddenResetWorkaround of [
+    "--db-url",
+    "--project-ref",
+    "--local",
+    "--version",
+    "--last",
+    "--sql-paths",
+    "--include-seed",
+    "--seed",
+    "yes \\|",
+    "echo y \\|",
+    "echo yes \\|",
+    "printf",
+  ]) {
+    assert.doesNotMatch(
+      resetInvocations[0].toLowerCase(),
+      new RegExp(forbiddenResetWorkaround),
+    );
+  }
   for (const forbidden of [
     "db push",
     "migration repair",

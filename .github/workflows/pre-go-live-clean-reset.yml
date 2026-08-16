@@ -159,7 +159,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npx --no-install supabase db reset --linked --no-seed
+          npx --no-install supabase db reset --linked --no-seed --yes
 
       - name: Verify canonical migration history after reset
         shell: bash
