@@ -172,6 +172,35 @@ test("disposable Auth cleanup is paginated, fixed-target, count-only, and fail-c
   assert.match(cleanup, /for \(let page = 1; ; page \+= 1\)/);
   assert.match(cleanup, /const perPage = 1000/);
   assert.equal((cleanup.match(/auth\.admin\.deleteUser/g) ?? []).length, 1);
+  assert.match(cleanup, /let successfulDeletes = 0;/);
+  assert.match(cleanup, /const rawStatus = Number\(error\?\.status\);/);
+  assert.match(
+    cleanup,
+    /const status = Number\.isInteger\(rawStatus\) \? rawStatus : 'UNAVAILABLE';/,
+  );
+  assert.match(cleanup, /typeof error\?\.code === 'string'/);
+  assert.match(cleanup, /typeof error\?\.name === 'string'/);
+  assert.match(cleanup, /const redactIdentifiers = \(value\) => value/);
+  assert.match(
+    cleanup,
+    /redactIdentifiers\(rawCodeOrName\)\.replace\(\/\[\^A-Za-z0-9_\.\-\]\/g, '_'\)\.slice\(0, 80\)/,
+  );
+  assert.match(cleanup, /\[REDACTED_UUID\]/);
+  assert.match(cleanup, /\[REDACTED_EMAIL\]/);
+  assert.match(cleanup, /const message = redactIdentifiers\(rawMessage\)/);
+  assert.match(cleanup, /\.slice\(0, 300\)/);
+  assert.match(
+    cleanup,
+    /AUTH_TEST_USER_CLEANUP_FAILURE successful_deletes_before_failure=\$\{successfulDeletes\}; status=\$\{status\}; code_or_name=\$\{codeOrName\}; message=\$\{message\}/,
+  );
+  assert.ok(
+    cleanup.indexOf("auth.admin.deleteUser(userId)") <
+      cleanup.indexOf("sanitizeDeleteFailure(error, successfulDeletes)") &&
+      cleanup.indexOf("sanitizeDeleteFailure(error, successfulDeletes)") <
+        cleanup.indexOf("throw new Error('AUTH_TEST_USER_CLEANUP_FAILED')") &&
+      cleanup.indexOf("throw new Error('AUTH_TEST_USER_CLEANUP_FAILED')") <
+        cleanup.indexOf("successfulDeletes += 1"),
+  );
   assert.match(cleanup, /AUTH_TEST_USER_CLEANUP_FAILED/);
   assert.match(cleanup, /AUTH_TEST_USER_CLEANUP_INCOMPLETE/);
   assert.match(cleanup, /afterIds\.length !== 0/);
@@ -180,6 +209,15 @@ test("disposable Auth cleanup is paginated, fixed-target, count-only, and fail-c
   assert.doesNotMatch(
     cleanup,
     /(?:email|metadata|token)\b.*console\.log|console\.log.*(?:email|metadata|token)\b/i,
+  );
+  assert.doesNotMatch(
+    cleanup,
+    /(?:JSON\.stringify\(error\)|error\.(?:stack|headers|metadata)|console\.(?:log|error)\([^)]*(?:userId|error|stack|headers|metadata))/,
+  );
+  assert.doesNotMatch(cleanup, /\$\{(?:userId|error(?:\.[^}]*)?)\}/);
+  assert.doesNotMatch(
+    cleanup,
+    /(?:retry|continue|soft.?delete|updateUser|banUser)/i,
   );
   assert.doesNotMatch(cleanup, /(?:db query|psql|delete from auth\.users)/i);
   assert.doesNotMatch(

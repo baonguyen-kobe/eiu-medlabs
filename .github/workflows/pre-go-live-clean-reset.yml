@@ -187,9 +187,33 @@ jobs:
 
           const beforeIds = await listAllUserIds();
           console.log(`Disposable Auth users before cleanup: ${beforeIds.length}`);
+          const redactIdentifiers = (value) => value
+            .replace(/\b[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\b/gi, '[REDACTED_UUID]')
+            .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[REDACTED_EMAIL]');
+          const sanitizeDeleteFailure = (error, successfulDeletes) => {
+            const rawStatus = Number(error?.status);
+            const status = Number.isInteger(rawStatus) ? rawStatus : 'UNAVAILABLE';
+            const rawCodeOrName = typeof error?.code === 'string'
+              ? error.code
+              : typeof error?.name === 'string'
+                ? error.name
+                : 'UNAVAILABLE';
+            const codeOrName = redactIdentifiers(rawCodeOrName).replace(/[^A-Za-z0-9_.-]/g, '_').slice(0, 80) || 'UNAVAILABLE';
+            const rawMessage = typeof error?.message === 'string' ? error.message : 'UNAVAILABLE';
+            const message = redactIdentifiers(rawMessage)
+              .replace(/[\r\n\t]+/g, ' ')
+              .slice(0, 300);
+            console.log(`AUTH_TEST_USER_CLEANUP_FAILURE successful_deletes_before_failure=${successfulDeletes}; status=${status}; code_or_name=${codeOrName}; message=${message}`);
+          };
+
+          let successfulDeletes = 0;
           for (const userId of beforeIds) {
             const { error } = await authAdmin.auth.admin.deleteUser(userId);
-            if (error) throw new Error('AUTH_TEST_USER_CLEANUP_FAILED');
+            if (error) {
+              sanitizeDeleteFailure(error, successfulDeletes);
+              throw new Error('AUTH_TEST_USER_CLEANUP_FAILED');
+            }
+            successfulDeletes += 1;
           }
           const afterIds = await listAllUserIds();
           console.log(`Disposable Auth users after cleanup: ${afterIds.length}`);
