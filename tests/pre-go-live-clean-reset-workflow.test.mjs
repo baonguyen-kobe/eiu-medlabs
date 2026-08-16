@@ -158,6 +158,14 @@ test("disposable Auth cleanup is paginated, fixed-target, count-only, and fail-c
       .length,
     1,
   );
+  assert.match(
+    cleanup,
+    /node <<'NODE'\n          import \{ writeFileSync \} from 'node:fs';\n          import \{ join \} from 'node:path';\n          import \{ createClient \} from '@supabase\/supabase-js';/,
+  );
+  assert.doesNotMatch(cleanup, /\brequire\s*\(/);
+  assert.doesNotMatch(cleanup, /\b(?:module\.exports|exports\.)/);
+  assert.match(cleanup, /const beforeIds = await listAllUserIds\(\);/);
+  assert.match(cleanup, /writeFileSync\(\s*join\(/);
   assert.match(cleanup, /const projectRef = 'bwhiivfhezoozrzvchmm'/);
   assert.match(cleanup, /https:\/\/\$\{projectRef\}\.supabase\.co/);
   assert.match(cleanup, /auth\.admin\.listUsers\(\{ page, perPage \}\)/);
