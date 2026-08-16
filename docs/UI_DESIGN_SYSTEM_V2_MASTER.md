@@ -1098,7 +1098,7 @@ Skills/Y chỉ khác data/business fields, không khác visual shell.
   rõ ràng của người dùng và phải thắng ở mọi viewport.
 - Khi URL không có `view`, server render `Tuần` để tránh hydration mismatch.
   Client chỉ resolve một lần sau hydration: desktop giữ `Tuần`; breakpoint
-  responsive hiện hành `max-width: 760px` dùng `Danh sách`.
+  responsive hiện hành `max-width: 920px` dùng `Danh sách`.
 - Default responsive không ghi URL, không tạo router loop, không lắng nghe
   resize để ghi đè view đang xem, và không được thay thế lựa chọn thủ công.
 - `Tổng quan` và `Lịch trực` không thừa hưởng rule default này.

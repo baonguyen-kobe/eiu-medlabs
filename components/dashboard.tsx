@@ -67,7 +67,7 @@ const viewLabels: Record<ViewMode, View> = {
   list: "Danh sách",
 };
 
-const responsiveCalendarDefaultMedia = "(max-width: 760px)";
+const responsiveCalendarDefaultMedia = "(max-width: 920px)";
 const inactiveCalendarEquipmentRequestStatuses = new Set<string>(["cancelled"]);
 
 function subscribeToInitialCalendarViewport() {

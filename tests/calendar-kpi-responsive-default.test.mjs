@@ -63,8 +63,13 @@ test("Skills and Basic Medical calendars share a one-time responsive default wit
 
   assert.match(
     calendar,
-    /responsiveCalendarDefaultMedia = "\(max-width: 760px\)"/,
+    /responsiveCalendarDefaultMedia = "\(max-width: 920px\)"/,
   );
+  const compactDefaultAt = (viewportWidth) =>
+    viewportWidth <= 920 ? "Danh sách" : "Tuần";
+  assert.equal(compactDefaultAt(921), "Tuần");
+  assert.equal(compactDefaultAt(920), "Danh sách");
+  assert.equal(compactDefaultAt(768), "Danh sách");
   assert.match(calendar, /hasExplicitView = false/);
   assert.match(
     calendar,
@@ -76,6 +81,11 @@ test("Skills and Basic Medical calendars share a one-time responsive default wit
   );
   assert.match(calendar, /setManualView\(nextView\)/);
   assert.doesNotMatch(calendar, /addEventListener\(\s*["']resize/);
+  const initialViewportHelper = calendar.match(
+    /function getInitialCalendarViewportDefault\(\) \{[\s\S]*?\n\}/,
+  )?.[0];
+  assert.ok(initialViewportHelper);
+  assert.doesNotMatch(initialViewportHelper, /router\.(?:push|replace)/);
 
   for (const page of [skills, basicMedical]) {
     assert.match(
@@ -88,6 +98,6 @@ test("Skills and Basic Medical calendars share a one-time responsive default wit
   assert.doesNotMatch(staffShifts, /hasExplicitView/);
   assert.match(
     master,
-    /Responsive calendar default[\s\S]*`view=week`, `view=month`, hoặc `view=list`[\s\S]*max-width: 760px[\s\S]*không lắng nghe\s+resize[\s\S]*`Tổng quan` và `Lịch trực` không thừa hưởng/s,
+    /Responsive calendar default[\s\S]*`view=week`, `view=month`, hoặc `view=list`[\s\S]*max-width: 920px[\s\S]*không lắng nghe\s+resize[\s\S]*`Tổng quan` và `Lịch trực` không thừa hưởng/s,
   );
 });
