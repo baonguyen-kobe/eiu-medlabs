@@ -134,6 +134,22 @@ test("Management log diagnostic uses bounded, separate read-only source queries"
     logStep,
     /actions\/upload-artifact|\.zip|\.tar|artifact/i,
   );
+  const uuidPatternSource = String.raw`\b[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\b`;
+  const uuidRedactor = new RegExp(uuidPatternSource, "gi");
+  assert.ok(
+    logStep.includes(
+      String.raw`.replace(/${uuidPatternSource}/gi, '[REDACTED_UUID]')`,
+    ),
+  );
+  for (const uuid of [
+    "00000000-0000-0000-0000-000000000000",
+    "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF",
+  ]) {
+    assert.equal(
+      uuid.replace(uuidRedactor, "[REDACTED_UUID]"),
+      "[REDACTED_UUID]",
+    );
+  }
   for (const marker of [
     "[REDACTED_UUID]",
     "[REDACTED_EMAIL]",

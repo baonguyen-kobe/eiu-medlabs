@@ -238,7 +238,7 @@ jobs:
           import { join } from 'node:path';
 
           const redact = (value) => String(value ?? 'UNAVAILABLE')
-            .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi, '[REDACTED_UUID]')
+            .replace(/\b[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\b/gi, '[REDACTED_UUID]')
             .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[REDACTED_EMAIL]')
             .replace(/\beyJ[a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+){2}\b/g, '[REDACTED_JWT]')
             .replace(/\bBearer\s+[A-Za-z0-9._-]+/gi, 'Bearer [REDACTED_TOKEN]')
