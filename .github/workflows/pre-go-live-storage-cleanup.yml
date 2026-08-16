@@ -17,7 +17,6 @@ jobs:
     timeout-minutes: 15
     env:
       PROJECT_REF: bwhiivfhezoozrzvchmm
-      PRODUCTION_SUPABASE_SECRET_KEY: ${{ secrets.PRODUCTION_SUPABASE_SECRET_KEY }}
 
     steps:
       - uses: actions/checkout@v7
@@ -110,6 +109,8 @@ jobs:
 
       - name: Prove the exact empty Storage state
         shell: bash
+        env:
+          PRODUCTION_SUPABASE_SECRET_KEY: ${{ secrets.PRODUCTION_SUPABASE_SECRET_KEY }}
         run: |
           set -euo pipefail
           PROJECT_REF="$PROJECT_REF" PRODUCTION_SUPABASE_SECRET_KEY="$PRODUCTION_SUPABASE_SECRET_KEY" node --input-type=module <<'NODE'
@@ -134,6 +135,8 @@ jobs:
 
       - name: Delete only the confirmed empty Storage bucket
         shell: bash
+        env:
+          PRODUCTION_SUPABASE_SECRET_KEY: ${{ secrets.PRODUCTION_SUPABASE_SECRET_KEY }}
         run: |
           set -euo pipefail
           PROJECT_REF="$PROJECT_REF" PRODUCTION_SUPABASE_SECRET_KEY="$PRODUCTION_SUPABASE_SECRET_KEY" node --input-type=module <<'NODE'
@@ -160,6 +163,8 @@ jobs:
 
       - name: Re-list Storage state after cleanup
         shell: bash
+        env:
+          PRODUCTION_SUPABASE_SECRET_KEY: ${{ secrets.PRODUCTION_SUPABASE_SECRET_KEY }}
         run: |
           set -euo pipefail
           PROJECT_REF="$PROJECT_REF" PRODUCTION_SUPABASE_SECRET_KEY="$PRODUCTION_SUPABASE_SECRET_KEY" node --input-type=module <<'NODE'

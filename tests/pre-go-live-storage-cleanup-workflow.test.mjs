@@ -22,6 +22,12 @@ const frozenPr2 = [
   "20260810030000",
 ];
 
+const storageApiSteps = [
+  "Prove the exact empty Storage state",
+  "Delete only the confirmed empty Storage bucket",
+  "Re-list Storage state after cleanup",
+];
+
 test("Storage cleanup rail is dispatch-only, main-only, fixed-target, and noncancelling", () => {
   assert.match(workflow, /^on:\n  workflow_dispatch:\s*$/m);
   assert.doesNotMatch(workflow, /^  (?:push|pull_request|schedule):/m);
@@ -36,10 +42,28 @@ test("Storage cleanup rail is dispatch-only, main-only, fixed-target, and noncan
   assert.match(workflow, /actions\/checkout@v7[\s\S]*?ref: main/);
   assert.match(workflow, /actions\/setup-node@v7[\s\S]*?node-version: 24/);
   assert.match(workflow, /npm ci --ignore-scripts/);
-  assert.match(
-    workflow,
-    /PRODUCTION_SUPABASE_SECRET_KEY: \$\{\{ secrets\.PRODUCTION_SUPABASE_SECRET_KEY \}\}/,
+  const jobEnvironment = workflow.match(
+    /    env:\n([\s\S]*?)\n\n    steps:/,
+  )?.[1];
+  assert.ok(jobEnvironment);
+  assert.match(jobEnvironment, /PROJECT_REF: bwhiivfhezoozrzvchmm/);
+  assert.doesNotMatch(jobEnvironment, /PRODUCTION_SUPABASE_SECRET_KEY/);
+  assert.equal(
+    (
+      workflow.match(
+        /^          PRODUCTION_SUPABASE_SECRET_KEY: \$\{\{ secrets\.PRODUCTION_SUPABASE_SECRET_KEY \}\}$/gm,
+      ) ?? []
+    ).length,
+    3,
   );
+  for (const step of storageApiSteps) {
+    assert.match(
+      workflow,
+      new RegExp(
+        `- name: ${step}\\n        shell: bash\\n        env:\\n          PRODUCTION_SUPABASE_SECRET_KEY: \\$\\{\\{ secrets\\.PRODUCTION_SUPABASE_SECRET_KEY \\}\\}\\n        run:`,
+      ),
+    );
+  }
   assert.doesNotMatch(
     workflow,
     /(?:echo|printf).*PRODUCTION_SUPABASE_SECRET_KEY/,
