@@ -19,11 +19,11 @@ import {
   canUseSkillsWorkspace,
   canViewBasicMedicalSchedules,
 } from "@/lib/workspace-access";
+import { normalizeCalendarEquipmentRequest } from "@/lib/equipment-calendar-request";
 
 export default async function DashboardPage() {
   const {
     supabase,
-    userId,
     fullName,
     roles,
     roomTypes,
@@ -51,38 +51,27 @@ export default async function DashboardPage() {
     "yyyy-MM-dd",
   );
 
-  const [{ data: schedules }, { data: shifts }, { data: people }] =
-    await Promise.all([
-      supabase
-        .from("class_schedules")
-        .select(
-          `
+  const [{ data: schedules }, { data: people }] = await Promise.all([
+    supabase
+      .from("class_schedules")
+      .select(
+        `
         id, schedule_date, start_time, end_time, course_code_snapshot,
         course_name_snapshot, lecturer_id, lecturer_2_id, schedule_status,
-        rooms!inner (room_code, building_code, room_type_id)
+        rooms!inner (room_code, building_code, room_type_id),
+        equipment_requests (id, status)
       `,
-        )
-        .eq("rooms.room_type_id", NURSING_SKILLS_ROOM_TYPE_ID)
-        .gte("schedule_date", monthStartText)
-        .lte("schedule_date", queryEndText)
-        .neq("schedule_status", "cancelled")
-        .order("schedule_date")
-        .order("start_time"),
-      supabase
-        .from("staff_shifts")
-        .select(
-          "id, staff_id, shift_date, start_time, end_time, shift_type, status",
-        )
-        .gte("shift_date", monthStartText)
-        .lte("shift_date", monthEndText)
-        .neq("status", "cancelled")
-        .order("shift_date")
-        .order("start_time"),
-      supabase.rpc("list_active_people"),
-    ]);
+      )
+      .eq("rooms.room_type_id", NURSING_SKILLS_ROOM_TYPE_ID)
+      .gte("schedule_date", monthStartText)
+      .lte("schedule_date", queryEndText)
+      .neq("schedule_status", "cancelled")
+      .order("schedule_date")
+      .order("start_time"),
+    supabase.rpc("list_active_people"),
+  ]);
 
   const classRows = schedules ?? [];
-  const shiftRows = shifts ?? [];
   const peopleById = new Map(
     ((people ?? []) as Array<{ id: string; full_name: string }>).map(
       (person) => [person.id, person.full_name],
@@ -102,9 +91,13 @@ export default async function DashboardPage() {
   const openClasses = monthClasses.filter(
     ({ lecturer_id, lecturer_2_id }) => !lecturer_id && !lecturer_2_id,
   );
-  const myClasses = monthClasses.filter(
-    ({ lecturer_id, lecturer_2_id }) =>
-      lecturer_id === userId || lecturer_2_id === userId,
+  const monthClassesWithoutEffectiveEquipmentRequest = monthClasses.filter(
+    (schedule) => {
+      const equipmentRequest = normalizeCalendarEquipmentRequest(
+        schedule.equipment_requests,
+      );
+      return !equipmentRequest || equipmentRequest.status === "cancelled";
+    },
   );
   const canImport = roles.some((role) =>
     ["admin", "staff", "teaching_assistant"].includes(role),
@@ -175,24 +168,13 @@ export default async function DashboardPage() {
           <span>Số lớp chưa có Giảng viên</span>
           <strong>{openClasses.length}</strong>
         </article>
-        {lecturerView ? (
-          <article className="kpi-card kpi-violet">
-            <div className="kpi-icon">
-              <CalendarDays />
-            </div>
-            <span>Lớp của tôi trong tháng</span>
-            <strong>{myClasses.length}</strong>
-          </article>
-        ) : null}
-        {!lecturerView ? (
-          <article className="kpi-card kpi-violet">
-            <div className="kpi-icon">
-              <PackageCheck />
-            </div>
-            <span>Ca trực Kho trong tháng</span>
-            <strong>{shiftRows.length}</strong>
-          </article>
-        ) : null}
+        <article className="kpi-card kpi-violet">
+          <div className="kpi-icon">
+            <PackageCheck />
+          </div>
+          <span>Số lớp chưa có đăng ký thiết bị</span>
+          <strong>{monthClassesWithoutEffectiveEquipmentRequest.length}</strong>
+        </article>
       </section>
 
       <section className="overview-grid">

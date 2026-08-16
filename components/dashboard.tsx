@@ -21,6 +21,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   useTransition,
 } from "react";
 import {
@@ -65,6 +66,21 @@ const viewLabels: Record<ViewMode, View> = {
   week: "Tuần",
   list: "Danh sách",
 };
+
+const responsiveCalendarDefaultMedia = "(max-width: 760px)";
+const inactiveCalendarEquipmentRequestStatuses = new Set<string>(["cancelled"]);
+
+function subscribeToInitialCalendarViewport() {
+  return () => {};
+}
+
+function getInitialCalendarViewportDefault() {
+  return window.matchMedia(responsiveCalendarDefaultMedia).matches;
+}
+
+function getServerCalendarViewportDefault() {
+  return false;
+}
 
 function formatDisplayDate(date: string) {
   return new Intl.DateTimeFormat("vi-VN", {
@@ -285,6 +301,7 @@ export function Dashboard({
   nextDate,
   anchorDate,
   initialView,
+  hasExplicitView = false,
   todayDate,
   lecturers,
   rooms = [],
@@ -305,6 +322,7 @@ export function Dashboard({
   nextDate: string;
   anchorDate: string;
   initialView: ViewMode;
+  hasExplicitView?: boolean;
   todayDate: string;
   lecturers: PersonOption[];
   rooms?: RoomOption[];
@@ -330,7 +348,15 @@ export function Dashboard({
           : "viewer";
   const selectableRoles: Role[] = roles;
   const [role, setRole] = useState<Role>(initialRole);
-  const [view, setView] = useState<View>(viewLabels[initialView]);
+  const [manualView, setManualView] = useState<View | null>(null);
+  const useCompactCalendarDefault = useSyncExternalStore(
+    subscribeToInitialCalendarViewport,
+    getInitialCalendarViewportDefault,
+    getServerCalendarViewportDefault,
+  );
+  const view = hasExplicitView
+    ? viewLabels[initialView]
+    : (manualView ?? (useCompactCalendarDefault ? "Danh sách" : "Tuần"));
   const [showClasses, setShowClasses] = useState(true);
   const [showShifts, setShowShifts] = useState(true);
   const [query, setQuery] = useState("");
@@ -458,7 +484,7 @@ export function Dashboard({
 
   function navigateToView(nextView: View) {
     const mode = viewModes[nextView];
-    setView(nextView);
+    setManualView(nextView);
     const basePath =
       calendarKind === "basic_medical"
         ? "/basic-medical/schedules"
@@ -478,9 +504,16 @@ export function Dashboard({
     });
   }
 
+  const loadedClassEvents = events.filter((event) => event.type === "class");
   const classEvents = visibleEvents.filter((event) => event.type === "class");
   const unassigned = classEvents.filter((event) => !event.assigned);
-  const shiftEvents = visibleEvents.filter((event) => event.type === "shift");
+  const classesWithoutEffectiveEquipmentRequest = loadedClassEvents.filter(
+    (event) =>
+      !event.equipmentRequest ||
+      inactiveCalendarEquipmentRequestStatuses.has(
+        event.equipmentRequest.status,
+      ),
+  );
   const activeSlots = calendarSlots.filter((slot) =>
     calendarKind === "basic_medical"
       ? slot.type === "class"
@@ -590,25 +623,15 @@ export function Dashboard({
                 <span>Chưa có giảng viên</span>
                 <strong>{unassigned.length}</strong>
               </article>
-              {lecturerView ? (
-                <article className="kpi-card kpi-indigo">
-                  <div className="kpi-icon">
-                    <GraduationCap size={19} />
-                  </div>
-                  <span>Lớp của tôi</span>
-                  <strong>
-                    {classEvents.filter((event) => event.owned).length}
-                  </strong>
-                </article>
-              ) : (
-                <article className="kpi-card kpi-violet">
-                  <div className="kpi-icon">
-                    <PackageCheck size={19} />
-                  </div>
-                  <span>Ca trực</span>
-                  <strong>{shiftEvents.length}</strong>
-                </article>
-              )}
+              <article className="kpi-card kpi-violet">
+                <div className="kpi-icon">
+                  <PackageCheck size={19} />
+                </div>
+                <span>Số lớp chưa có đăng ký thiết bị</span>
+                <strong>
+                  {classesWithoutEffectiveEquipmentRequest.length}
+                </strong>
+              </article>
             </>
           )}
         </section>

@@ -54,9 +54,8 @@ export default async function BasicMedicalSchedulesPage({
   const requestedDate = query.date ?? query.week;
   const parsedDate = requestedDate ? parseISO(requestedDate) : businessToday();
   const baseDate = isValid(parsedDate) ? parsedDate : businessToday();
-  const viewMode: ViewMode = ["month", "week", "list"].includes(
-    query.view ?? "",
-  )
+  const hasExplicitView = ["month", "week", "list"].includes(query.view ?? "");
+  const viewMode: ViewMode = hasExplicitView
     ? (query.view as ViewMode)
     : "week";
   const weekStart = startOfWeek(baseDate, { weekStartsOn: 1 });
@@ -287,6 +286,7 @@ export default async function BasicMedicalSchedulesPage({
       )}
       anchorDate={format(baseDate, "yyyy-MM-dd")}
       initialView={viewMode}
+      hasExplicitView={hasExplicitView}
       todayDate={today}
       lecturers={(
         (lecturers ?? []) as Array<{ id: string; full_name: string }>
