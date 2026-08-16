@@ -1090,6 +1090,32 @@ Keep:
 
 Skills/Y chỉ khác data/business fields, không khác visual shell.
 
+## Responsive calendar default
+
+Áp dụng riêng cho `Lịch Skills lab` và `Lịch Y cơ sở`.
+
+- URL có `view=week`, `view=month`, hoặc `view=list` hợp lệ luôn là lựa chọn
+  rõ ràng của người dùng và phải thắng ở mọi viewport.
+- Khi URL không có `view`, server render `Tuần` để tránh hydration mismatch.
+  Client chỉ resolve một lần sau hydration: desktop giữ `Tuần`; breakpoint
+  responsive hiện hành `max-width: 920px` dùng `Danh sách`.
+- Default responsive không ghi URL, không tạo router loop, không lắng nghe
+  resize để ghi đè view đang xem, và không được thay thế lựa chọn thủ công.
+- `Tổng quan` và `Lịch trực` không thừa hưởng rule default này.
+
+## Skills equipment-registration KPI
+
+KPI thứ tư màu tím của `Tổng quan` và `Lịch Skills lab` là:
+
+```text
+Số lớp chưa có đăng ký thiết bị
+```
+
+Chỉ đếm lớp Skills active trong period riêng của page. Một request thiết bị
+được normalize theo calendar contract hiện hữu; request `cancelled` không còn
+effective, nên lớp đó vẫn được tính là chưa đăng ký. Không đếm ca trực và
+không áp dụng KPI này cho Lịch Y cơ sở.
+
 ## Calendar detail drawer family
 
 Skills and Basic Medical share the same detail-drawer family. The drawer is a
