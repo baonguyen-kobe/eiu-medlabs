@@ -220,30 +220,61 @@ jobs:
           }
           NODE
 
-      - name: Attempt a sanitized read-only Management API log diagnostic
+      - name: Query bounded Auth and Postgres Management logs with sanitized output only
         shell: bash
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
           set -euo pipefail
-          readonly window_start='2026-08-16T07:29:58Z'
-          readonly window_end='2026-08-16T07:30:02Z'
-          status_code="$(curl --silent --output "$RUNNER_TEMP/auth-delete-management-logs.json" --write-out '%{http_code}' --get "https://api.supabase.com/v1/projects/$PROJECT_REF/analytics/endpoints/logs" --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" --data-urlencode "start=$window_start" --data-urlencode "end=$window_end" || true)"
-          STATUS_CODE="$status_code" RUNNER_TEMP="$RUNNER_TEMP" node <<'NODE'
+          readonly window_start='2026-08-16T09:43:30Z'
+          readonly window_end='2026-08-16T09:45:00Z'
+          readonly logs_endpoint="https://api.supabase.com/v1/projects/$PROJECT_REF/analytics/endpoints/logs"
+          readonly auth_sql="select timestamp, severity_text, event_message from logs where source = 'auth_logs' and timestamp >= toDateTime('$window_start') and timestamp <= toDateTime('$window_end') order by timestamp asc limit 50"
+          readonly postgres_sql="select timestamp, severity_text, event_message, log_attributes['parsed.sql_state_code'] as sql_state_code, log_attributes['parsed.user_name'] as parsed_user_name from logs where source = 'postgres_logs' and timestamp >= toDateTime('$window_start') and timestamp <= toDateTime('$window_end') and (severity_text in ('ERROR', 'FATAL', 'PANIC') or lower(event_message) like '%supabase_auth_admin%') order by timestamp asc limit 50"
+          auth_status="$(curl --silent --request GET --output "$RUNNER_TEMP/auth-logs.json" --write-out '%{http_code}' --get "$logs_endpoint" --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" --data-urlencode "sql=$auth_sql" || true)"
+          postgres_status="$(curl --silent --request GET --output "$RUNNER_TEMP/postgres-logs.json" --write-out '%{http_code}' --get "$logs_endpoint" --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" --data-urlencode "sql=$postgres_sql" || true)"
+          AUTH_STATUS="$auth_status" POSTGRES_STATUS="$postgres_status" RUNNER_TEMP="$RUNNER_TEMP" node <<'NODE'
           import { existsSync, readFileSync } from 'node:fs';
           import { join } from 'node:path';
 
-          const allowedCategories = [
-            ['ROOT_ADMIN_PROFILE_DELETE_PROTECTED', /root[\s_-]*admin.*profile.*delete|profile.*root[\s_-]*admin.*delete/i],
-            ['FOREIGN_KEY_RESTRICTED', /foreign key|restrict|no action/i],
-            ['PERMISSION_DENIED', /permission denied|not authorized|forbidden|status[\s:=]*40[13]/i],
-          ];
-          const statusCode = process.env.STATUS_CODE;
-          const resultPath = join(process.env.RUNNER_TEMP, 'auth-delete-management-logs.json');
-          let detail = 'UNAVAILABLE';
-          if (statusCode === '200' && existsSync(resultPath)) {
-            const content = readFileSync(resultPath, 'utf8');
-            detail = allowedCategories.find(([, pattern]) => pattern.test(content))?.[0] ?? 'UNCLASSIFIED';
-          }
-          console.log(`LOG_ROOT_CAUSE_DETAIL=${detail}`);
+          const redact = (value) => String(value ?? 'UNAVAILABLE')
+            .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi, '[REDACTED_UUID]')
+            .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[REDACTED_EMAIL]')
+            .replace(/\beyJ[a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+){2}\b/g, '[REDACTED_JWT]')
+            .replace(/\bBearer\s+[A-Za-z0-9._-]+/gi, 'Bearer [REDACTED_TOKEN]')
+            .replace(/\bsb_(?:secret|publishable)_[A-Za-z0-9_-]+\b/gi, '[REDACTED_API_KEY]')
+            .replace(/\b(?:user[ _-]?id|user_id)\s*[:=]\s*[^\s,;]+/gi, 'user_id=[REDACTED_USER_ID]')
+            .replace(/[\r\n\t]+/g, ' ')
+            .slice(0, 300);
+          const rowsFrom = (path) => {
+            if (!existsSync(path)) return [];
+            try {
+              const parsed = JSON.parse(readFileSync(path, 'utf8'));
+              if (Array.isArray(parsed)) return parsed;
+              for (const key of ['data', 'rows', 'result']) if (Array.isArray(parsed?.[key])) return parsed[key];
+            } catch {
+              return [];
+            }
+            return [];
+          };
+          const authRows = process.env.AUTH_STATUS === '200'
+            ? rowsFrom(join(process.env.RUNNER_TEMP, 'auth-logs.json'))
+            : [];
+          const postgresRows = process.env.POSTGRES_STATUS === '200'
+            ? rowsFrom(join(process.env.RUNNER_TEMP, 'postgres-logs.json'))
+            : [];
+          const firstAuth = authRows[0] ?? {};
+          const firstPostgres = postgresRows[0] ?? {};
+          const authEvidence = redact(firstAuth.event_message);
+          const postgresEvidence = redact(firstPostgres.event_message);
+          const sqlState = redact(firstPostgres.sql_state_code);
+          const classify = (text) => {
+            if (/foreign key|restrict|no action/i.test(text)) return 'FOREIGN_KEY_RESTRICTED';
+            if (/root[\s_-]*admin.*profile.*delete|profile.*root[\s_-]*admin.*delete/i.test(text)) return 'ROOT_ADMIN_PROFILE_DELETE_PROTECTED';
+            if (/permission denied|not authorized|forbidden/i.test(text)) return 'PERMISSION_DENIED';
+            return 'UNAVAILABLE';
+          };
+          console.log(`AUTH_LOG_DIAGNOSTIC http_status=${redact(process.env.AUTH_STATUS)}; event_count=${authRows.length}; message=${authEvidence}`);
+          console.log(`POSTGRES_LOG_DIAGNOSTIC http_status=${redact(process.env.POSTGRES_STATUS)}; event_count=${postgresRows.length}; sql_state=${sqlState}; message=${postgresEvidence}`);
+          console.log(`LOG_ROOT_CAUSE_DETAIL=${classify(`${authEvidence} ${postgresEvidence}`)}`);
           NODE
