@@ -33,6 +33,66 @@ test("UI V2 keeps the approved semantic visual foundation", async () => {
   assert.match(css, /border-radius: 9px/);
 });
 
+test("UI V2 gives composite controls one global visual shell", async () => {
+  const css = await source("app/globals.css");
+  const master = await source("docs/UI_DESIGN_SYSTEM_V2_MASTER.md");
+  const shellContract = css.match(
+    /\/\* One chrome-owning composite control gets one visual shell\.[\s\S]*?(?=\.badge,)/,
+  )?.[0];
+
+  assert.ok(shellContract);
+  for (const family of [
+    "search-field",
+    "input-with-icon",
+    "data-search",
+    "filter-control",
+    "role-switcher",
+    "class-range-mode",
+    "equipment-date-filter",
+    "searchable-combobox-control",
+  ]) {
+    assert.match(shellContract, new RegExp(`\\.${family}`));
+  }
+
+  assert.match(
+    shellContract,
+    /> :is\(input:not\(\[type="checkbox"\]\):not\(\[type="radio"\]\), select, textarea\)/,
+  );
+  for (const reset of [
+    "background: transparent",
+    "border: 0",
+    "border-radius: 0",
+    "box-shadow: none",
+    "outline: 0",
+  ]) {
+    assert.match(
+      shellContract,
+      new RegExp(reset.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+    );
+  }
+  assert.match(
+    shellContract,
+    /:is\(\s*:focus,\s*:focus-visible\s*\)[\s\S]*box-shadow: none/,
+  );
+  assert.match(
+    shellContract,
+    /\):focus-within \{[\s\S]*border-color: var\(--primary\)[\s\S]*box-shadow: 0 0 0 3px rgb\(20 64 105 \/ 12%\)/,
+  );
+  assert.match(
+    css,
+    /:where\([\s\S]*input:not\(\[type="checkbox"\]\)[\s\S]*\):focus-visible \{[\s\S]*border-color: var\(--primary\)[\s\S]*box-shadow: 0 0 0 3px rgb\(20 64 105 \/ 12%\)/,
+  );
+  assert.doesNotMatch(css, /\.class-range-dates:focus-within/);
+  assert.match(
+    master,
+    /Global one-control-one-visual-shell rule[\s\S]*wrapper owns border, radius, background[\s\S]*child native `input`, `select`, or `textarea` resets[\s\S]*standalone native controls keep the shared native `:focus-visible` rule/,
+  );
+  assert.match(
+    master,
+    /`class-range-dates`[\s\S]*independent native control shells[\s\S]*group must not add a combined `:focus-within`[\s\S]*ring/,
+  );
+});
+
 test("UI V2 shared chrome and data primitives use canonical Master geometry", async () => {
   const css = await source("app/globals.css");
   const catalog = await source("components/equipment-catalog-manager.tsx");

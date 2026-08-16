@@ -5117,8 +5117,7 @@ select {
 
 .search-field:focus-within,
 .data-search:focus-within,
-.class-range-mode:focus-within,
-.class-range-dates:focus-within {
+.class-range-mode:focus-within {
   border-color: var(--teal-500);
   box-shadow: 0 0 0 3px rgb(20 64 105 / 12%);
 }
@@ -9842,6 +9841,55 @@ select:focus-visible,
 textarea:focus-visible {
   outline: 0;
   outline-offset: 0;
+}
+
+/* One chrome-owning composite control gets one visual shell. Native children
+   stay interactive, but never add a second border, background, radius, or
+   focus ring inside the wrapper that already owns those visuals. */
+:is(
+    .search-field,
+    .input-with-icon,
+    .data-search,
+    .filter-control,
+    .role-switcher,
+    .class-range-mode,
+    .equipment-date-filter,
+    .searchable-combobox-control
+  )
+  > :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea),
+:is(
+    .search-field,
+    .input-with-icon,
+    .data-search,
+    .filter-control,
+    .role-switcher,
+    .class-range-mode,
+    .equipment-date-filter,
+    .searchable-combobox-control
+  )
+  > :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea):is(
+    :focus,
+    :focus-visible
+  ) {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  outline: 0;
+}
+
+:is(
+  .search-field,
+  .input-with-icon,
+  .data-search,
+  .filter-control,
+  .role-switcher,
+  .class-range-mode,
+  .equipment-date-filter,
+  .searchable-combobox-control
+):focus-within {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgb(20 64 105 / 12%);
 }
 
 .badge,
