@@ -155,11 +155,81 @@ jobs:
           if (observation.storage_bucket_count !== 0 || observation.storage_object_count !== 0) throw new Error('STORAGE_CLEANUP_REVIEW_REQUIRED');
           NODE
 
+      - name: Delete all disposable Auth test users before reset
+        shell: bash
+        env:
+          PRODUCTION_SUPABASE_SECRET_KEY: ${{ secrets.PRODUCTION_SUPABASE_SECRET_KEY }}
+        run: |
+          set -euo pipefail
+          PROJECT_REF="$PROJECT_REF" RUNNER_TEMP="$RUNNER_TEMP" node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const { createClient } = require('@supabase/supabase-js');
+
+          const projectRef = 'bwhiivfhezoozrzvchmm';
+          if (process.env.PROJECT_REF !== projectRef) throw new Error('AUTH_CLEANUP_TARGET_UNPROVEN');
+          const secret = process.env.PRODUCTION_SUPABASE_SECRET_KEY;
+          if (!secret) throw new Error('AUTH_CLEANUP_SECRET_UNAVAILABLE');
+          const authAdmin = createClient(`https://${projectRef}.supabase.co`, secret, {
+            auth: { autoRefreshToken: false, persistSession: false },
+          });
+          const listAllUserIds = async () => {
+            const ids = [];
+            const perPage = 1000;
+            for (let page = 1; ; page += 1) {
+              const { data, error } = await authAdmin.auth.admin.listUsers({ page, perPage });
+              if (error) throw new Error('AUTH_CLEANUP_LIST_FAILED');
+              const users = data?.users ?? [];
+              ids.push(...users.map((user) => user.id));
+              if (users.length < perPage) return ids;
+            }
+          };
+
+          const beforeIds = await listAllUserIds();
+          console.log(`Disposable Auth users before cleanup: ${beforeIds.length}`);
+          for (const userId of beforeIds) {
+            const { error } = await authAdmin.auth.admin.deleteUser(userId);
+            if (error) throw new Error('AUTH_TEST_USER_CLEANUP_FAILED');
+          }
+          const afterIds = await listAllUserIds();
+          console.log(`Disposable Auth users after cleanup: ${afterIds.length}`);
+          if (afterIds.length !== 0) throw new Error('AUTH_TEST_USER_CLEANUP_INCOMPLETE');
+          fs.writeFileSync(
+            path.join(process.env.RUNNER_TEMP, 'auth-cleanup-report.json'),
+            JSON.stringify({ before_count: beforeIds.length, after_count: afterIds.length }),
+          );
+          NODE
+
+      - name: Reconfirm Storage is empty immediately before reset
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/pre-reset-storage-final.sql" <<'SQL'
+          select jsonb_build_object(
+            'storage_bucket_count', (select count(*) from storage.buckets),
+            'storage_object_count', (select count(*) from storage.objects)
+          ) as observation;
+          SQL
+          npx --no-install supabase db query --linked --output-format json --file "$RUNNER_TEMP/pre-reset-storage-final.sql" > "$RUNNER_TEMP/pre-reset-storage-final.json"
+          RUNNER_TEMP="$RUNNER_TEMP" node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const result = JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP, 'pre-reset-storage-final.json'), 'utf8'));
+          const raw = result?.[0]?.observation ?? result?.rows?.[0]?.observation ?? result?.observation;
+          const observation = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          if (!observation || !Number.isInteger(Number(observation.storage_bucket_count)) || !Number.isInteger(Number(observation.storage_object_count))) throw new Error('FINAL_STORAGE_OBSERVATION_INVALID');
+          observation.storage_bucket_count = Number(observation.storage_bucket_count);
+          observation.storage_object_count = Number(observation.storage_object_count);
+          if (observation.storage_bucket_count !== 0 || observation.storage_object_count !== 0) throw new Error('STORAGE_CLEANUP_REVIEW_REQUIRED');
+          fs.writeFileSync(path.join(process.env.RUNNER_TEMP, 'pre-reset-storage-final-report.json'), JSON.stringify(observation));
+          console.log(`Final pre-reset Storage counts: buckets=${observation.storage_bucket_count}; objects=${observation.storage_object_count}`);
+          NODE
+
       - name: Reset the linked disposable-test database without seed data
         shell: bash
         run: |
           set -euo pipefail
-          npx --no-install supabase db reset --linked --no-seed
+          npx --no-install supabase db reset --linked --no-seed --yes
 
       - name: Verify canonical migration history after reset
         shell: bash
@@ -243,6 +313,8 @@ jobs:
           path: |
             ${{ runner.temp }}/migrations-before-report.json
             ${{ runner.temp }}/pre-reset-observation-report.json
+            ${{ runner.temp }}/auth-cleanup-report.json
+            ${{ runner.temp }}/pre-reset-storage-final-report.json
             ${{ runner.temp }}/migrations-after-report.json
             ${{ runner.temp }}/post-reset-verification-report.json
           if-no-files-found: error

@@ -2,6 +2,8 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { defaultWorkspacePath } from "@/lib/workspace-access";
+import type { AppRole } from "@/lib/viewer";
 
 export type LoginState = {
   error?: string;
@@ -38,19 +40,25 @@ export async function login(
     return { error: "ID/email hoặc mật khẩu chưa đúng." };
   }
 
-  const [{ data: profile }, { count: roleCount }] = await Promise.all([
+  const [
+    { data: profile },
+    { data: roleRows },
+    { data: assignedRoomTypeRows },
+  ] = await Promise.all([
     supabase
       .from("profiles")
       .select("is_active,must_change_password")
       .eq("id", data.user.id)
       .maybeSingle(),
+    supabase.from("user_roles").select("role").eq("user_id", data.user.id),
     supabase
-      .from("user_roles")
-      .select("role", { count: "exact", head: true })
-      .eq("user_id", data.user.id),
+      .from("profile_room_types")
+      .select("room_types!inner(code,is_active)")
+      .eq("profile_id", data.user.id)
+      .eq("room_types.is_active", true),
   ]);
 
-  if (!profile?.is_active || !roleCount) {
+  if (!profile?.is_active || !roleRows?.length) {
     await supabase.auth.signOut();
     return {
       error:
@@ -60,7 +68,12 @@ export async function login(
 
   if (profile.must_change_password) redirect("/change-password");
 
-  redirect("/dashboard");
+  const roles = roleRows.map(({ role }) => role as AppRole);
+  const roomTypeCodes = (assignedRoomTypeRows ?? []).flatMap((row) => {
+    const roomType = row.room_types as unknown as { code: string } | null;
+    return roomType ? [roomType.code] : [];
+  });
+  redirect(defaultWorkspacePath(roles, roomTypeCodes));
 }
 
 export async function logout() {
