@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { redirectIfPasswordChangeRequired } from "@/lib/forced-password";
+import { resolvePasswordChangeState } from "@/lib/forced-password";
 
 export type AppRole =
   "admin" | "staff" | "lecturer" | "teaching_assistant" | "viewer";
@@ -10,10 +10,9 @@ export async function getViewer() {
   const { data: claimsData } = await supabase.auth.getClaims();
   const userId = claimsData?.claims?.sub;
   if (!userId) redirect("/login");
-  await redirectIfPasswordChangeRequired(supabase, userId);
 
   const [
-    { data: profile },
+    profileResult,
     { data: roleRows },
     { data: allRoomTypeRows },
     { data: assignedRoomTypeRows },
@@ -23,7 +22,7 @@ export async function getViewer() {
     supabase
       .from("profiles")
       .select(
-        "full_name, title, allow_basic_medical_access, can_import_schedules, can_manage_email_notifications",
+        "full_name, title, allow_basic_medical_access, can_import_schedules, can_manage_email_notifications, must_change_password",
       )
       .eq("id", userId)
       .single(),
@@ -41,6 +40,9 @@ export async function getViewer() {
     supabase.rpc("get_personnel_authority_context"),
     supabase.rpc("get_basic_medical_authority_context"),
   ]);
+
+  const { data: profile } = profileResult;
+  if (resolvePasswordChangeState(profileResult)) redirect("/change-password");
 
   const roles = (roleRows ?? []).map(({ role }) => role as AppRole);
   const assignedRoomTypes = (assignedRoomTypeRows ?? []).flatMap((row) => {
