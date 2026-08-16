@@ -60,6 +60,22 @@ test("pre-go-live reset rail is main-only, dispatch-only, and fixed-target", () 
 test("pre-go-live reset rail pins canonical migration identity and excludes frozen PR2", () => {
   for (const value of [...targets, ...blobs, ...frozenPr2, "20260815031151"])
     assert.match(workflow, new RegExp(value));
+  const targetVersions = workflow.match(
+    /readonly target_versions=\(([\s\S]*?)\)/,
+  )?.[1];
+  assert.ok(targetVersions);
+  assert.deepEqual(
+    [...targetVersions.matchAll(/"(\d{14})"/g)].map((match) => match[1]),
+    targets,
+  );
+  const targetBlobs = workflow.match(
+    /readonly target_blobs=\(([\s\S]*?)\)/,
+  )?.[1];
+  assert.ok(targetBlobs);
+  assert.deepEqual(
+    [...targetBlobs.matchAll(/"([0-9a-f]{40})"/g)].map((match) => match[1]),
+    blobs,
+  );
   const files = workflow.match(/readonly target_files=\(([\s\S]*?)\)/)?.[1];
   assert.ok(files);
   assert.deepEqual(
@@ -131,6 +147,10 @@ test("exactly one no-seed reset is the only destructive database command", () =>
     "migration down",
     "schema_migrations",
     "--include-seed",
+    "seed-local-users",
+    "bootstrap-personnel",
+    "personnel:bootstrap",
+    "production-pr33-migrations",
     "create_test_users",
     "deploy-production",
     "vercel",
