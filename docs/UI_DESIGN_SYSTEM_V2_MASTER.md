@@ -7,7 +7,7 @@ Canonical path:
 docs/UI_DESIGN_SYSTEM_V2_MASTER.md
 
 Last updated:
-2026-08-15
+2026-08-16
 
 ---
 
@@ -477,6 +477,42 @@ Required:
 - visual giống production: một control = một viền focus
 
 Nếu wrapper đã vẽ border thì native/select inner element không được vẽ thêm border/outline riêng.
+
+---
+
+## Global one-control-one-visual-shell rule
+
+Một composite control chỉ có **một** visual-shell owner. Chỉ wrapper đã sở
+hữu chrome (border, radius, background, padding hoặc icon/chevron layout) được
+vẽ control shell và focus boundary.
+
+For those wrappers:
+
+- the wrapper owns border, radius, background, and the visible
+  `:focus-within` boundary;
+- its child native `input`, `select`, or `textarea` resets border,
+  border-radius, outline, box-shadow, and background in both base and focused
+  states;
+- keyboard focus remains visible on the wrapper; a child must never regain a
+  second focus ring through `:focus` or `:focus-visible`;
+- standalone native controls keep the shared native `:focus-visible` rule and
+  remain their own visual shell.
+
+Applies to shared chrome-owning families such as search fields, icon inputs,
+data search, filter/select shells, role switchers, class range modes,
+equipment date filters, and searchable combobox controls. This is a shared
+control contract, not a page-specific override.
+
+`class-range-dates` is intentionally different: it is only a layout group.
+Its start and end date inputs remain independent native control shells with
+their own focus boundaries; the group must not add a combined `:focus-within`
+ring.
+
+Canonical visual contract:
+
+```text
+one control → one visual border/radius/background → one visible focus boundary
+```
 
 ---
 
