@@ -134,6 +134,62 @@ test("project proof is multi-signal and observations are read-only before reset"
   assert.match(workflow, /from storage\.objects/);
 });
 
+test("disposable Auth cleanup is paginated, fixed-target, count-only, and fail-closed before reset", () => {
+  const jobEnvironment = workflow.match(
+    /jobs:\n  reset:[\s\S]*?\n    steps:/,
+  )?.[0];
+  assert.ok(jobEnvironment);
+  assert.doesNotMatch(jobEnvironment, /PRODUCTION_SUPABASE_SECRET_KEY/);
+
+  const cleanup = workflow.match(
+    /      - name: Delete all disposable Auth test users before reset[\s\S]*?(?=\n      - name:|\n      - uses:|$)/,
+  )?.[0];
+  assert.ok(cleanup);
+  assert.match(
+    cleanup,
+    /PRODUCTION_SUPABASE_SECRET_KEY: \$\{\{ secrets\.PRODUCTION_SUPABASE_SECRET_KEY \}\}/,
+  );
+  assert.equal(
+    (workflow.match(/^\s+PRODUCTION_SUPABASE_SECRET_KEY:/gm) ?? []).length,
+    1,
+  );
+  assert.equal(
+    (cleanup.match(/process\.env\.PRODUCTION_SUPABASE_SECRET_KEY/g) ?? [])
+      .length,
+    1,
+  );
+  assert.match(cleanup, /const projectRef = 'bwhiivfhezoozrzvchmm'/);
+  assert.match(cleanup, /https:\/\/\$\{projectRef\}\.supabase\.co/);
+  assert.match(cleanup, /auth\.admin\.listUsers\(\{ page, perPage \}\)/);
+  assert.match(cleanup, /for \(let page = 1; ; page \+= 1\)/);
+  assert.match(cleanup, /const perPage = 1000/);
+  assert.equal((cleanup.match(/auth\.admin\.deleteUser/g) ?? []).length, 1);
+  assert.match(cleanup, /AUTH_TEST_USER_CLEANUP_FAILED/);
+  assert.match(cleanup, /AUTH_TEST_USER_CLEANUP_INCOMPLETE/);
+  assert.match(cleanup, /afterIds\.length !== 0/);
+  assert.match(cleanup, /before_count/);
+  assert.match(cleanup, /after_count/);
+  assert.doesNotMatch(
+    cleanup,
+    /(?:email|metadata|token)\b.*console\.log|console\.log.*(?:email|metadata|token)\b/i,
+  );
+  assert.doesNotMatch(cleanup, /(?:db query|psql|delete from auth\.users)/i);
+  assert.doesNotMatch(
+    workflow,
+    /storage\.deleteBucket|emptyBucket|storage\.remove/,
+  );
+  assert.ok(
+    workflow.indexOf("Delete all disposable Auth test users before reset") <
+      workflow.indexOf("Reconfirm Storage is empty immediately before reset"),
+  );
+  assert.ok(
+    workflow.indexOf("Reconfirm Storage is empty immediately before reset") <
+      workflow.indexOf(
+        "Reset the linked disposable-test database without seed data",
+      ),
+  );
+});
+
 test("exactly one noninteractive no-seed reset is the only destructive database command", () => {
   const resetInvocations = workflow
     .split("\n")
@@ -184,7 +240,7 @@ test("exactly one noninteractive no-seed reset is the only destructive database 
   }
   assert.doesNotMatch(
     workflow,
-    /\b(?:insert|update|delete|merge|create|alter|drop|grant|revoke|truncate)\b/i,
+    /\b(?:insert|update|merge|alter|drop|grant|revoke|truncate)\b/i,
   );
 });
 

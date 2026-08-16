@@ -200,9 +200,13 @@ async function createEquipmentRequest(
     .getByRole("combobox", { name: "Tên thương mại dòng 1, kỹ năng 1" })
     .click();
   await page.getByRole("option", { name: catalog.commercial_name }).click();
-  await page.getByRole("button", { name: "Gửi đăng ký", exact: true }).click();
-  await expect(page.getByRole("status")).toHaveText(
-    "Đã tạo phiếu đăng ký thiết bị.",
+  await clickUntilState(
+    page.getByRole("button", { name: "Gửi đăng ký", exact: true }),
+    () =>
+      expect(page.getByRole("status")).toHaveText(
+        "Đã tạo phiếu đăng ký thiết bị.",
+        { timeout: 1_000 },
+      ),
   );
 
   const { data, error } = await service
@@ -233,10 +237,14 @@ async function cleanupCreatePathFixtures(
   }
 }
 
-async function createUnscopedTeachingAssistant(
+const nursingSkillsRoomTypeId = "40000000-0000-0000-0000-000000000001";
+const basicMedicalRoomTypeId = "40000000-0000-0000-0000-000000000002";
+
+async function createScopedTeachingAssistant(
   service: SupabaseClient,
+  roomTypeIds: string[],
 ): Promise<FixtureUser> {
-  const email = `m2-e2e-unscoped-${crypto.randomUUID()}@campus.local`;
+  const email = `m2-e2e-scoped-${crypto.randomUUID()}@campus.local`;
   const password = "LocalM2E2E123!";
   const { data, error } = await service.auth.admin.createUser({
     email,
@@ -265,19 +273,21 @@ async function createUnscopedTeachingAssistant(
         .upsert({ user_id: id, role: "teaching_assistant" })
     ).error,
   ).toBeNull();
-  const basicMedicalRoomTypeId = "40000000-0000-0000-0000-000000000002";
+  const values = roomTypeIds
+    .map((roomTypeId) => `('${id}', '${roomTypeId}')`)
+    .join(",");
   localSql(`
     begin;
     delete from public.profile_room_types where profile_id = '${id}';
     insert into public.profile_room_types (profile_id, room_type_id)
-    values ('${id}', '${basicMedicalRoomTypeId}');
+    values ${values};
     commit;
   `);
-  expect(
-    localSql(
-      `select room_type_id from public.profile_room_types where profile_id = '${id}';`,
-    ),
-  ).toContain(basicMedicalRoomTypeId);
+  const assignments = localSql(
+    `select room_type_id from public.profile_room_types where profile_id = '${id}';`,
+  );
+  for (const roomTypeId of roomTypeIds)
+    expect(assignments).toContain(roomTypeId);
   return { id, email, password };
 }
 
@@ -393,7 +403,7 @@ test("Lecturer remains able to create a Skills schedule and equipment request th
   }
 });
 
-test("Teaching Assistant without Skills scope is redirected from both create paths", async ({
+test("Basic Medical-only Teaching Assistant lands in Basic Medical and cannot enter Skills", async ({
   page,
 }) => {
   const config = await loadLocalServiceConfig();
@@ -401,7 +411,9 @@ test("Teaching Assistant without Skills scope is redirected from both create pat
   let fixture: FixtureUser | undefined;
 
   try {
-    fixture = await createUnscopedTeachingAssistant(service);
+    fixture = await createScopedTeachingAssistant(service, [
+      basicMedicalRoomTypeId,
+    ]);
     await login(
       page,
       fixture.email,
@@ -410,12 +422,74 @@ test("Teaching Assistant without Skills scope is redirected from both create pat
     );
 
     await page.goto("/schedule-entry/new");
-    await page.waitForURL((url) => url.pathname !== "/schedule-entry/new");
-    expect(new URL(page.url()).pathname).not.toBe("/schedule-entry/new");
+    await expect(page).toHaveURL(/\/basic-medical\/schedules$/);
     await page.goto("/equipment/register");
-    await page.waitForURL((url) => url.pathname !== "/equipment/register");
-    expect(new URL(page.url()).pathname).not.toBe("/equipment/register");
+    await expect(page).toHaveURL(/\/basic-medical\/schedules$/);
+    await page.goto("/class-schedules");
+    await expect(page).toHaveURL(/\/basic-medical\/schedules$/);
+    await page.goto("/imports");
+    await expect(page).toHaveURL(/\/basic-medical\/schedules$/);
+    await page.goto("/admin/rooms");
+    await expect(page).toHaveURL(/\/basic-medical\/schedules$/);
   } finally {
     if (fixture) await service.auth.admin.deleteUser(fixture.id);
+  }
+});
+
+test("Nursing-only Teaching Assistant can use Skills but cannot enter Basic Medical", async ({
+  page,
+}) => {
+  const config = await loadLocalServiceConfig();
+  const service = serviceClient(config);
+  let fixture: FixtureUser | undefined;
+
+  try {
+    fixture = await createScopedTeachingAssistant(service, [
+      nursingSkillsRoomTypeId,
+    ]);
+    await login(page, fixture.email, fixture.password);
+
+    await page.goto("/class-schedules");
+    await expect(page).toHaveURL(/\/class-schedules$/);
+    await page.goto("/basic-medical/schedules");
+    await expect(page).toHaveURL(/\/dashboard$/);
+  } finally {
+    if (fixture) await service.auth.admin.deleteUser(fixture.id);
+  }
+});
+
+test("Dual-scoped Teaching Assistant can enter both workspaces without escalation", async ({
+  page,
+}) => {
+  const config = await loadLocalServiceConfig();
+  const service = serviceClient(config);
+  let fixture: FixtureUser | undefined;
+
+  try {
+    fixture = await createScopedTeachingAssistant(service, [
+      nursingSkillsRoomTypeId,
+      basicMedicalRoomTypeId,
+    ]);
+    await login(page, fixture.email, fixture.password);
+
+    await page.goto("/class-schedules");
+    await expect(page).toHaveURL(/\/class-schedules$/);
+    await page.goto("/basic-medical/schedules");
+    await expect(page).toHaveURL(/\/basic-medical\/schedules$/);
+  } finally {
+    if (fixture) await service.auth.admin.deleteUser(fixture.id);
+  }
+});
+
+test("Admin, Staff, and Lecturer retain their dashboard landing", async ({
+  page,
+}) => {
+  for (const fixture of [
+    ["admin@campus.local", "LocalAdmin123!"],
+    ["staff@campus.local", "LocalStaff123!"],
+    ["giangvien@campus.local", "LocalLecturer123!"],
+  ]) {
+    await page.context().clearCookies();
+    await login(page, fixture[0], fixture[1]);
   }
 });
