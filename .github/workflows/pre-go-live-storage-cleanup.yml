@@ -1,0 +1,185 @@
+name: Pre-go-live empty Storage bucket cleanup
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: pre-go-live-storage-cleanup
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    name: Guarded empty Storage bucket cleanup
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PROJECT_REF: bwhiivfhezoozrzvchmm
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Verify main release identity and frozen PR2 exclusion
+        shell: bash
+        run: |
+          set -euo pipefail
+          readonly frozen_pr2_versions=(
+            "20260809120000" "20260809130000" "20260809140000"
+            "20260809150000" "20260809160000" "20260810000000"
+            "20260810010000" "20260810020000" "20260810030000"
+          )
+
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || {
+            echo "STORAGE_CLEANUP_RELEASE_IDENTITY_CHANGED"
+            exit 1
+          }
+          git diff --quiet && [[ -z "$(git status --porcelain)" ]] || {
+            echo "STORAGE_CLEANUP_RELEASE_IDENTITY_CHANGED"
+            exit 1
+          }
+          for version in "${frozen_pr2_versions[@]}"; do
+            if compgen -G "supabase/migrations/${version}_*.sql" > /dev/null; then
+              echo "STORAGE_CLEANUP_FROZEN_PR2_PRESENT"
+              exit 1
+            fi
+          done
+          echo "STORAGE_CLEANUP_RELEASE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Prove the fixed target project before linking
+        shell: bash
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          npx --no-install supabase projects list --output-format json > "$RUNNER_TEMP/projects-before-link.json"
+          PROJECT_REF="$PROJECT_REF" RUNNER_TEMP="$RUNNER_TEMP" node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const projects = JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP, 'projects-before-link.json'), 'utf8')).projects;
+          const matches = (projects ?? []).filter((project) => project.id === process.env.PROJECT_REF && project.ref === process.env.PROJECT_REF);
+          if (matches.length !== 1) throw new Error('STORAGE_CLEANUP_TARGET_PROJECT_UNPROVEN');
+          console.log(`Accessible fixed target project: ${process.env.PROJECT_REF}`);
+          NODE
+
+      - name: Link the fixed disposable-test project
+        shell: bash
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.PRODUCTION_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          npx --no-install supabase link --project-ref "$PROJECT_REF" --yes
+          npx --no-install supabase projects list --output-format json > "$RUNNER_TEMP/projects-after-link.json"
+          PROJECT_REF="$PROJECT_REF" RUNNER_TEMP="$RUNNER_TEMP" node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const projects = JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP, 'projects-after-link.json'), 'utf8')).projects;
+          const matches = (projects ?? []).filter((project) => project.id === process.env.PROJECT_REF && project.ref === process.env.PROJECT_REF && project.linked === true);
+          if (matches.length !== 1) throw new Error('STORAGE_CLEANUP_TARGET_LINK_UNPROVEN');
+          console.log(`Linked fixed target project: ${process.env.PROJECT_REF}`);
+          NODE
+
+      - name: Record read-only migration identity before Storage API use
+        shell: bash
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.PRODUCTION_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          npx --no-install supabase migration list --linked --output-format json > "$RUNNER_TEMP/migrations-before-storage-cleanup.json"
+          RUNNER_TEMP="$RUNNER_TEMP" node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const input = JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP, 'migrations-before-storage-cleanup.json'), 'utf8'));
+          const remote = [...new Set((input.migrations ?? []).map((row) => row.remote).filter((value) => /^\d{14}$/.test(value)))].sort();
+          console.log(`Pre-cleanup remote migration versions: ${remote.join(',') || 'NONE'}`);
+          NODE
+
+      - name: Prove the exact empty Storage state
+        shell: bash
+        env:
+          PRODUCTION_SUPABASE_SECRET_KEY: ${{ secrets.PRODUCTION_SUPABASE_SECRET_KEY }}
+        run: |
+          set -euo pipefail
+          PROJECT_REF="$PROJECT_REF" PRODUCTION_SUPABASE_SECRET_KEY="$PRODUCTION_SUPABASE_SECRET_KEY" node --input-type=module <<'NODE'
+          import { createClient } from '@supabase/supabase-js';
+
+          const projectRef = process.env.PROJECT_REF;
+          const secretKey = process.env.PRODUCTION_SUPABASE_SECRET_KEY;
+          if (projectRef !== 'bwhiivfhezoozrzvchmm') throw new Error('STORAGE_CLEANUP_TARGET_CHANGED');
+          if (!secretKey) throw new Error('STORAGE_CLEANUP_SECRET_UNAVAILABLE');
+
+          const client = createClient(`https://${projectRef}.supabase.co`, secretKey, {
+            auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
+          });
+          const { data: buckets, error: bucketError } = await client.storage.listBuckets();
+          if (bucketError || !Array.isArray(buckets)) throw new Error('STORAGE_CLEANUP_BUCKET_LIST_FAILED');
+          if (buckets.length !== 1) throw new Error('STORAGE_CLEANUP_BUCKET_COUNT_MISMATCH');
+          const { data: entries, error: objectError } = await client.storage.from(buckets[0].id).list('', { limit: 1, offset: 0 });
+          if (objectError || !Array.isArray(entries)) throw new Error('STORAGE_CLEANUP_OBJECT_LIST_FAILED');
+          if (entries.length !== 0) throw new Error('STORAGE_CLEANUP_OBJECTS_PRESENT');
+          console.log('Pre-cleanup Storage counts: buckets=1; objects=0');
+          NODE
+
+      - name: Delete only the confirmed empty Storage bucket
+        shell: bash
+        env:
+          PRODUCTION_SUPABASE_SECRET_KEY: ${{ secrets.PRODUCTION_SUPABASE_SECRET_KEY }}
+        run: |
+          set -euo pipefail
+          PROJECT_REF="$PROJECT_REF" PRODUCTION_SUPABASE_SECRET_KEY="$PRODUCTION_SUPABASE_SECRET_KEY" node --input-type=module <<'NODE'
+          import { createClient } from '@supabase/supabase-js';
+
+          const projectRef = process.env.PROJECT_REF;
+          const secretKey = process.env.PRODUCTION_SUPABASE_SECRET_KEY;
+          if (projectRef !== 'bwhiivfhezoozrzvchmm') throw new Error('STORAGE_CLEANUP_TARGET_CHANGED');
+          if (!secretKey) throw new Error('STORAGE_CLEANUP_SECRET_UNAVAILABLE');
+
+          const client = createClient(`https://${projectRef}.supabase.co`, secretKey, {
+            auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
+          });
+          const { data: buckets, error: bucketError } = await client.storage.listBuckets();
+          if (bucketError || !Array.isArray(buckets)) throw new Error('STORAGE_CLEANUP_BUCKET_LIST_FAILED');
+          if (buckets.length !== 1) throw new Error('STORAGE_CLEANUP_BUCKET_COUNT_MISMATCH');
+          const { data: entries, error: objectError } = await client.storage.from(buckets[0].id).list('', { limit: 1, offset: 0 });
+          if (objectError || !Array.isArray(entries)) throw new Error('STORAGE_CLEANUP_OBJECT_LIST_FAILED');
+          if (entries.length !== 0) throw new Error('STORAGE_CLEANUP_OBJECTS_PRESENT');
+          const { error: deleteError } = await client.storage.deleteBucket(buckets[0].id);
+          if (deleteError) throw new Error('STORAGE_CLEANUP_BUCKET_DELETE_FAILED');
+          console.log('Confirmed empty Storage bucket deleted.');
+          NODE
+
+      - name: Re-list Storage state after cleanup
+        shell: bash
+        env:
+          PRODUCTION_SUPABASE_SECRET_KEY: ${{ secrets.PRODUCTION_SUPABASE_SECRET_KEY }}
+        run: |
+          set -euo pipefail
+          PROJECT_REF="$PROJECT_REF" PRODUCTION_SUPABASE_SECRET_KEY="$PRODUCTION_SUPABASE_SECRET_KEY" node --input-type=module <<'NODE'
+          import { createClient } from '@supabase/supabase-js';
+
+          const projectRef = process.env.PROJECT_REF;
+          const secretKey = process.env.PRODUCTION_SUPABASE_SECRET_KEY;
+          if (projectRef !== 'bwhiivfhezoozrzvchmm') throw new Error('STORAGE_CLEANUP_TARGET_CHANGED');
+          if (!secretKey) throw new Error('STORAGE_CLEANUP_SECRET_UNAVAILABLE');
+
+          const client = createClient(`https://${projectRef}.supabase.co`, secretKey, {
+            auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
+          });
+          const { data: buckets, error: bucketError } = await client.storage.listBuckets();
+          if (bucketError || !Array.isArray(buckets)) throw new Error('STORAGE_CLEANUP_BUCKET_LIST_FAILED');
+          if (buckets.length !== 0) throw new Error('STORAGE_CLEANUP_POSTCONDITION_FAILED');
+          console.log('Post-cleanup Storage counts: buckets=0; objects=0');
+          NODE
