@@ -1,0 +1,249 @@
+name: Pre-go-live Auth delete read-only diagnostic
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: pre-go-live-auth-delete-readonly-diagnostic
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostic:
+    name: Read-only Auth delete diagnostic for the fixed disposable-test project
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PROJECT_REF: bwhiivfhezoozrzvchmm
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install the locked Supabase CLI
+        run: npm ci --ignore-scripts
+
+      - name: Verify main release identity and clean checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || {
+            echo "AUTH_DELETE_DIAGNOSTIC_RELEASE_IDENTITY_CHANGED"
+            exit 1
+          }
+          git diff --quiet && [[ -z "$(git status --porcelain)" ]] || {
+            echo "AUTH_DELETE_DIAGNOSTIC_CHECKOUT_DIRTY"
+            exit 1
+          }
+          echo "AUTH_DELETE_DIAGNOSTIC_RELEASE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Prove the fixed target project before linking
+        shell: bash
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          npx --no-install supabase projects list --output-format json > "$RUNNER_TEMP/projects-before-link.json"
+          PROJECT_REF="$PROJECT_REF" RUNNER_TEMP="$RUNNER_TEMP" node <<'NODE'
+          import { readFileSync } from 'node:fs';
+          import { join } from 'node:path';
+
+          const projects = JSON.parse(readFileSync(join(process.env.RUNNER_TEMP, 'projects-before-link.json'), 'utf8')).projects;
+          const matches = (projects ?? []).filter((project) => project.id === process.env.PROJECT_REF && project.ref === process.env.PROJECT_REF);
+          if (matches.length !== 1) throw new Error('AUTH_DELETE_DIAGNOSTIC_TARGET_UNPROVEN');
+          console.log(`Accessible fixed target project: ${process.env.PROJECT_REF}`);
+          NODE
+
+      - name: Link and reconfirm the fixed target project
+        shell: bash
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          npx --no-install supabase link --project-ref "$PROJECT_REF" --yes
+          npx --no-install supabase projects list --output-format json > "$RUNNER_TEMP/projects-after-link.json"
+          PROJECT_REF="$PROJECT_REF" RUNNER_TEMP="$RUNNER_TEMP" node <<'NODE'
+          import { readFileSync } from 'node:fs';
+          import { join } from 'node:path';
+
+          const projects = JSON.parse(readFileSync(join(process.env.RUNNER_TEMP, 'projects-after-link.json'), 'utf8')).projects;
+          const matches = (projects ?? []).filter((project) => project.id === process.env.PROJECT_REF && project.ref === process.env.PROJECT_REF && project.linked === true);
+          if (matches.length !== 1) throw new Error('AUTH_DELETE_DIAGNOSTIC_LINK_UNPROVEN');
+          console.log(`Linked fixed target project: ${process.env.PROJECT_REF}`);
+          NODE
+
+      - name: Count Auth Admin users through the read-only paginated API
+        shell: bash
+        env:
+          PRODUCTION_SUPABASE_SECRET_KEY: ${{ secrets.PRODUCTION_SUPABASE_SECRET_KEY }}
+        run: |
+          set -euo pipefail
+          PROJECT_REF="$PROJECT_REF" node <<'NODE'
+          import { createClient } from '@supabase/supabase-js';
+
+          const projectRef = 'bwhiivfhezoozrzvchmm';
+          if (process.env.PROJECT_REF !== projectRef) throw new Error('AUTH_DELETE_DIAGNOSTIC_TARGET_UNPROVEN');
+          const secret = process.env.PRODUCTION_SUPABASE_SECRET_KEY;
+          if (!secret) throw new Error('AUTH_DELETE_DIAGNOSTIC_SECRET_UNAVAILABLE');
+          const authAdmin = createClient(`https://${projectRef}.supabase.co`, secret, {
+            auth: { autoRefreshToken: false, persistSession: false },
+          });
+          let count = 0;
+          const perPage = 1000;
+          for (let page = 1; ; page += 1) {
+            const { data, error } = await authAdmin.auth.admin.listUsers({ page, perPage });
+            if (error) throw new Error('AUTH_DELETE_DIAGNOSTIC_LIST_FAILED');
+            const users = data?.users ?? [];
+            count += users.length;
+            if (users.length < perPage) break;
+          }
+          console.log(`AUTH_ADMIN_USER_COUNT=${count}`);
+          NODE
+
+      - name: Count linked database profiles and Storage rows
+        shell: bash
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.PRODUCTION_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/profile-storage-counts.sql" <<'SQL'
+          select jsonb_build_object(
+            'profiles_count', (select count(*) from public.profiles),
+            'storage_bucket_count', (select count(*) from storage.buckets),
+            'storage_object_count', (select count(*) from storage.objects)
+          ) as counts;
+          SQL
+          npx --no-install supabase db query --linked --output-format json --file "$RUNNER_TEMP/profile-storage-counts.sql" > "$RUNNER_TEMP/profile-storage-counts.json"
+          RUNNER_TEMP="$RUNNER_TEMP" node <<'NODE'
+          import { readFileSync } from 'node:fs';
+          import { join } from 'node:path';
+
+          const result = JSON.parse(readFileSync(join(process.env.RUNNER_TEMP, 'profile-storage-counts.json'), 'utf8'));
+          const raw = result?.[0]?.counts ?? result?.rows?.[0]?.counts ?? result?.counts;
+          const counts = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          const keys = ['profiles_count', 'storage_bucket_count', 'storage_object_count'];
+          if (!counts || keys.some((key) => !Number.isInteger(Number(counts[key])))) throw new Error('AUTH_DELETE_DIAGNOSTIC_COUNT_INVALID');
+          console.log(`PROFILES_COUNT=${Number(counts.profiles_count)}`);
+          console.log(`STORAGE_BUCKET_COUNT=${Number(counts.storage_bucket_count)}`);
+          console.log(`STORAGE_OBJECT_COUNT=${Number(counts.storage_object_count)}`);
+          NODE
+
+      - name: Catalog profile foreign keys and referenced row counts
+        shell: bash
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.PRODUCTION_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/profile-foreign-key-counts.sql" <<'SQL'
+          with profile_fk_constraints as (
+            select
+              child_namespace.nspname as table_schema,
+              child.relname as table_name,
+              child_column.attname as column_name,
+              constraint_catalog.conname as constraint_name,
+              case constraint_catalog.confdeltype
+                when 'r' then 'RESTRICT'
+                when 'a' then 'NO ACTION'
+                when 'c' then 'CASCADE'
+                when 'n' then 'SET NULL'
+                when 'd' then 'SET DEFAULT'
+              end as delete_action
+            from pg_constraint as constraint_catalog
+            join pg_class as child on child.oid = constraint_catalog.conrelid
+            join pg_namespace as child_namespace on child_namespace.oid = child.relnamespace
+            join pg_attribute as child_column
+              on child_column.attrelid = constraint_catalog.conrelid
+              and child_column.attnum = constraint_catalog.conkey[1]
+            join pg_attribute as profile_id
+              on profile_id.attrelid = constraint_catalog.confrelid
+              and profile_id.attnum = constraint_catalog.confkey[1]
+            where constraint_catalog.contype = 'f'
+              and constraint_catalog.confrelid = 'public.profiles'::regclass
+              and profile_id.attname = 'id'
+              and array_length(constraint_catalog.conkey, 1) = 1
+              and array_length(constraint_catalog.confkey, 1) = 1
+              and constraint_catalog.confdeltype in ('r', 'a')
+          )
+          select coalesce(
+            jsonb_agg(
+              jsonb_build_object(
+                'table_schema', table_schema,
+                'table_name', table_name,
+                'column_name', column_name,
+                'constraint_name', constraint_name,
+                'delete_action', delete_action,
+                'referenced_row_count', (
+                  xpath(
+                    '/table/row/count/text()',
+                    query_to_xml(
+                      format(
+                        'select count(*) as count from %I.%I where %I is not null',
+                        table_schema,
+                        table_name,
+                        column_name
+                      ),
+                      false,
+                      true,
+                      ''
+                    )
+                  )
+                )[1]::text::bigint
+              )
+            ),
+            '[]'::jsonb
+          ) as profile_foreign_keys
+          from profile_fk_constraints;
+          SQL
+          npx --no-install supabase db query --linked --output-format json --file "$RUNNER_TEMP/profile-foreign-key-counts.sql" > "$RUNNER_TEMP/profile-foreign-key-counts.json"
+          RUNNER_TEMP="$RUNNER_TEMP" node <<'NODE'
+          import { readFileSync } from 'node:fs';
+          import { join } from 'node:path';
+
+          const result = JSON.parse(readFileSync(join(process.env.RUNNER_TEMP, 'profile-foreign-key-counts.json'), 'utf8'));
+          const raw = result?.[0]?.profile_foreign_keys ?? result?.rows?.[0]?.profile_foreign_keys ?? result?.profile_foreign_keys;
+          const rows = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          if (!Array.isArray(rows)) throw new Error('AUTH_DELETE_DIAGNOSTIC_FK_CATALOG_INVALID');
+          for (const row of rows) {
+            const count = Number(row.referenced_row_count);
+            if (!Number.isInteger(count)) throw new Error('AUTH_DELETE_DIAGNOSTIC_FK_COUNT_INVALID');
+            console.log(`PROFILE_FK table=${row.table_schema}.${row.table_name}; column=${row.column_name}; constraint=${row.constraint_name}; delete_action=${row.delete_action}; referenced_row_count=${count}`);
+          }
+          NODE
+
+      - name: Attempt a sanitized read-only Management API log diagnostic
+        shell: bash
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          readonly window_start='2026-08-16T07:29:58Z'
+          readonly window_end='2026-08-16T07:30:02Z'
+          status_code="$(curl --silent --output "$RUNNER_TEMP/auth-delete-management-logs.json" --write-out '%{http_code}' --get "https://api.supabase.com/v1/projects/$PROJECT_REF/analytics/endpoints/logs" --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" --data-urlencode "start=$window_start" --data-urlencode "end=$window_end" || true)"
+          STATUS_CODE="$status_code" RUNNER_TEMP="$RUNNER_TEMP" node <<'NODE'
+          import { existsSync, readFileSync } from 'node:fs';
+          import { join } from 'node:path';
+
+          const allowedCategories = [
+            ['ROOT_ADMIN_PROFILE_DELETE_PROTECTED', /root[\s_-]*admin.*profile.*delete|profile.*root[\s_-]*admin.*delete/i],
+            ['FOREIGN_KEY_RESTRICTED', /foreign key|restrict|no action/i],
+            ['PERMISSION_DENIED', /permission denied|not authorized|forbidden|status[\s:=]*40[13]/i],
+          ];
+          const statusCode = process.env.STATUS_CODE;
+          const resultPath = join(process.env.RUNNER_TEMP, 'auth-delete-management-logs.json');
+          let detail = 'UNAVAILABLE';
+          if (statusCode === '200' && existsSync(resultPath)) {
+            const content = readFileSync(resultPath, 'utf8');
+            detail = allowedCategories.find(([, pattern]) => pattern.test(content))?.[0] ?? 'UNCLASSIFIED';
+          }
+          console.log(`LOG_ROOT_CAUSE_DETAIL=${detail}`);
+          NODE
