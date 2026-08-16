@@ -102,30 +102,93 @@ test("database and FK inspection are select-only and output only approved fields
   );
 });
 
-test("Management log diagnostic is read-only and never prints raw log data", () => {
+test("Management log diagnostic uses bounded, separate read-only source queries", () => {
   const logStep = workflow.match(
-    /      - name: Attempt a sanitized read-only Management API log diagnostic[\s\S]*$/,
+    /      - name: Query bounded Auth and Postgres Management logs with sanitized output only[\s\S]*$/,
   )?.[0];
   assert.ok(logStep);
   assert.match(
     logStep,
     /https:\/\/api\.supabase\.com\/v1\/projects\/\$PROJECT_REF\/analytics\/endpoints\/logs/,
   );
-  assert.match(logStep, /2026-08-16T07:29:58Z/);
-  assert.match(logStep, /2026-08-16T07:30:02Z/);
-  for (const category of [
+  assert.match(logStep, /2026-08-16T09:43:30Z/);
+  assert.match(logStep, /2026-08-16T09:45:00Z/);
+  assert.equal((logStep.match(/--request GET/g) ?? []).length, 2);
+  assert.equal((logStep.match(/--get/g) ?? []).length, 2);
+  assert.equal((logStep.match(/--data-urlencode "sql=\$/g) ?? []).length, 2);
+  assert.match(logStep, /source = 'auth_logs'/);
+  assert.match(logStep, /source = 'postgres_logs'/);
+  assert.match(logStep, /severity_text in \('ERROR', 'FATAL', 'PANIC'\)/);
+  assert.match(logStep, /supabase_auth_admin/);
+  assert.match(
+    logStep,
+    /log_attributes\['parsed\.sql_state_code'\] as sql_state_code/,
+  );
+  assert.match(
+    logStep,
+    /log_attributes\['parsed\.user_name'\] as parsed_user_name/,
+  );
+  assert.match(logStep, /--output "\$RUNNER_TEMP\/auth-logs\.json"/);
+  assert.match(logStep, /--output "\$RUNNER_TEMP\/postgres-logs\.json"/);
+  assert.doesNotMatch(
+    logStep,
+    /actions\/upload-artifact|\.zip|\.tar|artifact/i,
+  );
+  const uuidPatternSource = String.raw`\b[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\b`;
+  const uuidRedactor = new RegExp(uuidPatternSource, "gi");
+  assert.ok(
+    logStep.includes(
+      String.raw`.replace(/${uuidPatternSource}/gi, '[REDACTED_UUID]')`,
+    ),
+  );
+  for (const uuid of [
+    "00000000-0000-0000-0000-000000000000",
+    "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF",
+  ]) {
+    assert.equal(
+      uuid.replace(uuidRedactor, "[REDACTED_UUID]"),
+      "[REDACTED_UUID]",
+    );
+  }
+  for (const marker of [
+    "[REDACTED_UUID]",
+    "[REDACTED_EMAIL]",
+    "[REDACTED_JWT]",
+    "[REDACTED_TOKEN]",
+    "[REDACTED_API_KEY]",
+    "[REDACTED_USER_ID]",
     "ROOT_ADMIN_PROFILE_DELETE_PROTECTED",
     "FOREIGN_KEY_RESTRICTED",
     "PERMISSION_DENIED",
-    "UNCLASSIFIED",
     "UNAVAILABLE",
   ]) {
-    assert.match(logStep, new RegExp(category));
+    assert.match(
+      logStep,
+      new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+    );
   }
-  assert.match(logStep, /LOG_ROOT_CAUSE_DETAIL=\$\{detail\}/);
+  assert.match(logStep, /LOG_ROOT_CAUSE_DETAIL=\$\{classify\(/);
+  assert.match(
+    logStep,
+    /const authEvidence = redact\(firstAuth\.event_message\)/,
+  );
+  assert.match(
+    logStep,
+    /const postgresEvidence = redact\(firstPostgres\.event_message\)/,
+  );
+  assert.match(
+    logStep,
+    /const sqlState = redact\(firstPostgres\.sql_state_code\)/,
+  );
+  assert.match(logStep, /AUTH_LOG_DIAGNOSTIC http_status=\$\{redact\(/);
+  assert.match(logStep, /POSTGRES_LOG_DIAGNOSTIC http_status=\$\{redact\(/);
+  assert.match(
+    logStep,
+    /SUPABASE_ACCESS_TOKEN: \$\{\{ secrets\.SUPABASE_ACCESS_TOKEN \}\}/,
+  );
   assert.doesNotMatch(
     logStep,
-    /console\.log\([^)]*(?:content|resultPath|statusCode|error|message|response|body)/i,
+    /console\.log\([^)]*(?:content|resultPath|error|response|body|parsed_user_name)/i,
   );
   assert.doesNotMatch(
     logStep,
@@ -157,6 +220,6 @@ test("workflow has no mutation, reset, deploy, or old-rail path", () => {
   }
   assert.doesNotMatch(
     workflow,
-    /(?:delete from|create table|drop table|alter table)/i,
+    /\b(?:insert\s+into|update\s+[\w."]+|delete\s+from|merge\s+into|truncate\s+table|drop\s+table|alter\s+table|create\s+table)\b/i,
   );
 });
