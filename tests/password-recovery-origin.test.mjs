@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   passwordRecoveryRedirectUrl,
@@ -101,4 +102,15 @@ test("password-state policy allows only a verified boolean false and blocks forc
       /PASSWORD_STATE_UNAVAILABLE/,
     );
   }
+});
+
+test("viewer resolves password state from its authoritative profile read", async () => {
+  const source = await readFile(
+    new URL("../lib/viewer.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(source, /can_manage_email_notifications, must_change_password/);
+  assert.match(source, /resolvePasswordChangeState\(profileResult\)/);
+  assert.doesNotMatch(source, /redirectIfPasswordChangeRequired/);
 });

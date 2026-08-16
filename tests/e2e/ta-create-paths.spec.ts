@@ -420,6 +420,12 @@ test("Basic Medical-only Teaching Assistant lands in Basic Medical and cannot en
       fixture.password,
       /\/basic-medical\/schedules$/,
     );
+    await expect(
+      page.getByRole("heading", {
+        name: "\u004c\u1ecbch Y c\u01a1 s\u1edf",
+        exact: true,
+      }),
+    ).toBeVisible();
 
     await page.goto("/schedule-entry/new");
     await expect(page).toHaveURL(/\/basic-medical\/schedules$/);
@@ -476,6 +482,60 @@ test("Dual-scoped Teaching Assistant can enter both workspaces without escalatio
     await expect(page).toHaveURL(/\/class-schedules$/);
     await page.goto("/basic-medical/schedules");
     await expect(page).toHaveURL(/\/basic-medical\/schedules$/);
+  } finally {
+    if (fixture) await service.auth.admin.deleteUser(fixture.id);
+  }
+});
+
+test("Teaching Assistant with a forced password change cannot enter either workspace", async ({
+  page,
+}) => {
+  const config = await loadLocalServiceConfig();
+  const service = serviceClient(config);
+  let fixture: FixtureUser | undefined;
+
+  try {
+    fixture = await createScopedTeachingAssistant(service, [
+      basicMedicalRoomTypeId,
+    ]);
+    expect(
+      (
+        await service
+          .from("profiles")
+          .update({ must_change_password: true })
+          .eq("id", fixture.id)
+      ).error,
+    ).toBeNull();
+
+    await login(page, fixture.email, fixture.password, /\/change-password$/);
+    await page.goto("/basic-medical/schedules");
+    await expect(page).toHaveURL(/\/change-password$/);
+  } finally {
+    if (fixture) await service.auth.admin.deleteUser(fixture.id);
+  }
+});
+
+test("Teaching Assistant with unavailable password state fails closed after an authenticated session", async ({
+  page,
+}) => {
+  const config = await loadLocalServiceConfig();
+  const service = serviceClient(config);
+  let fixture: FixtureUser | undefined;
+
+  try {
+    fixture = await createScopedTeachingAssistant(service, [
+      basicMedicalRoomTypeId,
+    ]);
+    await login(
+      page,
+      fixture.email,
+      fixture.password,
+      /\/basic-medical\/schedules$/,
+    );
+    localSql(`delete from public.profiles where id = '${fixture.id}';`);
+
+    await page.goto("/basic-medical/schedules");
+    await expect(page).toHaveURL(/\/login\?error=password-state$/);
   } finally {
     if (fixture) await service.auth.admin.deleteUser(fixture.id);
   }
