@@ -1,0 +1,249 @@
+name: Pre-go-live clean reset
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: pre-go-live-clean-reset
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  reset:
+    name: Guarded clean reset of the disposable test project
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PROJECT_REF: bwhiivfhezoozrzvchmm
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.PRODUCTION_DB_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install the locked Supabase CLI
+        run: npm ci --ignore-scripts
+
+      - name: Verify main release identity and canonical migration set
+        shell: bash
+        run: |
+          set -euo pipefail
+          readonly target_versions=("20260813160000" "20260813161000" "20260815131138")
+          readonly target_files=(
+            "20260813160000_operations_integrity_master_batch.sql"
+            "20260813161000_catalog_reconciliation_preview_apply.sql"
+            "20260815131138_grant_basic_medical_confirmation_signer_snapshot.sql"
+          )
+          readonly target_blobs=(
+            "0b2fdf2608e523aed26416b290d8120e5f858e37"
+            "49b9d767dd8f403dcfef6686ff1fe59d5ca8848d"
+            "d0f8cb795af46ab676238ab74099f3008f7baf22"
+          )
+          readonly forbidden_versions=(
+            "20260809120000" "20260809130000" "20260809140000"
+            "20260809150000" "20260809160000" "20260810000000"
+            "20260810010000" "20260810020000" "20260810030000"
+            "20260815031151"
+          )
+
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || {
+            echo "RESET_RELEASE_IDENTITY_CHANGED: reset may run only from main."
+            exit 1
+          }
+          git diff --quiet && [[ -z "$(git status --porcelain)" ]] || {
+            echo "RESET_RELEASE_IDENTITY_CHANGED: checkout is not clean."
+            exit 1
+          }
+          for index in "${!target_files[@]}"; do
+            file="supabase/migrations/${target_files[$index]}"
+            [[ -f "$file" ]] || {
+              echo "RESET_RELEASE_IDENTITY_CHANGED: required migration is missing."
+              exit 1
+            }
+            [[ "$(git hash-object "$file")" == "${target_blobs[$index]}" ]] || {
+              echo "RESET_RELEASE_IDENTITY_CHANGED: required migration content differs."
+              exit 1
+            }
+          done
+          for version in "${forbidden_versions[@]}"; do
+            if compgen -G "supabase/migrations/${version}_*.sql" > /dev/null; then
+              echo "RESET_RELEASE_IDENTITY_CHANGED: forbidden legacy or frozen migration is present."
+              exit 1
+            fi
+          done
+          echo "RESET_RELEASE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Prove the fixed target project before linking
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --no-install supabase projects list --output-format json > "$RUNNER_TEMP/projects-before-link.json"
+          PROJECT_REF="$PROJECT_REF" RUNNER_TEMP="$RUNNER_TEMP" node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const projects = JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP, 'projects-before-link.json'), 'utf8')).projects;
+          const matches = (projects ?? []).filter((project) => project.id === process.env.PROJECT_REF && project.ref === process.env.PROJECT_REF);
+          if (matches.length !== 1) throw new Error('RESET_TARGET_PROJECT_UNPROVEN');
+          console.log(`Accessible fixed target project: ${process.env.PROJECT_REF}`);
+          NODE
+
+      - name: Link the fixed disposable-test project
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --no-install supabase link --project-ref "$PROJECT_REF" --yes
+          npx --no-install supabase projects list --output-format json > "$RUNNER_TEMP/projects-after-link.json"
+          PROJECT_REF="$PROJECT_REF" RUNNER_TEMP="$RUNNER_TEMP" node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const projects = JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP, 'projects-after-link.json'), 'utf8')).projects;
+          const matches = (projects ?? []).filter((project) => project.id === process.env.PROJECT_REF && project.ref === process.env.PROJECT_REF && project.linked === true);
+          if (matches.length !== 1) throw new Error('RESET_TARGET_LINK_UNPROVEN');
+          console.log(`Linked fixed target project: ${process.env.PROJECT_REF}`);
+          NODE
+
+      - name: Record safe pre-reset migration identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --no-install supabase migration list --linked --output-format json > "$RUNNER_TEMP/migrations-before.json"
+          RUNNER_TEMP="$RUNNER_TEMP" node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const input = JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP, 'migrations-before.json'), 'utf8'));
+          const versions = (key) => [...new Set((input.migrations ?? []).map((row) => row[key]).filter((value) => /^\d{14}$/.test(value)))].sort();
+          const report = { local: versions('local'), remote: versions('remote') };
+          fs.writeFileSync(path.join(process.env.RUNNER_TEMP, 'migrations-before-report.json'), JSON.stringify(report));
+          console.log(`Pre-reset remote migration versions: ${report.remote.join(',') || 'NONE'}`);
+          console.log(`Pre-reset local migration versions: ${report.local.join(',') || 'NONE'}`);
+          NODE
+
+      - name: Record safe pre-reset counts and block storage cleanup ambiguity
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/pre-reset-observation.sql" <<'SQL'
+          select jsonb_build_object(
+            'public_table_count', (select count(*) from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE'),
+            'auth_users_count', (select count(*) from auth.users),
+            'profiles_count', (select count(*) from public.profiles),
+            'storage_bucket_count', (select count(*) from storage.buckets),
+            'storage_object_count', (select count(*) from storage.objects)
+          ) as observation;
+          SQL
+          npx --no-install supabase db query --linked --output-format json --file "$RUNNER_TEMP/pre-reset-observation.sql" > "$RUNNER_TEMP/pre-reset-observation.json"
+          RUNNER_TEMP="$RUNNER_TEMP" node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const result = JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP, 'pre-reset-observation.json'), 'utf8'));
+          const raw = result?.[0]?.observation ?? result?.rows?.[0]?.observation ?? result?.observation;
+          const observation = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          const keys = ['public_table_count', 'auth_users_count', 'profiles_count', 'storage_bucket_count', 'storage_object_count'];
+          if (!observation || keys.some((key) => !Number.isInteger(Number(observation[key])))) throw new Error('RESET_PRE_OBSERVATION_INVALID');
+          for (const key of keys) observation[key] = Number(observation[key]);
+          fs.writeFileSync(path.join(process.env.RUNNER_TEMP, 'pre-reset-observation-report.json'), JSON.stringify(observation));
+          console.log(`Pre-reset counts: public_tables=${observation.public_table_count}; auth_users=${observation.auth_users_count}; profiles=${observation.profiles_count}; storage_buckets=${observation.storage_bucket_count}; storage_objects=${observation.storage_object_count}`);
+          if (observation.storage_bucket_count !== 0 || observation.storage_object_count !== 0) throw new Error('STORAGE_CLEANUP_REVIEW_REQUIRED');
+          NODE
+
+      - name: Reset the linked disposable-test database without seed data
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --no-install supabase db reset --linked --no-seed
+
+      - name: Verify canonical migration history after reset
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --no-install supabase migration list --linked --output-format json > "$RUNNER_TEMP/migrations-after.json"
+          RUNNER_TEMP="$RUNNER_TEMP" node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const input = JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP, 'migrations-after.json'), 'utf8'));
+          const versions = (key) => [...new Set((input.migrations ?? []).map((row) => row[key]).filter((value) => /^\d{14}$/.test(value)))].sort();
+          const local = versions('local');
+          const remote = versions('remote');
+          const targets = ['20260813160000', '20260813161000', '20260815131138'];
+          const forbidden = ['20260809120000', '20260809130000', '20260809140000', '20260809150000', '20260809160000', '20260810000000', '20260810010000', '20260810020000', '20260810030000', '20260815031151'];
+          if (JSON.stringify(remote) !== JSON.stringify(local)) throw new Error('POST_RESET_MIGRATION_HISTORY_MISMATCH');
+          if (targets.some((version) => !remote.includes(version))) throw new Error('POST_RESET_REQUIRED_MIGRATION_MISSING');
+          if (forbidden.some((version) => remote.includes(version))) throw new Error('POST_RESET_FORBIDDEN_MIGRATION_PRESENT');
+          fs.writeFileSync(path.join(process.env.RUNNER_TEMP, 'migrations-after-report.json'), JSON.stringify({ local, remote }));
+          console.log(`Post-reset canonical migration versions: ${remote.join(',')}`);
+          NODE
+
+      - name: Verify signer security, core structures, seed absence, and auth/profile consistency
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/post-reset-verification.sql" <<'SQL'
+          select jsonb_build_object(
+            'authenticated_signer_name_snapshot_select', has_column_privilege('authenticated', 'public.basic_medical_session_confirmations', 'signer_name_snapshot', 'select'),
+            'authenticated_signature_data_select', has_column_privilege('authenticated', 'public.basic_medical_session_confirmations', 'signature_data', 'select'),
+            'authenticated_table_select', has_table_privilege('authenticated', 'public.basic_medical_session_confirmations', 'select'),
+            'anon_signer_name_snapshot_select', has_column_privilege('anon', 'public.basic_medical_session_confirmations', 'signer_name_snapshot', 'select'),
+            'rls_enabled', coalesce((select c.relrowsecurity from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relname = 'basic_medical_session_confirmations'), false),
+            'system_security_principals_exists', to_regclass('public.system_security_principals') is not null,
+            'personnel_authority_function_exists', to_regprocedure('public.get_personnel_authority_context()') is not null,
+            'catalog_reconciliation_function_exists', to_regprocedure('public.preview_catalog_reconciliation(text,jsonb)') is not null,
+            'basic_medical_confirmation_exists', to_regclass('public.basic_medical_session_confirmations') is not null,
+            'basic_medical_confirmation_function_exists', to_regprocedure('public.confirm_basic_medical_session(uuid,text,jsonb)') is not null,
+            'seed_course_count', (select count(*) from public.courses where id = '10000000-0000-0000-0000-000000000001'),
+            'seed_room_count', (select count(*) from public.rooms where id = '20000000-0000-0000-0000-000000000001'),
+            'seed_shift_template_count', (select count(*) from public.shift_templates where id = '30000000-0000-0000-0000-000000000001'),
+            'auth_users_count', (select count(*) from auth.users),
+            'profiles_count', (select count(*) from public.profiles),
+            'linked_profiles_count', (select count(*) from public.profiles profiles join auth.users users on users.id = profiles.id),
+            'orphan_profiles_count', (select count(*) from public.profiles profiles left join auth.users users on users.id = profiles.id where users.id is null),
+            'missing_profile_auth_users_count', (select count(*) from auth.users users left join public.profiles profiles on profiles.id = users.id where profiles.id is null)
+          ) as verification;
+          SQL
+          npx --no-install supabase db query --linked --output-format json --file "$RUNNER_TEMP/post-reset-verification.sql" > "$RUNNER_TEMP/post-reset-verification.json"
+          RUNNER_TEMP="$RUNNER_TEMP" node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const result = JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP, 'post-reset-verification.json'), 'utf8'));
+          const raw = result?.[0]?.verification ?? result?.rows?.[0]?.verification ?? result?.verification;
+          const verification = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          const expected = {
+            authenticated_signer_name_snapshot_select: true,
+            authenticated_signature_data_select: false,
+            authenticated_table_select: false,
+            anon_signer_name_snapshot_select: false,
+            rls_enabled: true,
+            system_security_principals_exists: true,
+            personnel_authority_function_exists: true,
+            catalog_reconciliation_function_exists: true,
+            basic_medical_confirmation_exists: true,
+            basic_medical_confirmation_function_exists: true,
+          };
+          if (!verification || Object.entries(expected).some(([key, value]) => verification[key] !== value)) throw new Error('POST_RESET_SECURITY_OR_STRUCTURE_FAILED');
+          for (const key of ['seed_course_count', 'seed_room_count', 'seed_shift_template_count', 'auth_users_count', 'profiles_count', 'linked_profiles_count', 'orphan_profiles_count', 'missing_profile_auth_users_count']) verification[key] = Number(verification[key]);
+          if (verification.seed_course_count !== 0 || verification.seed_room_count !== 0 || verification.seed_shift_template_count !== 0) throw new Error('POST_RESET_SEED_PRESENT');
+          if (verification.profiles_count !== verification.linked_profiles_count + verification.orphan_profiles_count || verification.auth_users_count !== verification.linked_profiles_count + verification.missing_profile_auth_users_count || verification.orphan_profiles_count !== 0 || verification.missing_profile_auth_users_count !== 0) throw new Error('POST_RESET_AUTH_PROFILE_INCONSISTENT');
+          fs.writeFileSync(path.join(process.env.RUNNER_TEMP, 'post-reset-verification-report.json'), JSON.stringify(verification));
+          console.log(`Post-reset Auth/profile counts: auth_users=${verification.auth_users_count}; profiles=${verification.profiles_count}; missing_profiles=${verification.missing_profile_auth_users_count}; orphan_profiles=${verification.orphan_profiles_count}`);
+          console.log('Post-reset signer security, structures, and no-seed verification: PASS');
+          NODE
+
+      - name: Upload the safe reset verification report
+        uses: actions/upload-artifact@v4
+        with:
+          name: pre-go-live-clean-reset-report
+          path: |
+            ${{ runner.temp }}/migrations-before-report.json
+            ${{ runner.temp }}/pre-reset-observation-report.json
+            ${{ runner.temp }}/migrations-after-report.json
+            ${{ runner.temp }}/post-reset-verification-report.json
+          if-no-files-found: error
+          retention-days: 14
