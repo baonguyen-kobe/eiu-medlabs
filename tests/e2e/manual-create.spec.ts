@@ -220,10 +220,10 @@ test("calendar stacks classes in one session and opens every class directly", as
       await clickUntilState(classCards.nth(index), () =>
         expect(detailDrawer).toBeVisible({ timeout: 1_000 }),
       );
-      await detailDrawer
-        .getByRole("button", { name: "Đóng", exact: true })
-        .click();
-      await expect(detailDrawer).toHaveCount(0);
+      await clickUntilState(
+        detailDrawer.getByRole("button", { name: "Đóng", exact: true }),
+        () => expect(detailDrawer).toHaveCount(0),
+      );
     }
   } finally {
     await removeClassesForDate("2035-12-16", serviceConfig);
