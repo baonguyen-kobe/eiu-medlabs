@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createHmac, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomUUID } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   assertEmailOutboxOperationSucceeded,
@@ -9,6 +9,7 @@ import {
 } from "@/lib/email-outbox-contract";
 import { renderEmailV2 } from "@/lib/email-template-v2";
 import {
+  buildEmailWebhookClientDiagnostic,
   canonicalEmailWebhookPayload,
   emailFailureStatus,
 } from "@/lib/email-webhook-signature";
@@ -783,13 +784,16 @@ async function deliverNotification(notification: EmailNotification) {
       text: deliveryText,
       senderName,
     };
+    const canonicalPayload = canonicalEmailWebhookPayload(webhookPayload);
     const signature = createHmac("sha256", appsScriptSecret)
-      .update(canonicalEmailWebhookPayload(webhookPayload))
+      .update(canonicalPayload)
       .digest("hex");
+    const requestBody = JSON.stringify({ ...webhookPayload, signature });
+
     const response = await fetch(appsScriptUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...webhookPayload, signature }),
+      body: requestBody,
       signal: AbortSignal.timeout(60_000),
     });
 
@@ -798,6 +802,21 @@ async function deliverNotification(notification: EmailNotification) {
       messageId?: string;
       error?: string;
     };
+    if (result.error === "AUTH_SIGNATURE_MISMATCH") {
+      const diagnostic = buildEmailWebhookClientDiagnostic({
+        secret: appsScriptSecret,
+        url: appsScriptUrl,
+        canonicalPayload,
+        signature,
+        requestBody,
+        payload: webhookPayload,
+        sha256Hex16: (input: string) =>
+          createHash("sha256").update(input, "utf8").digest("hex").slice(0, 16),
+      });
+      console.warn(
+        "EMAIL_HMAC_CLIENT_DIAGNOSTIC: " + JSON.stringify(diagnostic),
+      );
+    }
     if (!response.ok || !result.ok) {
       throw new Error(result.error ?? `APPS_SCRIPT_EMAIL_${response.status}`);
     }
