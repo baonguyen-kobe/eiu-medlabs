@@ -68,10 +68,18 @@ test("Basic Medical Lecturer Edit: Migration and declarative schema are valid an
   );
   assert.match(migration, /raise exception 'INVALID_LECTURER'/);
 
-  // Check mutation flag and updates
+  // Check mutation flag, preserve confirmation flag, and updates
   assert.match(
     migration,
     /set_config\('app\.basic_medical_registration_mutation', 'true', true\)/,
+  );
+  assert.match(
+    migration,
+    /set_config\('app\.basic_medical_preserve_confirmation_lecturer_change', 'true', true\)/,
+  );
+  assert.match(
+    migration,
+    /set_config\('app\.basic_medical_preserve_confirmation_lecturer_change', 'false', true\)/,
   );
   assert.match(
     migration,
@@ -82,14 +90,21 @@ test("Basic Medical Lecturer Edit: Migration and declarative schema are valid an
     /update public\.class_schedules[\s\S]*set lecturer_id = target_teaching_lecturer_id[\s\S]*where id = session_row\.class_schedule_id/,
   );
 
+  // Check trigger function redefinition with transaction-scoped preservation
+  assert.match(
+    migration,
+    /create or replace function private\.invalidate_basic_medical_confirmation_on_schedule_change/,
+  );
+  assert.match(
+    migration,
+    /current_setting\('app\.basic_medical_preserve_confirmation_lecturer_change', true\)/,
+  );
+
   // Check audit log insertion
   assert.match(
     migration,
     /insert into public\.audit_logs[\s\S]*basic_medical_session\.update_teaching_lecturer/,
   );
-
-  // Check that confirmations table is NOT touched
-  assert.doesNotMatch(migration, /basic_medical_session_confirmations/);
 
   // Check grants
   assert.match(
@@ -101,7 +116,7 @@ test("Basic Medical Lecturer Edit: Migration and declarative schema are valid an
     /revoke all on function public\.update_basic_medical_session_teaching_lecturer\(uuid, uuid\) from public, anon/,
   );
 
-  // Ensure declarative schema matches migration logic
+  // Ensure declarative schema matches migration logic exactly
   assert.equal(migration.trim(), schema.trim());
 });
 

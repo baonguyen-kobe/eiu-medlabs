@@ -2,6 +2,61 @@
 -- on an existing session without recreating the registration and without
 -- invalidating existing confirmations or signatures.
 
+create or replace function private.invalidate_basic_medical_confirmation_on_schedule_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  preserve_confirmation_context boolean;
+begin
+  -- Room, date, start_time, and end_time changes ALWAYS invalidate active confirmations.
+  if old.room_id is distinct from new.room_id
+    or old.schedule_date is distinct from new.schedule_date
+    or old.start_time is distinct from new.start_time
+    or old.end_time is distinct from new.end_time then
+    update public.basic_medical_session_confirmations as confirmations
+    set invalidated_at = coalesce(confirmations.invalidated_at, clock_timestamp()),
+        invalidated_reason = coalesce(
+          confirmations.invalidated_reason,
+          'Thông tin phòng, thời gian hoặc Giảng viên giảng dạy/hướng dẫn đã thay đổi.'
+        )
+    from public.basic_medical_registration_sessions as sessions
+    where sessions.class_schedule_id = new.id
+      and confirmations.session_id = sessions.id
+      and confirmations.invalidated_at is null;
+    return new;
+  end if;
+
+  -- Lecturer-only change invalidates unless explicitly executed under the dedicated
+  -- preserve-confirmation context from update_basic_medical_session_teaching_lecturer.
+  if old.lecturer_id is distinct from new.lecturer_id then
+    preserve_confirmation_context := coalesce(
+      nullif(current_setting('app.basic_medical_preserve_confirmation_lecturer_change', true), ''),
+      'false'
+    )::boolean;
+
+    if not preserve_confirmation_context then
+      update public.basic_medical_session_confirmations as confirmations
+      set invalidated_at = coalesce(confirmations.invalidated_at, clock_timestamp()),
+          invalidated_reason = coalesce(
+            confirmations.invalidated_reason,
+            'Thông tin phòng, thời gian hoặc Giảng viên giảng dạy/hướng dẫn đã thay đổi.'
+          )
+      from public.basic_medical_registration_sessions as sessions
+      where sessions.class_schedule_id = new.id
+        and confirmations.session_id = sessions.id
+        and confirmations.invalidated_at is null;
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+revoke all on function private.invalidate_basic_medical_confirmation_on_schedule_change() from public, anon, authenticated;
+
 create or replace function public.update_basic_medical_session_teaching_lecturer(
   target_session_id uuid,
   target_teaching_lecturer_id uuid
@@ -74,6 +129,7 @@ begin
 
   if session_row.teaching_lecturer_id is distinct from target_teaching_lecturer_id then
     perform set_config('app.basic_medical_registration_mutation', 'true', true);
+    perform set_config('app.basic_medical_preserve_confirmation_lecturer_change', 'true', true);
 
     update public.basic_medical_registration_sessions
     set teaching_lecturer_id = target_teaching_lecturer_id
@@ -82,6 +138,8 @@ begin
     update public.class_schedules
     set lecturer_id = target_teaching_lecturer_id
     where id = session_row.class_schedule_id;
+
+    perform set_config('app.basic_medical_preserve_confirmation_lecturer_change', 'false', true);
 
     insert into public.audit_logs (
       actor_id,
