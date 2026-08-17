@@ -37,11 +37,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          readonly target_versions=("20260817170000")
+          readonly target_versions=("20260815131138" "20260817170000")
           readonly target_files=(
+            "20260815131138_grant_basic_medical_confirmation_signer_snapshot.sql"
             "20260817170000_update_basic_medical_session_teaching_lecturer.sql"
           )
           readonly target_blobs=(
+            "d0f8cb795af46ab676238ab74099f3008f7baf22"
             "ac0b51f0a491e3364cc6677957ea4f9cae7a16c9"
           )
           readonly forbidden_versions=(
@@ -79,7 +81,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          readonly target_versions=("20260817170000")
+          readonly target_versions=("20260815131138" "20260817170000")
           readonly forbidden_versions=(
             "20260809120000" "20260809130000" "20260809140000"
             "20260809150000" "20260809160000" "20260810000000"
@@ -114,7 +116,7 @@ jobs:
             fi
           done
           if [[ "$(printf '%s\n' "${remote_versions[@]}")" != "$(printf '%s\n' "${expected_remote_before[@]}")" ]]; then
-            echo "MIGRATION_ALLOWLIST_MISMATCH: remote history is not exactly the reviewed baseline through 20260815131138."
+            echo "MIGRATION_ALLOWLIST_MISMATCH: remote history is not exactly the reviewed baseline through 20260813161000."
             exit 1
           fi
           printf '%s\n' "${remote_versions[@]}" > "$RUNNER_TEMP/pr54-remote-before.txt"
@@ -153,7 +155,7 @@ jobs:
             echo "POST_PUSH_MIGRATION_VERIFICATION_FAILED: remote history differs from the exact reviewed local history."
             exit 1
           fi
-          for version in 20260817170000; do
+          for version in 20260815131138 20260817170000; do
             if ! printf '%s\n' "${remote_versions[@]}" | grep -Fxq "$version"; then
               echo "POST_PUSH_MIGRATION_VERIFICATION_FAILED: reviewed migration is missing remotely."
               exit 1
