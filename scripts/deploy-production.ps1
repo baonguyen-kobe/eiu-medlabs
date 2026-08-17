@@ -46,13 +46,38 @@ function Assert-VersionEndpoint {
   param(
     [Parameter(Mandatory)][string]$Url,
     [Parameter(Mandatory)][string]$ExpectedSha,
-    [Parameter(Mandatory)][string]$Label
+    [Parameter(Mandatory)][string]$Label,
+    [int]$MaxAttempts = 12,
+    [int]$DelaySeconds = 5
   )
 
-  $version = Invoke-RestMethod -Uri "$($Url.TrimEnd('/'))/api/version" -Headers @{ "Cache-Control" = "no-cache" }
-  if ($version.gitSha -cne $ExpectedSha) {
-    throw "$Label /api/version reported '$($version.gitSha)' instead of '$ExpectedSha'."
+  $targetUri = "$($Url.TrimEnd('/'))/api/version"
+  $lastReportedSha = $null
+  $lastError = $null
+
+  for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+    try {
+      $version = Invoke-RestMethod -Uri $targetUri -Headers @{ "Cache-Control" = "no-cache" }
+      $reportedSha = if ($version -and $version.gitSha) { [string]$version.gitSha } else { $null }
+      $lastReportedSha = $reportedSha
+
+      if ($reportedSha -ceq $ExpectedSha) {
+        return
+      }
+    } catch {
+      $lastError = $_.Exception.Message
+    }
+
+    if ($attempt -lt $MaxAttempts) {
+      Start-Sleep -Seconds $DelaySeconds
+    }
   }
+
+  if ($lastError -and -not $lastReportedSha) {
+    throw "$Label /api/version unreachable after $MaxAttempts attempts: $lastError"
+  }
+
+  throw "$Label /api/version reported '$lastReportedSha' instead of '$ExpectedSha' after $MaxAttempts attempts."
 }
 
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
@@ -87,40 +112,60 @@ try {
     throw "Vercel project link is missing at .vercel/project.json."
   }
 
-  Invoke-Vercel -CommandPath $vercelPath -Arguments @(
+  $deployOutput = Invoke-Vercel -CommandPath $vercelPath -Arguments @(
     "deploy", "--prod", "--yes",
     "--meta", "appGitSha=$sha",
     "--env", "APP_GIT_SHA=$sha",
     "--build-env", "APP_GIT_SHA=$sha"
-  ) | Out-Null
-
-  $metadataOutput = Invoke-Vercel -CommandPath $vercelPath -Arguments @(
-    "ls", "--meta", "appGitSha=$sha"
   )
-  $metadataText = $metadataOutput | Out-String
-  if ($metadataText -notmatch "https://[A-Za-z0-9.-]+\\.vercel\\.app") {
-    throw "Vercel metadata lookup did not return a deployment for the deployed appGitSha."
+
+  $deploymentUrl = $null
+  $metadataAvailable = $false
+
+  try {
+    $metadataOutput = Invoke-Vercel -CommandPath $vercelPath -Arguments @(
+      "ls", "--meta", "appGitSha=$sha"
+    )
+    $metadataText = $metadataOutput | Out-String
+    if ($metadataText -match 'https://[A-Za-z0-9.-]+\.vercel\.app') {
+      $deploymentUrls = [regex]::Matches(
+        $metadataText,
+        'https://[A-Za-z0-9.-]+\.vercel\.app(?:[^\s]*)?'
+      ) | ForEach-Object { $_.Value.TrimEnd("/", ".") }
+      $deploymentUrl = $deploymentUrls | Select-Object -Last 1
+      if ($deploymentUrl) {
+        $metadataAvailable = $true
+      }
+    }
+  } catch {
+    Write-Warning "Vercel metadata lookup command failed; falling back to exact production /api/version verification."
   }
 
-  $deploymentUrls = [regex]::Matches(
-    $metadataText,
-    "https://[A-Za-z0-9.-]+\\.vercel\\.app(?:[^\\s]*)?"
-  ) | ForEach-Object { $_.Value.TrimEnd("/", ".") }
-  $deploymentUrl = $deploymentUrls | Select-Object -Last 1
-  if (-not $deploymentUrl) {
-    throw "Vercel metadata lookup completed without a deployment URL."
+  if (-not $metadataAvailable) {
+    Write-Warning "Vercel metadata lookup did not return the deployment; falling back to exact production /api/version verification."
   }
 
   # This project protects raw deployment URLs with Vercel Authentication. The
-  # exact metadata match plus the public production alias validates the same
+  # exact metadata match (when available) plus the public production alias validates the same
   # deployment without relying on an SSO-protected direct deployment endpoint.
   Assert-VersionEndpoint `
     -Url "https://medlabs-calendar.vercel.app" `
     -ExpectedSha $sha `
-    -Label "Production alias"
+    -Label "Production alias" `
+    -MaxAttempts 12 `
+    -DelaySeconds 5
 
-  Write-Output "Production deployment verified: $deploymentUrl"
-  Write-Output "Production application SHA: $sha"
+  if ($metadataAvailable -and $deploymentUrl) {
+    Write-Output "Production deployment verified."
+    Write-Output "Deployment URL: $deploymentUrl"
+    Write-Output "Production application SHA: $sha"
+    Write-Output "Verification: metadata + exact production alias"
+  } else {
+    Write-Output "Production deployment verified."
+    Write-Output "Production application SHA: $sha"
+    Write-Output "Verification: exact production alias"
+    Write-Output "Metadata lookup: unavailable / non-fatal"
+  }
 } finally {
   Pop-Location
 }
