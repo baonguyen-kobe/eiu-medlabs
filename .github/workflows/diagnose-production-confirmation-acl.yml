@@ -64,10 +64,51 @@ jobs:
                 'authenticated_any_column_select', has_any_column_privilege('authenticated', 'public.basic_medical_session_confirmations', 'select'),
                 'authenticated_signer_name_snapshot_select', has_column_privilege('authenticated', 'public.basic_medical_session_confirmations', 'signer_name_snapshot', 'select'),
                 'authenticated_signature_data_select', has_column_privilege('authenticated', 'public.basic_medical_session_confirmations', 'signature_data', 'select'),
-                'public_table_select', has_table_privilege('public', 'public.basic_medical_session_confirmations', 'select'),
-                'public_any_column_select', has_any_column_privilege('public', 'public.basic_medical_session_confirmations', 'select'),
-                'public_signer_name_snapshot_select', has_column_privilege('public', 'public.basic_medical_session_confirmations', 'signer_name_snapshot', 'select'),
-                'public_signature_data_select', has_column_privilege('public', 'public.basic_medical_session_confirmations', 'signature_data', 'select')
+                'public_table_select', coalesce((
+                  select true from pg_class c
+                  join pg_namespace n on n.oid = c.relnamespace
+                  cross join lateral aclexplode(coalesce(c.relacl, acldefault('r', c.relowner))) a
+                  where n.nspname = 'public'
+                    and c.relname = 'basic_medical_session_confirmations'
+                    and a.grantee = 0
+                    and a.privilege_type = 'SELECT'
+                  limit 1
+                ), false),
+                'public_any_column_select', coalesce((
+                  select true from pg_class c
+                  join pg_namespace n on n.oid = c.relnamespace
+                  join pg_attribute att on att.attrelid = c.oid and att.attnum > 0 and not att.attisdropped
+                  cross join lateral aclexplode(att.attacl) a
+                  where n.nspname = 'public'
+                    and c.relname = 'basic_medical_session_confirmations'
+                    and a.grantee = 0
+                    and a.privilege_type = 'SELECT'
+                  limit 1
+                ), false),
+                'public_signer_name_snapshot_select', coalesce((
+                  select true from pg_class c
+                  join pg_namespace n on n.oid = c.relnamespace
+                  join pg_attribute att on att.attrelid = c.oid and att.attnum > 0 and not att.attisdropped
+                  cross join lateral aclexplode(att.attacl) a
+                  where n.nspname = 'public'
+                    and c.relname = 'basic_medical_session_confirmations'
+                    and att.attname = 'signer_name_snapshot'
+                    and a.grantee = 0
+                    and a.privilege_type = 'SELECT'
+                  limit 1
+                ), false),
+                'public_signature_data_select', coalesce((
+                  select true from pg_class c
+                  join pg_namespace n on n.oid = c.relnamespace
+                  join pg_attribute att on att.attrelid = c.oid and att.attnum > 0 and not att.attisdropped
+                  cross join lateral aclexplode(att.attacl) a
+                  where n.nspname = 'public'
+                    and c.relname = 'basic_medical_session_confirmations'
+                    and att.attname = 'signature_data'
+                    and a.grantee = 0
+                    and a.privilege_type = 'SELECT'
+                  limit 1
+                ), false)
               )
             ),
             'table_acl', (
@@ -75,7 +116,12 @@ jobs:
                 'grantee', coalesce(r.rolname, 'PUBLIC'),
                 'grantor', gr.rolname,
                 'privilege_type', a.privilege_type,
-                'is_grantable', a.is_grantable
+                'is_grantable', a.is_grantable,
+                'grantee_effective_roles', case when a.grantee = 0 then '[]'::jsonb else (
+                  select coalesce(jsonb_agg(pr.rolname), '[]'::jsonb)
+                  from pg_roles pr
+                  where pr.oid != a.grantee and pg_has_role(a.grantee, pr.oid, 'member')
+                ) end
               )), '[]'::jsonb)
               from pg_class c
               join pg_namespace n on n.oid = c.relnamespace
@@ -91,7 +137,12 @@ jobs:
                 'grantee', coalesce(r.rolname, 'PUBLIC'),
                 'grantor', gr.rolname,
                 'privilege_type', a.privilege_type,
-                'is_grantable', a.is_grantable
+                'is_grantable', a.is_grantable,
+                'grantee_effective_roles', case when a.grantee = 0 then '[]'::jsonb else (
+                  select coalesce(jsonb_agg(pr.rolname), '[]'::jsonb)
+                  from pg_roles pr
+                  where pr.oid != a.grantee and pg_has_role(a.grantee, pr.oid, 'member')
+                ) end
               ) order by att.attnum, r.rolname), '[]'::jsonb)
               from pg_class c
               join pg_namespace n on n.oid = c.relnamespace
@@ -206,7 +257,12 @@ jobs:
                 'grantee', coalesce(gr.rolname, 'PUBLIC'),
                 'grantor', go.rolname,
                 'privilege_type', a.privilege_type,
-                'is_grantable', a.is_grantable
+                'is_grantable', a.is_grantable,
+                'grantee_effective_roles', case when a.grantee = 0 then '[]'::jsonb else (
+                  select coalesce(jsonb_agg(pr.rolname), '[]'::jsonb)
+                  from pg_roles pr
+                  where pr.oid != a.grantee and pg_has_role(a.grantee, pr.oid, 'member')
+                ) end
               )), '[]'::jsonb)
               from pg_default_acl d
               left join pg_roles r on r.oid = d.defaclrole
