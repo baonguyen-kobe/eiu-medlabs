@@ -100,6 +100,14 @@ test("Basic Medical Lecturer Edit: Migration and declarative schema are valid an
     /current_setting\('app\.basic_medical_preserve_confirmation_lecturer_change', true\)/,
   );
 
+  // Check cancellation guards (session and registration)
+  assert.match(migration, /REGISTRATION_CANCELLED/);
+  assert.match(migration, /BASIC_MEDICAL_SESSION_CANCELLED/);
+  assert.match(
+    migration,
+    /session_row\.cancelled_at is not null or schedule_row\.schedule_status = 'cancelled'/,
+  );
+
   // Check audit log insertion
   assert.match(
     migration,
@@ -120,7 +128,7 @@ test("Basic Medical Lecturer Edit: Migration and declarative schema are valid an
   assert.equal(migration.trim(), schema.trim());
 });
 
-test("Basic Medical Lecturer Edit: Server action enforces auth, input validation, and path revalidation", async () => {
+test("Basic Medical Lecturer Edit: Server action enforces auth, input validation, cancellation rejection, and path revalidation", async () => {
   const actionsSource = await fs.readFile(actionsPath, "utf8");
 
   assert.ok(
@@ -146,6 +154,10 @@ test("Basic Medical Lecturer Edit: Server action enforces auth, input validation
   assert.match(
     actionsSource,
     /INVALID_LECTURER[\s\S]*Giảng viên không hợp lệ hoặc không thuộc phạm vi Y cơ sở/,
+  );
+  assert.match(
+    actionsSource,
+    /BASIC_MEDICAL_SESSION_CANCELLED[\s\S]*Buổi học đã hủy, không thể thay đổi giảng viên/,
   );
 });
 

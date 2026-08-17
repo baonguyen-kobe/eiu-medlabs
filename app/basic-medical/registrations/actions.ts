@@ -71,7 +71,10 @@ export async function updateBasicMedicalSessionTeachingLecturer(
       ? "Chỉ người tạo phiếu hoặc Admin được thay đổi giảng viên."
       : error.message.includes("INVALID_LECTURER")
         ? "Giảng viên không hợp lệ hoặc không thuộc phạm vi Y cơ sở."
-        : "Không thể cập nhật giảng viên giảng dạy/hướng dẫn.";
+        : error.message.includes("BASIC_MEDICAL_SESSION_CANCELLED") ||
+            error.message.includes("REGISTRATION_CANCELLED")
+          ? "Buổi học đã hủy, không thể thay đổi giảng viên."
+          : "Không thể cập nhật giảng viên giảng dạy/hướng dẫn.";
     redirect(registrationsUrl("error", message));
   }
 

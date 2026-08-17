@@ -70,6 +70,7 @@ declare
   actor_id uuid;
   session_row public.basic_medical_registration_sessions%rowtype;
   registration_row public.basic_medical_registrations%rowtype;
+  schedule_row public.class_schedules%rowtype;
   basic_medical_room_type_id constant uuid := '40000000-0000-0000-0000-000000000002'::uuid;
   is_admin_user boolean := false;
   is_creator_user boolean := false;
@@ -99,6 +100,19 @@ begin
 
   if registration_row.cancelled_at is not null then
     raise exception 'REGISTRATION_CANCELLED' using errcode = '55000';
+  end if;
+
+  select schedules.* into schedule_row
+  from public.class_schedules as schedules
+  where schedules.id = session_row.class_schedule_id
+  for update;
+
+  if schedule_row.id is null then
+    raise exception 'BASIC_MEDICAL_LINKED_SCHEDULE_INCONSISTENT' using errcode = 'P0001';
+  end if;
+
+  if session_row.cancelled_at is not null or schedule_row.schedule_status = 'cancelled' then
+    raise exception 'BASIC_MEDICAL_SESSION_CANCELLED' using errcode = '55000';
   end if;
 
   is_admin_user := (select private.is_admin());
