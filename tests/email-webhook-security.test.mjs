@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 import {
+  buildEmailWebhookClientDiagnostic,
   canonicalEmailWebhookPayload,
   emailFailureStatus,
 } from "../lib/email-webhook-signature.ts";
@@ -192,4 +193,76 @@ test("request unauthorized không append từng dòng vào Google Sheet", () => 
 test("provider success nhưng DB ACK fail không trở thành lỗi có thể gửi lại", () => {
   assert.equal(emailFailureStatus(true), "sent_unconfirmed");
   assert.equal(emailFailureStatus(false), "failed");
+});
+
+test("buildEmailWebhookClientDiagnostic tạo fingerprint an toàn không chứa raw secret hoặc raw payload", () => {
+  const secret = "very-sensitive-secret-value-1234567890";
+  const url = "https://script.google.com/macros/s/AKfycbx_TEST/exec";
+  const payload = {
+    timestamp: "1785978000000",
+    nonce: "test-nonce-123",
+    id: "notif-id-456",
+    dedupeKey: "dedupe-789",
+    to: "test.recipient@example.com",
+    subject: "Tiêu đề kiểm tra",
+    html: "<p>Nội dung HTML tiếng Việt</p>",
+    text: "Nội dung Text tiếng Việt",
+    senderName: "MedLabs Calendar",
+  };
+  const canonicalPayload = canonicalEmailWebhookPayload(payload);
+  const signature = createHmac("sha256", secret)
+    .update(canonicalPayload)
+    .digest("hex");
+  const requestBody = JSON.stringify({ ...payload, signature });
+
+  const sha256Hex16 = (str) =>
+    createHash("sha256").update(str, "utf8").digest("hex").slice(0, 16);
+
+  const diag = buildEmailWebhookClientDiagnostic({
+    secret,
+    url,
+    canonicalPayload,
+    signature,
+    requestBody,
+    payload,
+    sha256Hex16,
+  });
+
+  assert.equal(diag.event, "EMAIL_HMAC_CLIENT_DIAGNOSTIC");
+  assert.equal(diag.runtimeSecretLength, secret.length);
+  assert.equal(diag.runtimeSecretSha256_16, sha256Hex16(secret));
+  assert.equal(diag.runtimeUrlSha256_16, sha256Hex16(url));
+  assert.equal(diag.canonicalSha256_16, sha256Hex16(canonicalPayload));
+  assert.equal(diag.signatureSha256_16, sha256Hex16(signature));
+  assert.equal(diag.requestBodySha256_16, sha256Hex16(requestBody));
+
+  assert.equal(diag.timestampLength, payload.timestamp.length);
+  assert.equal(diag.nonceLength, payload.nonce.length);
+  assert.equal(diag.idLength, payload.id.length);
+  assert.equal(diag.dedupeKeyLength, payload.dedupeKey.length);
+  assert.equal(diag.toLength, payload.to.length);
+  assert.equal(diag.subjectLength, payload.subject.length);
+  assert.equal(diag.htmlLength, payload.html.length);
+  assert.equal(diag.textLength, payload.text.length);
+  assert.equal(diag.senderNameLength, payload.senderName.length);
+
+  assert.equal(diag.subjectHasNonAscii, true);
+  assert.equal(diag.htmlHasNonAscii, true);
+  assert.equal(diag.textHasNonAscii, true);
+  assert.equal(diag.senderNameHasNonAscii, false);
+
+  const serialized = JSON.stringify(diag);
+  assert.ok(!serialized.includes(secret));
+  assert.ok(!serialized.includes(payload.to));
+  assert.ok(!serialized.includes(payload.subject));
+  assert.ok(!serialized.includes(payload.html));
+  assert.ok(!serialized.includes(payload.text));
+  assert.ok(!serialized.includes(payload.senderName));
+  assert.ok(!serialized.includes(signature));
+
+  // Request body integrity
+  const parsedRequestBody = JSON.parse(requestBody);
+  assert.equal(parsedRequestBody.signature, signature);
+  assert.equal(parsedRequestBody.timestamp, payload.timestamp);
+  assert.equal(parsedRequestBody.nonce, payload.nonce);
 });
