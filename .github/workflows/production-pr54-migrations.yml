@@ -1,0 +1,333 @@
+name: Production PR #54 migration
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: production-pr54-migrations
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    name: Apply reviewed PR #54 migration
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PROJECT_REF: bwhiivfhezoozrzvchmm
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.PRODUCTION_DB_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install the locked Supabase CLI
+        run: npm ci --ignore-scripts
+
+      - name: Verify release identity and reviewed migration files
+        shell: bash
+        run: |
+          set -euo pipefail
+          readonly target_versions=("20260817170000")
+          readonly target_files=(
+            "20260817170000_update_basic_medical_session_teaching_lecturer.sql"
+          )
+          readonly target_blobs=(
+            "ac0b51f0a491e3364cc6677957ea4f9cae7a16c9"
+          )
+          readonly forbidden_versions=(
+            "20260809120000" "20260809130000" "20260809140000"
+            "20260809150000" "20260809160000" "20260810000000"
+            "20260810010000" "20260810020000" "20260810030000"
+          )
+
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || {
+            echo "RELEASE_IDENTITY_CHANGED: production migrations may run only from main."
+            exit 1
+          }
+          for index in "${!target_files[@]}"; do
+            file="supabase/migrations/${target_files[$index]}"
+            [[ -f "$file" ]] || { echo "RELEASE_IDENTITY_CHANGED: reviewed target migration is missing."; exit 1; }
+            [[ "$(git hash-object "$file")" == "${target_blobs[$index]}" ]] || {
+              echo "RELEASE_IDENTITY_CHANGED: reviewed target migration content differs."
+              exit 1
+            }
+          done
+          for version in "${forbidden_versions[@]}"; do
+            if compgen -G "supabase/migrations/${version}_*.sql" > /dev/null; then
+              echo "RELEASE_IDENTITY_CHANGED: frozen PR #2 migration is present locally."
+              exit 1
+            fi
+          done
+
+      - name: Link the fixed production project
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --no-install supabase link --project-ref "$PROJECT_REF" --yes
+
+      - name: Preflight the exact production migration history
+        shell: bash
+        run: |
+          set -euo pipefail
+          readonly target_versions=("20260817170000")
+          readonly forbidden_versions=(
+            "20260809120000" "20260809130000" "20260809140000"
+            "20260809150000" "20260809160000" "20260810000000"
+            "20260810010000" "20260810020000" "20260810030000"
+          )
+          history_json="$(npx --no-install supabase migration list --linked --output-format json)"
+          printf '%s\n' "$history_json" > "$RUNNER_TEMP/pr54-migrations-before.json"
+          mapfile -t remote_versions < <(jq -r '.migrations[] | (.remote // empty)' "$RUNNER_TEMP/pr54-migrations-before.json" | grep -E '^[0-9]{14}$' | sort -u)
+          mapfile -t local_versions < <(jq -r '.migrations[] | (.local // empty)' "$RUNNER_TEMP/pr54-migrations-before.json" | grep -E '^[0-9]{14}$' | sort -u)
+
+          for version in "${forbidden_versions[@]}"; do
+            if printf '%s\n' "${remote_versions[@]}" | grep -Fxq "$version"; then
+              echo "MIGRATION_ALLOWLIST_MISMATCH: frozen PR #2 migration is already applied remotely."
+              exit 1
+            fi
+          done
+          for version in "${target_versions[@]}"; do
+            if ! printf '%s\n' "${local_versions[@]}" | grep -Fxq "$version"; then
+              echo "MIGRATION_ALLOWLIST_MISMATCH: reviewed target migration is missing locally."
+              exit 1
+            fi
+            if printf '%s\n' "${remote_versions[@]}" | grep -Fxq "$version"; then
+              echo "MIGRATION_ALLOWLIST_MISMATCH: reviewed target migration is unexpectedly already remote."
+              exit 1
+            fi
+          done
+
+          expected_remote_before=()
+          for version in "${local_versions[@]}"; do
+            if ! printf '%s\n' "${target_versions[@]}" | grep -Fxq "$version"; then
+              expected_remote_before+=("$version")
+            fi
+          done
+          if [[ "$(printf '%s\n' "${remote_versions[@]}")" != "$(printf '%s\n' "${expected_remote_before[@]}")" ]]; then
+            echo "MIGRATION_ALLOWLIST_MISMATCH: remote history is not exactly the reviewed baseline through 20260815131138."
+            exit 1
+          fi
+          printf '%s\n' "${remote_versions[@]}" > "$RUNNER_TEMP/pr54-remote-before.txt"
+          printf '%s\n' "${target_versions[@]}" > "$RUNNER_TEMP/pr54-pending-targets.txt"
+
+      - name: Dry-run and assert the exact ordered pending set
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t expected_pending < "$RUNNER_TEMP/pr54-pending-targets.txt"
+          npx --no-install supabase db push --linked --dry-run > "$RUNNER_TEMP/pr54-migrations-dry-run.txt" 2>&1 || {
+            echo "MIGRATION_DRY_RUN_FAILED"
+            exit 1
+          }
+          mapfile -t observed_pending < <(grep -oE '20[0-9]{12}' "$RUNNER_TEMP/pr54-migrations-dry-run.txt" | awk '!seen[$0]++')
+          if [[ "$(printf '%s\n' "${observed_pending[@]}")" != "$(printf '%s\n' "${expected_pending[@]}")" ]]; then
+            echo "MIGRATION_ALLOWLIST_MISMATCH: dry-run differs from the exact reviewed ordered set."
+            exit 1
+          fi
+
+      - name: Apply the exact reviewed pending migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --no-install supabase db push --linked
+
+      - name: Verify the exact final migration history
+        shell: bash
+        run: |
+          set -euo pipefail
+          history_json="$(npx --no-install supabase migration list --linked --output-format json)"
+          printf '%s\n' "$history_json" > "$RUNNER_TEMP/pr54-migrations-after.json"
+          mapfile -t remote_versions < <(jq -r '.migrations[] | (.remote // empty)' "$RUNNER_TEMP/pr54-migrations-after.json" | grep -E '^[0-9]{14}$' | sort -u)
+          mapfile -t local_versions < <(jq -r '.migrations[] | (.local // empty)' "$RUNNER_TEMP/pr54-migrations-after.json" | grep -E '^[0-9]{14}$' | sort -u)
+          if [[ "$(printf '%s\n' "${remote_versions[@]}")" != "$(printf '%s\n' "${local_versions[@]}")" ]]; then
+            echo "POST_PUSH_MIGRATION_VERIFICATION_FAILED: remote history differs from the exact reviewed local history."
+            exit 1
+          fi
+          for version in 20260817170000; do
+            if ! printf '%s\n' "${remote_versions[@]}" | grep -Fxq "$version"; then
+              echo "POST_PUSH_MIGRATION_VERIFICATION_FAILED: reviewed migration is missing remotely."
+              exit 1
+            fi
+          done
+          for version in 20260809120000 20260809130000 20260809140000 20260809150000 20260809160000 20260810000000 20260810010000 20260810020000 20260810030000; do
+            if printf '%s\n' "${remote_versions[@]}" | grep -Fxq "$version"; then
+              echo "POST_PUSH_MIGRATION_VERIFICATION_FAILED: frozen PR #2 migration is remotely applied."
+              exit 1
+            fi
+          done
+          mapfile -t remote_before < "$RUNNER_TEMP/pr54-remote-before.txt"
+          mapfile -t expected_added < "$RUNNER_TEMP/pr54-pending-targets.txt"
+          added_versions=()
+          for version in "${remote_versions[@]}"; do
+            if ! printf '%s\n' "${remote_before[@]}" | grep -Fxq "$version"; then added_versions+=("$version"); fi
+          done
+          if [[ "$(printf '%s\n' "${added_versions[@]}")" != "$(printf '%s\n' "${expected_added[@]}")" ]]; then
+            echo "POST_PUSH_MIGRATION_VERIFICATION_FAILED: remote history gained an unexpected migration."
+            exit 1
+          fi
+
+      - name: Verify database contract and confirmation security after migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/pr54-db-contract-postcheck.sql" <<'SQL'
+          select jsonb_build_object(
+            'rpc_exists', exists (
+              select 1 from pg_proc p
+              join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public'
+                and p.proname = 'update_basic_medical_session_teaching_lecturer'
+            ),
+            'rpc_secdef', coalesce((
+              select p.prosecdef from pg_proc p
+              join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public'
+                and p.proname = 'update_basic_medical_session_teaching_lecturer'
+            ), false),
+            'authenticated_rpc_execute', has_function_privilege(
+              'authenticated',
+              'public.update_basic_medical_session_teaching_lecturer(uuid, uuid)',
+              'execute'
+            ),
+            'anon_rpc_execute', has_function_privilege(
+              'anon',
+              'public.update_basic_medical_session_teaching_lecturer(uuid, uuid)',
+              'execute'
+            ),
+            'public_rpc_execute', has_function_privilege(
+              'public',
+              'public.update_basic_medical_session_teaching_lecturer(uuid, uuid)',
+              'execute'
+            ),
+            'rpc_source', (
+              select p.prosrc from pg_proc p
+              join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public'
+                and p.proname = 'update_basic_medical_session_teaching_lecturer'
+            ),
+            'trigger_fn_source', (
+              select p.prosrc from pg_proc p
+              join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'private'
+                and p.proname = 'invalidate_basic_medical_confirmation_on_schedule_change'
+            ),
+            'authenticated_trigger_fn_execute', has_function_privilege(
+              'authenticated',
+              'private.invalidate_basic_medical_confirmation_on_schedule_change()',
+              'execute'
+            ),
+            'authenticated_signer_name_snapshot_select', has_column_privilege(
+              'authenticated',
+              'public.basic_medical_session_confirmations',
+              'signer_name_snapshot',
+              'select'
+            ),
+            'authenticated_signature_data_select', has_column_privilege(
+              'authenticated',
+              'public.basic_medical_session_confirmations',
+              'signature_data',
+              'select'
+            ),
+            'authenticated_table_select', has_table_privilege(
+              'authenticated',
+              'public.basic_medical_session_confirmations',
+              'select'
+            ),
+            'anon_signer_name_snapshot_select', has_column_privilege(
+              'anon',
+              'public.basic_medical_session_confirmations',
+              'signer_name_snapshot',
+              'select'
+            ),
+            'rls_enabled', coalesce((
+              select c.relrowsecurity
+              from pg_class c
+              join pg_namespace n on n.oid = c.relnamespace
+              where n.nspname = 'public'
+                and c.relname = 'basic_medical_session_confirmations'
+            ), false)
+          ) as postcheck;
+          SQL
+          npx --no-install supabase db query --linked --output-format json --file "$RUNNER_TEMP/pr54-db-contract-postcheck.sql" > "$RUNNER_TEMP/pr54-db-contract-after.json"
+          RUNNER_TEMP="$RUNNER_TEMP" node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const result = JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP, 'pr54-db-contract-after.json'), 'utf8'));
+          const raw = result?.[0]?.postcheck ?? result?.rows?.[0]?.postcheck ?? result?.postcheck;
+          const postcheck = typeof raw === 'string' ? JSON.parse(raw) : raw;
+
+          if (!postcheck) {
+            throw new Error('POSTCHECK_EMPTY_RESULT');
+          }
+
+          // A & B: RPC existence and privileges
+          if (postcheck.rpc_exists !== true) throw new Error('RPC_NOT_FOUND');
+          if (postcheck.rpc_secdef !== true) throw new Error('RPC_NOT_SECURITY_DEFINER');
+          if (postcheck.authenticated_rpc_execute !== true) throw new Error('AUTHENTICATED_EXECUTE_MISSING');
+          if (postcheck.anon_rpc_execute !== false) throw new Error('ANON_EXECUTE_UNEXPECTED');
+          if (postcheck.public_rpc_execute !== false) throw new Error('PUBLIC_EXECUTE_UNEXPECTED');
+          if (postcheck.authenticated_trigger_fn_execute !== false) throw new Error('TRIGGER_FN_EXECUTE_UNEXPECTED');
+
+          // C: RPC business guards
+          const rpcSource = postcheck.rpc_source || '';
+          const requiredRpcGuards = [
+            'AUTH_REQUIRED',
+            'UPDATE_FORBIDDEN',
+            'INVALID_LECTURER',
+            'REGISTRATION_CANCELLED',
+            'BASIC_MEDICAL_SESSION_CANCELLED',
+            'app.basic_medical_registration_mutation',
+            'app.basic_medical_preserve_confirmation_lecturer_change',
+            'update public.basic_medical_registration_sessions',
+            'update public.class_schedules',
+            'basic_medical_session.update_teaching_lecturer'
+          ];
+          for (const guard of requiredRpcGuards) {
+            if (!rpcSource.includes(guard)) {
+              throw new Error(`RPC_GUARD_MISSING: ${guard}`);
+            }
+          }
+
+          // D & E: Trigger preservation & generic invalidations
+          const triggerSource = postcheck.trigger_fn_source || '';
+          const requiredTriggerPatterns = [
+            'app.basic_medical_preserve_confirmation_lecturer_change',
+            'Thông tin phòng, thời gian hoặc Giảng viên giảng dạy/hướng dẫn đã thay đổi.',
+            'old.room_id is distinct from new.room_id',
+            'old.schedule_date is distinct from new.schedule_date',
+            'old.start_time is distinct from new.start_time',
+            'old.end_time is distinct from new.end_time',
+            'old.lecturer_id is distinct from new.lecturer_id'
+          ];
+          for (const pattern of requiredTriggerPatterns) {
+            if (!triggerSource.includes(pattern)) {
+              throw new Error(`TRIGGER_PATTERN_MISSING: ${pattern}`);
+            }
+          }
+
+          // Security & privilege checks on confirmations
+          const requiredPermissions = {
+            authenticated_signer_name_snapshot_select: true,
+            authenticated_signature_data_select: false,
+            authenticated_table_select: false,
+            anon_signer_name_snapshot_select: false,
+            rls_enabled: true,
+          };
+          for (const [key, value] of Object.entries(requiredPermissions)) {
+            if (postcheck[key] !== value) {
+              throw new Error(`CONFIRMATION_PERMISSION_POSTCHECK_FAILED: ${key} expected ${value} got ${postcheck[key]}`);
+            }
+          }
+
+          console.log('Database contract and confirmation security postcheck: PASS');
+          NODE
