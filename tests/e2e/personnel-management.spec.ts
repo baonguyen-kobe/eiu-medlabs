@@ -103,10 +103,12 @@ test("personnel drawer saves role, import capability and lock atomically", async
     await expect(
       confirmation.getByRole("button", { name: "Quay lại" }),
     ).toBeFocused();
-    await confirmation.getByRole("button", { name: "Khóa tài khoản" }).click();
-
-    await expect(drawer.getByRole("status")).toContainText(
-      "Đã cập nhật nhân sự.",
+    await clickUntilState(
+      confirmation.getByRole("button", { name: "Khóa tài khoản" }),
+      () =>
+        expect(drawer.getByRole("status")).toContainText(
+          "Đã cập nhật nhân sự.",
+        ),
     );
     await expect(row).toContainText("Đã khóa");
     await expect(row).not.toContainText("Nhập lịch");
