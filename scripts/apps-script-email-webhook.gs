@@ -7,7 +7,7 @@
  *
  * Deploy: Web app / Execute as Me / Who has access: Anyone.
  */
-const MEDLABS_VERSION = "2026.08.06-hmac-v3";
+const MEDLABS_VERSION = "2026.08.17-hmac-v3-clean";
 const SECRET_PROPERTY = "WEBHOOK_SECRET";
 const LEGACY_SECRET_PROPERTY = "EMAIL_WEBHOOK_SECRET";
 const SENT_KEYS_PROPERTY = "MEDLABS_SENT_EMAIL_KEYS";
@@ -35,7 +35,11 @@ function safeEqual_(left, right) {
 }
 
 function hmacHex_(value, secret) {
-  return Utilities.computeHmacSha256Signature(value, secret)
+  return Utilities.computeHmacSha256Signature(
+    String(value || ""),
+    String(secret || ""),
+    Utilities.Charset.UTF_8,
+  )
     .map(function (byte) {
       const normalized = byte < 0 ? byte + 256 : byte;
       return ("0" + normalized.toString(16)).slice(-2);

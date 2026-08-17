@@ -4,10 +4,8 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 import {
-  buildEmailWebhookClientDiagnostic,
   canonicalEmailWebhookPayload,
   emailFailureStatus,
-  maybeLogEmailWebhookClientDiagnostic,
 } from "../lib/email-webhook-signature.ts";
 
 const scriptSource = readFileSync(
@@ -53,11 +51,17 @@ function appsScriptHarness() {
     Utilities: {
       Charset: { UTF_8: "utf8" },
       DigestAlgorithm: { SHA_256: "sha256" },
-      computeHmacSha256Signature(value, secret) {
-        return [...createHmac("sha256", secret).update(value).digest()];
+      computeHmacSha256Signature(value, secret, charset) {
+        if (charset !== undefined && charset !== "utf8") {
+          throw new Error(`Unexpected charset: ${charset}`);
+        }
+        return [...createHmac("sha256", secret).update(value, "utf8").digest()];
       },
-      computeDigest(_algorithm, value) {
-        return [...createHash("sha256").update(value).digest()];
+      computeDigest(_algorithm, value, charset) {
+        if (charset !== undefined && charset !== "utf8") {
+          throw new Error(`Unexpected charset: ${charset}`);
+        }
+        return [...createHash("sha256").update(value, "utf8").digest()];
       },
       getUuid: () => crypto.randomUUID(),
     },
@@ -196,156 +200,58 @@ test("provider success nhưng DB ACK fail không trở thành lỗi có thể g�
   assert.equal(emailFailureStatus(false), "failed");
 });
 
-test("buildEmailWebhookClientDiagnostic tạo fingerprint an toàn không chứa raw secret hoặc raw payload", () => {
-  const secret = "very-sensitive-secret-value-1234567890";
-  const url = "https://script.google.com/macros/s/AKfycbx_TEST/exec";
-  const payload = {
-    timestamp: "1785978000000",
-    nonce: "test-nonce-123",
-    id: "notif-id-456",
-    dedupeKey: "dedupe-789",
-    to: "test.recipient@example.com",
-    subject: "Tiêu đề kiểm tra",
-    html: "<p>Nội dung HTML tiếng Việt</p>",
-    text: "Nội dung Text tiếng Việt",
-    senderName: "MedLabs Calendar",
-  };
-  const canonicalPayload = canonicalEmailWebhookPayload(payload);
-  const signature = createHmac("sha256", secret)
-    .update(canonicalPayload)
-    .digest("hex");
-  const requestBody = JSON.stringify({ ...payload, signature });
+test("Apps Script canonical source sử dụng UTF-8 rõ ràng, không chứa hàm diagnostic tạm và giữ nguyên thứ tự trường", () => {
+  // 1. Explicit UTF-8 in HMAC
+  assert.ok(
+    scriptSource.includes("Utilities.Charset.UTF_8"),
+    "Apps Script source must explicitly reference Utilities.Charset.UTF_8",
+  );
+  assert.match(
+    scriptSource,
+    /Utilities\.computeHmacSha256Signature\s*\(\s*String\(value\s*\|\|\s*["']{2}\)\s*,\s*String\(secret\s*\|\|\s*["']{2}\)\s*,\s*Utilities\.Charset\.UTF_8\s*,?\s*\)/,
+    "hmacHex_ must pass Utilities.Charset.UTF_8 explicitly",
+  );
 
-  const sha256Hex16 = (str) =>
-    createHash("sha256").update(str, "utf8").digest("hex").slice(0, 16);
+  // 2. Canonical field order
+  assert.match(
+    scriptSource,
+    /canonicalPayload_[\s\S]*?body\.timestamp[\s\S]*?body\.nonce[\s\S]*?body\.id[\s\S]*?body\.dedupeKey[\s\S]*?body\.to[\s\S]*?body\.subject[\s\S]*?body\.html[\s\S]*?body\.text[\s\S]*?body\.senderName/,
+    "canonicalPayload_ must retain exact 9-field ordered array",
+  );
 
-  const diag = buildEmailWebhookClientDiagnostic({
-    secret,
-    url,
-    canonicalPayload,
-    signature,
-    requestBody,
-    payload,
-    sha256Hex16,
-  });
+  // 3. No temporary diagnostic helpers or properties
+  assert.ok(
+    !scriptSource.includes("diagnoseMedLabsHmac"),
+    "Must not contain diagnoseMedLabsHmac",
+  );
+  assert.ok(
+    !scriptSource.includes("showLatestHmacDiagnostic"),
+    "Must not contain showLatestHmacDiagnostic",
+  );
+  assert.ok(
+    !scriptSource.includes("writeHmacMismatchDiagnostic_"),
+    "Must not contain writeHmacMismatchDiagnostic_",
+  );
+  assert.ok(
+    !scriptSource.includes("MEDLABS_LAST_HMAC_DIAGNOSTIC"),
+    "Must not contain MEDLABS_LAST_HMAC_DIAGNOSTIC",
+  );
+  assert.ok(
+    !scriptSource.includes("AUTH_SIGNATURE_MISMATCH"),
+    "Must not return verbose auth diagnostic error codes",
+  );
 
-  assert.equal(diag.event, "EMAIL_HMAC_CLIENT_DIAGNOSTIC");
-  assert.equal(diag.runtimeSecretLength, secret.length);
-  assert.equal(diag.runtimeSecretSha256_16, sha256Hex16(secret));
-  assert.equal(diag.runtimeUrlSha256_16, sha256Hex16(url));
-  assert.equal(diag.canonicalSha256_16, sha256Hex16(canonicalPayload));
-  assert.equal(diag.signatureSha256_16, sha256Hex16(signature));
-  assert.equal(diag.requestBodySha256_16, sha256Hex16(requestBody));
+  // 4. Secret property name
+  assert.match(
+    scriptSource,
+    /const SECRET_PROPERTY = "WEBHOOK_SECRET";/,
+    "Must use WEBHOOK_SECRET script property",
+  );
 
-  assert.equal(diag.timestampLength, payload.timestamp.length);
-  assert.equal(diag.nonceLength, payload.nonce.length);
-  assert.equal(diag.idLength, payload.id.length);
-  assert.equal(diag.dedupeKeyLength, payload.dedupeKey.length);
-  assert.equal(diag.toLength, payload.to.length);
-  assert.equal(diag.subjectLength, payload.subject.length);
-  assert.equal(diag.htmlLength, payload.html.length);
-  assert.equal(diag.textLength, payload.text.length);
-  assert.equal(diag.senderNameLength, payload.senderName.length);
-
-  assert.equal(diag.subjectHasNonAscii, true);
-  assert.equal(diag.htmlHasNonAscii, true);
-  assert.equal(diag.textHasNonAscii, true);
-  assert.equal(diag.senderNameHasNonAscii, false);
-
-  const serialized = JSON.stringify(diag);
-  assert.ok(!serialized.includes(secret));
-  assert.ok(!serialized.includes(payload.to));
-  assert.ok(!serialized.includes(payload.subject));
-  assert.ok(!serialized.includes(payload.html));
-  assert.ok(!serialized.includes(payload.text));
-  assert.ok(!serialized.includes(payload.senderName));
-  assert.ok(!serialized.includes(signature));
-
-  // Request body integrity
-  const parsedRequestBody = JSON.parse(requestBody);
-  assert.equal(parsedRequestBody.signature, signature);
-  assert.equal(parsedRequestBody.timestamp, payload.timestamp);
-  assert.equal(parsedRequestBody.nonce, payload.nonce);
-});
-
-test("chỉ ghi log diagnostic khi Apps Script trả về đúng mã lỗi AUTH_SIGNATURE_MISMATCH", () => {
-  const secret = "test-secret-value-1234567890";
-  const url = "https://script.google.com/macros/s/AKfycbx_TEST/exec";
-  const payload = {
-    timestamp: "1785978000000",
-    nonce: "test-nonce-123",
-    id: "notif-id-456",
-    dedupeKey: "dedupe-789",
-    to: "test.recipient@example.com",
-    subject: "Tiêu đề kiểm tra",
-    html: "<p>Nội dung HTML</p>",
-    text: "Nội dung Text",
-    senderName: "MedLabs Calendar",
-  };
-  const canonicalPayload = canonicalEmailWebhookPayload(payload);
-  const signature = createHmac("sha256", secret)
-    .update(canonicalPayload)
-    .digest("hex");
-  const requestBody = JSON.stringify({ ...payload, signature });
-  const sha256Hex16 = (str) =>
-    createHash("sha256").update(str, "utf8").digest("hex").slice(0, 16);
-
-  const logs = [];
-  const mockWarn = (msg) => logs.push(msg);
-
-  // A. AUTH_SIGNATURE_MISMATCH path produces diagnostic
-  const mismatchResult = maybeLogEmailWebhookClientDiagnostic({
-    resultError: "AUTH_SIGNATURE_MISMATCH",
-    secret,
-    url,
-    canonicalPayload,
-    signature,
-    requestBody,
-    payload,
-    sha256Hex16,
-    warn: mockWarn,
-  });
-  assert.ok(mismatchResult);
-  assert.equal(logs.length, 1);
-  assert.ok(logs[0].startsWith("EMAIL_HMAC_CLIENT_DIAGNOSTIC: "));
-
-  // B. Successful response does NOT produce diagnostic
-  logs.length = 0;
-  const successResult = maybeLogEmailWebhookClientDiagnostic({
-    resultError: undefined,
-    secret,
-    url,
-    canonicalPayload,
-    signature,
-    requestBody,
-    payload,
-    sha256Hex16,
-    warn: mockWarn,
-  });
-  assert.equal(successResult, null);
-  assert.equal(logs.length, 0);
-
-  // C. Other errors do NOT produce diagnostic
-  for (const otherError of [
-    "INVALID_EMAIL_PAYLOAD",
-    "UNAUTHORIZED",
-    "NONCE_REPLAY",
-    "UNAUTHORIZED_TIMESTAMP",
-    "INTERNAL_ERROR",
-  ]) {
-    logs.length = 0;
-    const otherResult = maybeLogEmailWebhookClientDiagnostic({
-      resultError: otherError,
-      secret,
-      url,
-      canonicalPayload,
-      signature,
-      requestBody,
-      payload,
-      sha256Hex16,
-      warn: mockWarn,
-    });
-    assert.equal(otherResult, null);
-    assert.equal(logs.length, 0);
-  }
+  // 5. Version
+  assert.match(
+    scriptSource,
+    /const MEDLABS_VERSION = "2026\.08\.17-hmac-v3-clean";/,
+    "Must use clean non-diagnostic version string",
+  );
 });
