@@ -51,11 +51,17 @@ function appsScriptHarness() {
     Utilities: {
       Charset: { UTF_8: "utf8" },
       DigestAlgorithm: { SHA_256: "sha256" },
-      computeHmacSha256Signature(value, secret) {
-        return [...createHmac("sha256", secret).update(value).digest()];
+      computeHmacSha256Signature(value, secret, charset) {
+        if (charset !== undefined && charset !== "utf8") {
+          throw new Error(`Unexpected charset: ${charset}`);
+        }
+        return [...createHmac("sha256", secret).update(value, "utf8").digest()];
       },
-      computeDigest(_algorithm, value) {
-        return [...createHash("sha256").update(value).digest()];
+      computeDigest(_algorithm, value, charset) {
+        if (charset !== undefined && charset !== "utf8") {
+          throw new Error(`Unexpected charset: ${charset}`);
+        }
+        return [...createHash("sha256").update(value, "utf8").digest()];
       },
       getUuid: () => crypto.randomUUID(),
     },
@@ -192,4 +198,60 @@ test("request unauthorized không append từng dòng vào Google Sheet", () => 
 test("provider success nhưng DB ACK fail không trở thành lỗi có thể gửi lại", () => {
   assert.equal(emailFailureStatus(true), "sent_unconfirmed");
   assert.equal(emailFailureStatus(false), "failed");
+});
+
+test("Apps Script canonical source sử dụng UTF-8 rõ ràng, không chứa hàm diagnostic tạm và giữ nguyên thứ tự trường", () => {
+  // 1. Explicit UTF-8 in HMAC
+  assert.ok(
+    scriptSource.includes("Utilities.Charset.UTF_8"),
+    "Apps Script source must explicitly reference Utilities.Charset.UTF_8",
+  );
+  assert.match(
+    scriptSource,
+    /Utilities\.computeHmacSha256Signature\s*\(\s*String\(value\s*\|\|\s*["']{2}\)\s*,\s*String\(secret\s*\|\|\s*["']{2}\)\s*,\s*Utilities\.Charset\.UTF_8\s*,?\s*\)/,
+    "hmacHex_ must pass Utilities.Charset.UTF_8 explicitly",
+  );
+
+  // 2. Canonical field order
+  assert.match(
+    scriptSource,
+    /canonicalPayload_[\s\S]*?body\.timestamp[\s\S]*?body\.nonce[\s\S]*?body\.id[\s\S]*?body\.dedupeKey[\s\S]*?body\.to[\s\S]*?body\.subject[\s\S]*?body\.html[\s\S]*?body\.text[\s\S]*?body\.senderName/,
+    "canonicalPayload_ must retain exact 9-field ordered array",
+  );
+
+  // 3. No temporary diagnostic helpers or properties
+  assert.ok(
+    !scriptSource.includes("diagnoseMedLabsHmac"),
+    "Must not contain diagnoseMedLabsHmac",
+  );
+  assert.ok(
+    !scriptSource.includes("showLatestHmacDiagnostic"),
+    "Must not contain showLatestHmacDiagnostic",
+  );
+  assert.ok(
+    !scriptSource.includes("writeHmacMismatchDiagnostic_"),
+    "Must not contain writeHmacMismatchDiagnostic_",
+  );
+  assert.ok(
+    !scriptSource.includes("MEDLABS_LAST_HMAC_DIAGNOSTIC"),
+    "Must not contain MEDLABS_LAST_HMAC_DIAGNOSTIC",
+  );
+  assert.ok(
+    !scriptSource.includes("AUTH_SIGNATURE_MISMATCH"),
+    "Must not return verbose auth diagnostic error codes",
+  );
+
+  // 4. Secret property name
+  assert.match(
+    scriptSource,
+    /const SECRET_PROPERTY = "WEBHOOK_SECRET";/,
+    "Must use WEBHOOK_SECRET script property",
+  );
+
+  // 5. Version
+  assert.match(
+    scriptSource,
+    /const MEDLABS_VERSION = "2026\.08\.17-hmac-v3-clean";/,
+    "Must use clean non-diagnostic version string",
+  );
 });
