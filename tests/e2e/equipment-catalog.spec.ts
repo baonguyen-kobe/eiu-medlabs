@@ -34,7 +34,7 @@ test("danh mục thiết bị hỗ trợ import, export, tìm kiếm, sort và t
   });
   const scrollBefore = await nav.evaluate((element) => element.scrollTop);
   await clickUntilState(
-    page.getByRole("link", { name: "Danh mục thiết bị" }),
+    page.getByRole("link", { name: "Danh mục TB Skills lab" }),
     () => expect(page).toHaveURL(/\/admin\/equipment$/),
   );
   await expect(page.getByRole("link", { name: "Danh mục khác" })).toBeVisible();

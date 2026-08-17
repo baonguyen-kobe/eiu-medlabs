@@ -238,9 +238,9 @@ Ví dụ:
 
 ```text
 KỸ NĂNG ĐIỀU DƯỠNG
+TẠO PHIẾU
 QUẢN LÝ LỚP
 QUẢN LÝ PHÒNG
-TẠO PHIẾU
 Y CƠ SỞ
 QUẢN TRỊ
 ```
@@ -1108,7 +1108,7 @@ Skills/Y chỉ khác data/business fields, không khác visual shell.
 KPI thứ tư màu tím của `Tổng quan` và `Lịch Skills lab` là:
 
 ```text
-Số lớp chưa có đăng ký thiết bị
+Số lớp chưa đăng ký thiết bị
 ```
 
 Chỉ đếm lớp Skills active trong period riêng của page. Một request thiết bị

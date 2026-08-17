@@ -29,8 +29,9 @@ test("Skills equipment KPI counts only active classes without an effective reque
   );
   assert.match(
     overview,
-    /kpi-card kpi-violet[\s\S]*Số lớp chưa có đăng ký thiết bị[\s\S]*monthClassesWithoutEffectiveEquipmentRequest\.length/,
+    /kpi-card kpi-violet[\s\S]*Số lớp chưa đăng ký thiết bị[\s\S]*monthClassesWithoutEffectiveEquipmentRequest\.length/,
   );
+  assert.doesNotMatch(overview, /Số lớp chưa có đăng ký thiết bị/);
   assert.doesNotMatch(overview, /Ca trực Kho trong tháng/);
   assert.doesNotMatch(overview, /Lớp của tôi trong tháng/);
 
@@ -48,8 +49,10 @@ test("Skills equipment KPI counts only active classes without an effective reque
   );
   assert.match(calendar, /calendarKind === "basic_medical"/);
   assert.match(calendar, /Tổng số sinh viên/);
-  assert.match(calendar, /Số lớp chưa có đăng ký thiết bị/);
+  assert.match(calendar, /Số lớp chưa đăng ký thiết bị/);
+  assert.doesNotMatch(calendar, /Số lớp chưa có đăng ký thiết bị/);
   assert.doesNotMatch(basicMedical, /equipment_requests/);
+  assert.doesNotMatch(staffShifts, /Số lớp chưa đăng ký thiết bị/);
   assert.doesNotMatch(staffShifts, /Số lớp chưa có đăng ký thiết bị/);
 });
 
