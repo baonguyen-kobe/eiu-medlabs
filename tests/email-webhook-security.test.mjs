@@ -7,6 +7,7 @@ import {
   buildEmailWebhookClientDiagnostic,
   canonicalEmailWebhookPayload,
   emailFailureStatus,
+  maybeLogEmailWebhookClientDiagnostic,
 } from "../lib/email-webhook-signature.ts";
 
 const scriptSource = readFileSync(
@@ -265,4 +266,86 @@ test("buildEmailWebhookClientDiagnostic tạo fingerprint an toàn không chứa
   assert.equal(parsedRequestBody.signature, signature);
   assert.equal(parsedRequestBody.timestamp, payload.timestamp);
   assert.equal(parsedRequestBody.nonce, payload.nonce);
+});
+
+test("chỉ ghi log diagnostic khi Apps Script trả về đúng mã lỗi AUTH_SIGNATURE_MISMATCH", () => {
+  const secret = "test-secret-value-1234567890";
+  const url = "https://script.google.com/macros/s/AKfycbx_TEST/exec";
+  const payload = {
+    timestamp: "1785978000000",
+    nonce: "test-nonce-123",
+    id: "notif-id-456",
+    dedupeKey: "dedupe-789",
+    to: "test.recipient@example.com",
+    subject: "Tiêu đề kiểm tra",
+    html: "<p>Nội dung HTML</p>",
+    text: "Nội dung Text",
+    senderName: "MedLabs Calendar",
+  };
+  const canonicalPayload = canonicalEmailWebhookPayload(payload);
+  const signature = createHmac("sha256", secret)
+    .update(canonicalPayload)
+    .digest("hex");
+  const requestBody = JSON.stringify({ ...payload, signature });
+  const sha256Hex16 = (str) =>
+    createHash("sha256").update(str, "utf8").digest("hex").slice(0, 16);
+
+  const logs = [];
+  const mockWarn = (msg) => logs.push(msg);
+
+  // A. AUTH_SIGNATURE_MISMATCH path produces diagnostic
+  const mismatchResult = maybeLogEmailWebhookClientDiagnostic({
+    resultError: "AUTH_SIGNATURE_MISMATCH",
+    secret,
+    url,
+    canonicalPayload,
+    signature,
+    requestBody,
+    payload,
+    sha256Hex16,
+    warn: mockWarn,
+  });
+  assert.ok(mismatchResult);
+  assert.equal(logs.length, 1);
+  assert.ok(logs[0].startsWith("EMAIL_HMAC_CLIENT_DIAGNOSTIC: "));
+
+  // B. Successful response does NOT produce diagnostic
+  logs.length = 0;
+  const successResult = maybeLogEmailWebhookClientDiagnostic({
+    resultError: undefined,
+    secret,
+    url,
+    canonicalPayload,
+    signature,
+    requestBody,
+    payload,
+    sha256Hex16,
+    warn: mockWarn,
+  });
+  assert.equal(successResult, null);
+  assert.equal(logs.length, 0);
+
+  // C. Other errors do NOT produce diagnostic
+  for (const otherError of [
+    "INVALID_EMAIL_PAYLOAD",
+    "UNAUTHORIZED",
+    "NONCE_REPLAY",
+    "UNAUTHORIZED_TIMESTAMP",
+    "INTERNAL_ERROR",
+  ]) {
+    logs.length = 0;
+    const otherResult = maybeLogEmailWebhookClientDiagnostic({
+      resultError: otherError,
+      secret,
+      url,
+      canonicalPayload,
+      signature,
+      requestBody,
+      payload,
+      sha256Hex16,
+      warn: mockWarn,
+    });
+    assert.equal(otherResult, null);
+    assert.equal(logs.length, 0);
+  }
 });

@@ -100,3 +100,21 @@ export function buildEmailWebhookClientDiagnostic(params: {
     ),
   };
 }
+
+export function maybeLogEmailWebhookClientDiagnostic(params: {
+  resultError?: string;
+  secret: string;
+  url: string;
+  canonicalPayload: string;
+  signature: string;
+  requestBody: string;
+  payload: EmailWebhookPayload;
+  sha256Hex16: (input: string) => string;
+  warn?: (message: string) => void;
+}) {
+  if (params.resultError !== "AUTH_SIGNATURE_MISMATCH") return null;
+  const diagnostic = buildEmailWebhookClientDiagnostic(params);
+  const logger = params.warn ?? console.warn;
+  logger("EMAIL_HMAC_CLIENT_DIAGNOSTIC: " + JSON.stringify(diagnostic));
+  return diagnostic;
+}

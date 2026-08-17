@@ -790,19 +790,6 @@ async function deliverNotification(notification: EmailNotification) {
       .digest("hex");
     const requestBody = JSON.stringify({ ...webhookPayload, signature });
 
-    const diagnostic = buildEmailWebhookClientDiagnostic({
-      secret: appsScriptSecret,
-      url: appsScriptUrl,
-      canonicalPayload,
-      signature,
-      requestBody,
-      payload: webhookPayload,
-      sha256Hex16: (input: string) =>
-        createHash("sha256").update(input, "utf8").digest("hex").slice(0, 16),
-    });
-
-    console.warn("EMAIL_HMAC_CLIENT_DIAGNOSTIC: " + JSON.stringify(diagnostic));
-
     const response = await fetch(appsScriptUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -815,6 +802,21 @@ async function deliverNotification(notification: EmailNotification) {
       messageId?: string;
       error?: string;
     };
+    if (result.error === "AUTH_SIGNATURE_MISMATCH") {
+      const diagnostic = buildEmailWebhookClientDiagnostic({
+        secret: appsScriptSecret,
+        url: appsScriptUrl,
+        canonicalPayload,
+        signature,
+        requestBody,
+        payload: webhookPayload,
+        sha256Hex16: (input: string) =>
+          createHash("sha256").update(input, "utf8").digest("hex").slice(0, 16),
+      });
+      console.warn(
+        "EMAIL_HMAC_CLIENT_DIAGNOSTIC: " + JSON.stringify(diagnostic),
+      );
+    }
     if (!response.ok || !result.ok) {
       throw new Error(result.error ?? `APPS_SCRIPT_EMAIL_${response.status}`);
     }
