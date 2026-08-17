@@ -1,0 +1,242 @@
+name: Diagnose Production Confirmation ACL
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: diagnose-production-confirmation-acl
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    name: Run read-only confirmation ACL diagnostic
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PROJECT_REF: bwhiivfhezoozrzvchmm
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.PRODUCTION_DB_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install the locked Supabase CLI
+        run: npm ci --ignore-scripts
+
+      - name: Verify release identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || {
+            echo "RELEASE_IDENTITY_CHANGED: diagnostic may run only from main."
+            exit 1
+          }
+
+      - name: Link the fixed production project
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --no-install supabase link --project-ref "$PROJECT_REF" --yes
+
+      - name: Execute read-only confirmation ACL diagnostic
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/confirmation-acl-diagnostic.sql" <<'SQL'
+          select jsonb_build_object(
+            'effective_privileges', (
+              select jsonb_build_object(
+                'anon_table_select', has_table_privilege('anon', 'public.basic_medical_session_confirmations', 'select'),
+                'anon_any_column_select', has_any_column_privilege('anon', 'public.basic_medical_session_confirmations', 'select'),
+                'anon_signer_name_snapshot_select', has_column_privilege('anon', 'public.basic_medical_session_confirmations', 'signer_name_snapshot', 'select'),
+                'anon_signature_data_select', has_column_privilege('anon', 'public.basic_medical_session_confirmations', 'signature_data', 'select'),
+                'authenticated_table_select', has_table_privilege('authenticated', 'public.basic_medical_session_confirmations', 'select'),
+                'authenticated_any_column_select', has_any_column_privilege('authenticated', 'public.basic_medical_session_confirmations', 'select'),
+                'authenticated_signer_name_snapshot_select', has_column_privilege('authenticated', 'public.basic_medical_session_confirmations', 'signer_name_snapshot', 'select'),
+                'authenticated_signature_data_select', has_column_privilege('authenticated', 'public.basic_medical_session_confirmations', 'signature_data', 'select'),
+                'public_table_select', has_table_privilege('public', 'public.basic_medical_session_confirmations', 'select'),
+                'public_any_column_select', has_any_column_privilege('public', 'public.basic_medical_session_confirmations', 'select'),
+                'public_signer_name_snapshot_select', has_column_privilege('public', 'public.basic_medical_session_confirmations', 'signer_name_snapshot', 'select'),
+                'public_signature_data_select', has_column_privilege('public', 'public.basic_medical_session_confirmations', 'signature_data', 'select')
+              )
+            ),
+            'table_acl', (
+              select coalesce(jsonb_agg(jsonb_build_object(
+                'grantee', coalesce(r.rolname, 'PUBLIC'),
+                'grantor', gr.rolname,
+                'privilege_type', a.privilege_type,
+                'is_grantable', a.is_grantable
+              )), '[]'::jsonb)
+              from pg_class c
+              join pg_namespace n on n.oid = c.relnamespace
+              cross join lateral aclexplode(coalesce(c.relacl, acldefault('r', c.relowner))) a
+              left join pg_roles r on r.oid = a.grantee
+              left join pg_roles gr on gr.oid = a.grantor
+              where n.nspname = 'public'
+                and c.relname = 'basic_medical_session_confirmations'
+            ),
+            'column_acl', (
+              select coalesce(jsonb_agg(jsonb_build_object(
+                'column_name', att.attname,
+                'grantee', coalesce(r.rolname, 'PUBLIC'),
+                'grantor', gr.rolname,
+                'privilege_type', a.privilege_type,
+                'is_grantable', a.is_grantable
+              ) order by att.attnum, r.rolname), '[]'::jsonb)
+              from pg_class c
+              join pg_namespace n on n.oid = c.relnamespace
+              join pg_attribute att on att.attrelid = c.oid and att.attnum > 0 and not att.attisdropped
+              cross join lateral aclexplode(att.attacl) a
+              left join pg_roles r on r.oid = a.grantee
+              left join pg_roles gr on gr.oid = a.grantor
+              where n.nspname = 'public'
+                and c.relname = 'basic_medical_session_confirmations'
+            ),
+            'info_schema_privileges', (
+              select jsonb_build_object(
+                'table_privileges', (
+                  select coalesce(jsonb_agg(jsonb_build_object(
+                    'grantor', grantor,
+                    'grantee', grantee,
+                    'privilege_type', privilege_type,
+                    'is_grantable', is_grantable
+                  )), '[]'::jsonb)
+                  from information_schema.table_privileges
+                  where table_schema = 'public'
+                    and table_name = 'basic_medical_session_confirmations'
+                ),
+                'column_privileges', (
+                  select coalesce(jsonb_agg(jsonb_build_object(
+                    'column_name', column_name,
+                    'grantor', grantor,
+                    'grantee', grantee,
+                    'privilege_type', privilege_type,
+                    'is_grantable', is_grantable
+                  ) order by column_name, grantee), '[]'::jsonb)
+                  from information_schema.column_privileges
+                  where table_schema = 'public'
+                    and table_name = 'basic_medical_session_confirmations'
+                )
+              )
+            ),
+            'role_membership', (
+              select jsonb_build_object(
+                'anon_has_role_authenticated', pg_has_role('anon', 'authenticated', 'member'),
+                'authenticated_has_role_anon', pg_has_role('authenticated', 'anon', 'member'),
+                'memberships', (
+                  select coalesce(jsonb_agg(jsonb_build_object(
+                    'role', r.rolname,
+                    'member_of', pr.rolname,
+                    'admin_option', m.admin_option
+                  )), '[]'::jsonb)
+                  from pg_auth_members m
+                  join pg_roles r on r.oid = m.member
+                  join pg_roles pr on pr.oid = m.roleid
+                  where r.rolname in ('anon', 'authenticated')
+                ),
+                'role_attributes', (
+                  select coalesce(jsonb_agg(jsonb_build_object(
+                    'rolname', rolname,
+                    'rolsuper', rolsuper,
+                    'rolinherit', rolinherit,
+                    'rolcreaterole', rolcreaterole,
+                    'rolcreatedb', rolcreatedb,
+                    'rolcanlogin', rolcanlogin
+                  )), '[]'::jsonb)
+                  from pg_roles
+                  where rolname in ('anon', 'authenticated', 'postgres', 'service_role', 'authenticator')
+                )
+              )
+            ),
+            'rls_status', (
+              select jsonb_build_object(
+                'rls_enabled', coalesce((
+                  select c.relrowsecurity
+                  from pg_class c
+                  join pg_namespace n on n.oid = c.relnamespace
+                  where n.nspname = 'public'
+                    and c.relname = 'basic_medical_session_confirmations'
+                ), false),
+                'rls_forced', coalesce((
+                  select c.relforcerowsecurity
+                  from pg_class c
+                  join pg_namespace n on n.oid = c.relnamespace
+                  where n.nspname = 'public'
+                    and c.relname = 'basic_medical_session_confirmations'
+                ), false),
+                'policies', (
+                  select coalesce(jsonb_agg(jsonb_build_object(
+                    'policyname', pol.polname,
+                    'cmd', case pol.polcmd
+                      when 'r' then 'SELECT'
+                      when 'a' then 'INSERT'
+                      when 'w' then 'UPDATE'
+                      when 'd' then 'DELETE'
+                      when '*' then 'ALL'
+                    end,
+                    'roles', (
+                      select coalesce(jsonb_agg(coalesce(r.rolname, 'PUBLIC')), '[]'::jsonb)
+                      from unnest(pol.polroles) as role_oid
+                      left join pg_roles r on r.oid = role_oid
+                    )
+                  )), '[]'::jsonb)
+                  from pg_policy pol
+                  join pg_class c on c.oid = pol.polrelid
+                  join pg_namespace n on n.oid = c.relnamespace
+                  where n.nspname = 'public'
+                    and c.relname = 'basic_medical_session_confirmations'
+                )
+              )
+            ),
+            'default_privileges', (
+              select coalesce(jsonb_agg(jsonb_build_object(
+                'defaclrole', r.rolname,
+                'defaclnamespace', n.nspname,
+                'defaclobjtype', d.defaclobjtype,
+                'grantee', coalesce(gr.rolname, 'PUBLIC'),
+                'grantor', go.rolname,
+                'privilege_type', a.privilege_type,
+                'is_grantable', a.is_grantable
+              )), '[]'::jsonb)
+              from pg_default_acl d
+              left join pg_roles r on r.oid = d.defaclrole
+              left join pg_namespace n on n.oid = d.defaclnamespace
+              cross join lateral aclexplode(d.defaclacl) a
+              left join pg_roles gr on gr.oid = a.grantee
+              left join pg_roles go on go.oid = a.grantor
+            )
+          ) as diagnostic_result;
+          SQL
+
+          npx --no-install supabase db query --linked --output-format json --file "$RUNNER_TEMP/confirmation-acl-diagnostic.sql" > "$RUNNER_TEMP/confirmation-acl-diagnostic.json"
+
+      - name: Display read-only diagnostic output
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUNNER_TEMP="$RUNNER_TEMP" node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const filePath = path.join(process.env.RUNNER_TEMP, 'confirmation-acl-diagnostic.json');
+          const result = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+          const raw = result?.[0]?.diagnostic_result ?? result?.rows?.[0]?.diagnostic_result ?? result?.diagnostic_result;
+          const diagnostic = typeof raw === 'string' ? JSON.parse(raw) : raw;
+
+          if (!diagnostic) {
+            throw new Error('DIAGNOSTIC_EMPTY_RESULT');
+          }
+
+          console.log('=== CONFIRMATION ACL READ-ONLY DIAGNOSTIC REPORT ===');
+          console.log(JSON.stringify(diagnostic, null, 2));
+          console.log('=== END DIAGNOSTIC REPORT ===');
+          NODE
