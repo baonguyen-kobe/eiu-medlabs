@@ -15,11 +15,19 @@ import ts from "typescript";
 // Extract buildNavigation function body to execute and test navigation matrix
 function extractBuildNavigation() {
   const startIdx = workspaceShellSource.indexOf("function buildNavigation(");
-  const endIdx = workspaceShellSource.indexOf("export function WorkspaceShell(");
-  assert.ok(startIdx > -1 && endIdx > -1, "buildNavigation function found in source");
+  const endIdx = workspaceShellSource.indexOf(
+    "export function WorkspaceShell(",
+  );
+  assert.ok(
+    startIdx > -1 && endIdx > -1,
+    "buildNavigation function found in source",
+  );
   const rawFnBody = workspaceShellSource.slice(startIdx, endIdx);
   const transpiled = ts.transpileModule(rawFnBody, {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
   }).outputText;
 
   // Mock dependencies for pure execution of buildNavigation

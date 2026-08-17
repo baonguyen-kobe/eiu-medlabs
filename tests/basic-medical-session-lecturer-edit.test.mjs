@@ -31,37 +31,75 @@ test("Basic Medical Lecturer Edit: Migration and declarative schema are valid an
   const migration = await fs.readFile(migrationPath, "utf8");
   const schema = await fs.readFile(schemaPath, "utf8");
 
-  assert.ok(migration.includes("create or replace function public.update_basic_medical_session_teaching_lecturer"));
-  assert.ok(schema.includes("create or replace function public.update_basic_medical_session_teaching_lecturer"));
+  assert.ok(
+    migration.includes(
+      "create or replace function public.update_basic_medical_session_teaching_lecturer",
+    ),
+  );
+  assert.ok(
+    schema.includes(
+      "create or replace function public.update_basic_medical_session_teaching_lecturer",
+    ),
+  );
 
   // Check security definer and search_path
   assert.match(migration, /security definer\s+set search_path = ''/);
 
   // Check authorization logic: creator or admin
   assert.match(migration, /is_admin_user := \(select private\.is_admin\(\)\)/);
-  assert.match(migration, /is_creator_user := \(registration_row\.created_by = actor_id\)/);
-  assert.match(migration, /if not \(is_admin_user or is_creator_user\) then[\s\S]*UPDATE_FORBIDDEN/);
+  assert.match(
+    migration,
+    /is_creator_user := \(registration_row\.created_by = actor_id\)/,
+  );
+  assert.match(
+    migration,
+    /if not \(is_admin_user or is_creator_user\) then[\s\S]*UPDATE_FORBIDDEN/,
+  );
 
   // Check target lecturer validation
-  assert.match(migration, /private\.is_operationally_assignable\(target_teaching_lecturer_id\)/);
+  assert.match(
+    migration,
+    /private\.is_operationally_assignable\(target_teaching_lecturer_id\)/,
+  );
   assert.match(migration, /roles\.role = 'lecturer'/);
-  assert.match(migration, /assignments\.room_type_id = basic_medical_room_type_id/);
+  assert.match(
+    migration,
+    /assignments\.room_type_id = basic_medical_room_type_id/,
+  );
   assert.match(migration, /raise exception 'INVALID_LECTURER'/);
 
   // Check mutation flag and updates
-  assert.match(migration, /set_config\('app\.basic_medical_registration_mutation', 'true', true\)/);
-  assert.match(migration, /update public\.basic_medical_registration_sessions[\s\S]*where id = session_row\.id/);
-  assert.match(migration, /update public\.class_schedules[\s\S]*set lecturer_id = target_teaching_lecturer_id[\s\S]*where id = session_row\.class_schedule_id/);
+  assert.match(
+    migration,
+    /set_config\('app\.basic_medical_registration_mutation', 'true', true\)/,
+  );
+  assert.match(
+    migration,
+    /update public\.basic_medical_registration_sessions[\s\S]*where id = session_row\.id/,
+  );
+  assert.match(
+    migration,
+    /update public\.class_schedules[\s\S]*set lecturer_id = target_teaching_lecturer_id[\s\S]*where id = session_row\.class_schedule_id/,
+  );
 
   // Check audit log insertion
-  assert.match(migration, /insert into public\.audit_logs[\s\S]*basic_medical_session\.update_teaching_lecturer/);
+  assert.match(
+    migration,
+    /insert into public\.audit_logs[\s\S]*basic_medical_session\.update_teaching_lecturer/,
+  );
 
   // Check that confirmations table is NOT touched
   assert.doesNotMatch(migration, /basic_medical_session_confirmations/);
 
   // Check grants
-  assert.match(migration, /grant execute on function public\.update_basic_medical_session_teaching_lecturer\(uuid, uuid\) to authenticated/);
-  assert.match(migration, /revoke all on function public\.update_basic_medical_session_teaching_lecturer\(uuid, uuid\) from public, anon/);
+  assert.match(
+    migration,
+    /grant execute on function public\.update_basic_medical_session_teaching_lecturer\(uuid, uuid\) to authenticated/,
+  );
+  assert.match(
+    migration,
+    /revoke all on function public\.update_basic_medical_session_teaching_lecturer\(uuid, uuid\) from public, anon/,
+  );
 
   // Ensure declarative schema matches migration logic
   assert.equal(migration.trim(), schema.trim());
@@ -70,7 +108,11 @@ test("Basic Medical Lecturer Edit: Migration and declarative schema are valid an
 test("Basic Medical Lecturer Edit: Server action enforces auth, input validation, and path revalidation", async () => {
   const actionsSource = await fs.readFile(actionsPath, "utf8");
 
-  assert.ok(actionsSource.includes("export async function updateBasicMedicalSessionTeachingLecturer"));
+  assert.ok(
+    actionsSource.includes(
+      "export async function updateBasicMedicalSessionTeachingLecturer",
+    ),
+  );
   assert.match(
     actionsSource,
     /update_basic_medical_session_teaching_lecturer/,
@@ -80,14 +122,8 @@ test("Basic Medical Lecturer Edit: Server action enforces auth, input validation
     actionsSource,
     /revalidatePath\("\/basic-medical\/registrations"\)/,
   );
-  assert.match(
-    actionsSource,
-    /revalidatePath\("\/basic-medical\/schedules"\)/,
-  );
-  assert.match(
-    actionsSource,
-    /revalidatePath\("\/class-schedules"\)/,
-  );
+  assert.match(actionsSource, /revalidatePath\("\/basic-medical\/schedules"\)/);
+  assert.match(actionsSource, /revalidatePath\("\/class-schedules"\)/);
   assert.match(
     actionsSource,
     /UPDATE_FORBIDDEN[\s\S]*Chỉ người tạo phiếu hoặc Admin/,

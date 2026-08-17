@@ -38,9 +38,7 @@ export async function updateBasicMedicalSessionTeachingLecturer(
   formData: FormData,
 ) {
   const sessionId = String(formData.get("session_id") ?? "");
-  const teachingLecturerId = String(
-    formData.get("teaching_lecturer_id") ?? "",
-  );
+  const teachingLecturerId = String(formData.get("teaching_lecturer_id") ?? "");
   if (
     !/^[0-9a-f-]{36}$/i.test(sessionId) ||
     !/^[0-9a-f-]{36}$/i.test(teachingLecturerId)
@@ -81,10 +79,7 @@ export async function updateBasicMedicalSessionTeachingLecturer(
   revalidatePath("/basic-medical/schedules");
   revalidatePath("/class-schedules");
   redirect(
-    registrationsUrl(
-      "notice",
-      "Đã cập nhật giảng viên giảng dạy/hướng dẫn.",
-    ),
+    registrationsUrl("notice", "Đã cập nhật giảng viên giảng dạy/hướng dẫn."),
   );
 }
 
