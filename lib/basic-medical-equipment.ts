@@ -102,12 +102,8 @@ export type BasicMedicalSessionConfirmation = {
   id: string;
   signer_id: string;
   signed_at: string;
-  signer_name_snapshot: string | null;
   invalidated_at: string | null;
   invalidated_reason: string | null;
-  invalidated_by?: string | null;
-  invalidated_by_name_snapshot?: string | null;
-  signer: { full_name: string } | null;
 };
 
 export type BasicMedicalConfirmationEquipmentEvidence = {
