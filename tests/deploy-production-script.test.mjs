@@ -109,13 +109,30 @@ test("deploy-production.ps1 reports structured verification output for both path
   );
 });
 
+const powershellCmd = (() => {
+  if (process.env.POWERSHELL_BIN) return process.env.POWERSHELL_BIN;
+  if (process.platform === "win32") return "powershell";
+  return "pwsh";
+})();
+
 function runPowerShell(scriptBlock) {
-  const result = execFileSync(
-    "powershell",
-    ["-NoProfile", "-NonInteractive", "-Command", scriptBlock],
-    { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] },
-  );
-  return result;
+  try {
+    return execFileSync(
+      powershellCmd,
+      ["-NoProfile", "-NonInteractive", "-Command", scriptBlock],
+      { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] },
+    );
+  } catch (err) {
+    if (err.code === "ENOENT") {
+      const altCmd = powershellCmd === "pwsh" ? "powershell" : "pwsh";
+      return execFileSync(
+        altCmd,
+        ["-NoProfile", "-NonInteractive", "-Command", scriptBlock],
+        { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] },
+      );
+    }
+    throw err;
+  }
 }
 
 test("PowerShell Assert-VersionEndpoint behavior: exact match succeeds", () => {
