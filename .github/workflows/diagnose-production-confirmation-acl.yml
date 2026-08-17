@@ -113,15 +113,10 @@ jobs:
             ),
             'table_acl', (
               select coalesce(jsonb_agg(jsonb_build_object(
-                'grantee', coalesce(r.rolname, 'PUBLIC'),
+                'grantee', case when a.grantee = 0 then 'PUBLIC' else r.rolname end,
                 'grantor', gr.rolname,
                 'privilege_type', a.privilege_type,
-                'is_grantable', a.is_grantable,
-                'grantee_effective_roles', case when a.grantee = 0 then '[]'::jsonb else (
-                  select coalesce(jsonb_agg(pr.rolname), '[]'::jsonb)
-                  from pg_roles pr
-                  where pr.oid != a.grantee and pg_has_role(a.grantee, pr.oid, 'member')
-                ) end
+                'is_grantable', a.is_grantable
               )), '[]'::jsonb)
               from pg_class c
               join pg_namespace n on n.oid = c.relnamespace
@@ -134,15 +129,10 @@ jobs:
             'column_acl', (
               select coalesce(jsonb_agg(jsonb_build_object(
                 'column_name', att.attname,
-                'grantee', coalesce(r.rolname, 'PUBLIC'),
+                'grantee', case when a.grantee = 0 then 'PUBLIC' else r.rolname end,
                 'grantor', gr.rolname,
                 'privilege_type', a.privilege_type,
-                'is_grantable', a.is_grantable,
-                'grantee_effective_roles', case when a.grantee = 0 then '[]'::jsonb else (
-                  select coalesce(jsonb_agg(pr.rolname), '[]'::jsonb)
-                  from pg_roles pr
-                  where pr.oid != a.grantee and pg_has_role(a.grantee, pr.oid, 'member')
-                ) end
+                'is_grantable', a.is_grantable
               ) order by att.attnum, r.rolname), '[]'::jsonb)
               from pg_class c
               join pg_namespace n on n.oid = c.relnamespace
@@ -152,6 +142,34 @@ jobs:
               left join pg_roles gr on gr.oid = a.grantor
               where n.nspname = 'public'
                 and c.relname = 'basic_medical_session_confirmations'
+            ),
+            'acl_grantee_membership', (
+              select coalesce(jsonb_agg(
+                jsonb_build_object(
+                  'role', roles.rolname,
+                  'anon_member', pg_has_role('anon', roles.oid, 'member'),
+                  'authenticated_member', pg_has_role('authenticated', roles.oid, 'member')
+                ) order by roles.rolname
+              ), '[]'::jsonb)
+              from (
+                select distinct a.grantee
+                from pg_class c
+                join pg_namespace n on n.oid = c.relnamespace
+                cross join lateral aclexplode(coalesce(c.relacl, acldefault('r', c.relowner))) a
+                where n.nspname = 'public'
+                  and c.relname = 'basic_medical_session_confirmations'
+                  and a.grantee <> 0
+                union
+                select distinct a.grantee
+                from pg_class c
+                join pg_namespace n on n.oid = c.relnamespace
+                join pg_attribute att on att.attrelid = c.oid and att.attnum > 0 and not att.attisdropped
+                cross join lateral aclexplode(att.attacl) a
+                where n.nspname = 'public'
+                  and c.relname = 'basic_medical_session_confirmations'
+                  and a.grantee <> 0
+              ) acl_roles
+              join pg_roles roles on roles.oid = acl_roles.grantee
             ),
             'info_schema_privileges', (
               select jsonb_build_object(
@@ -236,7 +254,7 @@ jobs:
                       when '*' then 'ALL'
                     end,
                     'roles', (
-                      select coalesce(jsonb_agg(coalesce(r.rolname, 'PUBLIC')), '[]'::jsonb)
+                      select coalesce(jsonb_agg(case when role_oid = 0 then 'PUBLIC' else coalesce(r.rolname, 'PUBLIC') end), '[]'::jsonb)
                       from unnest(pol.polroles) as role_oid
                       left join pg_roles r on r.oid = role_oid
                     )
@@ -254,15 +272,10 @@ jobs:
                 'defaclrole', r.rolname,
                 'defaclnamespace', n.nspname,
                 'defaclobjtype', d.defaclobjtype,
-                'grantee', coalesce(gr.rolname, 'PUBLIC'),
+                'grantee', case when a.grantee = 0 then 'PUBLIC' else gr.rolname end,
                 'grantor', go.rolname,
                 'privilege_type', a.privilege_type,
-                'is_grantable', a.is_grantable,
-                'grantee_effective_roles', case when a.grantee = 0 then '[]'::jsonb else (
-                  select coalesce(jsonb_agg(pr.rolname), '[]'::jsonb)
-                  from pg_roles pr
-                  where pr.oid != a.grantee and pg_has_role(a.grantee, pr.oid, 'member')
-                ) end
+                'is_grantable', a.is_grantable
               )), '[]'::jsonb)
               from pg_default_acl d
               left join pg_roles r on r.oid = d.defaclrole
