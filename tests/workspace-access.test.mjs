@@ -109,3 +109,18 @@ test("Người xem Y cơ sở chỉ xem lịch; admin và staff không phụ thu
     true,
   );
 });
+
+test("mọi vai trò có phạm vi Y cơ sở đều được phép tải danh sách phiếu", () => {
+  for (const role of [
+    "admin",
+    "staff",
+    "lecturer",
+    "teaching_assistant",
+    "viewer",
+  ]) {
+    assert.equal(
+      access.canViewBasicMedicalRegistrations([role], ["basic_medical"]),
+      true,
+    );
+  }
+});

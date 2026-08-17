@@ -8,6 +8,7 @@ const [
   evidencePage,
   registrationsPage,
   registrationList,
+  equipmentTypes,
   signerSnapshotPermissionMigration,
   signerSnapshotPermissionSchema,
 ] = await Promise.all([
@@ -41,6 +42,10 @@ const [
       "../components/basic-medical-registration-list.tsx",
       import.meta.url,
     ),
+    "utf8",
+  ),
+  readFile(
+    new URL("../lib/basic-medical-equipment.ts", import.meta.url),
     "utf8",
   ),
   readFile(
@@ -110,7 +115,7 @@ test("human-readable evidence values are prospective snapshots, not render-time 
   );
 });
 
-test("list query never serializes signature and gates invalidated evidence links", () => {
+test("registration list requests only confirmation columns available to authenticated readers", () => {
   const selectStart = registrationsPage.indexOf(
     '"id,registration_code,created_at',
   );
@@ -120,12 +125,32 @@ test("list query never serializes signature and gates invalidated evidence links
   assert.doesNotMatch(select, /signature_data/);
   assert.match(
     select,
-    /invalidated_at,invalidated_by,invalidated_by_name_snapshot,invalidated_reason/,
+    /confirmations:basic_medical_session_confirmations\(id,signer_id,signed_at,invalidated_at,invalidated_reason\)/,
+  );
+  for (const forbiddenColumn of [
+    "signer_name_snapshot",
+    "invalidated_by",
+    "invalidated_by_name_snapshot",
+  ]) {
+    assert.doesNotMatch(select, new RegExp(forbiddenColumn));
+  }
+  assert.doesNotMatch(
+    equipmentTypes.slice(
+      equipmentTypes.indexOf("export type BasicMedicalSessionConfirmation"),
+      equipmentTypes.indexOf(
+        "export type BasicMedicalConfirmationEquipmentEvidence",
+      ),
+    ),
+    /signer_name_snapshot|invalidated_by(?:_name_snapshot)?|signer:\s*\{/,
   );
   assert.match(registrationList, /Xác nhận đã vô hiệu/);
-  assert.match(registrationList, /confirmation\.signer_name_snapshot/);
-  assert.doesNotMatch(registrationList, /confirmation\.signer\?\.full_name/);
-  assert.match(registrationsPage, /signer_name_snapshot/);
+  assert.match(registrationList, /Giảng viên buổi học:/);
+  assert.match(registrationList, /session\.teaching\?\.full_name/);
+  assert.doesNotMatch(registrationList, /confirmation\.signer_name_snapshot/);
+  assert.doesNotMatch(
+    registrationsPage,
+    /signer_name_snapshot|invalidated_by(?:_name_snapshot)?/,
+  );
   assert.doesNotMatch(
     registrationsPage,
     /signer:profiles!basic_medical_session_confirmations_signer_id_fkey/,
