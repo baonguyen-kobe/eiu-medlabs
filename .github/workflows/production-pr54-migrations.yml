@@ -226,6 +226,58 @@ jobs:
               'private.invalidate_basic_medical_confirmation_on_schedule_change()',
               'execute'
             ),
+            'anon_trigger_fn_execute', has_function_privilege(
+              'anon',
+              'private.invalidate_basic_medical_confirmation_on_schedule_change()',
+              'execute'
+            ),
+            'public_trigger_fn_execute', has_function_privilege(
+              'public',
+              'private.invalidate_basic_medical_confirmation_on_schedule_change()',
+              'execute'
+            ),
+            'confirmation_trigger_exists', exists (
+              select 1
+              from pg_trigger t
+              join pg_class c on c.oid = t.tgrelid
+              join pg_namespace n on n.oid = c.relnamespace
+              where n.nspname = 'public'
+                and c.relname = 'class_schedules'
+                and t.tgname = 'class_schedules_invalidate_basic_medical_confirmation'
+                and not t.tgisinternal
+            ),
+            'confirmation_trigger_enabled', coalesce((
+              select t.tgenabled = 'O'
+              from pg_trigger t
+              join pg_class c on c.oid = t.tgrelid
+              join pg_namespace n on n.oid = c.relnamespace
+              where n.nspname = 'public'
+                and c.relname = 'class_schedules'
+                and t.tgname = 'class_schedules_invalidate_basic_medical_confirmation'
+                and not t.tgisinternal
+            ), false),
+            'confirmation_trigger_function', (
+              select concat(fn_ns.nspname, '.', p.proname)
+              from pg_trigger t
+              join pg_class c on c.oid = t.tgrelid
+              join pg_namespace n on n.oid = c.relnamespace
+              join pg_proc p on p.oid = t.tgfoid
+              join pg_namespace fn_ns on fn_ns.oid = p.pronamespace
+              where n.nspname = 'public'
+                and c.relname = 'class_schedules'
+                and t.tgname = 'class_schedules_invalidate_basic_medical_confirmation'
+                and not t.tgisinternal
+            ),
+            'confirmation_trigger_definition', (
+              select pg_get_triggerdef(t.oid)
+              from pg_trigger t
+              join pg_class c on c.oid = t.tgrelid
+              join pg_namespace n on n.oid = c.relnamespace
+              where n.nspname = 'public'
+                and c.relname = 'class_schedules'
+                and t.tgname = 'class_schedules_invalidate_basic_medical_confirmation'
+                and not t.tgisinternal
+            ),
             'authenticated_signer_name_snapshot_select', has_column_privilege(
               'authenticated',
               'public.basic_medical_session_confirmations',
@@ -276,7 +328,36 @@ jobs:
           if (postcheck.authenticated_rpc_execute !== true) throw new Error('AUTHENTICATED_EXECUTE_MISSING');
           if (postcheck.anon_rpc_execute !== false) throw new Error('ANON_EXECUTE_UNEXPECTED');
           if (postcheck.public_rpc_execute !== false) throw new Error('PUBLIC_EXECUTE_UNEXPECTED');
-          if (postcheck.authenticated_trigger_fn_execute !== false) throw new Error('TRIGGER_FN_EXECUTE_UNEXPECTED');
+
+          // Trigger helper function privileges (hardened: no execute for authenticated, anon, or public)
+          if (postcheck.authenticated_trigger_fn_execute !== false) throw new Error('TRIGGER_FN_AUTHENTICATED_EXECUTE_UNEXPECTED');
+          if (postcheck.anon_trigger_fn_execute !== false) throw new Error('TRIGGER_FN_ANON_EXECUTE_UNEXPECTED');
+          if (postcheck.public_trigger_fn_execute !== false) throw new Error('TRIGGER_FN_PUBLIC_EXECUTE_UNEXPECTED');
+
+          // Trigger catalog attachment & definition
+          if (postcheck.confirmation_trigger_exists !== true) throw new Error('CONFIRMATION_TRIGGER_NOT_FOUND');
+          if (postcheck.confirmation_trigger_enabled !== true) throw new Error('CONFIRMATION_TRIGGER_NOT_ENABLED');
+          if (postcheck.confirmation_trigger_function !== 'private.invalidate_basic_medical_confirmation_on_schedule_change') {
+            throw new Error('CONFIRMATION_TRIGGER_WRONG_FUNCTION');
+          }
+
+          const triggerDef = postcheck.confirmation_trigger_definition || '';
+          const requiredDefSubstrings = [
+            'class_schedules_invalidate_basic_medical_confirmation',
+            'class_schedules',
+            'UPDATE OF',
+            'room_id',
+            'schedule_date',
+            'start_time',
+            'end_time',
+            'lecturer_id',
+            'private.invalidate_basic_medical_confirmation_on_schedule_change'
+          ];
+          for (const sub of requiredDefSubstrings) {
+            if (!triggerDef.includes(sub)) {
+              throw new Error(`CONFIRMATION_TRIGGER_DEF_MISSING: ${sub}`);
+            }
+          }
 
           // C: RPC business guards
           const rpcSource = postcheck.rpc_source || '';
@@ -329,5 +410,5 @@ jobs:
             }
           }
 
-          console.log('Database contract and confirmation security postcheck: PASS');
+          console.log('Database contract, trigger catalog, and confirmation security postcheck: PASS');
           NODE
