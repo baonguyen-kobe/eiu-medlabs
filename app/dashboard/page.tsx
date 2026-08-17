@@ -172,7 +172,7 @@ export default async function DashboardPage() {
           <div className="kpi-icon">
             <PackageCheck />
           </div>
-          <span>Số lớp chưa có đăng ký thiết bị</span>
+          <span>Số lớp chưa đăng ký thiết bị</span>
           <strong>{monthClassesWithoutEffectiveEquipmentRequest.length}</strong>
         </article>
       </section>

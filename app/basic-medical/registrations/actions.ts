@@ -34,6 +34,58 @@ export async function cancelBasicMedicalSession(formData: FormData) {
   redirect(registrationsUrl("notice", "Đã hủy đúng một buổi học Y cơ sở."));
 }
 
+export async function updateBasicMedicalSessionTeachingLecturer(
+  formData: FormData,
+) {
+  const sessionId = String(formData.get("session_id") ?? "");
+  const teachingLecturerId = String(formData.get("teaching_lecturer_id") ?? "");
+  if (
+    !/^[0-9a-f-]{36}$/i.test(sessionId) ||
+    !/^[0-9a-f-]{36}$/i.test(teachingLecturerId)
+  ) {
+    redirect(
+      registrationsUrl(
+        "error",
+        "Thông tin buổi học hoặc giảng viên không hợp lệ.",
+      ),
+    );
+  }
+
+  const supabase = await createClient();
+  const { data: claims } = await supabase.auth.getClaims();
+  const userId = claims?.claims?.sub;
+  if (!userId) {
+    redirect(registrationsUrl("error", "Phiên đăng nhập đã hết hạn."));
+  }
+
+  const { error } = await supabase.rpc(
+    "update_basic_medical_session_teaching_lecturer",
+    {
+      target_session_id: sessionId,
+      target_teaching_lecturer_id: teachingLecturerId,
+    },
+  );
+
+  if (error) {
+    const message = error.message.includes("UPDATE_FORBIDDEN")
+      ? "Chỉ người tạo phiếu hoặc Admin được thay đổi giảng viên."
+      : error.message.includes("INVALID_LECTURER")
+        ? "Giảng viên không hợp lệ hoặc không thuộc phạm vi Y cơ sở."
+        : error.message.includes("BASIC_MEDICAL_SESSION_CANCELLED") ||
+            error.message.includes("REGISTRATION_CANCELLED")
+          ? "Buổi học đã hủy, không thể thay đổi giảng viên."
+          : "Không thể cập nhật giảng viên giảng dạy/hướng dẫn.";
+    redirect(registrationsUrl("error", message));
+  }
+
+  revalidatePath("/basic-medical/registrations");
+  revalidatePath("/basic-medical/schedules");
+  revalidatePath("/class-schedules");
+  redirect(
+    registrationsUrl("notice", "Đã cập nhật giảng viên giảng dạy/hướng dẫn."),
+  );
+}
+
 export async function invalidateBasicMedicalSessionConfirmation(
   formData: FormData,
 ) {

@@ -627,7 +627,7 @@ export function Dashboard({
                 <div className="kpi-icon">
                   <PackageCheck size={19} />
                 </div>
-                <span>Số lớp chưa có đăng ký thiết bị</span>
+                <span>Số lớp chưa đăng ký thiết bị</span>
                 <strong>
                   {classesWithoutEffectiveEquipmentRequest.length}
                 </strong>

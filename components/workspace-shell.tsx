@@ -101,8 +101,13 @@ function buildNavigation(
     (hasSkillsScope &&
       roles.some((role) => ["lecturer", "teaching_assistant"].includes(role)));
   const isViewer = roles.includes("viewer");
+  const canShowBasicMedical = canViewBasicMedicalSchedules(
+    roles,
+    roomTypeCodes,
+  );
   const groups: Array<{ label: string; items: NavItem[] }> = [];
 
+  // Group 1 — Kỹ năng Điều dưỡng
   if (hasSkillsWorkspace) {
     groups.push({
       label: "Kỹ năng Điều dưỡng",
@@ -119,171 +124,124 @@ function buildNavigation(
           icon: CalendarDays,
           activeIcon: CalendarDaysSolid,
         },
-        ...(!isViewer
-          ? [
-              {
-                label: "Đăng ký thiết bị",
-                href: "/equipment/register",
-                icon: ClipboardList,
-                activeIcon: ClipboardListSolid,
-              },
-              {
-                label: "Phiếu thiết bị của tôi",
-                href: "/equipment/mine",
-                icon: FileClock,
-                activeIcon: FileClockSolid,
-              },
-            ]
-          : []),
       ],
     });
   }
 
-  if (hasSkillsWorkspace && isLecturer) {
-    groups.push({
-      label: "Quản lý lớp",
-      items: [
-        {
-          label: "Lớp đang mở",
-          href: "/classes/open",
-          icon: GraduationCap,
-          activeIcon: GraduationCapSolid,
-        },
-        {
-          label: "Lớp của tôi",
-          href: "/classes/mine",
-          icon: ClipboardList,
-          activeIcon: ClipboardListSolid,
-        },
-      ],
-    });
-  } else if (hasSkillsWorkspace && isStaff) {
-    groups.push({
-      label: "Quản lý phòng",
-      items: [
-        {
-          label: "Lớp đang mở",
-          href: "/classes/open",
-          icon: GraduationCap,
-          activeIcon: GraduationCapSolid,
-        },
-        {
-          label: "Lịch trực",
-          href: "/staff-shifts",
-          icon: PackageCheck,
-          activeIcon: PackageCheckSolid,
-        },
-        {
-          label: "Phiếu thiết bị",
-          href: "/equipment/requests",
-          icon: FileClock,
-          activeIcon: FileClockSolid,
-        },
-        {
-          label: "Import Phiếu thiết bị",
-          href: "/equipment/import",
-          icon: Import,
-          activeIcon: ImportSolid,
-        },
-        ...(canManageEmailNotifications
-          ? [
-              {
-                label: "Email thông báo",
-                href: "/email-notifications",
-                icon: FileClock,
-                activeIcon: FileClockSolid,
-              },
-            ]
-          : []),
-      ],
-    });
-  } else if (hasSkillsWorkspace && isAdmin) {
-    groups.push(
-      {
-        label: "Quản lý lớp",
-        items: [
-          {
-            label: "Lớp đang mở",
-            href: "/classes/open",
-            icon: GraduationCap,
-            activeIcon: GraduationCapSolid,
-          },
-        ],
-      },
-      {
-        label: "Quản lý phòng",
-        items: [
-          {
-            label: "Lịch trực",
-            href: "/staff-shifts",
-            icon: PackageCheck,
-            activeIcon: PackageCheckSolid,
-          },
-          {
-            label: "Phiếu thiết bị",
-            href: "/equipment/requests",
-            icon: FileClock,
-            activeIcon: FileClockSolid,
-          },
-          {
-            label: "Import Phiếu thiết bị",
-            href: "/equipment/import",
-            icon: Import,
-            activeIcon: ImportSolid,
-          },
-          ...(canManageEmailNotifications
-            ? [
-                {
-                  label: "Email thông báo",
-                  href: "/email-notifications",
-                  icon: FileClock,
-                  activeIcon: FileClockSolid,
-                },
-              ]
-            : []),
-        ],
-      },
-    );
-  }
-
+  // Group 2 — Tạo phiếu
+  const taoPhieuItems: NavItem[] = [];
   if (canCreateSkills) {
+    taoPhieuItems.push({
+      label: "Tạo lịch Skills lab",
+      href: "/schedule-entry/new",
+      icon: Plus,
+      activeIcon: PlusSolid,
+    });
+  }
+  if (hasSkillsWorkspace && !isViewer) {
+    taoPhieuItems.push({
+      label: "Đăng ký thiết bị",
+      href: "/equipment/register",
+      icon: ClipboardList,
+      activeIcon: ClipboardListSolid,
+    });
+  }
+  if (canCreateSkills && canImport) {
+    taoPhieuItems.push({
+      label: "Import lịch Skills lab",
+      href: "/schedule-entry/import",
+      icon: Import,
+      activeIcon: ImportSolid,
+    });
+  }
+  if (canCreateSkills && (isAdmin || isStaff || canImport)) {
+    taoPhieuItems.push({
+      label: "Lịch sử import",
+      href: "/imports",
+      icon: FileClock,
+      activeIcon: FileClockSolid,
+    });
+  }
+  if (taoPhieuItems.length > 0) {
     groups.push({
       label: "Tạo phiếu",
-      items: [
-        {
-          label: "Tạo lịch Skills lab",
-          href: "/schedule-entry/new",
-          icon: Plus,
-          activeIcon: PlusSolid,
-        },
-        ...(canImport
-          ? [
-              {
-                label: "Import lịch Skills lab",
-                href: "/schedule-entry/import",
-                icon: Import,
-                activeIcon: ImportSolid,
-              },
-            ]
-          : []),
-        ...(isAdmin || isStaff || canImport
-          ? [
-              {
-                label: "Lịch sử import",
-                href: "/imports",
-                icon: FileClock,
-                activeIcon: FileClockSolid,
-              },
-            ]
-          : []),
-      ],
+      items: taoPhieuItems,
     });
   }
 
-  const canShowBasicMedical = canViewBasicMedicalSchedules(
-    roles,
-    roomTypeCodes,
-  );
+  // Group 3 — Quản lý lớp
+  const quanLyLopItems: NavItem[] = [];
+  if (hasSkillsWorkspace && (isAdmin || isStaff || isLecturer)) {
+    quanLyLopItems.push({
+      label: "Lớp đang mở",
+      href: "/classes/open",
+      icon: GraduationCap,
+      activeIcon: GraduationCapSolid,
+    });
+  }
+  if (hasSkillsWorkspace && isLecturer) {
+    quanLyLopItems.push({
+      label: "Lớp của tôi",
+      href: "/classes/mine",
+      icon: ClipboardList,
+      activeIcon: ClipboardListSolid,
+    });
+  }
+  if (hasSkillsWorkspace && !isViewer) {
+    quanLyLopItems.push({
+      label: "Phiếu thiết bị của tôi",
+      href: "/equipment/mine",
+      icon: FileClock,
+      activeIcon: FileClockSolid,
+    });
+  }
+  if (quanLyLopItems.length > 0) {
+    groups.push({
+      label: "Quản lý lớp",
+      items: quanLyLopItems,
+    });
+  }
+
+  // Group 4 — Quản lý phòng
+  const quanLyPhongItems: NavItem[] = [];
+  if (hasSkillsWorkspace && (isAdmin || isStaff)) {
+    quanLyPhongItems.push(
+      {
+        label: "Lịch trực",
+        href: "/staff-shifts",
+        icon: PackageCheck,
+        activeIcon: PackageCheckSolid,
+      },
+      {
+        label: "Phiếu thiết bị",
+        href: "/equipment/requests",
+        icon: FileClock,
+        activeIcon: FileClockSolid,
+      },
+      {
+        label: "Import Phiếu thiết bị",
+        href: "/equipment/import",
+        icon: Import,
+        activeIcon: ImportSolid,
+      },
+    );
+    if (canManageEmailNotifications) {
+      quanLyPhongItems.push({
+        label: "Email thông báo",
+        href: "/email-notifications",
+        icon: FileClock,
+        activeIcon: FileClockSolid,
+      });
+    }
+  }
+  if (quanLyPhongItems.length > 0) {
+    groups.push({
+      label: "Quản lý phòng",
+      items: quanLyPhongItems,
+    });
+  }
+
+  // Group 5 — Y cơ sở
   if (canShowBasicMedical) {
     const yItems: NavItem[] = [
       {
@@ -316,6 +274,16 @@ function buildNavigation(
       });
     }
     if (
+      canImportBasicMedicalSchedules(roles, roomTypeCodes, canImportSchedules)
+    ) {
+      yItems.push({
+        label: "Import lịch Y cơ sở",
+        href: "/basic-medical/import",
+        icon: Import,
+        activeIcon: ImportSolid,
+      });
+    }
+    if (
       canViewBasicMedicalSchedules(roles, roomTypeCodes) &&
       !canManageBasicMedicalWorkspace(roles, roomTypeCodes)
     ) {
@@ -326,64 +294,56 @@ function buildNavigation(
         activeIcon: ClipboardListSolid,
       });
     }
-    if (
-      canImportBasicMedicalSchedules(roles, roomTypeCodes, canImportSchedules)
-    ) {
-      yItems.push({
-        label: "Import lịch Y cơ sở",
-        href: "/basic-medical/import",
-        icon: Import,
-        activeIcon: ImportSolid,
-      });
+    if (yItems.length > 0) {
+      groups.push({ label: "Y cơ sở", items: yItems });
     }
-    groups.push({ label: "Y cơ sở", items: yItems });
   }
 
-  if (isAdmin || isStaff) {
-    const adminItems: NavItem[] = [
+  // Group 6 — Quản trị
+  const adminItems: NavItem[] = [];
+  if (isAdmin) {
+    if (canManagePersonnel) {
+      adminItems.push({
+        label: "Nhân sự",
+        href: "/admin/personnel",
+        icon: Users,
+        activeIcon: UsersSolid,
+      });
+    }
+    adminItems.push(
       {
-        label: "Danh sách thiết bị Y cơ sở",
-        href: "/basic-medical/equipment",
-        icon: ClipboardList,
-        activeIcon: ClipboardListSolid,
+        label: "Danh mục TB Skills lab",
+        href: "/admin/equipment",
+        icon: Settings,
+        activeIcon: SettingsSolid,
       },
-    ];
-    if (!canManageBasicMedicalWorkspace(roles, roomTypeCodes)) {
-      adminItems.shift();
-    }
-    if (isAdmin) {
-      adminItems.unshift(
-        ...(canManagePersonnel
-          ? [
-              {
-                label: "Nhân sự",
-                href: "/admin/personnel",
-                icon: Users,
-                activeIcon: UsersSolid,
-              },
-            ]
-          : []),
-        {
-          label: "Danh mục thiết bị",
-          href: "/admin/equipment",
-          icon: Settings,
-          activeIcon: SettingsSolid,
-        },
-        {
-          label: "Danh mục khác",
-          href: "/admin/courses",
-          icon: Settings,
-          activeIcon: SettingsSolid,
-          activeHrefs: [
-            "/admin/catalogs",
-            "/admin/courses",
-            "/admin/rooms",
-            "/admin/shift-templates",
-            "/admin/audit",
-          ],
-        },
-      );
-    }
+      {
+        label: "Danh mục khác",
+        href: "/admin/courses",
+        icon: Settings,
+        activeIcon: SettingsSolid,
+        activeHrefs: [
+          "/admin/catalogs",
+          "/admin/courses",
+          "/admin/rooms",
+          "/admin/shift-templates",
+          "/admin/audit",
+        ],
+      },
+    );
+  }
+  if (
+    (isAdmin || isStaff) &&
+    canManageBasicMedicalWorkspace(roles, roomTypeCodes)
+  ) {
+    adminItems.push({
+      label: "Danh mục TB Y cơ sở",
+      href: "/basic-medical/equipment",
+      icon: ClipboardList,
+      activeIcon: ClipboardListSolid,
+    });
+  }
+  if (adminItems.length > 0) {
     groups.push({
       label: "Quản trị",
       items: adminItems,

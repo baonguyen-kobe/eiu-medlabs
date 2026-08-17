@@ -16,6 +16,7 @@ import {
   cancelBasicMedicalRegistration,
   cancelBasicMedicalSession,
   invalidateBasicMedicalSessionConfirmation,
+  updateBasicMedicalSessionTeachingLecturer,
 } from "@/app/basic-medical/registrations/actions";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
@@ -29,6 +30,7 @@ import {
   type BasicMedicalSessionConfirmation,
   type BasicMedicalRegistrationSessionItem,
   type BasicMedicalRoomInventoryItem,
+  type BasicMedicalInstructorOption,
 } from "@/lib/basic-medical-equipment";
 
 const dateTimeFormatter = new Intl.DateTimeFormat("vi-VN", {
@@ -535,6 +537,101 @@ function SessionStatus({
   );
 }
 
+function SessionLecturerCell({
+  session,
+  registration,
+  instructors,
+  viewerId,
+  isAdmin,
+}: {
+  session: BasicMedicalRegistrationSessionItem;
+  registration: BasicMedicalRegistrationListItem;
+  instructors: BasicMedicalInstructorOption[];
+  viewerId: string;
+  isAdmin: boolean;
+}) {
+  const [editOpen, setEditOpen] = useState(false);
+  const [selectedLecturerId, setSelectedLecturerId] = useState(
+    session.teaching_lecturer_id,
+  );
+  const [isPending, startTransition] = useTransition();
+
+  const isCancelled =
+    Boolean(registration.cancelled_at) ||
+    session.class_schedules?.schedule_status === "cancelled";
+  const canEdit =
+    !isCancelled &&
+    (isAdmin || registration.created_by === viewerId) &&
+    instructors.length > 0;
+
+  if (!canEdit) {
+    return <td>{session.teaching?.full_name ?? "—"}</td>;
+  }
+
+  const formId = `change-lecturer-${session.id}`;
+
+  return (
+    <td>
+      <div className="basic-medical-session-lecturer-cell">
+        <span>{session.teaching?.full_name ?? "—"}</span>
+        <form id={formId} action={updateBasicMedicalSessionTeachingLecturer}>
+          <input type="hidden" name="session_id" value={session.id} />
+          <input
+            type="hidden"
+            name="teaching_lecturer_id"
+            value={selectedLecturerId}
+          />
+        </form>
+        <button
+          type="button"
+          className="button button-secondary basic-medical-lecturer-edit-button"
+          onClick={() => {
+            setSelectedLecturerId(session.teaching_lecturer_id);
+            setEditOpen(true);
+          }}
+        >
+          Đổi GV
+        </button>
+        <ConfirmDialog
+          open={editOpen}
+          title="Đổi giảng viên giảng dạy/hướng dẫn"
+          description={`${registration.courses?.course_code ?? "Môn học"} · ${registration.courses?.course_name ?? ""} | Buổi ${session.session_number}: ${session.lesson_title} | ${formatDate(session.class_schedules?.schedule_date)} · ${formatTime(session.class_schedules?.start_time)}–${formatTime(session.class_schedules?.end_time)} | Phòng: ${registration.rooms?.building_code ?? ""} ${registration.rooms?.room_code ?? ""}${registration.rooms?.room_name ? ` – ${registration.rooms.room_name}` : ""}`}
+          confirmLabel="Lưu thay đổi"
+          pending={isPending}
+          onCancel={() => setEditOpen(false)}
+          onConfirm={() => {
+            if (!selectedLecturerId) return;
+            startTransition(() => {
+              const form = document.getElementById(
+                formId,
+              ) as HTMLFormElement | null;
+              if (!form) return;
+              form.requestSubmit();
+            });
+          }}
+        >
+          <label className="form-field">
+            <span>Giảng viên giảng dạy/hướng dẫn *</span>
+            <select
+              value={selectedLecturerId}
+              onChange={(event) => setSelectedLecturerId(event.target.value)}
+              disabled={isPending}
+            >
+              {instructors.map((instructor) => (
+                <option key={instructor.id} value={instructor.id}>
+                  {instructor.title
+                    ? `${instructor.title} ${instructor.full_name}`
+                    : instructor.full_name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </ConfirmDialog>
+      </div>
+    </td>
+  );
+}
+
 function SessionAdministrativeActions({
   session,
   confirmation,
@@ -655,13 +752,17 @@ function SessionAdministrativeActions({
 export function BasicMedicalRegistrationList({
   registrations,
   inventories,
+  instructors = [],
   viewerId,
+  isAdmin = false,
   canDelete,
   evidenceEnabled,
 }: {
   registrations: BasicMedicalRegistrationListItem[];
   inventories: BasicMedicalRoomInventoryItem[];
+  instructors?: BasicMedicalInstructorOption[];
   viewerId: string;
+  isAdmin?: boolean;
   canDelete: boolean;
   evidenceEnabled: boolean;
 }) {
@@ -937,7 +1038,13 @@ export function BasicMedicalRegistrationList({
                                         )}
                                       </td>
                                       <td>{session.lesson_title}</td>
-                                      <td>{session.teaching?.full_name}</td>
+                                      <SessionLecturerCell
+                                        session={session}
+                                        registration={registration}
+                                        instructors={instructors}
+                                        viewerId={viewerId}
+                                        isAdmin={isAdmin}
+                                      />
                                       <td className="basic-medical-session-action-cell">
                                         <div className="basic-medical-session-action-stack">
                                           <SessionStatus

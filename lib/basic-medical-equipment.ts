@@ -162,8 +162,15 @@ export type BasicMedicalRegistrationSessionItem = {
   confirmations: BasicMedicalSessionConfirmation[];
 };
 
+export type BasicMedicalInstructorOption = {
+  id: string;
+  full_name: string;
+  title: string | null;
+};
+
 export type BasicMedicalRegistrationListItem = {
   id: string;
+  created_by?: string;
   registration_code: string;
   created_at: string;
   academic_year: string;
