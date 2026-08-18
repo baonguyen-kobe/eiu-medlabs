@@ -168,3 +168,92 @@ test("Database migration and declarative schemas enforce semester column and RPC
     /if target_semester is null or target_semester not in \('HK1', 'HK2', 'HK3', 'HK4'\) then/,
   );
 });
+
+test("ImportWizard enforces batch-level semester selector before Step 1 upload", () => {
+  const wizardSource = readFileSync(
+    new URL("../components/import-wizard.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    wizardSource,
+    /<div className="import-stepper-bar">/,
+    "Import wizard must render .import-stepper-bar wrapping semester control and stepper",
+  );
+  assert.match(
+    wizardSource,
+    /id="import-semester-select"/,
+    "Import wizard must include #import-semester-select",
+  );
+  assert.match(
+    wizardSource,
+    /CANONICAL_SEMESTERS\.map\(/,
+    "Semester options must come from CANONICAL_SEMESTERS",
+  );
+  assert.match(
+    wizardSource,
+    /Vui lòng chọn Học kỳ trước khi chọn file import\./,
+    "Attempting upload without semester must show blocking error message",
+  );
+  assert.match(
+    wizardSource,
+    /validateScheduleRows\([\s\S]*?JSON\.stringify\(rows\),[\s\S]*?scope,[\s\S]*?semester/,
+    "validateScheduleRows must receive semester",
+  );
+  assert.match(
+    wizardSource,
+    /importScheduleRows\([\s\S]*?fileName,[\s\S]*?JSON\.stringify\(rows\),[\s\S]*?scope,[\s\S]*?semester/,
+    "importScheduleRows must receive semester",
+  );
+  assert.match(
+    wizardSource,
+    /Học kỳ: <b>\{semester\}<\/b>/,
+    "Preview steps must display the selected batch semester",
+  );
+});
+
+test("CSS rules align .import-stepper-bar with inner dropzone and handle mobile reflow", () => {
+  const cssSource = readFileSync(
+    new URL("../app/globals.css", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    cssSource,
+    /\.import-stepper-bar\s*\{[^}]*padding:\s*0 22px;[^}]*\}/,
+    ".import-stepper-bar must have 22px horizontal padding matching .import-panel",
+  );
+  assert.match(
+    cssSource,
+    /\.import-semester-control\s*\{[^}]*display:\s*flex;[^}]*\}/,
+    ".import-semester-control must be styled as a flex container",
+  );
+  assert.match(
+    cssSource,
+    /\.drop-zone\.drop-zone-blocked\s*\{[^}]*cursor:\s*not-allowed;[^}]*\}/,
+    "Blocked dropzone must have not-allowed cursor",
+  );
+});
+
+test("Import server actions require canonical semester for skills_lab and pass to create_import_schedule_row RPC", () => {
+  const actionSource = readFileSync(
+    new URL("../app/schedule-entry/import/actions.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    actionSource,
+    /if \(scope === "skills_lab"\)\s*\{\s*if \(!semester \|\| !isCanonicalSemester\(semester\)\)/,
+    "validateScheduleRows must fail closed if skills_lab is missing canonical semester",
+  );
+  assert.match(
+    actionSource,
+    /target_semester:\s*scope === "skills_lab"\s*\?\s*semester\s*:\s*null/,
+    "importScheduleRows must pass target_semester to create_import_schedule_row",
+  );
+  assert.match(
+    actionSource,
+    /semester:\s*scope === "skills_lab"\s*\?\s*semester\s*:\s*undefined/,
+    "importScheduleRows must return semester in result",
+  );
+});

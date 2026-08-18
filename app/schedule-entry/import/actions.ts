@@ -20,6 +20,7 @@ import {
   classifyImportPreviewCandidatesInOrder,
   type ExistingScheduleForPreview,
 } from "@/lib/import-preview-conflicts";
+import { isCanonicalSemester } from "@/lib/semesters";
 
 type ImportRow = Record<string, unknown>;
 type ImportLecturer = {
@@ -32,6 +33,7 @@ export type ImportResult = {
   ok: boolean;
   message: string;
   batchId?: string;
+  semester?: string;
   totalRows?: number;
   importedRows?: number;
   errorRows?: number;
@@ -127,11 +129,20 @@ function parseImportRows(inputRowsJson: string): ImportRow[] | null {
 export async function validateScheduleRows(
   inputRowsJson: string,
   scope: ScheduleScope = "skills_lab",
+  semester?: string,
 ): Promise<ImportValidationResult> {
   const supabase = await createClient();
   const { data: claimsData } = await supabase.auth.getClaims();
   const userId = claimsData?.claims?.sub;
   if (!userId) return invalidValidation("Phiên đăng nhập đã hết hạn.");
+
+  if (scope === "skills_lab") {
+    if (!semester || !isCanonicalSemester(semester)) {
+      return invalidValidation(
+        "Học kỳ không hợp lệ hoặc chưa được chọn. Vui lòng chọn học kỳ trước khi import.",
+      );
+    }
+  }
 
   const inputRows = parseImportRows(inputRowsJson);
   if (!inputRows) {
@@ -480,6 +491,7 @@ export async function importScheduleRows(
   fileName: string,
   inputRowsJson: string,
   scope: ScheduleScope = "skills_lab",
+  semester?: string,
 ): Promise<ImportResult> {
   const startedAt = Date.now();
   const supabase = await createClient();
@@ -488,6 +500,17 @@ export async function importScheduleRows(
   if (!userId) {
     return { ok: false, message: "Phiên đăng nhập đã hết hạn." };
   }
+
+  if (scope === "skills_lab") {
+    if (!semester || !isCanonicalSemester(semester)) {
+      return {
+        ok: false,
+        message:
+          "Học kỳ không hợp lệ hoặc chưa được chọn. Vui lòng chọn học kỳ trước khi import.",
+      };
+    }
+  }
+
   let inputRows: ImportRow[];
   try {
     const parsed = JSON.parse(inputRowsJson) as unknown;
@@ -801,6 +824,7 @@ export async function importScheduleRows(
             target_end: endTime,
             target_note: text(row, "note") || null,
             target_student_count: studentCount,
+            target_semester: scope === "skills_lab" ? semester : null,
           });
 
         if (scheduleError || !createdScheduleId) {
@@ -930,6 +954,7 @@ export async function importScheduleRows(
     ok: true,
     message: `Đã tạo ${finalImported} lịch từ ${inputRows.length} dòng.`,
     batchId: batch.id,
+    semester: scope === "skills_lab" ? semester : undefined,
     totalRows: inputRows.length,
     importedRows: finalImported,
     errorRows: finalErrors,

@@ -874,6 +874,7 @@ test("quyền nhập lịch chỉ quản lý batch của mình và Trợ giảng
         target_end: base.end_time,
         target_note: null,
         target_student_count: base.student_count,
+        target_semester: "HK1",
       });
     const ownImported = await createImported(
       importer,
@@ -1660,6 +1661,7 @@ test("hai batch import đồng thời không tạo cùng normalized hash", async
         target_end: "09:30",
         target_note: null,
         target_student_count: 20,
+        target_semester: "HK1",
       });
 
     const results = await Promise.all([
@@ -2343,6 +2345,7 @@ test("mỗi dòng import hợp lệ tạo lịch và bản ghi kiểm tra trong 
       target_end: "16:30",
       target_note: null,
       target_student_count: 20,
+      target_semester: "HK1",
     },
   );
   assert.ifError(rpcError);
@@ -2807,6 +2810,7 @@ test("direct import RPC từ chối hash giả do caller gửi", async () => {
       target_end: "09:30",
       target_note: null,
       target_student_count: 20,
+      target_semester: "HK1",
     });
     assert.ok(result.error);
     assert.equal(result.error.code, "22023");
@@ -2864,6 +2868,7 @@ test("hash của lịch import đã hủy không chặn lần import sau", async
       target_end: target.end,
       target_note: null,
       target_student_count: 20,
+      target_semester: "HK1",
     });
     assert.ifError(created.error);
     scheduleId = created.data;
