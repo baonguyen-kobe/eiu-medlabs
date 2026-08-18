@@ -170,23 +170,95 @@ test("Basic Medical Lecturer Edit: Page query selects created_by and fetches act
   assert.match(pageSource, /isAdmin=\{roles\.includes\("admin"\)\}/);
 });
 
-test("Basic Medical Lecturer Edit: UI component gates edit control to creator or Admin and preserves read-only for others", async () => {
+test("Basic Medical Lecturer Edit: UI component implements inline lecturer edit UX contract", async () => {
   const listSource = await fs.readFile(listComponentPath, "utf8");
 
+  // SessionLecturerCell exists and handles read vs edit mode
   assert.ok(listSource.includes("function SessionLecturerCell"));
+
+  // In read mode, lecturer cell renders plain text only (no Sửa or Đổi GV button inside lecturer cell)
   assert.match(
     listSource,
-    /canEdit =\s*!isCancelled &&\s*\(isAdmin \|\| registration\.created_by === viewerId\) &&\s*instructors\.length > 0/,
-    "Gated to creator or admin when not cancelled",
+    /if \(!isEditing\) \{\s*return <td>\{session\.teaching\?\.full_name \?\? "—"\}<\/td>;\s*\}/,
+    "Lecturer cell is read-only text in read mode",
+  );
+  assert.doesNotMatch(
+    listSource,
+    /basic-medical-lecturer-edit-button[\s\S]*SessionLecturerCell/,
+    "Sửa button is not placed inside SessionLecturerCell",
+  );
+  assert.doesNotMatch(
+    listSource,
+    />Đổi GV<\/button>/,
+    "Old Đổi GV button is completely removed",
+  );
+
+  // In edit mode, lecturer cell renders select dropdown with canonical options
+  assert.match(
+    listSource,
+    /<select[\s\S]*className="form-select basic-medical-lecturer-select"[\s\S]*value=\{selectedLecturerId\}[\s\S]*onChange=\{[\s\S]*onLecturerChange[\s\S]*>/,
+    "Renders select dropdown in edit mode",
   );
   assert.match(
     listSource,
-    /if \(!canEdit\) \{\s*return <td>\{session\.teaching\?\.full_name \?\? "—"\}<\/td>;\s*\}/,
-    "Renders read-only plain text for unauthorized users",
+    /instructor\.title\s*\?\s*`\$\{instructor\.title\}\s*\$\{instructor\.full_name\}`\s*:\s*instructor\.full_name/,
+    "Formats lecturer title and full name identically to registration form",
+  );
+
+  // Sửa button is positioned in the final action area (basic-medical-session-action-stack)
+  assert.match(
+    listSource,
+    /<td className="basic-medical-session-action-cell">\s*<div className="basic-medical-session-action-stack">[\s\S]*<SessionStatus[\s\S]*\{canEditLecturer \? \(/,
+    "Sửa button is placed in the final Trạng thái / Thao tác action stack",
+  );
+
+  // In edit mode, Sửa changes to Lưu with secondary Hủy button
+  assert.match(
+    listSource,
+    /isEditing\s*\?\s*\([\s\S]*basic-medical-session-lecturer-actions[\s\S]*updateBasicMedicalSessionTeachingLecturer[\s\S]*basic-medical-lecturer-save-button[\s\S]*isSavingLecturer[\s\S]*Lưu[\s\S]*basic-medical-lecturer-cancel-button[\s\S]*handleCancelEditLecturer[\s\S]*Hủy/,
+    "Sửa becomes Lưu in primary position with adjacent Hủy button",
+  );
+
+  // Authorization and cancellation gating
+  assert.match(
+    listSource,
+    /canEditLecturer\s*=\s*!isCancelled\s*&&\s*!isSessionCancelled\s*&&\s*\(\s*isAdmin\s*\|\|\s*registration\.created_by\s*===\s*viewerId\s*\)\s*&&\s*instructors\.length\s*>\s*0/,
+    "Gated to creator or admin when registration and session are not cancelled",
+  );
+
+  // Multi-session isolation and stable session ID
+  assert.match(
+    listSource,
+    /isEditing =\s*editingSessionId === session\.id/,
+    "Edit mode is isolated to exact stable session ID",
   );
   assert.match(
     listSource,
-    /ConfirmDialog[\s\S]*Đổi giảng viên giảng dạy\/hướng dẫn[\s\S]*Lưu thay đổi/,
-    "Uses ConfirmDialog with confirmation prompt and explicit save",
+    /name="session_id"\s*value=\{session\.id\}/,
+    "Submits exact stable session ID",
+  );
+
+  // No-change save optimization
+  assert.match(
+    listSource,
+    /if \(selectedLecturerId === session\.teaching_lecturer_id\) \{\s*setEditingSessionId\(null\);\s*return;\s*\}/,
+    "Exits edit mode cleanly without unnecessary server mutation when unchanged",
+  );
+
+  // Old lecturer ConfirmDialog removed, but administrative ConfirmDialogs preserved
+  assert.doesNotMatch(
+    listSource,
+    /title="Đổi giảng viên giảng dạy\/hướng dẫn"/,
+    "Old lecturer ConfirmDialog is removed",
+  );
+  assert.match(
+    listSource,
+    /title="Hủy buổi học Y cơ sở\?"/,
+    "Preserves Hủy lớp ConfirmDialog",
+  );
+  assert.match(
+    listSource,
+    /title="Vô hiệu hóa xác nhận buổi học\?"/,
+    "Preserves Vô hiệu hóa xác nhận ConfirmDialog",
   );
 });
