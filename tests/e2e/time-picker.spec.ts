@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 
 const ARTIFACTS_DIR =
