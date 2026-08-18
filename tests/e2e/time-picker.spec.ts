@@ -254,7 +254,7 @@ test.describe("Shared Custom Time Picker E2E Verification", () => {
 
     // Insert two class_schedule fixtures:
     //   Event A: start_time=08:15, end_time=11:30 (off-grid start — historical)
-    //   Event B: start_time=08:15, end_time=13:30 (SAME start time — critical C6 case)
+    //   Event B: start_time=08:15, end_time=10:30 (SAME start time — critical C6 case)
     const idA = crypto.randomUUID();
     const idB = crypto.randomUUID();
 
@@ -284,7 +284,7 @@ test.describe("Shared Custom Time Picker E2E Verification", () => {
             room_id: "20000000-0000-0000-0000-000000000002",
             schedule_date: fixtureDate,
             start_time: "08:15", // SAME start_time as A — C6 critical case
-            end_time: "13:30",
+            end_time: "10:30",
             source: "manual",
             schedule_status: "draft",
             created_by: adminId,
@@ -381,7 +381,7 @@ test.describe("Shared Custom Time Picker E2E Verification", () => {
       await drawer.locator('button[aria-label="Đóng"]').click();
       await expect(drawer).not.toBeVisible();
 
-      // C5: Different record, DIFFERENT value — open event B (08:15–13:30)
+      // C5: Different record, DIFFERENT value — open event B (08:15–10:30)
       // After editing A's start to 08:30 (dirty), now open B.
       // B's start is 08:15 (different end time = different event).
       const eventB = page
@@ -389,7 +389,7 @@ test.describe("Shared Custom Time Picker E2E Verification", () => {
         .filter({
           hasText: "08:15",
         })
-        .filter({ hasText: "13:30" })
+        .filter({ hasText: "10:30" })
         .first();
       await expect(eventB).toBeVisible({ timeout: 10_000 });
       await eventB.click();
