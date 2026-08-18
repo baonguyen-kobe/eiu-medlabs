@@ -74,6 +74,7 @@ type Schedule = {
   schedule_date: string;
   start_time: string;
   schedule_status: string;
+  semester: string | null;
   rooms: {
     room_code: string;
     building_code: string;
@@ -261,7 +262,7 @@ async function prepareEquipmentImport(
   const scheduleQuery = supabase
     .from("class_schedules")
     .select(
-      "id,course_code_snapshot,schedule_date,start_time,schedule_status,rooms!inner(room_code,building_code,room_type_id)",
+      "id,course_code_snapshot,schedule_date,start_time,schedule_status,semester,rooms!inner(room_code,building_code,room_type_id)",
     )
     .eq("rooms.room_type_id", NURSING_SKILLS_ROOM_TYPE_ID)
     .neq("schedule_status", "cancelled");
@@ -417,6 +418,20 @@ async function prepareEquipmentImport(
       groupErrors.push(
         "Thông tin lớp khớp nhiều lịch; cần bổ sung dữ liệu phân biệt",
       );
+    } else if (
+      !schedule?.semester ||
+      !["HK1", "HK2", "HK3", "HK4"].includes(schedule.semester)
+    ) {
+      groupErrors.push(
+        `Lớp ${String(first.course_code)} · ${String(first.schedule_date)} chưa có thông tin Học kỳ hợp lệ trong lịch`,
+      );
+    } else if (
+      first.semester &&
+      String(first.semester).trim().toUpperCase() !== schedule.semester
+    ) {
+      groupWarnings.push(
+        `Học kỳ trong file (${String(first.semester)}) khác lịch học (${schedule.semester}); hệ thống sử dụng học kỳ của lịch học (${schedule.semester})`,
+      );
     }
 
     const registrantMatch = resolveProfile(
@@ -562,7 +577,7 @@ async function prepareEquipmentImport(
         ? {
             source_code: requestCode,
             class_schedule_id: schedule.id,
-            semester: String(first.semester),
+            semester: schedule.semester,
             registrant_id: registrantMatch.profile.id,
             responsible_lecturer_id: responsible.id,
             phone_snapshot: phone,

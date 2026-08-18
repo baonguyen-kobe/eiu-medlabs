@@ -182,7 +182,6 @@ export function getEquipmentImportFormatIssues(
   const requiredText: Array<[EquipmentImportHeader, string]> = [
     ["source_code", "mã phiếu nguồn"],
     ["course_code", "mã môn học"],
-    ["semester", "học kỳ"],
     ["room", "phòng/Lab"],
     ["skill_name", "kỹ năng/bài thực hành"],
     ["item_name", "tên thiết bị và vật tư"],
@@ -219,7 +218,10 @@ export function getEquipmentImportFormatIssues(
   if (!normalizeImportDate(row.schedule_date)) {
     issues.push({ field: "schedule_date", message: "Ngày học không hợp lệ" });
   }
-  if (!["HK1", "HK2", "HK3", "HK4"].includes(String(row.semester))) {
+  if (
+    row.semester &&
+    !["HK1", "HK2", "HK3", "HK4"].includes(String(row.semester))
+  ) {
     issues.push({
       field: "semester",
       message: "Học kỳ phải là HK1, HK2, HK3 hoặc HK4",

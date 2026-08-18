@@ -1249,6 +1249,8 @@ declare
   new_request_id uuid;
   source_code text;
   results jsonb := '[]'::jsonb;
+  target_sched_semester text;
+  derived_semester text;
 begin
   if actor_id is null
     or not (select private.is_active_user())
@@ -1279,16 +1281,24 @@ begin
       ) then
         raise exception 'Người đăng ký của phiếu % không hợp lệ.', source_code using errcode = '22023';
       end if;
-      if not exists (
-        select 1
-        from public.class_schedules as schedules
-        join public.rooms as rooms on rooms.id = schedules.room_id
-        where schedules.id = (request_payload ->> 'class_schedule_id')::uuid
-          and schedules.schedule_status <> 'cancelled'
-          and rooms.room_type_id = '40000000-0000-0000-0000-000000000001'::uuid
-      ) then
+
+      select schedules.semester into target_sched_semester
+      from public.class_schedules as schedules
+      join public.rooms as rooms on rooms.id = schedules.room_id
+      where schedules.id = (request_payload ->> 'class_schedule_id')::uuid
+        and schedules.schedule_status <> 'cancelled'
+        and rooms.room_type_id = '40000000-0000-0000-0000-000000000001'::uuid;
+
+      if not found then
         raise exception 'Lớp Skills lab của phiếu % không hợp lệ.', source_code using errcode = '22023';
       end if;
+
+      if target_sched_semester is null or target_sched_semester not in ('HK1','HK2','HK3','HK4') then
+        raise exception 'Lịch học của phiếu % chưa có thông tin Học kỳ hợp lệ.', source_code using errcode = '22023';
+      end if;
+
+      derived_semester := target_sched_semester;
+
       if (request_payload ->> 'responsible_lecturer_id')::uuid
           <> (request_payload ->> 'registrant_id')::uuid
         and not exists (
@@ -1299,9 +1309,6 @@ begin
           where lecturers.id = (request_payload ->> 'responsible_lecturer_id')::uuid
         ) then
         raise exception 'Giảng viên phụ trách của phiếu % không hợp lệ.', source_code using errcode = '22023';
-      end if;
-      if coalesce(request_payload ->> 'semester', '') not in ('HK1','HK2','HK3','HK4') then
-        raise exception 'Học kỳ của phiếu % phải là HK1, HK2, HK3 hoặc HK4.', source_code using errcode = '22023';
       end if;
 
       insert into public.equipment_requests (
@@ -1320,7 +1327,7 @@ begin
         updated_at
       ) values (
         (request_payload ->> 'class_schedule_id')::uuid,
-        request_payload ->> 'semester',
+        derived_semester,
         (request_payload ->> 'registrant_id')::uuid,
         (request_payload ->> 'responsible_lecturer_id')::uuid,
         request_payload ->> 'phone_snapshot',
