@@ -87,13 +87,9 @@ test("form Y cơ sở tạo được đúng một buổi theo khung giờ của 
     await expect(sessionDate).toHaveAttribute("min", "2048-08-06");
     await expect(sessionDate).toHaveAttribute("max", "2048-08-06");
     await sessionDate.fill("2048-08-06");
-    await page
-      .getByRole("combobox", { name: "Buổi 1 - Giờ bắt đầu" })
-      .selectOption("19:00");
-    await page
-      .getByRole("combobox", { name: "Buổi 1 - Giờ kết thúc" })
-      .selectOption("21:00");
-    await sessionRow.locator('input:not([type="date"])').fill("Bài E2E");
+    await page.getByLabel("Buổi 1 - Giờ bắt đầu").fill("19:00");
+    await page.getByLabel("Buổi 1 - Giờ kết thúc").fill("21:00");
+    await page.getByLabel("Buổi 1 - Tên bài TN-TH").fill("Bài E2E");
     await page
       .getByRole("combobox", {
         name: "Buổi 1 - Giảng viên giảng dạy/hướng dẫn",

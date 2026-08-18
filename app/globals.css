@@ -7182,6 +7182,22 @@ body,
   font-size: 13px;
 }
 
+.time-picker-error {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.35;
+  font-weight: 500;
+  color: #dc2626;
+  animation: time-picker-fade-in 0.12s ease-out;
+}
+
+.inline-time-editor .time-picker-error,
+.drawer-time-editor .time-picker-error,
+.data-table .time-picker-error {
+  font-size: 11px;
+}
+
 .time-picker-popover {
   background: white;
   border: 1px solid var(--line-strong);

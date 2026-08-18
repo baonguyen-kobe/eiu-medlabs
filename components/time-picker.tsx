@@ -11,12 +11,24 @@ import {
 import { createPortal } from "react-dom";
 import { Clock3 } from "@/components/icons";
 import {
+  DEFAULT_TIME_PICKER_ALLOWED_VALUES,
   TIME_PICKER_HOURS,
   TIME_PICKER_MINUTES,
+  getDefaultInvalidMessage,
+  getHoursForAllowedValues,
+  getMinutesForHour,
   isValidTime,
 } from "@/lib/time-picker-utils";
 
-export { TIME_PICKER_HOURS, TIME_PICKER_MINUTES, isValidTime };
+export {
+  DEFAULT_TIME_PICKER_ALLOWED_VALUES,
+  TIME_PICKER_HOURS,
+  TIME_PICKER_MINUTES,
+  getDefaultInvalidMessage,
+  getHoursForAllowedValues,
+  getMinutesForHour,
+  isValidTime,
+};
 
 export type TimePickerProps = {
   name?: string;
@@ -33,6 +45,8 @@ export type TimePickerProps = {
   ariaDescribedBy?: string;
   ariaInvalid?: boolean;
   className?: string;
+  allowedValues?: readonly string[];
+  invalidMessage?: string;
 };
 
 export function TimePicker({
@@ -50,9 +64,13 @@ export function TimePicker({
   ariaDescribedBy,
   ariaInvalid,
   className = "",
+  allowedValues,
+  invalidMessage,
 }: TimePickerProps) {
   const generatedId = useId();
   const inputId = id ?? `${generatedId}-time-input`;
+  const errorId = `${inputId}-error`;
+
   const isControlled = value !== undefined;
   const [internalValue, setInternalValue] = useState(defaultValue);
   const currentValue = isControlled ? (value ?? "") : internalValue;
@@ -67,25 +85,35 @@ export function TimePicker({
   const inputRef = useRef<HTMLInputElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
 
-  const activeHour = isValidTime(currentValue)
-    ? currentValue.slice(0, 2)
-    : pendingHour;
-  const activeMinute = isValidTime(currentValue)
+  const isCurrentValid = isValidTime(currentValue, allowedValues);
+  const activeHour = isCurrentValid ? currentValue.slice(0, 2) : pendingHour;
+  const activeMinute = isCurrentValid
     ? currentValue.slice(3, 5)
     : pendingMinute;
 
-  // Update input custom validity
+  const hoursList = getHoursForAllowedValues(allowedValues);
+  const minutesList = getMinutesForHour(activeHour, allowedValues);
+
+  const isInvalid =
+    ariaInvalid !== undefined
+      ? ariaInvalid
+      : Boolean(currentValue) &&
+        !isCurrentValid &&
+        (touched || currentValue.length >= 5);
+
+  const displayErrorMessage =
+    invalidMessage ?? getDefaultInvalidMessage(allowedValues);
+
+  // Update input HTML5 custom validity
   useEffect(() => {
     const input = inputRef.current;
     if (!input) return;
-    if (currentValue && !isValidTime(currentValue)) {
-      input.setCustomValidity(
-        "Vui lòng nhập giờ từ 07:00 đến 19:30 (bước 30 phút, ví dụ: 07:30).",
-      );
+    if (currentValue && !isCurrentValid) {
+      input.setCustomValidity(displayErrorMessage);
     } else {
       input.setCustomValidity("");
     }
-  }, [currentValue]);
+  }, [currentValue, isCurrentValid, displayErrorMessage]);
 
   // Close on outside pointer click
   useEffect(() => {
@@ -153,7 +181,7 @@ export function TimePicker({
   function handleInputChange(event: React.ChangeEvent<HTMLInputElement>) {
     const nextText = event.target.value;
     triggerChange(nextText);
-    if (isValidTime(nextText)) {
+    if (isValidTime(nextText, allowedValues)) {
       setPendingHour(nextText.slice(0, 2));
       setPendingMinute(nextText.slice(3, 5));
     }
@@ -177,7 +205,11 @@ export function TimePicker({
 
   function handleHourSelect(hour: string) {
     setPendingHour(hour);
-    const minuteToUse = activeMinute ?? "00";
+    const validMinutesForHour = getMinutesForHour(hour, allowedValues);
+    const minuteToUse =
+      activeMinute && validMinutesForHour.includes(activeMinute)
+        ? activeMinute
+        : (validMinutesForHour[0] ?? "00");
     setPendingMinute(minuteToUse);
     const nextValue = `${hour}:${minuteToUse}`;
     triggerChange(nextValue);
@@ -186,7 +218,7 @@ export function TimePicker({
 
   function handleMinuteSelect(minute: string) {
     setPendingMinute(minute);
-    const hourToUse = activeHour ?? "07";
+    const hourToUse = activeHour ?? hoursList[0] ?? "07";
     setPendingHour(hourToUse);
     const nextValue = `${hourToUse}:${minute}`;
     triggerChange(nextValue);
@@ -195,10 +227,11 @@ export function TimePicker({
     inputRef.current?.focus();
   }
 
-  const isInvalid =
-    ariaInvalid !== undefined
-      ? ariaInvalid
-      : touched && Boolean(currentValue) && !isValidTime(currentValue);
+  const effectiveAriaDescribedBy = isInvalid
+    ? ariaDescribedBy
+      ? `${ariaDescribedBy} ${errorId}`
+      : errorId
+    : ariaDescribedBy;
 
   return (
     <div
@@ -229,12 +262,18 @@ export function TimePicker({
           disabled={disabled}
           readOnly={readOnly}
           aria-label={ariaLabel}
-          aria-describedby={ariaDescribedBy}
+          aria-describedby={effectiveAriaDescribedBy}
           aria-invalid={isInvalid ? "true" : undefined}
           aria-haspopup="dialog"
           className="time-picker-input"
         />
       </div>
+
+      {isInvalid ? (
+        <div id={errorId} className="time-picker-error" role="alert">
+          {displayErrorMessage}
+        </div>
+      ) : null}
 
       {open && typeof document !== "undefined"
         ? createPortal(
@@ -260,7 +299,7 @@ export function TimePicker({
                 >
                   <div className="time-picker-column-header">Giờ</div>
                   <div className="time-picker-options">
-                    {TIME_PICKER_HOURS.map((hour) => {
+                    {hoursList.map((hour) => {
                       const isSelected = activeHour === hour;
                       return (
                         <button
@@ -288,7 +327,7 @@ export function TimePicker({
                 >
                   <div className="time-picker-column-header">Phút</div>
                   <div className="time-picker-options">
-                    {TIME_PICKER_MINUTES.map((minute) => {
+                    {minutesList.map((minute) => {
                       const isSelected = activeMinute === minute;
                       return (
                         <button

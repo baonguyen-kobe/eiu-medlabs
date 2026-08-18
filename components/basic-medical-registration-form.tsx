@@ -12,6 +12,7 @@ import {
   createBasicMedicalRegistration,
   updateBasicMedicalRegistration,
 } from "@/app/basic-medical/new/actions";
+import { TimePicker } from "@/components/time-picker";
 import {
   BASIC_MEDICAL_END_TIMES,
   BASIC_MEDICAL_START_TIMES,
@@ -465,38 +466,24 @@ export function BasicMedicalRegistrationForm({
                     />
                   </td>
                   <td>
-                    <select
-                      aria-label={`Buổi ${i + 1} - Giờ bắt đầu`}
+                    <TimePicker
+                      ariaLabel={`Buổi ${i + 1} - Giờ bắt đầu`}
                       value={s.startTime}
-                      onChange={(e) =>
-                        update(s.key, { startTime: e.target.value })
-                      }
+                      onChange={(val) => update(s.key, { startTime: val })}
+                      allowedValues={BASIC_MEDICAL_START_TIMES}
+                      placeholder="07:00"
                       required
-                    >
-                      <option value="">Chọn giờ</option>
-                      {BASIC_MEDICAL_START_TIMES.map((time) => (
-                        <option key={time} value={time}>
-                          {time}
-                        </option>
-                      ))}
-                    </select>
+                    />
                   </td>
                   <td>
-                    <select
-                      aria-label={`Buổi ${i + 1} - Giờ kết thúc`}
+                    <TimePicker
+                      ariaLabel={`Buổi ${i + 1} - Giờ kết thúc`}
                       value={s.endTime}
-                      onChange={(e) =>
-                        update(s.key, { endTime: e.target.value })
-                      }
+                      onChange={(val) => update(s.key, { endTime: val })}
+                      allowedValues={BASIC_MEDICAL_END_TIMES}
+                      placeholder="11:30"
                       required
-                    >
-                      <option value="">Chọn giờ</option>
-                      {BASIC_MEDICAL_END_TIMES.map((time) => (
-                        <option key={time} value={time}>
-                          {time}
-                        </option>
-                      ))}
-                    </select>
+                    />
                   </td>
                   <td>
                     <input

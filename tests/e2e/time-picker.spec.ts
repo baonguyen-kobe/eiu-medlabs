@@ -25,7 +25,7 @@ async function loginAsAdmin(page: Page) {
 }
 
 test.describe("Shared Custom Time Picker E2E Verification", () => {
-  test("Schedule Form: display, click target, keyboard, popover, manual typing and validation", async ({
+  test("Schedule Form: display, click target, keyboard, popover, manual typing and visible validation", async ({
     page,
   }) => {
     await loginAsAdmin(page);
@@ -57,9 +57,9 @@ test.describe("Shared Custom Time Picker E2E Verification", () => {
     await expect(startInput).toHaveValue("07:30");
     await expect(endInput).toHaveValue("11:30");
 
-    // Screenshot 1: Closed field
+    // Screenshot 1: Skills Lab shared picker
     await page.screenshot({
-      path: resolve(ARTIFACTS_DIR, "time_picker_closed.png"),
+      path: resolve(ARTIFACTS_DIR, "time_picker_skills_lab.png"),
       fullPage: false,
     });
 
@@ -91,12 +91,6 @@ test.describe("Shared Custom Time Picker E2E Verification", () => {
         .nth(1)
         .locator(".time-picker-option.selected"),
     ).toHaveText("30");
-
-    // Screenshot 2: Open picker
-    await page.screenshot({
-      path: resolve(ARTIFACTS_DIR, "time_picker_open.png"),
-      fullPage: false,
-    });
 
     // Close via Escape key
     await page.keyboard.press("Escape");
@@ -133,7 +127,7 @@ test.describe("Shared Custom Time Picker E2E Verification", () => {
     await expect(popover).not.toBeVisible();
     await expect(startInput).toHaveValue("14:00");
 
-    // 4. MANUAL DIRECT TYPING & VALIDATION
+    // 4. MANUAL DIRECT TYPING & VISIBLE VALIDATION MESSAGE
     // Type valid value "08:30"
     await startInput.fill("08:30");
     await startInput.blur();
@@ -141,33 +135,111 @@ test.describe("Shared Custom Time Picker E2E Verification", () => {
     await expect(
       startTimeContainer.locator(".time-picker-control"),
     ).not.toHaveClass(/is-invalid/);
+    await expect(startTimeContainer.locator(".time-picker-error")).toHaveCount(
+      0,
+    );
 
     // Type invalid value "07:15"
     await startInput.fill("07:15");
     await startInput.blur();
-    await expect(startInput).toHaveValue("07:15"); // No silent normalization!
+    await expect(startInput).toHaveValue("07:15"); // Exact invalid text retained!
     await expect(
       startTimeContainer.locator(".time-picker-control"),
     ).toHaveClass(/is-invalid/);
+    await expect(startInput).toHaveAttribute("aria-invalid", "true");
 
-    // Screenshot 3: Manual typing invalid state
+    // Visible validation message is displayed below field
+    const visibleError = startTimeContainer.locator(".time-picker-error");
+    await expect(visibleError).toBeVisible();
+    await expect(visibleError).toContainText("07:00 đến 19:30");
+
+    // aria-describedby association
+    const errorId = await visibleError.getAttribute("id");
+    expect(errorId).toBeTruthy();
+    await expect(startInput).toHaveAttribute(
+      "aria-describedby",
+      new RegExp(errorId!),
+    );
+
+    // Screenshot 4: Invalid manual typing with visible error message
     await page.screenshot({
-      path: resolve(ARTIFACTS_DIR, "time_picker_manual_invalid.png"),
+      path: resolve(ARTIFACTS_DIR, "time_picker_visible_error.png"),
       fullPage: false,
     });
 
-    // Try submitting form with invalid start time -> should be blocked by browser validation
+    // Try submitting form with invalid start time -> should be blocked by validation
     const submitButton = page.getByRole("button", { name: "Tạo lịch" });
     await submitButton.click();
-    // Status message should NOT be "Đang lưu…" or success
     await expect(page.getByRole("status")).toHaveCount(0);
 
-    // Fix start time to valid "07:30"
+    // Fix start time to valid "07:30" -> error clears
     await startInput.fill("07:30");
     await startInput.blur();
     await expect(
       startTimeContainer.locator(".time-picker-control"),
     ).not.toHaveClass(/is-invalid/);
+    await expect(startTimeContainer.locator(".time-picker-error")).toHaveCount(
+      0,
+    );
+  });
+
+  test("Basic Medical Form: sessions table uses TimePicker with extended range 20:30 and 21:00", async ({
+    page,
+  }) => {
+    await loginAsAdmin(page);
+    await page.goto("/basic-medical/new");
+    await expect(page.locator("h1")).toContainText("Tạo lịch Y cơ sở");
+
+    // Check Buổi 1 session time pickers
+    const sessionStartPicker = page
+      .locator("tbody tr")
+      .first()
+      .locator(".time-picker")
+      .first();
+    const sessionEndPicker = page
+      .locator("tbody tr")
+      .first()
+      .locator(".time-picker")
+      .nth(1);
+
+    await expect(sessionStartPicker.locator(".time-picker-icon")).toHaveCount(
+      1,
+    );
+    await expect(sessionEndPicker.locator(".time-picker-icon")).toHaveCount(1);
+    await expect(page.locator('tbody input[type="time"]')).toHaveCount(0);
+
+    // Open Start Time Popover: verify hour 20 is available (Basic Medical allows up to 20:30)
+    await sessionStartPicker.locator(".time-picker-control").click();
+    const popover = page.locator('.time-picker-popover[role="dialog"]');
+    await expect(popover).toBeVisible();
+    await expect(popover.getByRole("option", { name: "20" })).toBeVisible();
+
+    // Select 20:30
+    await popover.getByRole("option", { name: "20" }).click();
+    await popover.getByRole("option", { name: "30" }).click();
+    await expect(popover).not.toBeVisible();
+    await expect(
+      sessionStartPicker.locator("input.time-picker-input"),
+    ).toHaveValue("20:30");
+
+    // Open End Time Popover: verify hour 21 is available (Basic Medical allows up to 21:00)
+    await sessionEndPicker.locator(".time-picker-control").click();
+    await expect(popover).toBeVisible();
+    await expect(popover.getByRole("option", { name: "21" })).toBeVisible();
+
+    // Select 21:00
+    await popover.getByRole("option", { name: "21" }).click();
+    await popover.getByRole("option", { name: "00" }).click();
+    await expect(popover).not.toBeVisible();
+    await expect(
+      sessionEndPicker.locator("input.time-picker-input"),
+    ).toHaveValue("21:00");
+
+    // Screenshot 2: Basic Medical shared picker
+    await page.screenshot({
+      path: resolve(ARTIFACTS_DIR, "time_picker_basic_medical.png"),
+      fullPage: false,
+    });
   });
 
   test("Schedule Form: end_time > start_time validation prevents invalid submission", async ({
@@ -233,5 +305,11 @@ test.describe("Shared Custom Time Picker E2E Verification", () => {
     await expect(endTimePicker.locator("input.time-picker-input")).toHaveValue(
       "11:30",
     );
+
+    // Screenshot 3: Admin shift template shared picker
+    await page.screenshot({
+      path: resolve(ARTIFACTS_DIR, "time_picker_admin_shift.png"),
+      fullPage: false,
+    });
   });
 });
