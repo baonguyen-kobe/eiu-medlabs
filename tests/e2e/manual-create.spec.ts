@@ -128,19 +128,25 @@ test("manual form fields and section headings share the approved desktop layout"
     Math.abs(lecturerBoxes[0].width - lecturerBoxes[1].width),
   ).toBeLessThanOrEqual(1);
 
-  const timeBoxes = await page
-    .locator(".form-grid.four > label")
+  const section2Labels = await page
+    .locator(".form-grid.three > label")
     .evaluateAll((labels) =>
       labels.map((label) => {
         const box = label.getBoundingClientRect();
         return { top: box.top, width: box.width };
       }),
     );
-  expect(timeBoxes).toHaveLength(4);
-  expect(new Set(timeBoxes.map((box) => Math.round(box.top))).size).toBe(1);
+  expect(section2Labels).toHaveLength(5);
   expect(
-    Math.max(...timeBoxes.map((box) => box.width)) -
-      Math.min(...timeBoxes.map((box) => box.width)),
+    Math.abs(section2Labels[0].top - section2Labels[1].top),
+  ).toBeLessThanOrEqual(1);
+  expect(section2Labels[0].width).toBeGreaterThan(section2Labels[1].width);
+
+  const row2Boxes = section2Labels.slice(2);
+  expect(new Set(row2Boxes.map((box) => Math.round(box.top))).size).toBe(1);
+  expect(
+    Math.max(...row2Boxes.map((box) => box.width)) -
+      Math.min(...row2Boxes.map((box) => box.width)),
   ).toBeLessThanOrEqual(1);
 
   await expect(page.locator(".form-section-title-line").first()).toHaveCSS(

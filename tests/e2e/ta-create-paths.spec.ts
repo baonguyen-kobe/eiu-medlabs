@@ -132,6 +132,7 @@ async function createManualSchedule(
     await lecturerOptions.first().click();
   }
   await page.locator('select[name="room_id"]').selectOption({ index: 1 });
+  await page.locator('select[name="semester"]').selectOption("HK1");
   await page.locator('input[name="schedule_date"]').fill(date);
   await page.locator('input[name="start_time"]').fill("07:30");
   await page.locator('input[name="end_time"]').fill("11:30");
@@ -177,7 +178,7 @@ async function createEquipmentRequest(
   await page
     .locator('select[name="class_schedule_id"]')
     .selectOption(schedule.id);
-  await page.locator('select[name="semester"]').selectOption("HK1");
+  await expect(page.locator('input[name="semester"]')).toHaveValue("HK1");
   await page
     .locator('select[name="responsible_lecturer_id"]')
     .selectOption(schedule.lecturer_id);
