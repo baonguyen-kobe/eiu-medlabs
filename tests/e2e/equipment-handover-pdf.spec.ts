@@ -119,6 +119,7 @@ test("equipment handover PDF separates missing, authorization, and query failure
           source: "manual",
           schedule_status: "published",
           student_count: 20,
+          semester: "HK1",
           created_by: adminId,
           published_by: adminId,
           published_at: new Date().toISOString(),
