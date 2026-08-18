@@ -473,6 +473,7 @@ export function BasicMedicalRegistrationForm({
                       allowedValues={BASIC_MEDICAL_START_TIMES}
                       placeholder="07:00"
                       required
+                      baselineKey={s.key}
                     />
                   </td>
                   <td>
@@ -483,6 +484,7 @@ export function BasicMedicalRegistrationForm({
                       allowedValues={BASIC_MEDICAL_END_TIMES}
                       placeholder="11:30"
                       required
+                      baselineKey={s.key}
                     />
                   </td>
                   <td>

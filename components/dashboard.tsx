@@ -905,6 +905,7 @@ export function Dashboard({
                         value={selectedStartTime}
                         onChange={setSelectedStartTime}
                         required
+                        baselineKey={selectedEvent.id}
                       />
                       <span>–</span>
                       <TimePicker
@@ -912,6 +913,7 @@ export function Dashboard({
                         value={selectedEndTime}
                         onChange={setSelectedEndTime}
                         required
+                        baselineKey={selectedEvent.id}
                       />
                     </span>
                   ) : (

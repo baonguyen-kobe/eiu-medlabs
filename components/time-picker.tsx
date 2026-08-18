@@ -47,6 +47,17 @@ export type TimePickerProps = {
   className?: string;
   allowedValues?: readonly string[];
   invalidMessage?: string;
+  /**
+   * Optional explicit record/session identity key.
+   * When this changes, the component resets its dirty state and treats the new
+   * controlled value as an untouched grandfathered baseline — even if the value
+   * string itself is identical to the previous record's value (C6 same-value
+   * record switch case). Parent onChange echoes with the same baselineKey do
+   * NOT reset dirty state (C7). If omitted, the component falls back to
+   * comparing the value prop string, which cannot distinguish same-value
+   * record switches.
+   */
+  baselineKey?: string | number;
 };
 
 export function TimePicker({
@@ -66,6 +77,7 @@ export function TimePicker({
   className = "",
   allowedValues,
   invalidMessage,
+  baselineKey,
 }: TimePickerProps) {
   const generatedId = useId();
   const inputId = id ?? `${generatedId}-time-input`;
@@ -80,6 +92,7 @@ export function TimePicker({
   const [isUserModified, setIsUserModified] = useState(false);
   const [lastEmittedValue, setLastEmittedValue] = useState<string | null>(null);
   const [prevPropValue, setPrevPropValue] = useState(value);
+  const [prevBaselineKey, setPrevBaselineKey] = useState(baselineKey);
   const [pendingHour, setPendingHour] = useState<string | null>(null);
   const [pendingMinute, setPendingMinute] = useState<string | null>(null);
 
@@ -87,12 +100,40 @@ export function TimePicker({
   const inputRef = useRef<HTMLInputElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
 
-  // Sync external baseline when controlled value prop changes from an external source (record switch)
-  if (isControlled && value !== prevPropValue) {
-    setPrevPropValue(value);
-    if (value !== lastEmittedValue) {
+  // Sync external baseline when the record identity changes.
+  //
+  // Strategy:
+  //   A. When baselineKey is provided: compare baselineKey to detect genuine
+  //      record switches — this correctly handles same-value switches (C6).
+  //      A parent onChange echo produces a value === lastEmittedValue with the
+  //      same baselineKey, so it never resets dirty state (C7).
+  //   B. When baselineKey is omitted: fall back to value-string comparison
+  //      (original behaviour, safe for call sites that always unmount/remount
+  //      or where same-value switch is impossible).
+  if (isControlled) {
+    const baselineKeyChanged =
+      baselineKey !== undefined && baselineKey !== prevBaselineKey;
+    const valueChangedExternally =
+      baselineKey === undefined &&
+      value !== prevPropValue &&
+      value !== lastEmittedValue;
+
+    if (baselineKeyChanged) {
+      // Genuine record switch detected via explicit identity (A).
+      // Reset dirty state; adopt new value as untouched baseline.
+      setPrevBaselineKey(baselineKey);
+      setPrevPropValue(value);
       setIsUserModified(false);
       setLastEmittedValue(value ?? null);
+    } else if (value !== prevPropValue) {
+      // Track prevPropValue even when baselineKey is present, so we always
+      // have the latest prop stored — needed for fallback branch (B).
+      setPrevPropValue(value);
+      if (valueChangedExternally) {
+        // Fallback branch (B): external value change without baselineKey.
+        setIsUserModified(false);
+        setLastEmittedValue(value ?? null);
+      }
     }
   }
 
