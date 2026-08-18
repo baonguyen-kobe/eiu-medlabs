@@ -349,6 +349,7 @@ test.describe("Shared Custom Time Picker E2E Verification", () => {
       expect(c2CustomValidity).toBe("");
 
       // C3: Edit same value — user types 08:15 -> now invalid (dirty)
+      await startInput.fill("");
       await startInput.fill("08:15");
       await startInput.blur();
       await expect(startInput).toHaveValue("08:15");
@@ -416,6 +417,7 @@ test.describe("Shared Custom Time Picker E2E Verification", () => {
 
       // C6 (CRITICAL): Same-value record switch
       // Make event B's start dirty (type 08:15 -> now invalid)
+      await startInputB.fill("");
       await startInputB.fill("08:15");
       await startInputB.blur();
       await expect(
@@ -452,6 +454,7 @@ test.describe("Shared Custom Time Picker E2E Verification", () => {
 
       // C7: Parent echo — make dirty with 08:15, then verify echo does NOT reset dirty
       // Re-dirty event A by typing 08:15 (currently grandfathered from C6 reset)
+      await startInputA2.fill("");
       await startInputA2.fill("08:15");
       await startInputA2.blur();
       await expect(
