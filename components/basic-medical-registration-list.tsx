@@ -539,94 +539,41 @@ function SessionStatus({
 
 function SessionLecturerCell({
   session,
-  registration,
   instructors,
-  viewerId,
-  isAdmin,
+  isEditing,
+  selectedLecturerId,
+  onLecturerChange,
+  isSaving,
 }: {
   session: BasicMedicalRegistrationSessionItem;
-  registration: BasicMedicalRegistrationListItem;
   instructors: BasicMedicalInstructorOption[];
-  viewerId: string;
-  isAdmin: boolean;
+  isEditing: boolean;
+  selectedLecturerId: string;
+  onLecturerChange: (lecturerId: string) => void;
+  isSaving: boolean;
 }) {
-  const [editOpen, setEditOpen] = useState(false);
-  const [selectedLecturerId, setSelectedLecturerId] = useState(
-    session.teaching_lecturer_id,
-  );
-  const [isPending, startTransition] = useTransition();
-
-  const isCancelled =
-    Boolean(registration.cancelled_at) ||
-    session.class_schedules?.schedule_status === "cancelled";
-  const canEdit =
-    !isCancelled &&
-    (isAdmin || registration.created_by === viewerId) &&
-    instructors.length > 0;
-
-  if (!canEdit) {
+  if (!isEditing) {
     return <td>{session.teaching?.full_name ?? "—"}</td>;
   }
-
-  const formId = `change-lecturer-${session.id}`;
 
   return (
     <td>
       <div className="basic-medical-session-lecturer-cell">
-        <span>{session.teaching?.full_name ?? "—"}</span>
-        <form id={formId} action={updateBasicMedicalSessionTeachingLecturer}>
-          <input type="hidden" name="session_id" value={session.id} />
-          <input
-            type="hidden"
-            name="teaching_lecturer_id"
-            value={selectedLecturerId}
-          />
-        </form>
-        <button
-          type="button"
-          className="button button-secondary basic-medical-lecturer-edit-button"
-          onClick={() => {
-            setSelectedLecturerId(session.teaching_lecturer_id);
-            setEditOpen(true);
-          }}
+        <select
+          className="form-select basic-medical-lecturer-select"
+          value={selectedLecturerId}
+          onChange={(event) => onLecturerChange(event.target.value)}
+          disabled={isSaving}
+          aria-label="Giảng viên giảng dạy/hướng dẫn"
         >
-          Đổi GV
-        </button>
-        <ConfirmDialog
-          open={editOpen}
-          title="Đổi giảng viên giảng dạy/hướng dẫn"
-          description={`${registration.courses?.course_code ?? "Môn học"} · ${registration.courses?.course_name ?? ""} | Buổi ${session.session_number}: ${session.lesson_title} | ${formatDate(session.class_schedules?.schedule_date)} · ${formatTime(session.class_schedules?.start_time)}–${formatTime(session.class_schedules?.end_time)} | Phòng: ${registration.rooms?.building_code ?? ""} ${registration.rooms?.room_code ?? ""}${registration.rooms?.room_name ? ` – ${registration.rooms.room_name}` : ""}`}
-          confirmLabel="Lưu thay đổi"
-          pending={isPending}
-          onCancel={() => setEditOpen(false)}
-          onConfirm={() => {
-            if (!selectedLecturerId) return;
-            startTransition(() => {
-              const form = document.getElementById(
-                formId,
-              ) as HTMLFormElement | null;
-              if (!form) return;
-              form.requestSubmit();
-            });
-          }}
-        >
-          <label className="form-field">
-            <span>Giảng viên giảng dạy/hướng dẫn *</span>
-            <select
-              value={selectedLecturerId}
-              onChange={(event) => setSelectedLecturerId(event.target.value)}
-              disabled={isPending}
-            >
-              {instructors.map((instructor) => (
-                <option key={instructor.id} value={instructor.id}>
-                  {instructor.title
-                    ? `${instructor.title} ${instructor.full_name}`
-                    : instructor.full_name}
-                </option>
-              ))}
-            </select>
-          </label>
-        </ConfirmDialog>
+          {instructors.map((instructor) => (
+            <option key={instructor.id} value={instructor.id}>
+              {instructor.title
+                ? `${instructor.title} ${instructor.full_name}`
+                : instructor.full_name}
+            </option>
+          ))}
+        </select>
       </div>
     </td>
   );
@@ -782,6 +729,39 @@ export function BasicMedicalRegistrationList({
     registration: BasicMedicalRegistrationListItem;
     session: BasicMedicalRegistrationSessionItem;
   } | null>(null);
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [selectedLecturerId, setSelectedLecturerId] = useState<string>("");
+  const [isSavingLecturer, startSavingTransition] = useTransition();
+
+  function handleStartEditLecturer(
+    session: BasicMedicalRegistrationSessionItem,
+  ) {
+    setEditingSessionId(session.id);
+    setSelectedLecturerId(
+      session.teaching_lecturer_id || (instructors[0]?.id ?? ""),
+    );
+  }
+
+  function handleCancelEditLecturer() {
+    setEditingSessionId(null);
+    setSelectedLecturerId("");
+  }
+
+  function handleSaveLecturer(session: BasicMedicalRegistrationSessionItem) {
+    if (!selectedLecturerId) return;
+    if (selectedLecturerId === session.teaching_lecturer_id) {
+      setEditingSessionId(null);
+      return;
+    }
+    startSavingTransition(() => {
+      const form = document.getElementById(
+        `change-lecturer-${session.id}`,
+      ) as HTMLFormElement | null;
+      if (!form) return;
+      form.requestSubmit();
+    });
+  }
+
   const inventoriesByRoom = useMemo(() => {
     const map = new Map<string, BasicMedicalRoomInventoryItem[]>();
     for (const inventory of inventories) {
@@ -1019,6 +999,18 @@ export function BasicMedicalRegistrationList({
                                 {sessions.map((session) => {
                                   const confirmation =
                                     confirmationBySession.get(session.id);
+                                  const isEditing =
+                                    editingSessionId === session.id;
+                                  const isSessionCancelled =
+                                    session.class_schedules?.schedule_status ===
+                                    "cancelled";
+                                  const canEditLecturer =
+                                    !isCancelled &&
+                                    !isSessionCancelled &&
+                                    (isAdmin ||
+                                      registration.created_by === viewerId) &&
+                                    instructors.length > 0;
+
                                   return (
                                     <tr key={session.id}>
                                       <td>{session.session_number}</td>
@@ -1040,10 +1032,11 @@ export function BasicMedicalRegistrationList({
                                       <td>{session.lesson_title}</td>
                                       <SessionLecturerCell
                                         session={session}
-                                        registration={registration}
                                         instructors={instructors}
-                                        viewerId={viewerId}
-                                        isAdmin={isAdmin}
+                                        isEditing={isEditing}
+                                        selectedLecturerId={selectedLecturerId}
+                                        onLecturerChange={setSelectedLecturerId}
+                                        isSaving={isSavingLecturer}
                                       />
                                       <td className="basic-medical-session-action-cell">
                                         <div className="basic-medical-session-action-stack">
@@ -1069,6 +1062,63 @@ export function BasicMedicalRegistrationList({
                                               confirmation={confirmation}
                                               registration={registration}
                                             />
+                                          ) : null}
+                                          {canEditLecturer ? (
+                                            isEditing ? (
+                                              <div className="basic-medical-session-lecturer-actions">
+                                                <form
+                                                  id={`change-lecturer-${session.id}`}
+                                                  action={
+                                                    updateBasicMedicalSessionTeachingLecturer
+                                                  }
+                                                >
+                                                  <input
+                                                    type="hidden"
+                                                    name="session_id"
+                                                    value={session.id}
+                                                  />
+                                                  <input
+                                                    type="hidden"
+                                                    name="teaching_lecturer_id"
+                                                    value={selectedLecturerId}
+                                                  />
+                                                </form>
+                                                <button
+                                                  type="button"
+                                                  className="button button-primary basic-medical-lecturer-save-button"
+                                                  disabled={isSavingLecturer}
+                                                  onClick={() =>
+                                                    handleSaveLecturer(session)
+                                                  }
+                                                >
+                                                  {isSavingLecturer
+                                                    ? "Đang lưu…"
+                                                    : "Lưu"}
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  className="button button-secondary basic-medical-lecturer-cancel-button"
+                                                  disabled={isSavingLecturer}
+                                                  onClick={
+                                                    handleCancelEditLecturer
+                                                  }
+                                                >
+                                                  Hủy
+                                                </button>
+                                              </div>
+                                            ) : (
+                                              <button
+                                                type="button"
+                                                className="button button-secondary basic-medical-lecturer-edit-button"
+                                                onClick={() =>
+                                                  handleStartEditLecturer(
+                                                    session,
+                                                  )
+                                                }
+                                              >
+                                                Sửa
+                                              </button>
+                                            )
                                           ) : null}
                                         </div>
                                       </td>
