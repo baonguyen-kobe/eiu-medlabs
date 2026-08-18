@@ -313,11 +313,11 @@ test("form-table controls and text retain the Master visible 16px safe inset", a
     const measurements = await Promise.all([
       measureTableCellInset(row.locator('input[type="date"]'), "Date"),
       measureTableCellInset(
-        row.locator('input[type="time"]').first(),
+        row.locator(".time-picker-control").first(),
         "Start time",
       ),
       measureTableCellInset(
-        row.locator('input[type="time"]').nth(1),
+        row.locator(".time-picker-control").nth(1),
         "End time",
       ),
       measureTableCellInset(row.locator("select").first(), "Room select"),

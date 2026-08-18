@@ -3184,6 +3184,22 @@ span.filter-control {
   border-color: var(--teal-500);
 }
 
+.admin-create-form .time-picker-control {
+  min-height: 40px;
+  border-radius: 8px;
+}
+
+.admin-create-form .time-picker-input {
+  min-height: 38px;
+  padding-left: 32px;
+  padding-right: 8px;
+  border: 0;
+}
+
+.admin-create-form .time-picker-icon {
+  left: 9px;
+}
+
 .admin-create-room {
   grid-template-columns: repeat(5, minmax(100px, 1fr)) auto;
 }
@@ -7068,7 +7084,8 @@ body,
   min-width: 0;
 }
 
-.drawer-time-editor input {
+.drawer-time-editor input,
+.drawer-time-editor .time-picker {
   min-width: 0;
 }
 
@@ -7079,6 +7096,183 @@ body,
 
 .inline-time-editor {
   min-width: 245px;
+}
+
+.inline-time-editor .time-picker {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.time-picker {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
+.time-picker-control {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 42px;
+  background: white;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  cursor: text;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+
+.time-picker-control:focus-within {
+  border-color: var(--teal-500);
+  box-shadow: 0 0 0 3px rgb(22 148 135 / 10%);
+}
+
+.time-picker-control.is-invalid {
+  border-color: #e5484d;
+  box-shadow: 0 0 0 3px rgb(229 72 77 / 12%);
+}
+
+.time-picker-control.is-disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background: var(--surface-soft);
+}
+
+.time-picker-icon {
+  position: absolute;
+  left: 11px;
+  color: var(--ink-500);
+  pointer-events: none;
+  flex-shrink: 0;
+}
+
+.time-picker-input {
+  width: 100%;
+  height: 100%;
+  min-height: 40px;
+  padding: 0 11px 0 36px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink-950);
+  background: transparent;
+  border: 0;
+  border-radius: 9px;
+  outline: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.inline-time-editor .time-picker-control,
+.drawer-time-editor .time-picker-control {
+  min-height: 38px;
+}
+
+.inline-time-editor .time-picker-icon,
+.drawer-time-editor .time-picker-icon {
+  left: 8px;
+}
+
+.inline-time-editor .time-picker-input,
+.drawer-time-editor .time-picker-input {
+  min-height: 36px;
+  padding-left: 28px;
+  padding-right: 6px;
+  font-size: 13px;
+}
+
+.time-picker-popover {
+  background: white;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  box-shadow:
+    0 10px 25px -5px rgb(0 0 0 / 12%),
+    0 8px 10px -6px rgb(0 0 0 / 8%);
+  padding: 8px;
+  min-width: 150px;
+  animation: time-picker-fade-in 0.12s ease-out;
+}
+
+@keyframes time-picker-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.time-picker-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.time-picker-column {
+  display: flex;
+  flex-direction: column;
+}
+
+.time-picker-column-header {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-500);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 4px 6px;
+  text-align: center;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 4px;
+}
+
+.time-picker-options {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 180px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  padding-right: 2px;
+}
+
+.time-picker-option {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 4px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-800);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition:
+    background-color 0.1s,
+    color 0.1s;
+  width: 100%;
+}
+
+.time-picker-option:hover {
+  background: #f1f5f9;
+  color: var(--ink-950);
+}
+
+.time-picker-option.selected {
+  background: var(--eiu-blue, #144069);
+  color: white;
+  font-weight: 700;
+}
+
+.time-picker-option:focus-visible {
+  outline: 2px solid var(--eiu-blue, #144069);
+  outline-offset: 1px;
 }
 
 .student-count-input {

@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
-import { CalendarDays, Clock3, Save } from "@/components/icons";
+import { CalendarDays, Save } from "@/components/icons";
 import { createScheduleDraft } from "@/app/schedule-entry/new/actions";
 import { CANONICAL_SEMESTERS } from "@/lib/semesters";
 import { SearchableCombobox } from "@/components/searchable-combobox";
+import { TimePicker } from "@/components/time-picker";
 
 const initialCreateScheduleState = {
   ok: false,
@@ -182,27 +183,21 @@ export function ScheduleForm({
           </label>
           <label>
             Giờ bắt đầu *
-            <span className="field-icon">
-              <Clock3 size={16} />
-              <input
-                name="start_time"
-                type="time"
-                defaultValue="07:30"
-                required
-              />
-            </span>
+            <TimePicker
+              name="start_time"
+              defaultValue="07:30"
+              required
+              ariaLabel="Giờ bắt đầu"
+            />
           </label>
           <label>
             Giờ kết thúc *
-            <span className="field-icon">
-              <Clock3 size={16} />
-              <input
-                name="end_time"
-                type="time"
-                defaultValue="11:30"
-                required
-              />
-            </span>
+            <TimePicker
+              name="end_time"
+              defaultValue="11:30"
+              required
+              ariaLabel="Giờ kết thúc"
+            />
           </label>
         </div>
       </section>

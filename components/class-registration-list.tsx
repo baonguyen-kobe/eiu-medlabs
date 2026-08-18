@@ -18,6 +18,7 @@ import {
   SearchableCombobox,
   type ComboboxOption,
 } from "@/components/searchable-combobox";
+import { TimePicker } from "@/components/time-picker";
 import { PaginationControls } from "@/components/pagination-controls";
 import { TABLE_PAGE_SIZE, totalPagesFor } from "@/lib/pagination";
 
@@ -482,21 +483,17 @@ export function ClassRegistrationList({
                   <td className="mono">
                     {canAssign ? (
                       <span className="inline-time-editor">
-                        <input
-                          aria-label={`Giờ bắt đầu ${item.course_code_snapshot}`}
-                          type="time"
+                        <TimePicker
+                          ariaLabel={`Giờ bắt đầu ${item.course_code_snapshot}`}
                           value={detailDraft.start}
-                          onChange={(event) =>
-                            updateDetail({ start: event.target.value })
-                          }
+                          onChange={(val) => updateDetail({ start: val })}
+                          required
                         />
-                        <input
-                          aria-label={`Giờ kết thúc ${item.course_code_snapshot}`}
-                          type="time"
+                        <TimePicker
+                          ariaLabel={`Giờ kết thúc ${item.course_code_snapshot}`}
                           value={detailDraft.end}
-                          onChange={(event) =>
-                            updateDetail({ end: event.target.value })
-                          }
+                          onChange={(val) => updateDetail({ end: val })}
+                          required
                         />
                       </span>
                     ) : (
