@@ -16,7 +16,10 @@ function getLocalEnv() {
     const eqIdx = trimmed.indexOf("=");
     if (eqIdx !== -1) {
       const key = trimmed.slice(0, eqIdx).trim();
-      const val = trimmed.slice(eqIdx + 1).trim().replace(/^["']|["']$/g, "");
+      const val = trimmed
+        .slice(eqIdx + 1)
+        .trim()
+        .replace(/^["']|["']$/g, "");
       env[key] = val;
     }
   }
@@ -26,15 +29,23 @@ function getLocalEnv() {
 const env = getLocalEnv();
 const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL || "http://127.0.0.1:54321";
 const serviceKey = env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY;
-const anonKey = env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const anonKey =
+  env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 function serviceClient() {
-  return createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
+  return createClient(supabaseUrl, serviceKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
 }
 
 async function signIn(email, password) {
-  const supabase = createClient(supabaseUrl, anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  const supabase = createClient(supabaseUrl, anonKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
   assert.ifError(error);
   assert.ok(data.user);
   return { supabase, user: data.user };
@@ -92,9 +103,22 @@ test("D1: Direct table INSERT mismatch -> schedule HK2 overrides caller HK4", as
 
   try {
     assert.ifError(
-      (await service.from("profiles").update({ phone: "0901234501" }).eq("id", lecturer.user.id)).error,
+      (
+        await service
+          .from("profiles")
+          .update({ phone: "0901234501" })
+          .eq("id", lecturer.user.id)
+      ).error,
     );
-    assert.ifError(await buildSchedule(service, scheduleId, "HK2", lecturer.user.id, DATES.D1));
+    assert.ifError(
+      await buildSchedule(
+        service,
+        scheduleId,
+        "HK2",
+        lecturer.user.id,
+        DATES.D1,
+      ),
+    );
 
     // Direct table INSERT using authenticated lecturer client, passing semester: 'HK4'
     const { data: req, error: insertErr } = await lecturer.supabase
@@ -117,7 +141,11 @@ test("D1: Direct table INSERT mismatch -> schedule HK2 overrides caller HK4", as
     requestId = req.id;
 
     // Invariant check: Stored semester MUST be HK2 (derived from schedule), NOT HK4
-    assert.equal(req.semester, "HK2", "Table-level trigger must enforce schedule HK2 authority over caller HK4");
+    assert.equal(
+      req.semester,
+      "HK2",
+      "Table-level trigger must enforce schedule HK2 authority over caller HK4",
+    );
   } finally {
     if (requestId) {
       await service.from("equipment_requests").delete().eq("id", requestId);
@@ -133,9 +161,22 @@ test("D2: Direct table INSERT on NULL schedule semester -> FAIL CLOSED", async (
 
   try {
     assert.ifError(
-      (await service.from("profiles").update({ phone: "0901234501" }).eq("id", lecturer.user.id)).error,
+      (
+        await service
+          .from("profiles")
+          .update({ phone: "0901234501" })
+          .eq("id", lecturer.user.id)
+      ).error,
     );
-    assert.ifError(await buildSchedule(service, scheduleId, null, lecturer.user.id, DATES.D2));
+    assert.ifError(
+      await buildSchedule(
+        service,
+        scheduleId,
+        null,
+        lecturer.user.id,
+        DATES.D2,
+      ),
+    );
 
     const { error: insertErr } = await lecturer.supabase
       .from("equipment_requests")
@@ -153,8 +194,14 @@ test("D2: Direct table INSERT on NULL schedule semester -> FAIL CLOSED", async (
       .select()
       .single();
 
-    assert.ok(insertErr, "Direct INSERT on schedule with NULL semester must FAIL CLOSED");
-    assert.match(insertErr.message, /Lịch học chưa có thông tin Học kỳ hợp lệ/i);
+    assert.ok(
+      insertErr,
+      "Direct INSERT on schedule with NULL semester must FAIL CLOSED",
+    );
+    assert.match(
+      insertErr.message,
+      /Lịch học chưa có thông tin Học kỳ hợp lệ/i,
+    );
   } finally {
     await service.from("class_schedules").delete().eq("id", scheduleId);
   }
@@ -168,9 +215,22 @@ test("D3: Direct table UPDATE semester tamper -> schedule HK2 authority maintain
 
   try {
     assert.ifError(
-      (await service.from("profiles").update({ phone: "0901234501" }).eq("id", lecturer.user.id)).error,
+      (
+        await service
+          .from("profiles")
+          .update({ phone: "0901234501" })
+          .eq("id", lecturer.user.id)
+      ).error,
     );
-    assert.ifError(await buildSchedule(service, scheduleId, "HK2", lecturer.user.id, DATES.D3));
+    assert.ifError(
+      await buildSchedule(
+        service,
+        scheduleId,
+        "HK2",
+        lecturer.user.id,
+        DATES.D3,
+      ),
+    );
 
     const { data: req } = await service
       .from("equipment_requests")
@@ -200,7 +260,11 @@ test("D3: Direct table UPDATE semester tamper -> schedule HK2 authority maintain
 
     assert.ok(!updateErr, `Update failed: ${updateErr?.message}`);
     // Must remain HK2!
-    assert.equal(updated.semester, "HK2", "Direct update attempting to tamper semester must be overwritten by schedule HK2");
+    assert.equal(
+      updated.semester,
+      "HK2",
+      "Direct update attempting to tamper semester must be overwritten by schedule HK2",
+    );
   } finally {
     if (requestId) {
       await service.from("equipment_requests").delete().eq("id", requestId);
@@ -217,10 +281,23 @@ test("D4: Historical request on NULL schedule -> same-schedule edit preserves HK
 
   try {
     assert.ifError(
-      (await service.from("profiles").update({ phone: "0901234501" }).eq("id", lecturer.user.id)).error,
+      (
+        await service
+          .from("profiles")
+          .update({ phone: "0901234501" })
+          .eq("id", lecturer.user.id)
+      ).error,
     );
     // Initially created with HK1
-    assert.ifError(await buildSchedule(service, scheduleId, "HK1", lecturer.user.id, DATES.D4));
+    assert.ifError(
+      await buildSchedule(
+        service,
+        scheduleId,
+        "HK1",
+        lecturer.user.id,
+        DATES.D4,
+      ),
+    );
 
     const { data: req } = await service
       .from("equipment_requests")
@@ -241,7 +318,10 @@ test("D4: Historical request on NULL schedule -> same-schedule edit preserves HK
     requestId = req.id;
 
     // Simulate historical schedule where schedule semester became NULL
-    await service.from("class_schedules").update({ semester: null }).eq("id", scheduleId);
+    await service
+      .from("class_schedules")
+      .update({ semester: null })
+      .eq("id", scheduleId);
 
     // Direct edit updating note while remaining on same schedule
     const { data: updated, error: updateErr } = await lecturer.supabase
@@ -252,7 +332,11 @@ test("D4: Historical request on NULL schedule -> same-schedule edit preserves HK
       .single();
 
     assert.ok(!updateErr, `Update failed: ${updateErr?.message}`);
-    assert.equal(updated.semester, "HK1", "Historical semester HK1 must be preserved on same schedule edit");
+    assert.equal(
+      updated.semester,
+      "HK1",
+      "Historical semester HK1 must be preserved on same schedule edit",
+    );
     assert.equal(updated.note, "Updated historical note");
   } finally {
     if (requestId) {
@@ -271,10 +355,31 @@ test("D5: Change class_schedule_id to schedule with NULL semester -> FAIL CLOSED
 
   try {
     assert.ifError(
-      (await service.from("profiles").update({ phone: "0901234501" }).eq("id", lecturer.user.id)).error,
+      (
+        await service
+          .from("profiles")
+          .update({ phone: "0901234501" })
+          .eq("id", lecturer.user.id)
+      ).error,
     );
-    assert.ifError(await buildSchedule(service, scheduleIdA, "HK1", lecturer.user.id, DATES.D5_A));
-    assert.ifError(await buildSchedule(service, scheduleIdB, null, lecturer.user.id, DATES.D5_B));
+    assert.ifError(
+      await buildSchedule(
+        service,
+        scheduleIdA,
+        "HK1",
+        lecturer.user.id,
+        DATES.D5_A,
+      ),
+    );
+    assert.ifError(
+      await buildSchedule(
+        service,
+        scheduleIdB,
+        null,
+        lecturer.user.id,
+        DATES.D5_B,
+      ),
+    );
 
     const { data: req } = await service
       .from("equipment_requests")
@@ -304,8 +409,14 @@ test("D5: Change class_schedule_id to schedule with NULL semester -> FAIL CLOSED
       })
       .eq("id", req.id);
 
-    assert.ok(updateErr, "Moving to schedule with NULL semester must FAIL CLOSED");
-    assert.match(updateErr.message, /Lịch học mới chưa có thông tin Học kỳ hợp lệ/i);
+    assert.ok(
+      updateErr,
+      "Moving to schedule with NULL semester must FAIL CLOSED",
+    );
+    assert.match(
+      updateErr.message,
+      /Lịch học mới chưa có thông tin Học kỳ hợp lệ/i,
+    );
   } finally {
     if (requestId) {
       await service.from("equipment_requests").delete().eq("id", requestId);
@@ -324,10 +435,31 @@ test("D6: Change class_schedule_id to canonical destination -> target schedule H
 
   try {
     assert.ifError(
-      (await service.from("profiles").update({ phone: "0901234501" }).eq("id", lecturer.user.id)).error,
+      (
+        await service
+          .from("profiles")
+          .update({ phone: "0901234501" })
+          .eq("id", lecturer.user.id)
+      ).error,
     );
-    assert.ifError(await buildSchedule(service, scheduleIdA, "HK1", lecturer.user.id, DATES.D6_A));
-    assert.ifError(await buildSchedule(service, scheduleIdB, "HK3", lecturer.user.id, DATES.D6_B));
+    assert.ifError(
+      await buildSchedule(
+        service,
+        scheduleIdA,
+        "HK1",
+        lecturer.user.id,
+        DATES.D6_A,
+      ),
+    );
+    assert.ifError(
+      await buildSchedule(
+        service,
+        scheduleIdB,
+        "HK3",
+        lecturer.user.id,
+        DATES.D6_B,
+      ),
+    );
 
     const { data: req } = await service
       .from("equipment_requests")
@@ -361,7 +493,11 @@ test("D6: Change class_schedule_id to canonical destination -> target schedule H
       .single();
 
     assert.ok(!updateErr, `Update failed: ${updateErr?.message}`);
-    assert.equal(updated.semester, "HK3", "Destination schedule HK3 must overwrite caller HK1");
+    assert.equal(
+      updated.semester,
+      "HK3",
+      "Destination schedule HK3 must overwrite caller HK1",
+    );
   } finally {
     if (requestId) {
       await service.from("equipment_requests").delete().eq("id", requestId);
@@ -380,9 +516,22 @@ test("D7: Status transition and confirmation flows remain intact", async () => {
 
   try {
     assert.ifError(
-      (await service.from("profiles").update({ phone: "0901234501" }).eq("id", lecturer.user.id)).error,
+      (
+        await service
+          .from("profiles")
+          .update({ phone: "0901234501" })
+          .eq("id", lecturer.user.id)
+      ).error,
     );
-    assert.ifError(await buildSchedule(service, scheduleId, "HK2", lecturer.user.id, DATES.D7));
+    assert.ifError(
+      await buildSchedule(
+        service,
+        scheduleId,
+        "HK2",
+        lecturer.user.id,
+        DATES.D7,
+      ),
+    );
 
     const { data: req } = await service
       .from("equipment_requests")
@@ -403,10 +552,13 @@ test("D7: Status transition and confirmation flows remain intact", async () => {
     requestId = req.id;
 
     // Admin manager_confirm_equipment_status -> 'preparing'
-    const { data: confirmed, error: rpcErr } = await admin.supabase.rpc("manager_confirm_equipment_status", {
-      target_request_id: req.id,
-      target_status: "preparing",
-    });
+    const { data: confirmed, error: rpcErr } = await admin.supabase.rpc(
+      "manager_confirm_equipment_status",
+      {
+        target_request_id: req.id,
+        target_status: "preparing",
+      },
+    );
 
     assert.ok(!rpcErr, `Confirmation RPC failed: ${rpcErr?.message}`);
     assert.equal(confirmed.status, "preparing");
