@@ -77,13 +77,24 @@ export function TimePicker({
 
   const [open, setOpen] = useState(false);
   const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({});
-  const [touched, setTouched] = useState(false);
+  const [isUserModified, setIsUserModified] = useState(false);
+  const [lastEmittedValue, setLastEmittedValue] = useState<string | null>(null);
+  const [prevPropValue, setPrevPropValue] = useState(value);
   const [pendingHour, setPendingHour] = useState<string | null>(null);
   const [pendingMinute, setPendingMinute] = useState<string | null>(null);
 
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+
+  // Sync external baseline when controlled value prop changes from an external source (record switch)
+  if (isControlled && value !== prevPropValue) {
+    setPrevPropValue(value);
+    if (value !== lastEmittedValue) {
+      setIsUserModified(false);
+      setLastEmittedValue(value ?? null);
+    }
+  }
 
   const isCurrentValid = isValidTime(currentValue, allowedValues);
   const activeHour = isCurrentValid ? currentValue.slice(0, 2) : pendingHour;
@@ -94,26 +105,25 @@ export function TimePicker({
   const hoursList = getHoursForAllowedValues(allowedValues);
   const minutesList = getMinutesForHour(activeHour, allowedValues);
 
+  // Existing historical values remain grandfathered until edited by the user
   const isInvalid =
     ariaInvalid !== undefined
       ? ariaInvalid
-      : Boolean(currentValue) &&
-        !isCurrentValid &&
-        (touched || currentValue.length >= 5);
+      : isUserModified && Boolean(currentValue) && !isCurrentValid;
 
   const displayErrorMessage =
     invalidMessage ?? getDefaultInvalidMessage(allowedValues);
 
-  // Update input HTML5 custom validity
+  // Update input HTML5 custom validity: only block submission when field is invalid
   useEffect(() => {
     const input = inputRef.current;
     if (!input) return;
-    if (currentValue && !isCurrentValid) {
+    if (isInvalid) {
       input.setCustomValidity(displayErrorMessage);
     } else {
       input.setCustomValidity("");
     }
-  }, [currentValue, isCurrentValid, displayErrorMessage]);
+  }, [isInvalid, displayErrorMessage]);
 
   // Close on outside pointer click
   useEffect(() => {
@@ -166,6 +176,8 @@ export function TimePicker({
   }, [open]);
 
   function triggerChange(nextValue: string) {
+    setIsUserModified(true);
+    setLastEmittedValue(nextValue);
     if (!isControlled) {
       setInternalValue(nextValue);
     }
@@ -188,7 +200,6 @@ export function TimePicker({
   }
 
   function handleInputBlur(event: FocusEvent<HTMLInputElement>) {
-    setTouched(true);
     onBlur?.(event);
   }
 

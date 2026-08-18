@@ -78,8 +78,9 @@ test("isValidTime accepts all canonical valid time strings (07:00 to 19:30 in 30
   }
 });
 
-test("isValidTime rejects invalid time values without silent normalization", () => {
+test("isValidTime rejects invalid or off-grid time values (e.g. historical 08:15) without silent normalization", () => {
   const invalidTimes = [
+    "08:15",
     "05:31",
     "06:30",
     "06:00",
@@ -118,7 +119,8 @@ test("isValidTime with BASIC_MEDICAL_START_TIMES supports 07:00 to 20:30", () =>
   assert.equal(isValidTime("07:00", BASIC_MEDICAL_START_TIMES), true);
   assert.equal(isValidTime("20:00", BASIC_MEDICAL_START_TIMES), true);
   assert.equal(isValidTime("20:30", BASIC_MEDICAL_START_TIMES), true);
-  // Rejects out of range
+  // Rejects out of range or off-grid
+  assert.equal(isValidTime("08:15", BASIC_MEDICAL_START_TIMES), false);
   assert.equal(isValidTime("21:00", BASIC_MEDICAL_START_TIMES), false);
   assert.equal(isValidTime("06:30", BASIC_MEDICAL_START_TIMES), false);
   assert.equal(isValidTime("07:15", BASIC_MEDICAL_START_TIMES), false);
@@ -128,7 +130,8 @@ test("isValidTime with BASIC_MEDICAL_END_TIMES supports 07:30 to 21:00", () => {
   assert.equal(isValidTime("07:30", BASIC_MEDICAL_END_TIMES), true);
   assert.equal(isValidTime("20:30", BASIC_MEDICAL_END_TIMES), true);
   assert.equal(isValidTime("21:00", BASIC_MEDICAL_END_TIMES), true);
-  // Rejects out of range
+  // Rejects out of range or off-grid
+  assert.equal(isValidTime("08:15", BASIC_MEDICAL_END_TIMES), false);
   assert.equal(isValidTime("07:00", BASIC_MEDICAL_END_TIMES), false);
   assert.equal(isValidTime("21:30", BASIC_MEDICAL_END_TIMES), false);
   assert.equal(isValidTime("14:15", BASIC_MEDICAL_END_TIMES), false);

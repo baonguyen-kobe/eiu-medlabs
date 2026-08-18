@@ -7,21 +7,10 @@ const ARTIFACTS_DIR =
 
 async function loginAsAdmin(page: Page) {
   await page.goto("/login");
-  const email = page.locator('input[name="email"]');
-  const password = page.locator('input[name="password"]');
-  const submit = page.locator('button[type="submit"]');
-
-  await clickUntilState(
-    submit,
-    () =>
-      expect(page).toHaveURL(/\/(dashboard|basic-medical\/schedules)/, {
-        timeout: 1_000,
-      }),
-    async () => {
-      await email.fill("admin@campus.local");
-      await password.fill("LocalAdmin123!");
-    },
-  );
+  await page.locator('input[name="email"]').fill("admin@campus.local");
+  await page.locator('input[name="password"]').fill("LocalAdmin123!");
+  await page.locator('button[type="submit"]').click();
+  await expect(page).toHaveURL(/\/(dashboard|basic-medical\/schedules)/);
 }
 
 test.describe("Shared Custom Time Picker E2E Verification", () => {
@@ -181,6 +170,79 @@ test.describe("Shared Custom Time Picker E2E Verification", () => {
     await expect(startTimeContainer.locator(".time-picker-error")).toHaveCount(
       0,
     );
+  });
+
+  test("Historical off-grid 08:15 compatibility: untouched, focus/open/close, edit, recovery, and record switch", async ({
+    page,
+  }) => {
+    await loginAsAdmin(page);
+    await page.goto("/admin/shift-templates");
+    await expect(page.locator("h1")).toContainText("Mẫu ca trực");
+
+    const form = page.locator("form.admin-create-form");
+    const startTimeContainer = form.locator(
+      "label:has-text('Bắt đầu') .time-picker",
+    );
+    const startInput = startTimeContainer.locator("input.time-picker-input");
+
+    // 1. On initial mount, default value "07:00" is untouched and valid:
+    await expect(startInput).toHaveValue("07:00");
+    await expect(startTimeContainer.locator(".time-picker-error")).toHaveCount(
+      0,
+    );
+    await expect(
+      startTimeContainer.locator(".time-picker-control"),
+    ).not.toHaveClass(/is-invalid/);
+    const initialValidationMessage = await startInput.evaluate(
+      (el: HTMLInputElement) => el.validationMessage,
+    );
+    expect(initialValidationMessage).toBe("");
+
+    // 2. Focus and open popover without editing:
+    await startInput.click();
+    const popover = page.locator('.time-picker-popover[role="dialog"]');
+    await expect(popover).toBeVisible();
+
+    // Close via Escape without picking
+    await page.keyboard.press("Escape");
+    await expect(popover).not.toBeVisible();
+    await expect(startTimeContainer.locator(".time-picker-error")).toHaveCount(
+      0,
+    );
+    await expect(
+      startTimeContainer.locator(".time-picker-control"),
+    ).not.toHaveClass(/is-invalid/);
+
+    // 3. User edits the field (types off-grid "08:15") -> visible error appears + customValidity set
+    await startInput.fill("08:15");
+    await startInput.blur();
+    await expect(startInput).toHaveValue("08:15"); // Exact invalid text preserved
+    await expect(
+      startTimeContainer.locator(".time-picker-control"),
+    ).toHaveClass(/is-invalid/);
+    await expect(startInput).toHaveAttribute("aria-invalid", "true");
+    await expect(
+      startTimeContainer.locator(".time-picker-error"),
+    ).toBeVisible();
+    const isCustomValiditySet = await startInput.evaluate(
+      (el: HTMLInputElement) => el.validationMessage.length > 0,
+    );
+    expect(isCustomValiditySet).toBe(true);
+
+    // 4. User corrects to valid "08:30" -> error clears + customValidity cleared
+    await startInput.fill("08:30");
+    await startInput.blur();
+    await expect(startInput).toHaveValue("08:30");
+    await expect(
+      startTimeContainer.locator(".time-picker-control"),
+    ).not.toHaveClass(/is-invalid/);
+    await expect(startTimeContainer.locator(".time-picker-error")).toHaveCount(
+      0,
+    );
+    const isCustomValidityCleared = await startInput.evaluate(
+      (el: HTMLInputElement) => el.validationMessage === "",
+    );
+    expect(isCustomValidityCleared).toBe(true);
   });
 
   test("Basic Medical Form: sessions table uses TimePicker with extended range 20:30 and 21:00", async ({
