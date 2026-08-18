@@ -940,6 +940,8 @@ declare
   actor_id uuid := (select auth.uid());
   actor_profile public.profiles;
   request_id uuid;
+  req_late_status text;
+  derived_semester text;
 begin
   if actor_id is null or not (select private.is_active_user())
     or not (
@@ -950,25 +952,29 @@ begin
     ) then
     raise exception 'Bạn không có quyền tạo phiếu thiết bị.' using errcode = '42501';
   end if;
-  if target_semester not in ('HK1','HK2','HK3','HK4') then
-    raise exception 'Học kỳ phải là HK1, HK2, HK3 hoặc HK4.' using errcode = '22023';
+
+  select schedules.semester into derived_semester
+  from public.class_schedules as schedules
+  join public.rooms as rooms on rooms.id = schedules.room_id
+  where schedules.id = target_class_schedule_id
+    and schedules.schedule_status <> 'cancelled'
+    and rooms.room_type_id = '40000000-0000-0000-0000-000000000001'::uuid
+    and (select private.has_room_type(rooms.room_type_id));
+
+  if not found then
+    raise exception 'Lớp Skills lab không hợp lệ.' using errcode = '42501';
   end if;
+
+  if derived_semester is null or derived_semester not in ('HK1','HK2','HK3','HK4') then
+    raise exception 'Lịch học chưa có thông tin Học kỳ hợp lệ.' using errcode = '22023';
+  end if;
+
   if target_items is null or jsonb_typeof(target_items) <> 'array'
     or jsonb_array_length(target_items) = 0
     or jsonb_array_length(target_items) > 500 then
     raise exception 'Danh sách thiết bị phải có từ 1 đến 500 dòng.' using errcode = '22023';
   end if;
-  if not exists (
-    select 1
-    from public.class_schedules as schedules
-    join public.rooms as rooms on rooms.id = schedules.room_id
-    where schedules.id = target_class_schedule_id
-      and schedules.schedule_status <> 'cancelled'
-      and rooms.room_type_id = '40000000-0000-0000-0000-000000000001'::uuid
-      and (select private.has_room_type(rooms.room_type_id))
-  ) then
-    raise exception 'Lớp Skills lab không hợp lệ.' using errcode = '42501';
-  end if;
+
   if target_responsible_lecturer_id <> actor_id
     and not exists (
       select 1
@@ -977,6 +983,7 @@ begin
     ) then
     raise exception 'Giảng viên phụ trách không hợp lệ.' using errcode = '42501';
   end if;
+
   if exists (
     select 1
     from jsonb_to_recordset(target_items) as item(
@@ -1003,7 +1010,7 @@ begin
     phone_snapshot, email_snapshot, receive_at, return_at,
     late_registration_reason, note, created_by
   ) values (
-    target_class_schedule_id, target_semester, actor_id, target_responsible_lecturer_id,
+    target_class_schedule_id, derived_semester, actor_id, target_responsible_lecturer_id,
     actor_profile.phone, actor_profile.email, target_receive_at, target_return_at,
     nullif(btrim(target_late_registration_reason), ''), nullif(btrim(target_note), ''), actor_id
   ) returning id into request_id;
@@ -1016,6 +1023,17 @@ begin
   from jsonb_to_recordset(target_items) as item(
     skill_name text, catalog_item_id uuid, quantity integer, note text
   );
+
+  select late_approval_status into req_late_status
+  from public.equipment_requests where id = request_id;
+
+  perform private.enqueue_equipment_request_outbox_event(
+    request_id,
+    case when req_late_status = 'pending' then 'late_approval_requested' else 'created' end,
+    null,
+    actor_id
+  );
+
   return request_id;
 end;
 $$;
@@ -1043,9 +1061,40 @@ set search_path = ''
 as $$
 declare
   updated_request_id uuid;
+  req_late_status text;
+  actor_id uuid := (select auth.uid());
+  target_sched_semester text;
+  current_request record;
+  effective_semester text;
 begin
-  if target_semester not in ('HK1','HK2','HK3','HK4') then
-    raise exception 'Học kỳ phải là HK1, HK2, HK3 hoặc HK4.' using errcode = '22023';
+  select schedules.semester into target_sched_semester
+  from public.class_schedules as schedules
+  join public.rooms as rooms on rooms.id = schedules.room_id
+  where schedules.id = target_class_schedule_id
+    and schedules.schedule_status <> 'cancelled'
+    and rooms.room_type_id = '40000000-0000-0000-0000-000000000001'::uuid
+    and (select private.has_room_type(rooms.room_type_id));
+
+  if not found then
+    raise exception 'Lớp Skills lab không hợp lệ.' using errcode = '42501';
+  end if;
+
+  select req.class_schedule_id, req.semester into current_request
+  from public.equipment_requests as req
+  where req.id = target_request_id;
+
+  if target_sched_semester in ('HK1','HK2','HK3','HK4') then
+    effective_semester := target_sched_semester;
+  elsif current_request.class_schedule_id is not null
+    and current_request.class_schedule_id = target_class_schedule_id
+    and current_request.semester in ('HK1','HK2','HK3','HK4') then
+    effective_semester := current_request.semester;
+  else
+    effective_semester := null;
+  end if;
+
+  if effective_semester is null or effective_semester not in ('HK1','HK2','HK3','HK4') then
+    raise exception 'Lịch học chưa có thông tin Học kỳ hợp lệ.' using errcode = '22023';
   end if;
 
   if target_items is null
@@ -1057,10 +1106,7 @@ begin
   if exists (
     select 1
     from jsonb_to_recordset(target_items) as item(
-      skill_name text,
-      catalog_item_id uuid,
-      quantity integer,
-      note text
+      skill_name text, catalog_item_id uuid, quantity integer, note text
     )
     left join public.equipment_catalog catalog on catalog.id = item.catalog_item_id
     where item.skill_name is null
@@ -1076,7 +1122,7 @@ begin
 
   update public.equipment_requests
   set class_schedule_id = target_class_schedule_id,
-      semester = target_semester,
+      semester = effective_semester,
       responsible_lecturer_id = target_responsible_lecturer_id,
       receive_at = target_receive_at,
       return_at = target_return_at,
@@ -1093,11 +1139,7 @@ begin
   delete from public.equipment_request_items where request_id = target_request_id;
 
   insert into public.equipment_request_items (
-    request_id,
-    skill_name,
-    catalog_item_id,
-    quantity,
-    note
+    request_id, skill_name, catalog_item_id, quantity, note
   )
   select target_request_id,
          btrim(item.skill_name),
@@ -1105,15 +1147,26 @@ begin
          item.quantity,
          nullif(btrim(item.note), '')
   from jsonb_to_recordset(target_items) as item(
-    skill_name text,
-    catalog_item_id uuid,
-    quantity integer,
-    note text
+    skill_name text, catalog_item_id uuid, quantity integer, note text
+  );
+
+  select late_approval_status into req_late_status
+  from public.equipment_requests where id = target_request_id;
+
+  perform private.enqueue_equipment_request_outbox_event(
+    target_request_id,
+    case when req_late_status = 'pending' then 'late_approval_requested' else 'updated' end,
+    null,
+    actor_id
   );
 
   return updated_request_id;
 end;
 $$;
+
+revoke execute on function public.update_equipment_request_content(uuid, uuid, text, uuid, timestamptz, timestamptz, text, text, jsonb) from public, anon;
+grant execute on function public.update_equipment_request_content(uuid, uuid, text, uuid, timestamptz, timestamptz, text, text, jsonb) to authenticated;
+
 create or replace function public.update_equipment_request_content(
   target_request_id uuid,
   target_class_schedule_id uuid,
@@ -1145,6 +1198,9 @@ as $$
     target_items
   );
 $$;
+
+revoke execute on function public.update_equipment_request_content(uuid, uuid, text, uuid, timestamptz, timestamptz, text, jsonb) from public, anon;
+grant execute on function public.update_equipment_request_content(uuid, uuid, text, uuid, timestamptz, timestamptz, text, jsonb) to authenticated;
 create policy basic_medical_registrations_select on public.basic_medical_registrations for select to authenticated using ((select private.is_active_user()) and ((select private.has_role('admin')) or (select private.has_role('staff')) or ((select private.has_room_type('40000000-0000-0000-0000-000000000002'::uuid)) and (created_by = (select auth.uid()) or registrant_id = (select auth.uid()) or responsible_lecturer_id = (select auth.uid())))));
 create policy basic_medical_registrations_manage on public.basic_medical_registrations for all to authenticated using ((select private.has_role('admin')) or (select private.has_role('staff')) or created_by = (select auth.uid())) with check (created_by = (select auth.uid()) and ((select private.has_role('admin')) or (select private.has_role('staff')) or (((select private.has_role('lecturer')) or (select private.has_role('teaching_assistant'))) and (select private.has_room_type('40000000-0000-0000-0000-000000000002'::uuid)) and exists (select 1 from public.profiles where profiles.id = (select auth.uid()) and profiles.allow_basic_medical_access))));
 create policy basic_medical_sessions_select on public.basic_medical_registration_sessions for select to authenticated using (exists (select 1 from public.basic_medical_registrations r where r.id = registration_id));

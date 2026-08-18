@@ -1,4 +1,4 @@
-﻿$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Stop"
 
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 $OutputEncoding = $utf8NoBom
@@ -17,7 +17,10 @@ function Invoke-LocalSqlFile {
 }
 
 $statusLines = & $npxCommand supabase status -o env
-$secretLine = $statusLines | Where-Object { $_ -like "SECRET_KEY=*" }
+$secretLine = $statusLines | Where-Object { $_ -like "SERVICE_ROLE_KEY=*" }
+if (-not $secretLine) {
+  $secretLine = $statusLines | Where-Object { $_ -like "SECRET_KEY=*" }
+}
 if (-not $secretLine) {
   throw "Không tìm thấy Supabase local secret key. Hãy chạy Supabase trước."
 }

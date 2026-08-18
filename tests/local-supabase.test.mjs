@@ -2108,9 +2108,9 @@ test("người đăng ký được điều chỉnh nội dung nhưng không đư
   const requestId = crypto.randomUUID();
   const catalogItemId = crypto.randomUUID();
 
-  for (const [id, date] of [
-    [firstScheduleId, "2035-09-09"],
-    [secondScheduleId, "2035-09-10"],
+  for (const [id, date, sem] of [
+    [firstScheduleId, "2035-09-09", "HK1"],
+    [secondScheduleId, "2035-09-10", "HK2"],
   ]) {
     const { error } = await serviceClient().from("class_schedules").insert({
       id,
@@ -2124,6 +2124,7 @@ test("người đăng ký được điều chỉnh nội dung nhưng không đư
       source: "manual",
       schedule_status: "published",
       student_count: 20,
+      semester: sem,
       created_by: lecturer.user.id,
       published_by: lecturer.user.id,
       published_at: new Date().toISOString(),
@@ -2706,6 +2707,7 @@ test("direct equipment RPC luôn xác minh giảng viên phụ trách và độ 
           source: "manual",
           schedule_status: "published",
           student_count: 20,
+          semester: "HK1",
           created_by: admin.user.id,
           published_by: admin.user.id,
           published_at: new Date().toISOString(),
