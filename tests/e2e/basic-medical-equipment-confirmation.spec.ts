@@ -1,6 +1,48 @@
+import { spawnSync } from "node:child_process";
 import { expect, test, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { createClient } from "@supabase/supabase-js";
+
+function localSql(sql: string) {
+  const listed = spawnSync(
+    "docker",
+    [
+      "ps",
+      "--filter",
+      "label=com.supabase.cli.project=lich-truc-app",
+      "--format",
+      "{{.Names}}",
+    ],
+    { encoding: "utf8" },
+  );
+  const databases = listed.stdout
+    .split(/\r?\n/)
+    .filter((name) => name.startsWith("supabase_db_"));
+  if (listed.status !== 0 || databases.length !== 1) {
+    throw new Error("REFUSING_AMBIGUOUS_LOCAL_SUPABASE_DATABASE");
+  }
+  const result = spawnSync(
+    "docker",
+    [
+      "exec",
+      "-i",
+      databases[0],
+      "psql",
+      "-U",
+      "postgres",
+      "-d",
+      "postgres",
+      "-v",
+      "ON_ERROR_STOP=1",
+      "-At",
+    ],
+    { input: sql, encoding: "utf8" },
+  );
+  if (result.status !== 0) {
+    throw new Error(result.stderr || result.stdout || "LOCAL_SQL_FAILED");
+  }
+  return result.stdout.trim();
+}
 
 async function loginAsAdmin(page: Page) {
   await page.goto("/login");
@@ -190,70 +232,57 @@ test("Người xem Y cơ sở không truy cập Danh sách thiết bị Y cơ s�
 test("Phiếu Y cơ sở: Trạng thái bên trái, nút Sửa/Lưu/Hủy bên phải hàng, Hủy lớp tách biệt bên dưới", async ({
   page,
 }) => {
-  const envText = await readFile(
-    new URL("../../.env.local", import.meta.url),
-    "utf8",
-  );
-  const env = Object.fromEntries(
-    envText
-      .split(/\r?\n/)
-      .filter((line) => line && !line.startsWith("#"))
-      .map((line) => {
-        const [key, ...value] = line.split("=");
-        return [key, value.join("=")];
-      }),
-  );
-  const service = createClient(
-    env.NEXT_PUBLIC_SUPABASE_URL,
-    env.SUPABASE_SECRET_KEY,
-    { auth: { persistSession: false } },
-  );
-
   const suffix = crypto.randomUUID().slice(0, 8);
-  const { data: lecturerProfile } = await service
-    .from("profiles")
-    .select("id")
-    .eq("email", "giangvien@campus.local")
-    .single();
+  const ids = Object.fromEntries(
+    [
+      "course",
+      "room",
+      "registration",
+      "schedule1",
+      "schedule2",
+      "session1",
+      "session2",
+    ].map((name) => [name, crypto.randomUUID()]),
+  ) as Record<string, string>;
 
-  const lecturerId = lecturerProfile!.id;
+  const courseCode = `BM-UI-${suffix}`;
   const testDate = "2048-11-20";
-  let registrationId: string | null = null;
+  const adminId = localSql(
+    "select id from public.profiles where email = 'admin@campus.local' limit 1;",
+  );
+  const lecturerId = localSql(
+    "select id from public.profiles where email = 'giangvien@campus.local' limit 1;",
+  );
 
   try {
-    const { data: createdId, error: rpcError } = await service.rpc(
-      "save_basic_medical_registration",
-      {
-        target_registration_id: null,
-        target_academic_year: "2048-2049",
-        target_semester: "HK1",
-        target_start_date: testDate,
-        target_end_date: testDate,
-        target_course_id: "10000000-0000-0000-0000-000000000005",
-        target_room_id: "20000000-0000-0000-0000-000000000002",
-        target_student_count: 20,
-        target_responsible_lecturer_id: lecturerId,
-        target_note: `Test session UI ${suffix}`,
-        target_sessions: [
-          {
-            schedule_date: testDate,
-            start_time: "07:30",
-            end_time: "11:30",
-            lesson_title: `Bài học 1 ${suffix}`,
-            teaching_lecturer_id: lecturerId,
-          },
-          {
-            schedule_date: testDate,
-            start_time: "13:30",
-            end_time: "16:30",
-            lesson_title: `Bài học 2 ${suffix}`,
-            teaching_lecturer_id: lecturerId,
-          },
-        ],
-      },
-    );
-    if (rpcError) throw rpcError;
-    registrationId = createdId;
+    localSql(`
+      begin;
+      select set_config('app.basic_medical_registration_mutation', 'true', true);
+      insert into public.courses (id, course_code, course_name, room_type_id, is_active)
+      select '${ids.course}', '${courseCode}', 'BM UI test ${suffix}', id, true
+      from public.room_types where code = 'basic_medical';
+      insert into public.rooms (id, room_code, building_code, room_name, room_type_id, capacity, is_active)
+      select '${ids.room}', 'R-${suffix}', 'E2E', 'Room ${suffix}', id, 20, true
+      from public.room_types where code = 'basic_medical';
+      insert into public.basic_medical_registrations
+        (id, academic_year, semester, start_date, end_date, course_id, room_id, student_count,
+         registrant_id, responsible_lecturer_id, created_by)
+      values ('${ids.registration}', '2048-2049', 'HK1', '${testDate}', '${testDate}', '${ids.course}',
+        '${ids.room}', 20, '${adminId}', '${lecturerId}', '${adminId}');
+      insert into public.class_schedules
+        (id, course_id, course_code_snapshot, course_name_snapshot, room_id, lecturer_id, schedule_date,
+         start_time, end_time, source, schedule_status, student_count, basic_medical_registration_id,
+         created_by, published_by, published_at)
+      values
+        ('${ids.schedule1}', '${ids.course}', '${courseCode}', 'Session 1 ${suffix}', '${ids.room}', '${lecturerId}', '${testDate}', '07:30', '11:30', 'manual', 'published', 20, '${ids.registration}', '${adminId}', '${adminId}', clock_timestamp()),
+        ('${ids.schedule2}', '${ids.course}', '${courseCode}', 'Session 2 ${suffix}', '${ids.room}', '${lecturerId}', '${testDate}', '13:30', '16:30', 'manual', 'published', 20, '${ids.registration}', '${adminId}', '${adminId}', clock_timestamp());
+      insert into public.basic_medical_registration_sessions
+        (id, registration_id, class_schedule_id, lesson_title, teaching_lecturer_id, session_number)
+      values
+        ('${ids.session1}', '${ids.registration}', '${ids.schedule1}', 'Lesson 1 ${suffix}', '${lecturerId}', 1),
+        ('${ids.session2}', '${ids.registration}', '${ids.schedule2}', 'Lesson 2 ${suffix}', '${lecturerId}', 2);
+      commit;
+    `);
 
     // 2. Test UI
     await loginAsAdmin(page);
@@ -262,8 +291,7 @@ test("Phiếu Y cơ sở: Trạng thái bên trái, nút Sửa/Lưu/Hủy bên p
     // Find and expand the created registration row
     const regRow = page
       .locator("tr.equipment-request-table-row")
-      .filter({ hasText: "MED 120" })
-      .filter({ hasText: "2048-2049" })
+      .filter({ hasText: courseCode })
       .first();
     await expect(regRow).toBeVisible({ timeout: 15_000 });
     await regRow.click();
@@ -338,11 +366,15 @@ test("Phiếu Y cơ sở: Trạng thái bên trái, nút Sửa/Lưu/Hủy bên p
     await expect(editButton).toBeVisible();
     await expect(lecturerSelect).not.toBeVisible();
   } finally {
-    if (registrationId) {
-      await service.rpc("cancel_basic_medical_registration", {
-        target_registration_id: registrationId,
-        target_reason: "E2E test cleanup",
-      });
-    }
+    localSql(`
+      begin;
+      select set_config('app.basic_medical_registration_mutation', 'true', true);
+      delete from public.basic_medical_registration_sessions where registration_id = '${ids.registration}';
+      delete from public.class_schedules where basic_medical_registration_id = '${ids.registration}';
+      delete from public.basic_medical_registrations where id = '${ids.registration}';
+      delete from public.rooms where id = '${ids.room}';
+      delete from public.courses where id = '${ids.course}';
+      commit;
+    `);
   }
 });
