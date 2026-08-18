@@ -178,7 +178,7 @@ async function createEquipmentRequest(
   await page
     .locator('select[name="class_schedule_id"]')
     .selectOption(schedule.id);
-  await expect(page.locator('input[name="semester"]')).toHaveValue("HK1");
+  await expect(page.getByLabel("Học kỳ")).toHaveValue("HK1");
   await page
     .locator('select[name="responsible_lecturer_id"]')
     .selectOption(schedule.lecturer_id);

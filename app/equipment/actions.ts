@@ -349,7 +349,6 @@ export async function updateEquipmentRequest(
 
   const requestId = String(formData.get("request_id") ?? "");
   const scheduleId = String(formData.get("class_schedule_id") ?? "");
-  const submittedSemester = String(formData.get("semester") ?? "").trim();
   const responsibleId = String(formData.get("responsible_lecturer_id") ?? "");
   const receiveDate = String(formData.get("receive_date") ?? "");
   const receiveTime = String(formData.get("receive_time") ?? "");
@@ -383,8 +382,7 @@ export async function updateEquipmentRequest(
   ) {
     return {
       ok: false,
-      message:
-        "Vui lòng kiểm tra lớp, học kỳ, giảng viên và thời gian nhận/trả.",
+      message: "Vui lòng kiểm tra lớp, giảng viên và thời gian nhận/trả.",
     };
   }
   if (
@@ -412,7 +410,7 @@ export async function updateEquipmentRequest(
     supabase
       .from("equipment_requests")
       .select(
-        "id,registrant_id,status,semester,receive_at,late_approval_status,late_registration_reason",
+        "id,class_schedule_id,registrant_id,status,semester,receive_at,late_approval_status,late_registration_reason",
       )
       .eq("id", requestId)
       .maybeSingle(),
@@ -429,12 +427,23 @@ export async function updateEquipmentRequest(
     }),
   ]);
 
-  const effectiveSemester =
-    schedule?.semester || request?.semester || submittedSemester;
+  let effectiveSemester: string | null = null;
+  if (isCanonicalSemester(schedule?.semester)) {
+    effectiveSemester = schedule.semester;
+  } else if (
+    request?.class_schedule_id &&
+    request.class_schedule_id === scheduleId &&
+    isCanonicalSemester(request.semester)
+  ) {
+    effectiveSemester = request.semester;
+  } else {
+    effectiveSemester = null;
+  }
+
   if (!isCanonicalSemester(effectiveSemester)) {
     return {
       ok: false,
-      message: "Lịch học hoặc phiếu chưa có thông tin Học kỳ hợp lệ.",
+      message: "Lịch học chưa có thông tin Học kỳ hợp lệ.",
     };
   }
 
@@ -569,7 +578,6 @@ export async function createEquipmentRequest(
   if (!userId) return { ok: false, message: "Phiên đăng nhập đã hết hạn." };
 
   const scheduleId = String(formData.get("class_schedule_id") ?? "");
-  const submittedSemester = String(formData.get("semester") ?? "").trim();
   const responsibleId = String(formData.get("responsible_lecturer_id") ?? "");
   const receiveDate = String(formData.get("receive_date") ?? "");
   const receiveTime = String(formData.get("receive_time") ?? "");
@@ -600,8 +608,7 @@ export async function createEquipmentRequest(
   ) {
     return {
       ok: false,
-      message:
-        "Vui lòng kiểm tra lớp, học kỳ, giảng viên và thời gian nhận/trả.",
+      message: "Vui lòng kiểm tra lớp, giảng viên và thời gian nhận/trả.",
     };
   }
   if (
@@ -643,7 +650,7 @@ export async function createEquipmentRequest(
     }),
   ]);
 
-  const effectiveSemester = schedule?.semester || submittedSemester;
+  const effectiveSemester = schedule?.semester;
   if (!isCanonicalSemester(effectiveSemester)) {
     return {
       ok: false,

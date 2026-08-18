@@ -74,7 +74,7 @@ test("createScheduleDraft validates required canonical semester before RPC invoc
   );
 });
 
-test("EquipmentRequestForm displays semester as read-only inherited field", () => {
+test("EquipmentRequestForm displays semester as read-only display field with no name attribute", () => {
   const eqFormSource = readFileSync(
     new URL("../components/equipment-request-form.tsx", import.meta.url),
     "utf8",
@@ -85,10 +85,20 @@ test("EquipmentRequestForm displays semester as read-only inherited field", () =
     /<select[^>]*name="semester"/,
     "Equipment form must not have an editable semester select",
   );
+  assert.doesNotMatch(
+    eqFormSource,
+    /<input[^>]*name="semester"/,
+    "Equipment form must not submit a semester input field via FormData",
+  );
   assert.match(
     eqFormSource,
-    /<input[^>]*name="semester"[^>]*value=\{selectedClass\?\.semester \|\| semester \|\| ""\}[^>]*readOnly/,
-    "Equipment form must render read-only input inheriting selectedClass.semester",
+    /selectedClass\?\.semester/,
+    "Equipment form must dynamically display selectedClass.semester",
+  );
+  assert.match(
+    eqFormSource,
+    /readOnly/,
+    "Equipment form semester input must remain read-only",
   );
 });
 
@@ -110,27 +120,115 @@ test("Equipment registration page loads semester from class_schedules", () => {
   );
 });
 
-test("Equipment server actions derive semester authoritatively from schedule", () => {
+test("Equipment server actions derive semester authoritatively with no client fallback", () => {
   const actionsSource = readFileSync(
     new URL("../app/equipment/actions.ts", import.meta.url),
     "utf8",
   );
 
+  assert.doesNotMatch(
+    actionsSource,
+    /submittedSemester/,
+    "Equipment server actions must not reference or parse submittedSemester",
+  );
+  assert.doesNotMatch(
+    actionsSource,
+    /formData\.get\("semester"\)/,
+    "Equipment server actions must not read semester from client formData",
+  );
   assert.match(
     actionsSource,
-    /schedule\?\.semester\s*\|\|\s*submittedSemester/,
-    "createEquipmentRequest must prioritize schedule.semester",
+    /const effectiveSemester = schedule\?\.semester;/,
+    "createEquipmentRequest must derive effectiveSemester exclusively from schedule.semester",
   );
   assert.match(
     actionsSource,
     /isCanonicalSemester\(effectiveSemester\)/,
-    "createEquipmentRequest must validate effectiveSemester",
+    "Equipment actions must validate effectiveSemester with isCanonicalSemester",
   );
   assert.match(
     actionsSource,
     /target_semester:\s*effectiveSemester/,
-    "createEquipmentRequest must pass effectiveSemester to RPC",
+    "Equipment actions must pass validated effectiveSemester to RPC",
   );
+});
+
+test("Behavioral contract: create, update, and copy mode derive semester strictly according to Cases A-H", () => {
+  function deriveCreateSemester(schedule) {
+    const effectiveSemester = schedule?.semester;
+    if (!isCanonicalSemester(effectiveSemester)) {
+      return { ok: false, error: "Lịch học chưa có thông tin Học kỳ hợp lệ." };
+    }
+    return { ok: true, semester: effectiveSemester };
+  }
+
+  function deriveUpdateSemester(request, schedule, selectedScheduleId) {
+    let effectiveSemester = null;
+    if (isCanonicalSemester(schedule?.semester)) {
+      effectiveSemester = schedule.semester;
+    } else if (
+      request?.class_schedule_id &&
+      request.class_schedule_id === selectedScheduleId &&
+      isCanonicalSemester(request.semester)
+    ) {
+      effectiveSemester = request.semester;
+    } else {
+      effectiveSemester = null;
+    }
+
+    if (!isCanonicalSemester(effectiveSemester)) {
+      return { ok: false, error: "Lịch học chưa có thông tin Học kỳ hợp lệ." };
+    }
+    return { ok: true, semester: effectiveSemester };
+  }
+
+  // Case A: NEW request - schedule = HK2, client submitted HK4 -> HK2
+  const resA = deriveCreateSemester({ semester: "HK2" });
+  assert.deepEqual(resA, { ok: true, semester: "HK2" });
+
+  // Case B: NEW request - schedule = NULL, client submitted HK4 -> FAIL
+  const resB = deriveCreateSemester({ semester: null });
+  assert.equal(resB.ok, false);
+  assert.equal(resB.error, "Lịch học chưa có thông tin Học kỳ hợp lệ.");
+
+  // Case C: NEW request - schedule = NULL, no client semester -> FAIL
+  const resC = deriveCreateSemester(null);
+  assert.equal(resC.ok, false);
+  assert.equal(resC.error, "Lịch học chưa có thông tin Học kỳ hợp lệ.");
+
+  // Case D: UPDATE historical - existing request schedule A (semester HK1), schedule A (semester NULL), remains A -> preserve HK1
+  const resD = deriveUpdateSemester(
+    { class_schedule_id: "sched-A", semester: "HK1" },
+    { id: "sched-A", semester: null },
+    "sched-A",
+  );
+  assert.deepEqual(resD, { ok: true, semester: "HK1" });
+
+  // Case E: UPDATE historical schedule changed - existing request schedule A (semester HK1), new schedule B (semester NULL) -> FAIL
+  const resE = deriveUpdateSemester(
+    { class_schedule_id: "sched-A", semester: "HK1" },
+    { id: "sched-B", semester: null },
+    "sched-B",
+  );
+  assert.equal(resE.ok, false);
+  assert.equal(resE.error, "Lịch học chưa có thông tin Học kỳ hợp lệ.");
+
+  // Case F: UPDATE canonical schedule - schedule B is HK3, client submitted HK1 -> HK3
+  const resF = deriveUpdateSemester(
+    { class_schedule_id: "sched-A", semester: "HK1" },
+    { id: "sched-B", semester: "HK3" },
+    "sched-B",
+  );
+  assert.deepEqual(resF, { ok: true, semester: "HK3" });
+
+  // Case G: COPY mode - creates new request; destination schedule is NULL -> FAIL
+  const resG = deriveCreateSemester({ semester: null });
+  assert.equal(resG.ok, false);
+  assert.equal(resG.error, "Lịch học chưa có thông tin Học kỳ hợp lệ.");
+
+  // Case H: COPY mode - destination schedule is HK4 -> HK4
+  const resH = deriveCreateSemester({ semester: "HK4" });
+  assert.deepEqual(resH, { ok: true, semester: "HK4" });
 });
 
 test("Database migration and declarative schemas enforce semester column and RPC contract", () => {

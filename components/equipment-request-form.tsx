@@ -190,7 +190,6 @@ export function EquipmentRequestForm({
   const [classId, setClassId] = useState(
     initialData?.classId ?? defaultClassId,
   );
-  const semester = initialData?.semester ?? "";
   const [receiveDate, setReceiveDate] = useState(
     initialData?.receiveDate ?? "",
   );
@@ -580,8 +579,12 @@ export function EquipmentRequestForm({
           <label>
             Học kỳ
             <input
-              name="semester"
-              value={selectedClass?.semester || semester || ""}
+              value={
+                selectedClass?.semester ||
+                (initialData?.mode === "edit" && initialData.classId === classId
+                  ? initialData.semester
+                  : "")
+              }
               readOnly
               placeholder="Chưa có học kỳ"
             />
