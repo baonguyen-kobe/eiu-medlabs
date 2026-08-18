@@ -250,6 +250,7 @@ test("Batch A: Teaching Assistant RPCs enforce scoped role contracts", async () 
         target_end_time: "09:30",
         target_note: note,
         target_student_count: 20,
+        target_semester: "HK1",
       });
       assert.ifError(manual.error);
       manualScheduleIds.push(manual.data.id);
@@ -267,6 +268,7 @@ test("Batch A: Teaching Assistant RPCs enforce scoped role contracts", async () 
         target_end_time: "09:30",
         target_note: skillsCourseBasicRoomNote,
         target_student_count: 20,
+        target_semester: "HK1",
       }),
       skillsCourseBasicRoomNote,
     );
@@ -282,6 +284,7 @@ test("Batch A: Teaching Assistant RPCs enforce scoped role contracts", async () 
         target_end_time: "09:30",
         target_note: basicCourseSkillsRoomNote,
         target_student_count: 20,
+        target_semester: "HK1",
       }),
       basicCourseSkillsRoomNote,
     );
@@ -297,6 +300,7 @@ test("Batch A: Teaching Assistant RPCs enforce scoped role contracts", async () 
         target_end_time: "09:30",
         target_note: basicManualScheduleNote,
         target_student_count: 20,
+        target_semester: "HK1",
       }),
       basicManualScheduleNote,
     );
@@ -313,6 +317,7 @@ test("Batch A: Teaching Assistant RPCs enforce scoped role contracts", async () 
         target_end_time: "09:30",
         target_note: "M2-01 out-of-scope Teaching Assistant",
         target_student_count: 20,
+        target_semester: "HK1",
       },
     );
     assert.equal(manualOutOfScope.error?.code, "42501");
@@ -329,6 +334,7 @@ test("Batch A: Teaching Assistant RPCs enforce scoped role contracts", async () 
         target_end_time: "09:30",
         target_note: outOfScopeTargetNote,
         target_student_count: 20,
+        target_semester: "HK1",
       },
     );
     assert.equal(manualOutOfScopeTarget.error?.code, "42501");
@@ -351,6 +357,7 @@ test("Batch A: Teaching Assistant RPCs enforce scoped role contracts", async () 
         target_end_time: "09:30",
         target_note: invalidLecturerNote,
         target_student_count: 20,
+        target_semester: "HK1",
       },
     );
     assert.equal(manualInvalidLecturer.error?.code, "42501");

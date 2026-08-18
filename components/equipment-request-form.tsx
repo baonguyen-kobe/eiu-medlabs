@@ -45,6 +45,7 @@ type ClassOption = {
   courseName: string;
   room: string;
   studentCount: number;
+  semester?: string;
 };
 
 type Lecturer = { id: string; full_name: string };
@@ -189,7 +190,7 @@ export function EquipmentRequestForm({
   const [classId, setClassId] = useState(
     initialData?.classId ?? defaultClassId,
   );
-  const [semester, setSemester] = useState(initialData?.semester ?? "");
+  const semester = initialData?.semester ?? "";
   const [receiveDate, setReceiveDate] = useState(
     initialData?.receiveDate ?? "",
   );
@@ -577,22 +578,13 @@ export function EquipmentRequestForm({
             />
           </label>
           <label>
-            Học kỳ *
-            <select
+            Học kỳ
+            <input
               name="semester"
-              value={semester}
-              onChange={(event) => setSemester(event.target.value)}
-              required
-            >
-              <option value="" disabled>
-                Chọn học kỳ
-              </option>
-              {[1, 2, 3, 4].map((number) => (
-                <option key={number} value={`HK${number}`}>
-                  HK{number}
-                </option>
-              ))}
-            </select>
+              value={selectedClass?.semester || semester || ""}
+              readOnly
+              placeholder="Chưa có học kỳ"
+            />
           </label>
           <label>
             Mã môn học

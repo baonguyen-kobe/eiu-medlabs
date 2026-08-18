@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState } from "react";
 import { CalendarDays, Clock3, Save } from "@/components/icons";
 import { createScheduleDraft } from "@/app/schedule-entry/new/actions";
+import { CANONICAL_SEMESTERS } from "@/lib/semesters";
 import { SearchableCombobox } from "@/components/searchable-combobox";
 
 const initialCreateScheduleState = {
@@ -144,8 +145,8 @@ export function ScheduleForm({
           </div>
           <p>Database sẽ chặn trùng phòng và trùng lịch giảng viên.</p>
         </div>
-        <div className="form-grid four">
-          <label>
+        <div className="form-grid three">
+          <label className="schedule-room-field">
             Phòng *
             <select name="room_id" defaultValue="" required>
               <option value="" disabled>
@@ -155,6 +156,19 @@ export function ScheduleForm({
                 <option key={room.id} value={room.id}>
                   {room.room_code}.{room.building_code}
                   {room.room_name ? ` — ${room.room_name}` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Học kỳ *
+            <select name="semester" defaultValue="" required>
+              <option value="" disabled>
+                Chọn học kỳ
+              </option>
+              {CANONICAL_SEMESTERS.map((semester) => (
+                <option key={semester} value={semester}>
+                  {semester}
                 </option>
               ))}
             </select>

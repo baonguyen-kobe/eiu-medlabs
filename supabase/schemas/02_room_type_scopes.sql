@@ -1678,7 +1678,8 @@ create or replace function public.create_manual_class_schedule(
   target_start_time time,
   target_end_time time,
   target_note text,
-  target_student_count integer
+  target_student_count integer,
+  target_semester text
 )
 returns public.class_schedules
 language plpgsql
@@ -1696,6 +1697,10 @@ declare
 begin
   if actor_id is null or not (select private.is_active_user()) then
     raise exception 'AUTHENTICATION_REQUIRED' using errcode = '42501';
+  end if;
+
+  if target_semester is null or target_semester not in ('HK1', 'HK2', 'HK3', 'HK4') then
+    raise exception 'Học kỳ phải là HK1, HK2, HK3 hoặc HK4.' using errcode = '22023';
   end if;
 
   select courses.course_code, courses.course_name, courses.room_type_id
@@ -1735,15 +1740,16 @@ begin
   insert into public.class_schedules (
     course_id, course_code_snapshot, course_name_snapshot, room_id,
     lecturer_id, lecturer_2_id, schedule_date, start_time, end_time,
-    source, schedule_status, note, student_count, created_by, published_by, published_at
+    source, schedule_status, note, student_count, semester, created_by, published_by, published_at
   ) values (
     target_course_id, course_code_val, course_name_val, target_room_id,
     target_lecturer_id, target_lecturer_2_id, target_schedule_date, target_start_time, target_end_time,
-    'manual', 'published', target_note, target_student_count, actor_id, actor_id, clock_timestamp()
+    'manual', 'published', target_note, target_student_count, target_semester, actor_id, actor_id, clock_timestamp()
   ) returning * into created_row;
 
   return created_row;
 end;
 $$;
-revoke all on function public.create_manual_class_schedule(uuid,uuid,uuid,uuid,date,time,time,text,integer) from public, anon;
-grant execute on function public.create_manual_class_schedule(uuid,uuid,uuid,uuid,date,time,time,text,integer) to authenticated;
+
+revoke all on function public.create_manual_class_schedule(uuid,uuid,uuid,uuid,date,time,time,text,integer,text) from public, anon;
+grant execute on function public.create_manual_class_schedule(uuid,uuid,uuid,uuid,date,time,time,text,integer,text) to authenticated;

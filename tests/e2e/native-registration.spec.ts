@@ -193,15 +193,11 @@ test("các trang đăng ký native hiển thị trên local", async ({ page }) =
   await expect(
     page.locator('select[name="responsible_lecturer_id"]'),
   ).toHaveValue("c18c4f94-a58a-4b5f-abd0-8c4856affab8");
-  await expect(page.locator('select[name="semester"]')).toHaveValue("");
-  await expect(page.locator('select[name="semester"] option')).toHaveCount(5);
-  await expect(page.locator('select[name="semester"] option')).toHaveText([
-    "Chọn học kỳ",
-    "HK1",
-    "HK2",
-    "HK3",
-    "HK4",
-  ]);
+  await expect(page.locator('input[name="semester"]')).toHaveValue("");
+  await expect(page.locator('input[name="semester"]')).toHaveAttribute(
+    "readonly",
+    "",
+  );
   await page.getByLabel("Số lượng kỹ năng/bài thực hành *").selectOption("2");
   await page.getByRole("button", { name: "+ Tạo bảng thiết bị" }).click();
   await expect(page.locator(".equipment-skill-card")).toHaveCount(2);

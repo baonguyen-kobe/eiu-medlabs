@@ -2755,6 +2755,10 @@ span.filter-control {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.schedule-room-field {
+  grid-column: span 2;
+}
+
 .schedule-form label {
   display: grid;
   gap: 7px;
@@ -4448,6 +4452,10 @@ body {
   .form-grid.two,
   .form-grid.three {
     grid-template-columns: 1fr;
+  }
+
+  .schedule-room-field {
+    grid-column: auto;
   }
 
   .schedule-form > section {
@@ -6350,6 +6358,10 @@ body,
   .form-grid.two,
   .form-grid.three {
     grid-template-columns: 1fr;
+  }
+
+  .schedule-room-field {
+    grid-column: auto;
   }
 
   .form-section-title {

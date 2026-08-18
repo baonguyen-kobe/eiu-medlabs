@@ -1354,6 +1354,7 @@ test("Người xem chỉ đọc lịch và nhận email theo loại phòng đã 
         target_end_time: "11:30",
         target_note: null,
         target_student_count: 20,
+        target_semester: "HK1",
       });
     assert.ifError(scheduleError);
     scheduleId = createdSchedule.id;
@@ -1787,6 +1788,7 @@ test("tạo lịch thủ công xếp đúng một email cho mỗi Staff hoặc A
       target_end_time: "11:30",
       target_note: null,
       target_student_count: 20,
+      target_semester: "HK1",
     });
   assert.ifError(insertError);
   const scheduleId = createdSchedule.id;
