@@ -1,6 +1,4 @@
-import { resolve } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { clickUntilState } from "./helpers/interaction-readiness";
 
 const ARTIFACTS_DIR =
   "C:/Users/User/.gemini/antigravity/brain/dffb3f58-6ffc-43d7-989c-33c163c573f8";
