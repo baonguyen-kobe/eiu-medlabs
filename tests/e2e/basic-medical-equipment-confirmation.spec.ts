@@ -210,146 +210,66 @@ test("Phiếu Y cơ sở: Trạng thái bên trái, nút Sửa/Lưu/Hủy bên p
   );
 
   const suffix = crypto.randomUUID().slice(0, 8);
-  const courseCode = `BM-UI-${suffix}`;
-  const ids = Object.fromEntries(
-    [
-      "course",
-      "room",
-      "registration",
-      "schedule1",
-      "schedule2",
-      "session1",
-      "session2",
-    ].map((name) => [name, crypto.randomUUID()]),
-  );
-
-  const { data: adminProfile } = await service
-    .from("profiles")
-    .select("id")
-    .eq("email", "admin@campus.local")
-    .single();
   const { data: lecturerProfile } = await service
     .from("profiles")
     .select("id")
     .eq("email", "giangvien@campus.local")
     .single();
 
-  const adminId = adminProfile!.id;
   const lecturerId = lecturerProfile!.id;
   const testDate = "2048-11-20";
+  let registrationId: string | null = null;
 
   try {
-    const { data: roomType } = await service
-      .from("room_types")
-      .select("id")
-      .eq("code", "basic_medical")
-      .single();
-
-    // 1. Create course & room
-    await service.from("courses").insert({
-      id: ids.course,
-      course_code: courseCode,
-      course_name: `Môn Y cơ sở test UI ${suffix}`,
-      room_type_id: roomType!.id,
-      is_active: true,
-    });
-    await service.from("rooms").insert({
-      id: ids.room,
-      room_code: `R-${suffix}`,
-      building_code: "E2E",
-      room_name: `Phòng test ${suffix}`,
-      room_type_id: roomType!.id,
-      capacity: 30,
-      is_active: true,
-    });
-
-    // 2. Create registration
-    await service.from("basic_medical_registrations").insert({
-      id: ids.registration,
-      academic_year: "2048-2049",
-      semester: "HK1",
-      start_date: testDate,
-      end_date: testDate,
-      course_id: ids.course,
-      room_id: ids.room,
-      student_count: 20,
-      registrant_id: adminId,
-      responsible_lecturer_id: lecturerId,
-      created_by: adminId,
-    });
-
-    // 3. Create class_schedules & sessions
-    await service.from("class_schedules").insert([
+    const { data: createdId, error: rpcError } = await service.rpc(
+      "save_basic_medical_registration",
       {
-        id: ids.schedule1,
-        course_id: ids.course,
-        course_code_snapshot: courseCode,
-        course_name_snapshot: `Môn Y cơ sở test UI ${suffix}`,
-        room_id: ids.room,
-        lecturer_id: lecturerId,
-        schedule_date: testDate,
-        start_time: "07:30",
-        end_time: "11:30",
-        source: "manual",
-        schedule_status: "published",
-        student_count: 20,
-        basic_medical_registration_id: ids.registration,
-        created_by: adminId,
-        published_by: adminId,
-        published_at: new Date().toISOString(),
+        target_registration_id: null,
+        target_academic_year: "2048-2049",
+        target_semester: "HK1",
+        target_start_date: testDate,
+        target_end_date: testDate,
+        target_course_id: "10000000-0000-0000-0000-000000000005",
+        target_room_id: "20000000-0000-0000-0000-000000000002",
+        target_student_count: 20,
+        target_responsible_lecturer_id: lecturerId,
+        target_note: `Test session UI ${suffix}`,
+        target_sessions: [
+          {
+            schedule_date: testDate,
+            start_time: "07:30",
+            end_time: "11:30",
+            lesson_title: `Bài học 1 ${suffix}`,
+            teaching_lecturer_id: lecturerId,
+          },
+          {
+            schedule_date: testDate,
+            start_time: "13:30",
+            end_time: "16:30",
+            lesson_title: `Bài học 2 ${suffix}`,
+            teaching_lecturer_id: lecturerId,
+          },
+        ],
       },
-      {
-        id: ids.schedule2,
-        course_id: ids.course,
-        course_code_snapshot: courseCode,
-        course_name_snapshot: `Môn Y cơ sở test UI ${suffix}`,
-        room_id: ids.room,
-        lecturer_id: lecturerId,
-        schedule_date: testDate,
-        start_time: "13:30",
-        end_time: "16:30",
-        source: "manual",
-        schedule_status: "published",
-        student_count: 20,
-        basic_medical_registration_id: ids.registration,
-        created_by: adminId,
-        published_by: adminId,
-        published_at: new Date().toISOString(),
-      },
-    ]);
+    );
+    if (rpcError) throw rpcError;
+    registrationId = createdId;
 
-    await service.from("basic_medical_registration_sessions").insert([
-      {
-        id: ids.session1,
-        registration_id: ids.registration,
-        class_schedule_id: ids.schedule1,
-        lesson_title: `Bài học 1 ${suffix}`,
-        teaching_lecturer_id: lecturerId,
-        session_number: 1,
-      },
-      {
-        id: ids.session2,
-        registration_id: ids.registration,
-        class_schedule_id: ids.schedule2,
-        lesson_title: `Bài học 2 ${suffix}`,
-        teaching_lecturer_id: lecturerId,
-        session_number: 2,
-      },
-    ]);
-
-    // 4. Test UI
+    // 2. Test UI
     await loginAsAdmin(page);
     await page.goto(`/basic-medical/registrations?status=all`);
 
     // Find and expand the created registration row
     const regRow = page
       .locator("tr.equipment-request-table-row")
-      .filter({ hasText: courseCode });
-    await expect(regRow).toBeVisible({ timeout: 10_000 });
+      .filter({ hasText: "MED 120" })
+      .filter({ hasText: "2048-2049" })
+      .first();
+    await expect(regRow).toBeVisible({ timeout: 15_000 });
     await regRow.click();
 
     // Verify detail row expanded and session table visible
-    const detailRow = page.locator("tr.equipment-request-detail-row");
+    const detailRow = page.locator("tr.equipment-request-detail-row").first();
     await expect(detailRow).toBeVisible();
 
     const sessionTable = detailRow.locator(".basic-medical-session-table");
@@ -418,20 +338,11 @@ test("Phiếu Y cơ sở: Trạng thái bên trái, nút Sửa/Lưu/Hủy bên p
     await expect(editButton).toBeVisible();
     await expect(lecturerSelect).not.toBeVisible();
   } finally {
-    // Cleanup
-    await service
-      .from("basic_medical_registration_sessions")
-      .delete()
-      .in("id", [ids.session1, ids.session2]);
-    await service
-      .from("class_schedules")
-      .delete()
-      .in("id", [ids.schedule1, ids.schedule2]);
-    await service
-      .from("basic_medical_registrations")
-      .delete()
-      .eq("id", ids.registration);
-    await service.from("rooms").delete().eq("id", ids.room);
-    await service.from("courses").delete().eq("id", ids.course);
+    if (registrationId) {
+      await service.rpc("cancel_basic_medical_registration", {
+        target_registration_id: registrationId,
+        target_reason: "E2E test cleanup",
+      });
+    }
   }
 });
