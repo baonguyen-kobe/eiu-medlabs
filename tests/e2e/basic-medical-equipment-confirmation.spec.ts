@@ -186,3 +186,252 @@ test("Người xem Y cơ sở không truy cập Danh sách thiết bị Y cơ s�
     await service.auth.admin.deleteUser(userId);
   }
 });
+
+test("Phiếu Y cơ sở: Trạng thái bên trái, nút Sửa/Lưu/Hủy bên phải hàng, Hủy lớp tách biệt bên dưới", async ({
+  page,
+}) => {
+  const envText = await readFile(
+    new URL("../../.env.local", import.meta.url),
+    "utf8",
+  );
+  const env = Object.fromEntries(
+    envText
+      .split(/\r?\n/)
+      .filter((line) => line && !line.startsWith("#"))
+      .map((line) => {
+        const [key, ...value] = line.split("=");
+        return [key, value.join("=")];
+      }),
+  );
+  const service = createClient(
+    env.NEXT_PUBLIC_SUPABASE_URL,
+    env.SUPABASE_SECRET_KEY,
+    { auth: { persistSession: false } },
+  );
+
+  const suffix = crypto.randomUUID().slice(0, 8);
+  const courseCode = `BM-UI-${suffix}`;
+  const ids = Object.fromEntries(
+    [
+      "course",
+      "room",
+      "registration",
+      "schedule1",
+      "schedule2",
+      "session1",
+      "session2",
+    ].map((name) => [name, crypto.randomUUID()]),
+  );
+
+  const { data: adminProfile } = await service
+    .from("profiles")
+    .select("id")
+    .eq("email", "admin@campus.local")
+    .single();
+  const { data: lecturerProfile } = await service
+    .from("profiles")
+    .select("id")
+    .eq("email", "giangvien@campus.local")
+    .single();
+
+  const adminId = adminProfile!.id;
+  const lecturerId = lecturerProfile!.id;
+  const testDate = "2048-11-20";
+
+  try {
+    const { data: roomType } = await service
+      .from("room_types")
+      .select("id")
+      .eq("code", "basic_medical")
+      .single();
+
+    // 1. Create course & room
+    await service.from("courses").insert({
+      id: ids.course,
+      course_code: courseCode,
+      course_name: `Môn Y cơ sở test UI ${suffix}`,
+      room_type_id: roomType!.id,
+      is_active: true,
+    });
+    await service.from("rooms").insert({
+      id: ids.room,
+      room_code: `R-${suffix}`,
+      building_code: "E2E",
+      room_name: `Phòng test ${suffix}`,
+      room_type_id: roomType!.id,
+      capacity: 30,
+      is_active: true,
+    });
+
+    // 2. Create registration
+    await service.from("basic_medical_registrations").insert({
+      id: ids.registration,
+      academic_year: "2048-2049",
+      semester: "HK1",
+      start_date: testDate,
+      end_date: testDate,
+      course_id: ids.course,
+      room_id: ids.room,
+      student_count: 20,
+      registrant_id: adminId,
+      responsible_lecturer_id: lecturerId,
+      created_by: adminId,
+    });
+
+    // 3. Create class_schedules & sessions
+    await service.from("class_schedules").insert([
+      {
+        id: ids.schedule1,
+        course_id: ids.course,
+        course_code_snapshot: courseCode,
+        course_name_snapshot: `Môn Y cơ sở test UI ${suffix}`,
+        room_id: ids.room,
+        lecturer_id: lecturerId,
+        schedule_date: testDate,
+        start_time: "07:30",
+        end_time: "11:30",
+        source: "manual",
+        schedule_status: "published",
+        student_count: 20,
+        basic_medical_registration_id: ids.registration,
+        created_by: adminId,
+        published_by: adminId,
+        published_at: new Date().toISOString(),
+      },
+      {
+        id: ids.schedule2,
+        course_id: ids.course,
+        course_code_snapshot: courseCode,
+        course_name_snapshot: `Môn Y cơ sở test UI ${suffix}`,
+        room_id: ids.room,
+        lecturer_id: lecturerId,
+        schedule_date: testDate,
+        start_time: "13:30",
+        end_time: "16:30",
+        source: "manual",
+        schedule_status: "published",
+        student_count: 20,
+        basic_medical_registration_id: ids.registration,
+        created_by: adminId,
+        published_by: adminId,
+        published_at: new Date().toISOString(),
+      },
+    ]);
+
+    await service.from("basic_medical_registration_sessions").insert([
+      {
+        id: ids.session1,
+        registration_id: ids.registration,
+        class_schedule_id: ids.schedule1,
+        lesson_title: `Bài học 1 ${suffix}`,
+        teaching_lecturer_id: lecturerId,
+        session_number: 1,
+      },
+      {
+        id: ids.session2,
+        registration_id: ids.registration,
+        class_schedule_id: ids.schedule2,
+        lesson_title: `Bài học 2 ${suffix}`,
+        teaching_lecturer_id: lecturerId,
+        session_number: 2,
+      },
+    ]);
+
+    // 4. Test UI
+    await loginAsAdmin(page);
+    await page.goto(`/basic-medical/registrations?status=all`);
+
+    // Find and expand the created registration row
+    const regRow = page
+      .locator("tr.equipment-request-table-row")
+      .filter({ hasText: courseCode });
+    await expect(regRow).toBeVisible({ timeout: 10_000 });
+    await regRow.click();
+
+    // Verify detail row expanded and session table visible
+    const detailRow = page.locator("tr.equipment-request-detail-row");
+    await expect(detailRow).toBeVisible();
+
+    const sessionTable = detailRow.locator(".basic-medical-session-table");
+    await expect(sessionTable).toBeVisible();
+
+    // Check first session action cell
+    const sessionRow1 = sessionTable.locator("tbody tr").first();
+    const actionCell = sessionRow1.locator(
+      ".basic-medical-session-action-cell",
+    );
+    const statusRow = actionCell.locator(".basic-medical-session-status-row");
+
+    // A. NORMAL MODE: status on left, Sửa on right
+    const statusPill = statusRow.locator(".request-status");
+    const editButton = statusRow.locator(
+      ".basic-medical-session-lecturer-actions .basic-medical-lecturer-edit-button",
+    );
+    await expect(statusPill).toBeVisible();
+    await expect(statusPill).toHaveText("Chưa xác nhận");
+    await expect(editButton).toBeVisible();
+    await expect(editButton).toHaveText("Sửa");
+
+    // C. ADMINISTRATIVE ACTIONS PRESENT: Hủy lớp is outside the status row
+    const cancelSessionButton = actionCell.locator(
+      ".basic-medical-session-action-stack > button.button-danger",
+    );
+    await expect(cancelSessionButton).toBeVisible();
+    await expect(cancelSessionButton).toHaveText("Hủy lớp");
+
+    // Capture Screenshot A: Normal mode & Screenshot C: Administrative action present
+    const artifactsDir =
+      "C:/Users/User/.gemini/antigravity/brain/dffb3f58-6ffc-43d7-989c-33c163c573f8";
+    await page.screenshot({
+      path: `${artifactsDir}/basic_medical_session_normal.png`,
+    });
+    await page.screenshot({
+      path: `${artifactsDir}/basic_medical_session_admin.png`,
+    });
+
+    // B. EDIT MODE: Click Sửa -> Lưu + Hủy on right of status row, lecturer select visible
+    await editButton.click();
+
+    const lecturerSelect = sessionRow1.locator(
+      ".basic-medical-lecturer-select",
+    );
+    await expect(lecturerSelect).toBeVisible();
+
+    const saveButton = statusRow.locator(
+      ".basic-medical-session-lecturer-actions .basic-medical-lecturer-save-button",
+    );
+    const cancelEditButton = statusRow.locator(
+      ".basic-medical-session-lecturer-actions .basic-medical-lecturer-cancel-button",
+    );
+    await expect(saveButton).toBeVisible();
+    await expect(saveButton).toHaveText("Lưu");
+    await expect(cancelEditButton).toBeVisible();
+    await expect(cancelEditButton).toHaveText("Hủy");
+
+    // Capture Screenshot B: Edit mode
+    await page.screenshot({
+      path: `${artifactsDir}/basic_medical_session_edit.png`,
+    });
+
+    // Click Hủy to restore normal read mode
+    await cancelEditButton.click();
+    await expect(editButton).toBeVisible();
+    await expect(lecturerSelect).not.toBeVisible();
+  } finally {
+    // Cleanup
+    await service
+      .from("basic_medical_registration_sessions")
+      .delete()
+      .in("id", [ids.session1, ids.session2]);
+    await service
+      .from("class_schedules")
+      .delete()
+      .in("id", [ids.schedule1, ids.schedule2]);
+    await service
+      .from("basic_medical_registrations")
+      .delete()
+      .eq("id", ids.registration);
+    await service.from("rooms").delete().eq("id", ids.room);
+    await service.from("courses").delete().eq("id", ids.course);
+  }
+});

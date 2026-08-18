@@ -1040,85 +1040,91 @@ export function BasicMedicalRegistrationList({
                                       />
                                       <td className="basic-medical-session-action-cell">
                                         <div className="basic-medical-session-action-stack">
-                                          <SessionStatus
-                                            session={session}
-                                            confirmation={confirmation}
-                                            historicalConfirmations={
-                                              session.confirmations
-                                            }
-                                            evidenceEnabled={evidenceEnabled}
-                                            viewerId={viewerId}
-                                            now={confirmationNow}
-                                            onOpen={() =>
-                                              setActive({
-                                                registration,
-                                                session,
-                                              })
-                                            }
-                                          />
+                                          <div className="basic-medical-session-status-row">
+                                            <SessionStatus
+                                              session={session}
+                                              confirmation={confirmation}
+                                              historicalConfirmations={
+                                                session.confirmations
+                                              }
+                                              evidenceEnabled={evidenceEnabled}
+                                              viewerId={viewerId}
+                                              now={confirmationNow}
+                                              onOpen={() =>
+                                                setActive({
+                                                  registration,
+                                                  session,
+                                                })
+                                              }
+                                            />
+                                            {canEditLecturer ? (
+                                              isEditing ? (
+                                                <div className="basic-medical-session-lecturer-actions">
+                                                  <form
+                                                    id={`change-lecturer-${session.id}`}
+                                                    action={
+                                                      updateBasicMedicalSessionTeachingLecturer
+                                                    }
+                                                  >
+                                                    <input
+                                                      type="hidden"
+                                                      name="session_id"
+                                                      value={session.id}
+                                                    />
+                                                    <input
+                                                      type="hidden"
+                                                      name="teaching_lecturer_id"
+                                                      value={selectedLecturerId}
+                                                    />
+                                                  </form>
+                                                  <button
+                                                    type="button"
+                                                    className="button button-primary basic-medical-lecturer-save-button"
+                                                    disabled={isSavingLecturer}
+                                                    onClick={() =>
+                                                      handleSaveLecturer(
+                                                        session,
+                                                      )
+                                                    }
+                                                  >
+                                                    {isSavingLecturer
+                                                      ? "Đang lưu…"
+                                                      : "Lưu"}
+                                                  </button>
+                                                  <button
+                                                    type="button"
+                                                    className="button button-secondary basic-medical-lecturer-cancel-button"
+                                                    disabled={isSavingLecturer}
+                                                    onClick={
+                                                      handleCancelEditLecturer
+                                                    }
+                                                  >
+                                                    Hủy
+                                                  </button>
+                                                </div>
+                                              ) : (
+                                                <div className="basic-medical-session-lecturer-actions">
+                                                  <button
+                                                    type="button"
+                                                    className="button button-secondary basic-medical-lecturer-edit-button"
+                                                    onClick={() =>
+                                                      handleStartEditLecturer(
+                                                        session,
+                                                      )
+                                                    }
+                                                  >
+                                                    Sửa
+                                                  </button>
+                                                </div>
+                                              )
+                                            ) : null}
+                                          </div>
                                           {canDelete ? (
                                             <SessionAdministrativeActions
                                               session={session}
                                               confirmation={confirmation}
                                               registration={registration}
                                             />
-                                          ) : null}
-                                          {canEditLecturer ? (
-                                            isEditing ? (
-                                              <div className="basic-medical-session-lecturer-actions">
-                                                <form
-                                                  id={`change-lecturer-${session.id}`}
-                                                  action={
-                                                    updateBasicMedicalSessionTeachingLecturer
-                                                  }
-                                                >
-                                                  <input
-                                                    type="hidden"
-                                                    name="session_id"
-                                                    value={session.id}
-                                                  />
-                                                  <input
-                                                    type="hidden"
-                                                    name="teaching_lecturer_id"
-                                                    value={selectedLecturerId}
-                                                  />
-                                                </form>
-                                                <button
-                                                  type="button"
-                                                  className="button button-primary basic-medical-lecturer-save-button"
-                                                  disabled={isSavingLecturer}
-                                                  onClick={() =>
-                                                    handleSaveLecturer(session)
-                                                  }
-                                                >
-                                                  {isSavingLecturer
-                                                    ? "Đang lưu…"
-                                                    : "Lưu"}
-                                                </button>
-                                                <button
-                                                  type="button"
-                                                  className="button button-secondary basic-medical-lecturer-cancel-button"
-                                                  disabled={isSavingLecturer}
-                                                  onClick={
-                                                    handleCancelEditLecturer
-                                                  }
-                                                >
-                                                  Hủy
-                                                </button>
-                                              </div>
-                                            ) : (
-                                              <button
-                                                type="button"
-                                                className="button button-secondary basic-medical-lecturer-edit-button"
-                                                onClick={() =>
-                                                  handleStartEditLecturer(
-                                                    session,
-                                                  )
-                                                }
-                                              >
-                                                Sửa
-                                              </button>
-                                            )
                                           ) : null}
                                         </div>
                                       </td>
