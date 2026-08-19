@@ -7144,6 +7144,8 @@ body,
 .time-picker-icon {
   position: absolute;
   left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
   color: var(--ink-500);
   pointer-events: none;
   flex-shrink: 0;
@@ -9265,6 +9267,7 @@ body,
     .basic-medical-registration-detail-note,
     .basic-medical-registration-detail-action
   ) {
+  grid-row: 1;
   padding-inline: 16px;
 }
 
@@ -9282,12 +9285,20 @@ body,
 
 .basic-medical-registration-detail-student-count {
   grid-column: 4;
+  justify-self: start;
+  width: 45%;
 }
 
 .basic-medical-registration-detail-note {
-  grid-column: 4 / span 2;
-  grid-row: 2;
-  padding-block-start: 2px;
+  grid-column: 4;
+  grid-row: 1;
+  justify-self: end;
+  align-self: start;
+  width: 50%;
+  min-width: 0;
+  text-align: left;
+  overflow-wrap: anywhere;
+  padding-block-start: 0;
 }
 
 .basic-medical-registration-detail-action {
