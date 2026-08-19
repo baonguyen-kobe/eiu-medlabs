@@ -60,7 +60,9 @@ async function loginAsAdmin(page: Page) {
   await page.locator('input[name="email"]').fill("admin@campus.local");
   await page.locator('input[name="password"]').fill("LocalAdmin123!");
   await page.locator('button[type="submit"]').click();
-  await expect(page).toHaveURL(/\/(dashboard|basic-medical\/schedules)/);
+  await expect(page).toHaveURL(/\/(dashboard|basic-medical\/schedules)/, {
+    timeout: 20_000,
+  });
 }
 
 test.describe("Shared Custom Time Picker E2E Verification", () => {

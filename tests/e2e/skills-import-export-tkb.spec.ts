@@ -9,7 +9,7 @@ test("Skills Lab normalizes LAB room codes, accepts no email and resolves lectur
   await page.locator('input[name="email"]').fill("admin@campus.local");
   await page.locator('input[name="password"]').fill("LocalAdmin123!");
   await page.locator('button[type="submit"]').click();
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page).toHaveURL(/\/dashboard$/, { timeout: 20_000 });
 
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(
@@ -48,7 +48,7 @@ test("Skills Lab normalizes LAB room codes, accepts no email and resolves lectur
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       buffer: XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }),
     },
-    () => expect(stepTwo).toHaveClass(/active/, { timeout: 2_000 }),
+    () => expect(stepTwo).toHaveClass(/active/, { timeout: 8_000 }),
   );
 
   const continueButton = page.getByRole("button", { name: /Tiếp tục/ });
@@ -74,7 +74,7 @@ test("Skills Lab preview displays and excludes an intra-file conflict", async ({
   await page.locator('input[name="email"]').fill("admin@campus.local");
   await page.locator('input[name="password"]').fill("LocalAdmin123!");
   await page.locator('button[type="submit"]').click();
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page).toHaveURL(/\/dashboard$/, { timeout: 20_000 });
 
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(
@@ -123,7 +123,7 @@ test("Skills Lab preview displays and excludes an intra-file conflict", async ({
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       buffer: XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }),
     },
-    () => expect(stepTwo).toHaveClass(/active/, { timeout: 2_000 }),
+    () => expect(stepTwo).toHaveClass(/active/, { timeout: 8_000 }),
   );
   await page.getByRole("button", { name: /Tiếp tục/ }).click();
 
@@ -141,7 +141,7 @@ test("Skills Lab import blocks file upload until Semester is selected", async ({
   await page.locator('input[name="email"]').fill("admin@campus.local");
   await page.locator('input[name="password"]').fill("LocalAdmin123!");
   await page.locator('button[type="submit"]').click();
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page).toHaveURL(/\/dashboard$/, { timeout: 20_000 });
 
   await page.goto("/schedule-entry/import");
   const semesterSelect = page.locator("#import-semester-select");
