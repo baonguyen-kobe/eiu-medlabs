@@ -17,7 +17,6 @@ as $$
 $$;
 
 revoke all on function private.class_schedule_has_equipment_request(uuid) from public, anon, authenticated;
-grant execute on function private.class_schedule_has_equipment_request(uuid) to authenticated;
 
 -- 2. Public batch RPC for UI equipment lock status querying without RLS information leaks
 create or replace function public.get_class_schedules_equipment_lock_status(

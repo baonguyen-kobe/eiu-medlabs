@@ -215,7 +215,9 @@ test.describe("Cancellation Dialog & UI Hardening E2E", () => {
     box = await dialog.boundingBox();
     expect(box).not.toBeNull();
     expect(box!.x).toBeGreaterThanOrEqual(0);
-    expect(box!.width).toBeLessThanOrEqual(1280);
+    expect(box!.y).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(1280);
+    expect(box!.y + box!.height).toBeLessThanOrEqual(420);
     await expect(dialog).toBeVisible();
 
     // C. Narrow/mobile-like viewport verification (375x667)
@@ -223,7 +225,9 @@ test.describe("Cancellation Dialog & UI Hardening E2E", () => {
     box = await dialog.boundingBox();
     expect(box).not.toBeNull();
     expect(box!.x).toBeGreaterThanOrEqual(0);
-    expect(box!.width).toBeLessThanOrEqual(375);
+    expect(box!.y).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(375);
+    expect(box!.y + box!.height).toBeLessThanOrEqual(667);
     await expect(dialog).toBeVisible();
 
     // Reset viewport size to desktop

@@ -1,5 +1,5 @@
 begin;
-select plan(10);
+select plan(13);
 
 -- 1. Helper function existence & security
 select has_function(
@@ -63,6 +63,24 @@ select ok(
   has_function_privilege('anon', 'public.update_class_schedule_details_core(uuid,date,time,time,uuid,integer,uuid[])', 'execute') = false
   and has_function_privilege('authenticated', 'public.update_class_schedule_details_core(uuid,date,time,time,uuid,integer,uuid[])', 'execute') = false,
   'update_class_schedule_details_core is strictly private to internal wrapper'
+);
+
+-- 11. Check that private.class_schedule_has_equipment_request(uuid) has NO execute privilege for authenticated
+select ok(
+  has_function_privilege('authenticated', 'private.class_schedule_has_equipment_request(uuid)', 'EXECUTE') = false,
+  'private.class_schedule_has_equipment_request(uuid) is denied to authenticated'
+);
+
+-- 12. Check that private.class_schedule_has_equipment_request(uuid) has NO execute privilege for anon
+select ok(
+  has_function_privilege('anon', 'private.class_schedule_has_equipment_request(uuid)', 'EXECUTE') = false,
+  'private.class_schedule_has_equipment_request(uuid) is denied to anon'
+);
+
+-- 13. Check that private.class_schedule_has_equipment_request(uuid) has NO execute privilege for public
+select ok(
+  has_function_privilege('public', 'private.class_schedule_has_equipment_request(uuid)', 'EXECUTE') = false,
+  'private.class_schedule_has_equipment_request(uuid) is denied to public'
 );
 
 select * from finish();
