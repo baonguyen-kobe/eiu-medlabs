@@ -643,7 +643,7 @@ begin
         'class_schedule_basic_medical_updated',
         recipients.id, recipients.email,
         concat('class_schedule_basic_medical_updated:', change_id, ':', before_row.id, ':', recipients.id),
-        concat('[MedLabs Y CS] Cập nhật ngày học ', before_row.course_code_snapshot, ' - ', room_label),
+        concat('[MedLabs Calendar] Đổi ngày học Y cơ sở · ', coalesce(before_row.course_code_snapshot, '')),
         jsonb_build_object(
           'schedule_id', before_row.id,
           'course_code', before_row.course_code_snapshot,
