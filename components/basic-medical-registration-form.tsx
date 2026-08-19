@@ -93,7 +93,9 @@ export function BasicMedicalRegistrationForm({
   const [courseId, setCourseId] = useState(initialData?.courseId ?? "");
   const [roomId, setRoomId] = useState(initialData?.roomId ?? "");
   const [studentCount, setStudentCount] = useState(
-    initialData ? String(initialData.studentCount) : "",
+    initialData && initialData.mode === "edit"
+      ? String(initialData.studentCount)
+      : "",
   );
   const [note, setNote] = useState(initialData?.note ?? "");
   const [clientError, setClientError] = useState("");

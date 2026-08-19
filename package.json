@@ -16,7 +16,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test --test-concurrency=1 tests/*.test.mjs",
     "test:db": "supabase test db",
-    "test:e2e:critical": "playwright test tests/e2e/accessibility-smoke.spec.ts tests/e2e/manual-create.spec.ts tests/e2e/ta-create-paths.spec.ts tests/e2e/skills-import-export-tkb.spec.ts tests/e2e/equipment-request-management.spec.ts tests/e2e/basic-medical-equipment-confirmation.spec.ts tests/e2e/basic-medical-evidence-pdf.spec.ts tests/e2e/equipment-handover-pdf.spec.ts tests/e2e/mobile-responsive.spec.ts tests/e2e/personnel-management.spec.ts tests/e2e/personnel-password-controls.spec.ts tests/e2e/course-room-type.spec.ts tests/e2e/time-picker.spec.ts",
+    "test:e2e:critical": "playwright test tests/e2e/accessibility-smoke.spec.ts tests/e2e/manual-create.spec.ts tests/e2e/ta-create-paths.spec.ts tests/e2e/skills-import-export-tkb.spec.ts tests/e2e/equipment-request-management.spec.ts tests/e2e/basic-medical-equipment-confirmation.spec.ts tests/e2e/basic-medical-evidence-pdf.spec.ts tests/e2e/equipment-handover-pdf.spec.ts tests/e2e/mobile-responsive.spec.ts tests/e2e/personnel-management.spec.ts tests/e2e/personnel-password-controls.spec.ts tests/e2e/course-room-type.spec.ts tests/e2e/time-picker.spec.ts tests/e2e/cancellation-dialog-typing.spec.ts",
     "test:e2e:evidence-off": "playwright test --config playwright.evidence-off.config.ts",
     "test:e2e:production-smoke": "npm run build && playwright test --config=playwright.production.config.ts",
     "test:e2e": "playwright test",

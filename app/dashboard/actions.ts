@@ -11,6 +11,15 @@ export type ActionResult = {
 };
 
 function friendlyDatabaseError(message: string): string {
+  if (message.includes("CLASS_EQUIPMENT_REQUEST_EXISTS")) {
+    return "Lớp đã có Phiếu đăng ký thiết bị. Vui lòng xóa vĩnh viễn Phiếu đăng ký thiết bị trước khi thực hiện thao tác này.";
+  }
+  if (message.includes("INVALID_ROOM_SELECTION")) {
+    return "Phòng học được chọn không hợp lệ cho Kỹ năng Điều dưỡng.";
+  }
+  if (message.includes("INVALID_COURSE_SELECTION")) {
+    return "Môn học được chọn không hợp lệ cho Kỹ năng Điều dưỡng.";
+  }
   if (message.includes("BASIC_MEDICAL_REGISTRATION_EDIT_REQUIRED")) {
     return "Phòng và số sinh viên phải được điều chỉnh tại Phiếu Y cơ sở.";
   }
@@ -369,6 +378,7 @@ export async function updateClassSchedule(
     scheduleDate: string;
     startTime: string;
     endTime: string;
+    courseId?: string;
     roomId: string;
     studentCount: number;
     lecturerIds: string[];
@@ -396,6 +406,25 @@ export async function updateClassSchedule(
     };
   }
   const supabase = await createClient();
+
+  if (values.courseId) {
+    const { error } = await supabase.rpc("update_skills_lab_class_schedule", {
+      target_schedule_id: scheduleId,
+      target_schedule_date: values.scheduleDate,
+      target_start_time: values.startTime,
+      target_end_time: values.endTime,
+      target_course_id: values.courseId,
+      target_room_id: values.roomId,
+      target_student_count: values.studentCount,
+      target_lecturer_ids: uniqueLecturerIds.length ? uniqueLecturerIds : null,
+    });
+    if (error)
+      return { ok: false, message: friendlyDatabaseError(error.message) };
+    revalidateScheduleViews();
+    after(processPendingScheduleEmails);
+    return { ok: true, message: "Đã lưu thay đổi lớp học." };
+  }
+
   const { error } = await supabase.rpc("update_class_schedule_details", {
     target_schedule_id: scheduleId,
     target_schedule_date: values.scheduleDate,
