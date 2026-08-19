@@ -300,6 +300,42 @@ test("Phiếu Y cơ sở: Trạng thái bên trái, nút Sửa/Lưu/Hủy bên p
     const detailRow = page.locator("tr.equipment-request-detail-row").first();
     await expect(detailRow).toBeVisible();
 
+    // Verify detail grid layout: Ghi chú in Column 4 Row 1 right side without overlapping Số sinh viên
+    const studentCountBlock = detailRow.locator(
+      ".basic-medical-registration-detail-student-count",
+    );
+    const noteBlock = detailRow.locator(
+      ".basic-medical-registration-detail-note",
+    );
+    const detailActionBlock = detailRow.locator(
+      ".basic-medical-registration-detail-action",
+    );
+
+    await expect(studentCountBlock).toBeVisible();
+    await expect(noteBlock).toBeVisible();
+    await expect(detailActionBlock).toBeVisible();
+
+    const studentBox = await studentCountBlock.boundingBox();
+    const noteBox = await noteBlock.boundingBox();
+    const actionBox = await detailActionBlock.boundingBox();
+
+    expect(studentBox).not.toBeNull();
+    expect(noteBox).not.toBeNull();
+    expect(actionBox).not.toBeNull();
+
+    if (studentBox && noteBox && actionBox) {
+      // 1. Ghi chú is on the same top row as Số sinh viên
+      expect(Math.abs(noteBox.y - studentBox.y)).toBeLessThanOrEqual(6);
+      // 2. Ghi chú is positioned to the right of Số sinh viên
+      expect(noteBox.x).toBeGreaterThan(studentBox.x);
+      // 3. Ghi chú does not overlap Số sinh viên
+      expect(noteBox.x).toBeGreaterThanOrEqual(
+        studentBox.x + studentBox.width - 5,
+      );
+      // 4. Ghi chú does not overlap or extend into Hủy phiếu (column 5)
+      expect(noteBox.x + noteBox.width).toBeLessThanOrEqual(actionBox.x + 5);
+    }
+
     const sessionTable = detailRow.locator(".basic-medical-session-table");
     await expect(sessionTable).toBeVisible();
 

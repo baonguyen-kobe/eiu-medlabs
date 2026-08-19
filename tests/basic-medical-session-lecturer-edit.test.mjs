@@ -353,3 +353,78 @@ test("Basic Medical Lecturer Edit: Session status and lecturer action row layout
     "basic-medical-session-lecturer-actions prevents wrapping between Lưu and Hủy",
   );
 });
+
+test("Basic Medical Registration Detail Grid: Ghi chú is placed in Column 4 Row 1 on right side", async () => {
+  const globalsCss = await fs.readFile(
+    path.resolve(__dirname, "../app/globals.css"),
+    "utf8",
+  );
+  const listSource = await fs.readFile(
+    path.resolve(
+      __dirname,
+      "../components/basic-medical-registration-list.tsx",
+    ),
+    "utf8",
+  );
+
+  // 1. JSX DOM order is preserved
+  assert.match(
+    listSource,
+    /basic-medical-registration-detail-code[\s\S]*basic-medical-registration-detail-registrant[\s\S]*basic-medical-registration-detail-responsible[\s\S]*basic-medical-registration-detail-student-count[\s\S]*basic-medical-registration-detail-note[\s\S]*basic-medical-registration-detail-action/,
+    "JSX DOM order of detail blocks is strictly preserved",
+  );
+
+  // 2. Fixed anchor column placements
+  assert.match(
+    globalsCss,
+    /\.basic-medical-registration-detail-code\s*\{[^}]*grid-column:\s*1;/,
+    "Mã phiếu is in column 1",
+  );
+  assert.match(
+    globalsCss,
+    /\.basic-medical-registration-detail-registrant\s*\{[^}]*grid-column:\s*2;/,
+    "Người đăng ký is in column 2",
+  );
+  assert.match(
+    globalsCss,
+    /\.basic-medical-registration-detail-responsible\s*\{[^}]*grid-column:\s*3;/,
+    "Giảng viên phụ trách is in column 3",
+  );
+  assert.match(
+    globalsCss,
+    /\.basic-medical-registration-detail-student-count\s*\{[^}]*grid-column:\s*4;/,
+    "Số sinh viên is in column 4",
+  );
+  assert.match(
+    globalsCss,
+    /\.basic-medical-registration-detail-action\s*\{[^}]*grid-column:\s*5;/,
+    "Hủy phiếu is in column 5",
+  );
+
+  // 3. Ghi chú is in Column 4 Row 1 right-aligned
+  assert.match(
+    globalsCss,
+    /\.basic-medical-registration-detail-note\s*\{[^}]*grid-column:\s*4;/,
+    "Ghi chú is in column 4",
+  );
+  assert.match(
+    globalsCss,
+    /\.basic-medical-registration-detail-note\s*\{[^}]*grid-row:\s*1;/,
+    "Ghi chú is in row 1",
+  );
+  assert.match(
+    globalsCss,
+    /\.basic-medical-registration-detail-note\s*\{[^}]*justify-self:\s*end;/,
+    "Ghi chú is right-aligned in column 4",
+  );
+  assert.match(
+    globalsCss,
+    /\.basic-medical-registration-detail-note\s*\{[^}]*width:\s*50%;/,
+    "Ghi chú occupies 50% width of column 4",
+  );
+  assert.match(
+    globalsCss,
+    /\.basic-medical-registration-detail-note\s*\{[^}]*text-align:\s*left;/,
+    "Ghi chú text is left-aligned inside its own box for clean wrapping",
+  );
+});
