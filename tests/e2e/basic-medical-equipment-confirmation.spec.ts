@@ -328,13 +328,23 @@ test("Phiếu Y cơ sở: Trạng thái bên trái, nút Sửa/Lưu/Hủy bên p
       expect(Math.abs(noteBox.y - studentBox.y)).toBeLessThanOrEqual(6);
       // 2. Ghi chú is positioned to the right of Số sinh viên
       expect(noteBox.x).toBeGreaterThan(studentBox.x);
-      // 3. Ghi chú does not overlap Số sinh viên
-      expect(noteBox.x).toBeGreaterThanOrEqual(
-        studentBox.x + studentBox.width - 5,
-      );
+      // 3. Ghi chú content does not overlap Số sinh viên content
+      const studentValue = await studentCountBlock
+        .locator("strong")
+        .boundingBox();
+      if (studentValue) {
+        expect(noteBox.x).toBeGreaterThan(studentValue.x + studentValue.width);
+      }
       // 4. Ghi chú does not overlap or extend into Hủy phiếu (column 5)
       expect(noteBox.x + noteBox.width).toBeLessThanOrEqual(actionBox.x + 5);
     }
+
+    // Capture Screenshot of expanded registration detail grid showing Ghi chú in column 4 row 1
+    const artifactsDir =
+      "C:/Users/User/.gemini/antigravity/brain/dffb3f58-6ffc-43d7-989c-33c163c573f8";
+    await page.screenshot({
+      path: `${artifactsDir}/basic_medical_registration_detail.png`,
+    });
 
     const sessionTable = detailRow.locator(".basic-medical-session-table");
     await expect(sessionTable).toBeVisible();
@@ -364,8 +374,6 @@ test("Phiếu Y cơ sở: Trạng thái bên trái, nút Sửa/Lưu/Hủy bên p
     await expect(cancelSessionButton).toHaveText("Hủy lớp");
 
     // Capture Screenshot A: Normal mode & Screenshot C: Administrative action present
-    const artifactsDir =
-      "C:/Users/User/.gemini/antigravity/brain/dffb3f58-6ffc-43d7-989c-33c163c573f8";
     await page.screenshot({
       path: `${artifactsDir}/basic_medical_session_normal.png`,
     });

@@ -9267,6 +9267,7 @@ body,
     .basic-medical-registration-detail-note,
     .basic-medical-registration-detail-action
   ) {
+  grid-row: 1;
   padding-inline: 16px;
 }
 
@@ -9284,6 +9285,8 @@ body,
 
 .basic-medical-registration-detail-student-count {
   grid-column: 4;
+  justify-self: start;
+  width: 45%;
 }
 
 .basic-medical-registration-detail-note {
