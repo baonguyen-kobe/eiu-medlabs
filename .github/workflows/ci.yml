@@ -83,7 +83,7 @@ jobs:
         run: ./scripts/seed-local-users.ps1
 
       - name: Install browser for accessibility smoke tests
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
 
       - name: Run critical end-to-end suite
         run: npm run test:e2e:critical
