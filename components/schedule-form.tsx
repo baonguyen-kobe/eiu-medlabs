@@ -95,6 +95,7 @@ export function ScheduleForm({
               type="number"
               min="1"
               step="1"
+              defaultValue="1"
               required
             />
           </label>
