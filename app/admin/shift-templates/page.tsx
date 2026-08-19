@@ -9,6 +9,7 @@ import { CatalogTabs } from "@/components/catalog-tabs";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { Trash2 } from "@/components/icons";
 import { PaginationLinks } from "@/components/pagination-links";
+import { TimePicker } from "@/components/time-picker";
 import { normalizePage, paginationRange } from "@/lib/pagination";
 
 export default async function ShiftTemplatesPage({
@@ -52,11 +53,21 @@ export default async function ShiftTemplatesPage({
         </label>
         <label>
           Bắt đầu
-          <input name="start_time" type="time" required />
+          <TimePicker
+            name="start_time"
+            required
+            ariaLabel="Bắt đầu"
+            defaultValue="07:00"
+          />
         </label>
         <label>
           Kết thúc
-          <input name="end_time" type="time" required />
+          <TimePicker
+            name="end_time"
+            required
+            ariaLabel="Kết thúc"
+            defaultValue="11:30"
+          />
         </label>
         <button className="button button-primary">Thêm mẫu ca</button>
       </form>

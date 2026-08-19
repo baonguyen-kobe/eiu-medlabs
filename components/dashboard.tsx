@@ -35,6 +35,7 @@ import {
   updateClassSchedule,
 } from "@/app/dashboard/actions";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { TimePicker } from "@/components/time-picker";
 import { WorkspaceShell } from "@/components/workspace-shell";
 import { type ScheduleEvent } from "@/lib/demo-data";
 import { equipmentRequestDeepLink } from "@/lib/equipment-calendar-request";
@@ -899,22 +900,20 @@ export function Dashboard({
                 <dd>
                   {selectedEvent.type === "class" && canEditClassDetails ? (
                     <span className="drawer-time-editor">
-                      <input
-                        aria-label="Giờ bắt đầu"
-                        type="time"
+                      <TimePicker
+                        ariaLabel="Giờ bắt đầu"
                         value={selectedStartTime}
-                        onChange={(event) =>
-                          setSelectedStartTime(event.target.value)
-                        }
+                        onChange={setSelectedStartTime}
+                        required
+                        baselineKey={selectedEvent.id}
                       />
                       <span>–</span>
-                      <input
-                        aria-label="Giờ kết thúc"
-                        type="time"
+                      <TimePicker
+                        ariaLabel="Giờ kết thúc"
                         value={selectedEndTime}
-                        onChange={(event) =>
-                          setSelectedEndTime(event.target.value)
-                        }
+                        onChange={setSelectedEndTime}
+                        required
+                        baselineKey={selectedEvent.id}
                       />
                     </span>
                   ) : (

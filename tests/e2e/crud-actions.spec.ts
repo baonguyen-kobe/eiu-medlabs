@@ -2,6 +2,7 @@ import nextEnv from "@next/env";
 import { expect, test, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import * as XLSX from "@e965/xlsx";
+import { openCombobox } from "./helpers/interaction-readiness";
 
 nextEnv.loadEnvConfig(process.cwd());
 
@@ -45,8 +46,7 @@ async function ensureAdminDataClient() {
 }
 
 async function deleteSchedulesOnDate(date: string) {
-  const db = await ensureAdminDataClient();
-  const { error } = await db
+  const { error } = await serviceDb
     .from("class_schedules")
     .delete()
     .eq("schedule_date", date);
@@ -54,8 +54,7 @@ async function deleteSchedulesOnDate(date: string) {
 }
 
 async function deleteSchedulesBetween(from: string, to: string) {
-  const db = await ensureAdminDataClient();
-  const { error } = await db
+  const { error } = await serviceDb
     .from("class_schedules")
     .delete()
     .gte("schedule_date", from)
@@ -64,8 +63,7 @@ async function deleteSchedulesBetween(from: string, to: string) {
 }
 
 async function deleteShiftsBetween(from: string, to: string) {
-  const db = await ensureAdminDataClient();
-  const { error } = await db
+  const { error } = await serviceDb
     .from("staff_shifts")
     .delete()
     .gte("shift_date", from)
@@ -74,20 +72,19 @@ async function deleteShiftsBetween(from: string, to: string) {
 }
 
 async function deletePatternsFrom(date: string) {
-  const db = await ensureAdminDataClient();
-  const { data: patterns, error } = await db
+  const { data: patterns, error } = await serviceDb
     .from("staff_shift_patterns")
     .select("id")
     .eq("effective_from", date);
   if (error) throw error;
   const ids = (patterns ?? []).map(({ id }) => id);
   if (ids.length) {
-    const { error: shiftError } = await db
+    const { error: shiftError } = await serviceDb
       .from("staff_shifts")
       .delete()
       .in("shift_pattern_id", ids);
     if (shiftError) throw shiftError;
-    const { error: patternError } = await db
+    const { error: patternError } = await serviceDb
       .from("staff_shift_patterns")
       .delete()
       .in("id", ids);
@@ -110,9 +107,10 @@ async function createManualClass(page: Page, date: string) {
   const courseCombobox = page.getByRole("combobox", {
     name: "Tìm và chọn môn học",
   });
-  await courseCombobox.click();
+  await openCombobox(courseCombobox);
   await page.getByRole("listbox").getByRole("option").first().click();
   await page.locator('select[name="room_id"]').selectOption({ index: 1 });
+  await page.locator('select[name="semester"]').selectOption("HK1");
   await page.locator('input[name="schedule_date"]').fill(date);
   await page.locator('input[name="start_time"]').fill("07:30");
   await page.locator('input[name="end_time"]').fill("11:30");

@@ -7,6 +7,7 @@ import { processPendingScheduleEmails } from "@/lib/email-notifications";
 import { createClient } from "@/lib/supabase/server";
 import { isWithinOperatingHours } from "@/lib/business-time";
 import { NURSING_SKILLS_ROOM_TYPE_ID } from "@/lib/room-types";
+import { isCanonicalSemester } from "@/lib/semesters";
 
 export type CreateScheduleState = {
   ok: boolean;
@@ -57,6 +58,7 @@ export async function createScheduleDraft(
   const scheduleDate = String(formData.get("schedule_date") ?? "");
   const startTime = String(formData.get("start_time") ?? "");
   const endTime = String(formData.get("end_time") ?? "");
+  const semester = String(formData.get("semester") ?? "").trim();
   const note = String(formData.get("note") ?? "").trim();
   const studentCount = Number(formData.get("student_count"));
   const requestedLecturerIds = [
@@ -70,6 +72,9 @@ export async function createScheduleDraft(
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(scheduleDate) || !startTime || !endTime) {
     return { ok: false, message: "Vui lòng nhập đủ ngày và thời gian." };
+  }
+  if (!isCanonicalSemester(semester)) {
+    return { ok: false, message: "Vui lòng chọn Học kỳ." };
   }
   if (!Number.isInteger(studentCount) || studentCount < 1) {
     return {
@@ -154,6 +159,7 @@ export async function createScheduleDraft(
       target_end_time: endTime,
       target_note: note || null,
       target_student_count: studentCount,
+      target_semester: semester,
     },
   );
 

@@ -1,6 +1,48 @@
+import { spawnSync } from "node:child_process";
 import { expect, test, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { createClient } from "@supabase/supabase-js";
+
+function localSql(sql: string) {
+  const listed = spawnSync(
+    "docker",
+    [
+      "ps",
+      "--filter",
+      "label=com.supabase.cli.project=lich-truc-app",
+      "--format",
+      "{{.Names}}",
+    ],
+    { encoding: "utf8" },
+  );
+  const databases = listed.stdout
+    .split(/\r?\n/)
+    .filter((name) => name.startsWith("supabase_db_"));
+  if (listed.status !== 0 || databases.length !== 1) {
+    throw new Error("REFUSING_AMBIGUOUS_LOCAL_SUPABASE_DATABASE");
+  }
+  const result = spawnSync(
+    "docker",
+    [
+      "exec",
+      "-i",
+      databases[0],
+      "psql",
+      "-U",
+      "postgres",
+      "-d",
+      "postgres",
+      "-v",
+      "ON_ERROR_STOP=1",
+      "-At",
+    ],
+    { input: sql, encoding: "utf8" },
+  );
+  if (result.status !== 0) {
+    throw new Error(result.stderr || result.stdout || "LOCAL_SQL_FAILED");
+  }
+  return result.stdout.trim();
+}
 
 async function loginAsAdmin(page: Page) {
   await page.goto("/login");
@@ -184,5 +226,155 @@ test("Người xem Y cơ sở không truy cập Danh sách thiết bị Y cơ s�
     ).toBeVisible();
   } finally {
     await service.auth.admin.deleteUser(userId);
+  }
+});
+
+test("Phiếu Y cơ sở: Trạng thái bên trái, nút Sửa/Lưu/Hủy bên phải hàng, Hủy lớp tách biệt bên dưới", async ({
+  page,
+}) => {
+  const suffix = crypto.randomUUID().slice(0, 8);
+  const ids = Object.fromEntries(
+    [
+      "course",
+      "room",
+      "registration",
+      "schedule1",
+      "schedule2",
+      "session1",
+      "session2",
+    ].map((name) => [name, crypto.randomUUID()]),
+  ) as Record<string, string>;
+
+  const courseCode = `BM-UI-${suffix}`;
+  const testDate = "2048-11-20";
+  const adminId = localSql(
+    "select id from public.profiles where email = 'admin@campus.local' limit 1;",
+  );
+  const lecturerId = localSql(
+    "select id from public.profiles where email = 'giangvien@campus.local' limit 1;",
+  );
+
+  try {
+    localSql(`
+      begin;
+      select set_config('app.basic_medical_registration_mutation', 'true', true);
+      insert into public.courses (id, course_code, course_name, room_type_id, is_active)
+      select '${ids.course}', '${courseCode}', 'BM UI test ${suffix}', id, true
+      from public.room_types where code = 'basic_medical';
+      insert into public.rooms (id, room_code, building_code, room_name, room_type_id, capacity, is_active)
+      select '${ids.room}', 'R-${suffix}', 'E2E', 'Room ${suffix}', id, 20, true
+      from public.room_types where code = 'basic_medical';
+      insert into public.basic_medical_registrations
+        (id, academic_year, semester, start_date, end_date, course_id, room_id, student_count,
+         registrant_id, responsible_lecturer_id, created_by)
+      values ('${ids.registration}', '2048-2049', 'HK1', '${testDate}', '${testDate}', '${ids.course}',
+        '${ids.room}', 20, '${adminId}', '${lecturerId}', '${adminId}');
+      insert into public.class_schedules
+        (id, course_id, course_code_snapshot, course_name_snapshot, room_id, lecturer_id, schedule_date,
+         start_time, end_time, source, schedule_status, student_count, basic_medical_registration_id,
+         created_by, published_by, published_at)
+      values
+        ('${ids.schedule1}', '${ids.course}', '${courseCode}', 'Session 1 ${suffix}', '${ids.room}', '${lecturerId}', '${testDate}', '07:30', '11:30', 'manual', 'published', 20, '${ids.registration}', '${adminId}', '${adminId}', clock_timestamp()),
+        ('${ids.schedule2}', '${ids.course}', '${courseCode}', 'Session 2 ${suffix}', '${ids.room}', '${lecturerId}', '${testDate}', '13:30', '16:30', 'manual', 'published', 20, '${ids.registration}', '${adminId}', '${adminId}', clock_timestamp());
+      insert into public.basic_medical_registration_sessions
+        (id, registration_id, class_schedule_id, lesson_title, teaching_lecturer_id, session_number)
+      values
+        ('${ids.session1}', '${ids.registration}', '${ids.schedule1}', 'Lesson 1 ${suffix}', '${lecturerId}', 1),
+        ('${ids.session2}', '${ids.registration}', '${ids.schedule2}', 'Lesson 2 ${suffix}', '${lecturerId}', 2);
+      commit;
+    `);
+
+    // 2. Test UI
+    await loginAsAdmin(page);
+    await page.goto(`/basic-medical/registrations?status=all`);
+
+    // Find and expand the created registration row
+    const regRow = page
+      .locator("tr.equipment-request-table-row")
+      .filter({ hasText: courseCode })
+      .first();
+    await expect(regRow).toBeVisible({ timeout: 15_000 });
+    await regRow.click();
+
+    // Verify detail row expanded and session table visible
+    const detailRow = page.locator("tr.equipment-request-detail-row").first();
+    await expect(detailRow).toBeVisible();
+
+    const sessionTable = detailRow.locator(".basic-medical-session-table");
+    await expect(sessionTable).toBeVisible();
+
+    // Check first session action cell
+    const sessionRow1 = sessionTable.locator("tbody tr").first();
+    const actionCell = sessionRow1.locator(
+      ".basic-medical-session-action-cell",
+    );
+    const statusRow = actionCell.locator(".basic-medical-session-status-row");
+
+    // A. NORMAL MODE: status on left, Sửa on right
+    const statusPill = statusRow.locator(".request-status");
+    const editButton = statusRow.locator(
+      ".basic-medical-session-lecturer-actions .basic-medical-lecturer-edit-button",
+    );
+    await expect(statusPill).toBeVisible();
+    await expect(statusPill).toHaveText("Chưa xác nhận");
+    await expect(editButton).toBeVisible();
+    await expect(editButton).toHaveText("Sửa");
+
+    // C. ADMINISTRATIVE ACTIONS PRESENT: Hủy lớp is outside the status row
+    const cancelSessionButton = actionCell.locator(
+      ".basic-medical-session-action-stack > button.button-danger",
+    );
+    await expect(cancelSessionButton).toBeVisible();
+    await expect(cancelSessionButton).toHaveText("Hủy lớp");
+
+    // Capture Screenshot A: Normal mode & Screenshot C: Administrative action present
+    const artifactsDir =
+      "C:/Users/User/.gemini/antigravity/brain/dffb3f58-6ffc-43d7-989c-33c163c573f8";
+    await page.screenshot({
+      path: `${artifactsDir}/basic_medical_session_normal.png`,
+    });
+    await page.screenshot({
+      path: `${artifactsDir}/basic_medical_session_admin.png`,
+    });
+
+    // B. EDIT MODE: Click Sửa -> Lưu + Hủy on right of status row, lecturer select visible
+    await editButton.click();
+
+    const lecturerSelect = sessionRow1.locator(
+      ".basic-medical-lecturer-select",
+    );
+    await expect(lecturerSelect).toBeVisible();
+
+    const saveButton = statusRow.locator(
+      ".basic-medical-session-lecturer-actions .basic-medical-lecturer-save-button",
+    );
+    const cancelEditButton = statusRow.locator(
+      ".basic-medical-session-lecturer-actions .basic-medical-lecturer-cancel-button",
+    );
+    await expect(saveButton).toBeVisible();
+    await expect(saveButton).toHaveText("Lưu");
+    await expect(cancelEditButton).toBeVisible();
+    await expect(cancelEditButton).toHaveText("Hủy");
+
+    // Capture Screenshot B: Edit mode
+    await page.screenshot({
+      path: `${artifactsDir}/basic_medical_session_edit.png`,
+    });
+
+    // Click Hủy to restore normal read mode
+    await cancelEditButton.click();
+    await expect(editButton).toBeVisible();
+    await expect(lecturerSelect).not.toBeVisible();
+  } finally {
+    localSql(`
+      begin;
+      select set_config('app.basic_medical_registration_mutation', 'true', true);
+      delete from public.basic_medical_registration_sessions where registration_id = '${ids.registration}';
+      delete from public.class_schedules where basic_medical_registration_id = '${ids.registration}';
+      delete from public.basic_medical_registrations where id = '${ids.registration}';
+      delete from public.rooms where id = '${ids.room}';
+      delete from public.courses where id = '${ids.course}';
+      commit;
+    `);
   }
 });

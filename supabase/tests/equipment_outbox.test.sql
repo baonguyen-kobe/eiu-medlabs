@@ -77,60 +77,60 @@ on conflict (id) do nothing;
 
 -- 2. Create test class schedules
 -- Sched 1: 7 days in future (morning 07:30 - 11:30)
-insert into public.class_schedules (id, course_id, room_id, lecturer_id, schedule_date, start_time, end_time, student_count, course_code_snapshot, course_name_snapshot, schedule_status, published_at, published_by, source, created_by)
+insert into public.class_schedules (id, course_id, room_id, lecturer_id, schedule_date, start_time, end_time, student_count, course_code_snapshot, course_name_snapshot, semester, schedule_status, published_at, published_by, source, created_by)
 values (
   '90000000-0000-0000-0000-000000000001'::uuid,
   (select id from public.courses where room_type_id = '40000000-0000-0000-0000-000000000001'::uuid limit 1),
   (select id from public.rooms where room_type_id = '40000000-0000-0000-0000-000000000001'::uuid limit 1),
   coalesce((select id from public.profiles where lower(email) = 'giangvien@campus.local'), '10000000-0000-0000-0000-000000000003'::uuid),
-  current_date + interval '7 days', '07:30', '11:30', 25, 'NURS-101', 'Kỹ năng ĐD', 'published', now(),
+  current_date + interval '7 days', '07:30', '11:30', 25, 'NURS-101', 'Kỹ năng ĐD', 'HK1', 'published', now(),
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid), 'manual',
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid)
 );
 
 -- Sched 2: Deterministic schedule date for late registration (<24h)
-insert into public.class_schedules (id, course_id, room_id, lecturer_id, schedule_date, start_time, end_time, student_count, course_code_snapshot, course_name_snapshot, schedule_status, published_at, published_by, source, created_by)
+insert into public.class_schedules (id, course_id, room_id, lecturer_id, schedule_date, start_time, end_time, student_count, course_code_snapshot, course_name_snapshot, semester, schedule_status, published_at, published_by, source, created_by)
 values (
   '90000000-0000-0000-0000-000000000002'::uuid,
   (select id from public.courses where room_type_id = '40000000-0000-0000-0000-000000000001'::uuid limit 1),
   (select id from public.rooms where room_type_id = '40000000-0000-0000-0000-000000000001'::uuid limit 1),
   coalesce((select id from public.profiles where lower(email) = 'giangvien@campus.local'), '10000000-0000-0000-0000-000000000003'::uuid),
-  private.get_test_late_schedule_date(), '07:30', '11:30', 25, 'NURS-101', 'Kỹ năng ĐD', 'published', now(),
+  private.get_test_late_schedule_date(), '07:30', '11:30', 25, 'NURS-101', 'Kỹ năng ĐD', 'HK1', 'published', now(),
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid), 'manual',
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid)
 );
 
 -- Sched 3: Deterministic schedule date for late registration
-insert into public.class_schedules (id, course_id, room_id, lecturer_id, schedule_date, start_time, end_time, student_count, course_code_snapshot, course_name_snapshot, schedule_status, published_at, published_by, source, created_by)
+insert into public.class_schedules (id, course_id, room_id, lecturer_id, schedule_date, start_time, end_time, student_count, course_code_snapshot, course_name_snapshot, semester, schedule_status, published_at, published_by, source, created_by)
 values (
   '90000000-0000-0000-0000-000000000003'::uuid,
   (select id from public.courses where room_type_id = '40000000-0000-0000-0000-000000000001'::uuid limit 1),
   (select id from public.rooms where room_type_id = '40000000-0000-0000-0000-000000000001'::uuid limit 1),
   coalesce((select id from public.profiles where lower(email) = 'giangvien@campus.local'), '10000000-0000-0000-0000-000000000003'::uuid),
-  private.get_test_late_schedule_date(), '12:30', '16:30', 25, 'NURS-101', 'Kỹ năng ĐD', 'published', now(),
+  private.get_test_late_schedule_date(), '12:30', '16:30', 25, 'NURS-101', 'Kỹ năng ĐD', 'HK1', 'published', now(),
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid), 'manual',
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid)
 );
 
 -- Sched 4 & 5 for OFF/TEST mode
-insert into public.class_schedules (id, course_id, room_id, lecturer_id, schedule_date, start_time, end_time, student_count, course_code_snapshot, course_name_snapshot, schedule_status, published_at, published_by, source, created_by)
+insert into public.class_schedules (id, course_id, room_id, lecturer_id, schedule_date, start_time, end_time, student_count, course_code_snapshot, course_name_snapshot, semester, schedule_status, published_at, published_by, source, created_by)
 values (
   '90000000-0000-0000-0000-000000000004'::uuid,
   (select id from public.courses where room_type_id = '40000000-0000-0000-0000-000000000001'::uuid limit 1),
   (select id from public.rooms where room_type_id = '40000000-0000-0000-0000-000000000001'::uuid limit 1),
   coalesce((select id from public.profiles where lower(email) = 'giangvien@campus.local'), '10000000-0000-0000-0000-000000000003'::uuid),
-  current_date + interval '10 days', '07:30', '11:30', 25, 'NURS-101', 'Kỹ năng ĐD', 'published', now(),
+  current_date + interval '10 days', '07:30', '11:30', 25, 'NURS-101', 'Kỹ năng ĐD', 'HK1', 'published', now(),
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid), 'manual',
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid)
 );
 
-insert into public.class_schedules (id, course_id, room_id, lecturer_id, schedule_date, start_time, end_time, student_count, course_code_snapshot, course_name_snapshot, schedule_status, published_at, published_by, source, created_by)
+insert into public.class_schedules (id, course_id, room_id, lecturer_id, schedule_date, start_time, end_time, student_count, course_code_snapshot, course_name_snapshot, semester, schedule_status, published_at, published_by, source, created_by)
 values (
   '90000000-0000-0000-0000-000000000005'::uuid,
   (select id from public.courses where room_type_id = '40000000-0000-0000-0000-000000000001'::uuid limit 1),
   (select id from public.rooms where room_type_id = '40000000-0000-0000-0000-000000000001'::uuid limit 1),
   coalesce((select id from public.profiles where lower(email) = 'giangvien@campus.local'), '10000000-0000-0000-0000-000000000003'::uuid),
-  current_date + interval '11 days', '07:30', '11:30', 25, 'NURS-101', 'Kỹ năng ĐD', 'published', now(),
+  current_date + interval '11 days', '07:30', '11:30', 25, 'NURS-101', 'Kỹ năng ĐD', 'HK1', 'published', now(),
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid), 'manual',
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid)
 );

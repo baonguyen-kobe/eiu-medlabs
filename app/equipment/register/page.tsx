@@ -309,7 +309,7 @@ export default async function EquipmentRegisterPage({
     supabase
       .from("class_schedules")
       .select(
-        "id,schedule_date,start_time,end_time,course_code_snapshot,course_name_snapshot,student_count,rooms!inner(room_code,building_code,room_type_id)",
+        "id,schedule_date,start_time,end_time,course_code_snapshot,course_name_snapshot,student_count,semester,rooms!inner(room_code,building_code,room_type_id)",
       )
       .eq("rooms.room_type_id", NURSING_SKILLS_ROOM_TYPE_ID)
       .gte("schedule_date", businessTodayString())
@@ -387,7 +387,7 @@ export default async function EquipmentRegisterPage({
     const { data: currentSchedule } = await supabase
       .from("class_schedules")
       .select(
-        "id,schedule_date,start_time,end_time,course_code_snapshot,course_name_snapshot,student_count,rooms!inner(room_code,building_code,room_type_id)",
+        "id,schedule_date,start_time,end_time,course_code_snapshot,course_name_snapshot,student_count,semester,rooms!inner(room_code,building_code,room_type_id)",
       )
       .eq("id", source.class_schedule_id)
       .eq("rooms.room_type_id", NURSING_SKILLS_ROOM_TYPE_ID)
@@ -409,6 +409,7 @@ export default async function EquipmentRegisterPage({
       courseCode: schedule.course_code_snapshot,
       courseName: schedule.course_name_snapshot,
       studentCount: schedule.student_count,
+      semester: schedule.semester ?? undefined,
       room: `${room.room_code}.${room.building_code}`,
       label: `${schedule.schedule_date.split("-").reverse().join("/")} · ${schedule.start_time.slice(0, 5)}–${schedule.end_time.slice(0, 5)} · ${schedule.course_code_snapshot} · ${room.room_code}.${room.building_code}`,
     };

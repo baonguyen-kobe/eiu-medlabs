@@ -172,6 +172,10 @@ create table public.class_schedules (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   lecturer_2_id uuid references public.profiles(id) on delete restrict,
+  semester text,
+  constraint class_schedules_semester_check check (
+    semester is null or semester in ('HK1', 'HK2', 'HK3', 'HK4')
+  ),
   constraint class_schedules_course_code_not_blank check (btrim(course_code_snapshot) <> ''),
   constraint class_schedules_course_name_not_blank check (btrim(course_name_snapshot) <> ''),
   constraint class_schedules_valid_time check (end_time > start_time),

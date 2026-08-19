@@ -874,6 +874,7 @@ test("quyền nhập lịch chỉ quản lý batch của mình và Trợ giảng
         target_end: base.end_time,
         target_note: null,
         target_student_count: base.student_count,
+        target_semester: "HK1",
       });
     const ownImported = await createImported(
       importer,
@@ -1126,6 +1127,7 @@ test("Staff ngoài room-type scope không quản lý được phiếu thiết b�
           start_time: "07:30",
           end_time: "09:30",
           student_count: 20,
+          semester: "HK1",
           schedule_status: "published",
           created_by: admin.user.id,
           published_by: admin.user.id,
@@ -1354,6 +1356,7 @@ test("Người xem chỉ đọc lịch và nhận email theo loại phòng đã 
         target_end_time: "11:30",
         target_note: null,
         target_student_count: 20,
+        target_semester: "HK1",
       });
     assert.ifError(scheduleError);
     scheduleId = createdSchedule.id;
@@ -1659,6 +1662,7 @@ test("hai batch import đồng thời không tạo cùng normalized hash", async
         target_end: "09:30",
         target_note: null,
         target_student_count: 20,
+        target_semester: "HK1",
       });
 
     const results = await Promise.all([
@@ -1787,6 +1791,7 @@ test("tạo lịch thủ công xếp đúng một email cho mỗi Staff hoặc A
       target_end_time: "11:30",
       target_note: null,
       target_student_count: 20,
+      target_semester: "HK1",
     });
   assert.ifError(insertError);
   const scheduleId = createdSchedule.id;
@@ -1969,6 +1974,7 @@ test("chỉ Admin hoặc Staff được chuyển trạng thái phiếu thiết b
       source: "manual",
       schedule_status: "published",
       student_count: 20,
+      semester: "HK1",
       created_by: admin.user.id,
       published_by: admin.user.id,
       published_at: new Date().toISOString(),
@@ -2104,9 +2110,9 @@ test("người đăng ký được điều chỉnh nội dung nhưng không đư
   const requestId = crypto.randomUUID();
   const catalogItemId = crypto.randomUUID();
 
-  for (const [id, date] of [
-    [firstScheduleId, "2035-09-09"],
-    [secondScheduleId, "2035-09-10"],
+  for (const [id, date, sem] of [
+    [firstScheduleId, "2035-09-09", "HK1"],
+    [secondScheduleId, "2035-09-10", "HK2"],
   ]) {
     const { error } = await serviceClient().from("class_schedules").insert({
       id,
@@ -2120,6 +2126,7 @@ test("người đăng ký được điều chỉnh nội dung nhưng không đư
       source: "manual",
       schedule_status: "published",
       student_count: 20,
+      semester: sem,
       created_by: lecturer.user.id,
       published_by: lecturer.user.id,
       published_at: new Date().toISOString(),
@@ -2341,6 +2348,7 @@ test("mỗi dòng import hợp lệ tạo lịch và bản ghi kiểm tra trong 
       target_end: "16:30",
       target_note: null,
       target_student_count: 20,
+      target_semester: "HK1",
     },
   );
   assert.ifError(rpcError);
@@ -2701,6 +2709,7 @@ test("direct equipment RPC luôn xác minh giảng viên phụ trách và độ 
           source: "manual",
           schedule_status: "published",
           student_count: 20,
+          semester: "HK1",
           created_by: admin.user.id,
           published_by: admin.user.id,
           published_at: new Date().toISOString(),
@@ -2805,6 +2814,7 @@ test("direct import RPC từ chối hash giả do caller gửi", async () => {
       target_end: "09:30",
       target_note: null,
       target_student_count: 20,
+      target_semester: "HK1",
     });
     assert.ok(result.error);
     assert.equal(result.error.code, "22023");
@@ -2862,6 +2872,7 @@ test("hash của lịch import đã hủy không chặn lần import sau", async
       target_end: target.end,
       target_note: null,
       target_student_count: 20,
+      target_semester: "HK1",
     });
     assert.ifError(created.error);
     scheduleId = created.data;
@@ -3322,6 +3333,7 @@ test("Admin và Staff xóa phiếu thiết bị, phiếu Y cơ sở chỉ hủy 
           source: "manual",
           schedule_status: "published",
           student_count: 20,
+          semester: "HK1",
           created_by: admin.user.id,
           published_by: admin.user.id,
           published_at: new Date().toISOString(),
@@ -3606,6 +3618,7 @@ test("Phiếu thiết bị chỉ cho ký giao sau khi kho xác nhận và GV ph�
           source: "manual",
           schedule_status: "published",
           student_count: 20,
+          semester: "HK1",
           created_by: admin.user.id,
           published_by: admin.user.id,
           published_at: new Date().toISOString(),

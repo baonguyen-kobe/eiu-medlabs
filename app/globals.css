@@ -2287,10 +2287,98 @@ span.filter-control {
   position: relative;
   max-width: 1180px;
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   margin: 0 auto 20px;
   padding: 0;
   list-style: none;
+}
+
+.import-stepper-bar {
+  max-width: 1180px;
+  margin: 0 auto 20px;
+  padding: 0 22px;
+  display: flex;
+  align-items: flex-end;
+  gap: 20px;
+  box-sizing: border-box;
+}
+
+.import-semester-control {
+  min-width: 150px;
+  max-width: 180px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.import-semester-control label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-800);
+}
+
+.import-semester-control select {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line-strong);
+  background: white;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-950);
+  cursor: pointer;
+  outline: none;
+}
+
+.import-semester-control select:focus-visible {
+  border-color: var(--teal-500);
+  box-shadow: 0 0 0 3px rgb(22 148 135 / 10%);
+}
+
+.import-semester-control select:disabled {
+  background: var(--surface-soft);
+  color: var(--ink-500);
+  cursor: not-allowed;
+}
+
+.import-stepper-bar .stepper {
+  flex: 1;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  position: relative;
+  list-style: none;
+  padding: 0;
+}
+
+.import-stepper-bar .stepper::before {
+  content: "";
+  position: absolute;
+  top: 15px;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: var(--line-strong);
+}
+
+.drop-zone.drop-zone-blocked {
+  cursor: not-allowed;
+}
+
+.drop-zone.drop-zone-blocked:hover {
+  background:
+    linear-gradient(white, white) padding-box,
+    repeating-linear-gradient(
+        90deg,
+        var(--line-strong) 0 8px,
+        transparent 8px 14px
+      )
+      border-box;
 }
 
 .stepper::before {
@@ -2755,6 +2843,10 @@ span.filter-control {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.schedule-room-field {
+  grid-column: span 2;
+}
+
 .schedule-form label {
   display: grid;
   gap: 7px;
@@ -3090,6 +3182,22 @@ span.filter-control {
 
 .admin-create-form input:focus-visible {
   border-color: var(--teal-500);
+}
+
+.admin-create-form .time-picker-control {
+  min-height: 40px;
+  border-radius: 8px;
+}
+
+.admin-create-form .time-picker-input {
+  min-height: 38px;
+  padding-left: 36px;
+  padding-right: 8px;
+  border: 0;
+}
+
+.admin-create-form .time-picker-icon {
+  left: 11px;
 }
 
 .admin-create-room {
@@ -4448,6 +4556,10 @@ body {
   .form-grid.two,
   .form-grid.three {
     grid-template-columns: 1fr;
+  }
+
+  .schedule-room-field {
+    grid-column: auto;
   }
 
   .schedule-form > section {
@@ -6352,6 +6464,10 @@ body,
     grid-template-columns: 1fr;
   }
 
+  .schedule-room-field {
+    grid-column: auto;
+  }
+
   .form-section-title {
     align-items: flex-start;
   }
@@ -6968,7 +7084,8 @@ body,
   min-width: 0;
 }
 
-.drawer-time-editor input {
+.drawer-time-editor input,
+.drawer-time-editor .time-picker {
   min-width: 0;
 }
 
@@ -6979,6 +7096,220 @@ body,
 
 .inline-time-editor {
   min-width: 245px;
+}
+
+.inline-time-editor .time-picker {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.time-picker {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
+.time-picker-control {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 42px;
+  background: white;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  cursor: text;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+
+.time-picker-control:focus-within {
+  border-color: var(--teal-500);
+  box-shadow: 0 0 0 3px rgb(22 148 135 / 10%);
+}
+
+.time-picker-control.is-invalid {
+  border-color: #e5484d;
+  box-shadow: 0 0 0 3px rgb(229 72 77 / 12%);
+}
+
+.time-picker-control.is-disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background: var(--surface-soft);
+}
+
+.time-picker-icon {
+  position: absolute;
+  left: 11px;
+  color: var(--ink-500);
+  pointer-events: none;
+  flex-shrink: 0;
+}
+
+.time-picker-control input.time-picker-input,
+.time-picker-control .time-picker-input,
+.schedule-form .time-picker-control input.time-picker-input,
+.schedule-form .time-picker-control .time-picker-input,
+.shift-form .time-picker-control input.time-picker-input,
+.shift-form .time-picker-control .time-picker-input,
+.admin-create-form .time-picker-control input.time-picker-input,
+.admin-create-form .time-picker-control .time-picker-input,
+.time-picker-input {
+  width: 100%;
+  height: 100%;
+  min-height: 40px;
+  padding: 0 11px 0 36px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink-950);
+  background: transparent;
+  border: 0;
+  border-radius: 9px;
+  outline: 0;
+  box-shadow: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.time-picker-control input.time-picker-input:focus,
+.time-picker-control input.time-picker-input:focus-visible,
+.schedule-form .time-picker-control input.time-picker-input:focus-visible,
+.shift-form .time-picker-control input.time-picker-input:focus-visible,
+.admin-create-form .time-picker-control input.time-picker-input:focus-visible {
+  background: transparent;
+  border: 0;
+  outline: 0;
+  box-shadow: none;
+}
+
+.inline-time-editor .time-picker-control,
+.drawer-time-editor .time-picker-control {
+  min-height: 38px;
+}
+
+.inline-time-editor .time-picker-icon,
+.drawer-time-editor .time-picker-icon {
+  left: 8px;
+}
+
+.inline-time-editor .time-picker-control input.time-picker-input,
+.drawer-time-editor .time-picker-control input.time-picker-input,
+.inline-time-editor .time-picker-input,
+.drawer-time-editor .time-picker-input {
+  min-height: 36px;
+  padding: 0 6px 0 30px;
+  font-size: 13px;
+}
+
+.time-picker-error {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.35;
+  font-weight: 500;
+  color: #dc2626;
+  animation: time-picker-fade-in 0.12s ease-out;
+}
+
+.inline-time-editor .time-picker-error,
+.drawer-time-editor .time-picker-error,
+.data-table .time-picker-error {
+  font-size: 11px;
+}
+
+.time-picker-popover {
+  background: white;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  box-shadow:
+    0 10px 25px -5px rgb(0 0 0 / 12%),
+    0 8px 10px -6px rgb(0 0 0 / 8%);
+  padding: 8px;
+  min-width: 150px;
+  animation: time-picker-fade-in 0.12s ease-out;
+}
+
+@keyframes time-picker-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.time-picker-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.time-picker-column {
+  display: flex;
+  flex-direction: column;
+}
+
+.time-picker-column-header {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-500);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 4px 6px;
+  text-align: center;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 4px;
+}
+
+.time-picker-options {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 180px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  padding-right: 2px;
+}
+
+.time-picker-option {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 4px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-800);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition:
+    background-color 0.1s,
+    color 0.1s;
+  width: 100%;
+}
+
+.time-picker-option:hover {
+  background: #f1f5f9;
+  color: var(--ink-950);
+}
+
+.time-picker-option.selected {
+  background: var(--eiu-blue, #144069);
+  color: white;
+  font-weight: 700;
+}
+
+.time-picker-option:focus-visible {
+  outline: 2px solid var(--eiu-blue, #144069);
+  outline-offset: 1px;
 }
 
 .student-count-input {
@@ -9032,11 +9363,20 @@ body,
   display: grid;
   justify-items: start;
   gap: 8px;
+  width: 100%;
+}
+
+.basic-medical-session-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
 }
 
 .basic-medical-session-status {
   display: grid;
-  justify-items: center;
+  justify-items: start;
   gap: 5px;
 }
 
@@ -9084,7 +9424,8 @@ body,
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  flex-wrap: wrap;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .basic-medical-lecturer-edit-button,
@@ -10763,6 +11104,22 @@ time,
   }
 
   .filter-bar > * {
+    width: 100%;
+  }
+
+  .import-stepper-bar {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 0 14px;
+    gap: 14px;
+  }
+
+  .import-semester-control {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .import-stepper-bar .stepper {
     width: 100%;
   }
 }

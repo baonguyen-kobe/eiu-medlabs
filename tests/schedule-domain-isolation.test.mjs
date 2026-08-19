@@ -6,7 +6,7 @@ const skillsRoomTypeId = "40000000-0000-0000-0000-000000000001";
 
 function manualScheduleRpcDefinition(source) {
   const match = source.match(
-    /create or replace function public\.create_manual_class_schedule\([\s\S]*?grant execute on function public\.create_manual_class_schedule\(uuid,uuid,uuid,uuid,date,time,time,text,integer\) to authenticated;/,
+    /create or replace function public\.create_manual_class_schedule\([\s\S]*?grant execute on function public\.create_manual_class_schedule\(uuid,uuid,uuid,uuid,date,time,time,text,integer,text\) to authenticated;/,
   );
   assert.ok(match);
   return match[0].replace(/\r\n/g, "\n").trim();
@@ -41,7 +41,7 @@ test("Skills calendar positively filters its room domain", () => {
 test("manual schedule migration and declarative schema keep the same Skills contract", () => {
   const migration = readFileSync(
     new URL(
-      "../supabase/migrations/20260811133000_skills_manual_schedule_domain_isolation.sql",
+      "../supabase/migrations/20260818104500_add_class_schedule_semester.sql",
       import.meta.url,
     ),
     "utf8",

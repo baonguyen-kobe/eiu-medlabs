@@ -262,3 +262,94 @@ test("Basic Medical Lecturer Edit: UI component implements inline lecturer edit 
     "Preserves Vô hiệu hóa xác nhận ConfirmDialog",
   );
 });
+
+test("Basic Medical Lecturer Edit: Session status and lecturer action row layout contract", async () => {
+  const listSource = await fs.readFile(listComponentPath, "utf8");
+  const globalsCss = await fs.readFile(
+    path.resolve(__dirname, "../app/globals.css"),
+    "utf8",
+  );
+
+  // 1. SessionStatus rendered inside status-row left area before lecturer controls
+  assert.match(
+    listSource,
+    /<div className="basic-medical-session-status-row">\s*<SessionStatus[\s\S]*\{canEditLecturer \?/,
+    "SessionStatus is rendered first inside basic-medical-session-status-row",
+  );
+
+  // 2. Lecturer controls are rendered in dedicated right-side action group
+  assert.match(
+    listSource,
+    /<div className="basic-medical-session-lecturer-actions">/,
+    "Lecturer controls are enclosed in basic-medical-session-lecturer-actions",
+  );
+
+  // 3. Normal mode contains Sửa
+  assert.match(
+    listSource,
+    /<button[\s\S]*className="button button-secondary basic-medical-lecturer-edit-button"[\s\S]*>[\s\S]*Sửa[\s\S]*<\/button>/,
+    "Normal mode contains Sửa button",
+  );
+
+  // 4. Edit mode contains Lưu + Hủy
+  assert.match(
+    listSource,
+    /<button[\s\S]*className="button button-primary basic-medical-lecturer-save-button"[\s\S]*>[\s\S]*Lưu[\s\S]*<\/button>\s*<button[\s\S]*className="button button-secondary basic-medical-lecturer-cancel-button"[\s\S]*>[\s\S]*Hủy[\s\S]*<\/button>/,
+    "Edit mode contains Lưu and Hủy buttons",
+  );
+
+  // 5. SessionAdministrativeActions is OUTSIDE the lecturer action group
+  assert.match(
+    listSource,
+    /<\/div>\s*\{canDelete \? \(\s*<SessionAdministrativeActions/,
+    "SessionAdministrativeActions is outside the status-row and lecturer action group",
+  );
+
+  // 6. Hủy lớp implementation remains unchanged
+  assert.match(
+    listSource,
+    /action=\{cancelBasicMedicalSession\}[\s\S]*className="button button-danger basic-medical-confirm-button"[\s\S]*Hủy lớp/,
+    "Hủy lớp action and button remain unchanged",
+  );
+
+  // 7. Permission condition canEditLecturer remains unchanged
+  assert.match(
+    listSource,
+    /canEditLecturer\s*=\s*!isCancelled\s*&&\s*!isSessionCancelled\s*&&\s*\(\s*isAdmin\s*\|\|\s*registration\.created_by\s*===\s*viewerId\s*\)\s*&&\s*instructors\.length\s*>\s*0/,
+    "canEditLecturer permission logic is preserved",
+  );
+
+  // 8. Save/cancel handlers remain unchanged
+  assert.match(
+    listSource,
+    /function handleStartEditLecturer\(/,
+    "handleStartEditLecturer exists",
+  );
+  assert.match(
+    listSource,
+    /function handleCancelEditLecturer\(/,
+    "handleCancelEditLecturer exists",
+  );
+  assert.match(
+    listSource,
+    /function handleSaveLecturer\(/,
+    "handleSaveLecturer exists",
+  );
+
+  // 9. CSS layout contract: status-row has justify-content space-between and status is start-aligned
+  assert.match(
+    globalsCss,
+    /\.basic-medical-session-status-row\s*\{[\s\S]*display:\s*flex;[\s\S]*justify-content:\s*space-between;/,
+    "basic-medical-session-status-row uses flexbox space-between",
+  );
+  assert.match(
+    globalsCss,
+    /\.basic-medical-session-status\s*\{[\s\S]*justify-items:\s*start;/,
+    "basic-medical-session-status anchors status content to the left",
+  );
+  assert.match(
+    globalsCss,
+    /\.basic-medical-session-lecturer-actions\s*\{[\s\S]*white-space:\s*nowrap;/,
+    "basic-medical-session-lecturer-actions prevents wrapping between Lưu and Hủy",
+  );
+});

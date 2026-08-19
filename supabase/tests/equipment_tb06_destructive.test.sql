@@ -19,24 +19,24 @@ values ('50000000-0000-0000-0000-000000000002'::uuid, 'Mô hình TB06', 'Mô hì
 on conflict (id) do nothing;
 
 -- Create schedule 1 & 2
-insert into public.class_schedules (id, course_id, room_id, lecturer_id, schedule_date, start_time, end_time, student_count, course_code_snapshot, course_name_snapshot, schedule_status, published_at, published_by, source, created_by)
+insert into public.class_schedules (id, course_id, room_id, lecturer_id, schedule_date, start_time, end_time, student_count, course_code_snapshot, course_name_snapshot, semester, schedule_status, published_at, published_by, source, created_by)
 values (
   '90000000-0000-0000-0000-000000000010'::uuid,
   (select id from public.courses where room_type_id = '40000000-0000-0000-0000-000000000001'::uuid limit 1),
   (select id from public.rooms where room_type_id = '40000000-0000-0000-0000-000000000001'::uuid limit 1),
   coalesce((select id from public.profiles where lower(email) = 'giangvien@campus.local'), '10000000-0000-0000-0000-000000000003'::uuid),
-  current_date + interval '8 days', '07:30', '11:30', 25, 'NURS-TB06', 'Kỹ năng TB06', 'published', now(),
+  current_date + interval '8 days', '07:30', '11:30', 25, 'NURS-TB06', 'Kỹ năng TB06', 'HK1', 'published', now(),
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid), 'manual',
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid)
 );
 
-insert into public.class_schedules (id, course_id, room_id, lecturer_id, schedule_date, start_time, end_time, student_count, course_code_snapshot, course_name_snapshot, schedule_status, published_at, published_by, source, created_by)
+insert into public.class_schedules (id, course_id, room_id, lecturer_id, schedule_date, start_time, end_time, student_count, course_code_snapshot, course_name_snapshot, semester, schedule_status, published_at, published_by, source, created_by)
 values (
   '90000000-0000-0000-0000-000000000011'::uuid,
   (select id from public.courses where room_type_id = '40000000-0000-0000-0000-000000000001'::uuid limit 1),
   (select id from public.rooms where room_type_id = '40000000-0000-0000-0000-000000000001'::uuid limit 1),
   coalesce((select id from public.profiles where lower(email) = 'giangvien@campus.local'), '10000000-0000-0000-0000-000000000003'::uuid),
-  current_date + interval '9 days', '07:30', '11:30', 25, 'NURS-TB06-HD', 'Kỹ năng Hard Delete', 'published', now(),
+  current_date + interval '9 days', '07:30', '11:30', 25, 'NURS-TB06-HD', 'Kỹ năng Hard Delete', 'HK1', 'published', now(),
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid), 'manual',
   coalesce((select id from public.profiles where lower(email) = 'admin@campus.local'), '10000000-0000-0000-0000-000000000001'::uuid)
 );

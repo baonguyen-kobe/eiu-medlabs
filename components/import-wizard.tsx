@@ -32,6 +32,7 @@ import {
 } from "@/lib/import-values";
 import { PaginationControls } from "@/components/pagination-controls";
 import { TABLE_PAGE_SIZE, totalPagesFor } from "@/lib/pagination";
+import { CANONICAL_SEMESTERS, isCanonicalSemester } from "@/lib/semesters";
 
 type Row = Record<string, unknown>;
 type ValidationRow = ImportValidationResult["rows"][number];
@@ -160,6 +161,7 @@ export function ImportWizard({
   embedded?: boolean;
   scope?: "skills_lab" | "basic_medical";
 }) {
+  const [semester, setSemester] = useState("");
   const [fileName, setFileName] = useState("");
   const [rows, setRows] = useState<Row[]>([]);
   const [error, setError] = useState("");
@@ -175,6 +177,13 @@ export function ImportWizard({
     setError("");
     setResult(null);
     setValidation(null);
+    if (
+      scope === "skills_lab" &&
+      (!semester || !isCanonicalSemester(semester))
+    ) {
+      setError("Vui lòng chọn Học kỳ trước khi chọn file import.");
+      return;
+    }
     if (file.size > 5 * 1024 * 1024) {
       setError("File vượt quá giới hạn 5 MB.");
       return;
@@ -266,6 +275,7 @@ export function ImportWizard({
         const validationResult = await validateScheduleRows(
           JSON.stringify(rows),
           scope,
+          semester,
         );
         setValidation(validationResult);
         if (validationResult.ok) {
@@ -286,6 +296,7 @@ export function ImportWizard({
           fileName,
           JSON.stringify(rows),
           scope,
+          semester,
         );
         setResult(importResult);
         if (importResult.ok) setStep(5);
@@ -337,22 +348,66 @@ export function ImportWizard({
         </div>
       ) : null}
 
-      <ol className="stepper">
-        {["Chọn file", "Xem trước", "Kiểm tra", "Xác nhận", "Kết quả"].map(
-          (label, index) => (
-            <li className={step >= index + 1 ? "active" : ""} key={label}>
-              <span>{step > index + 1 ? <Check size={14} /> : index + 1}</span>
-              <b>{label}</b>
-            </li>
-          ),
-        )}
-      </ol>
+      <div className="import-stepper-bar">
+        {scope === "skills_lab" ? (
+          <div className="import-semester-control">
+            <label htmlFor="import-semester-select">
+              <span>Học kỳ</span> <span className="text-danger">*</span>
+            </label>
+            <select
+              id="import-semester-select"
+              name="semester"
+              value={semester}
+              onChange={(event) => {
+                const val = event.target.value;
+                setSemester(val);
+                if (val) setError("");
+              }}
+              disabled={step > 1}
+              className="import-semester-select"
+            >
+              <option value="">Chọn học kỳ</option>
+              {CANONICAL_SEMESTERS.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
+
+        <ol className="stepper">
+          {["Chọn file", "Xem trước", "Kiểm tra", "Xác nhận", "Kết quả"].map(
+            (label, index) => (
+              <li className={step >= index + 1 ? "active" : ""} key={label}>
+                <span>
+                  {step > index + 1 ? <Check size={14} /> : index + 1}
+                </span>
+                <b>{label}</b>
+              </li>
+            ),
+          )}
+        </ol>
+      </div>
 
       {step === 1 ? (
         <section className="import-panel">
           <label
-            className={`drop-zone ${dragActive ? "drag-active" : ""}`}
-            htmlFor="schedule-import-file"
+            className={`drop-zone ${dragActive ? "drag-active" : ""} ${scope === "skills_lab" && !semester ? "drop-zone-blocked" : ""}`}
+            htmlFor={
+              scope === "skills_lab" && !semester
+                ? undefined
+                : "schedule-import-file"
+            }
+            onClick={(event) => {
+              if (
+                scope === "skills_lab" &&
+                (!semester || !isCanonicalSemester(semester))
+              ) {
+                event.preventDefault();
+                setError("Vui lòng chọn Học kỳ trước khi chọn file import.");
+              }
+            }}
             onDragEnter={(event) => {
               event.preventDefault();
               setDragActive(true);
@@ -375,6 +430,13 @@ export function ImportWizard({
             onDrop={(event) => {
               event.preventDefault();
               setDragActive(false);
+              if (
+                scope === "skills_lab" &&
+                (!semester || !isCanonicalSemester(semester))
+              ) {
+                setError("Vui lòng chọn Học kỳ trước khi chọn file import.");
+                return;
+              }
               const file = event.dataTransfer.files?.[0];
               if (file) void readFile(file);
             }}
@@ -383,7 +445,11 @@ export function ImportWizard({
               <UploadCloud size={28} />
             </span>
             <strong>Chọn hoặc kéo thả file vào đây</strong>
-            <small>Hỗ trợ CSV UTF-8 và XLSX, tối đa 5 MB</small>
+            <small>
+              {scope === "skills_lab" && !semester
+                ? "Vui lòng chọn Học kỳ ở phía trên trước khi tải file"
+                : "Hỗ trợ CSV UTF-8 và XLSX, tối đa 5 MB"}
+            </small>
           </label>
           <input
             id="schedule-import-file"
@@ -391,12 +457,20 @@ export function ImportWizard({
             type="file"
             accept=".csv,.xlsx"
             onChange={(event) => {
+              if (
+                scope === "skills_lab" &&
+                (!semester || !isCanonicalSemester(semester))
+              ) {
+                setError("Vui lòng chọn Học kỳ trước khi chọn file import.");
+                event.currentTarget.value = "";
+                return;
+              }
               const file = event.currentTarget.files?.[0];
               if (file) void readFile(file);
             }}
           />
           {error ? (
-            <p className="form-error">
+            <p className="form-error" role="alert">
               <AlertTriangle size={15} /> {error}
             </p>
           ) : null}
@@ -409,6 +483,12 @@ export function ImportWizard({
           <h2>Import đã hoàn tất</h2>
           <p>{result.message}</p>
           <div className="import-stats">
+            {scope === "skills_lab" && (result.semester || semester) ? (
+              <article>
+                <span>Học kỳ</span>
+                <strong>{result.semester || semester}</strong>
+              </article>
+            ) : null}
             <article>
               <span>Tổng dòng</span>
               <strong>{result.totalRows}</strong>
@@ -503,6 +583,11 @@ export function ImportWizard({
             <div>
               <strong>{fileName}</strong>
               <small>
+                {scope === "skills_lab" && semester ? (
+                  <span>
+                    Học kỳ: <b>{semester}</b> ·{" "}
+                  </span>
+                ) : null}
                 {step === 2
                   ? `${rows.length} dòng được đọc để xem trước`
                   : step === 3
@@ -518,6 +603,12 @@ export function ImportWizard({
           {step === 2 ? (
             <>
               <div className="import-stats">
+                {scope === "skills_lab" && semester ? (
+                  <article>
+                    <span>Học kỳ</span>
+                    <strong>{semester}</strong>
+                  </article>
+                ) : null}
                 <article>
                   <span>Tổng dòng</span>
                   <strong>{rows.length}</strong>
@@ -553,6 +644,12 @@ export function ImportWizard({
           {step === 3 && validation ? (
             <>
               <div className="import-stats">
+                {scope === "skills_lab" && semester ? (
+                  <article>
+                    <span>Học kỳ</span>
+                    <strong>{semester}</strong>
+                  </article>
+                ) : null}
                 <article>
                   <span>Tổng dòng</span>
                   <strong>{validation.totalRows}</strong>
@@ -593,6 +690,12 @@ export function ImportWizard({
           {step === 4 && validation ? (
             <>
               <div className="import-stats">
+                {scope === "skills_lab" && semester ? (
+                  <article>
+                    <span>Học kỳ</span>
+                    <strong>{semester}</strong>
+                  </article>
+                ) : null}
                 <article>
                   <span>Tổng dòng ban đầu</span>
                   <strong>{validation.totalRows}</strong>

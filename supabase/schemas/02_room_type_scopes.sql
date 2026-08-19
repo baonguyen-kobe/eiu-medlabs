@@ -908,7 +908,7 @@ create or replace function public.create_import_schedule_row(
   target_errors jsonb, target_warnings jsonb, target_course_id uuid,
   target_course_code text, target_course_name text, target_room_id uuid,
   target_lecturer_id uuid, target_date date, target_start time, target_end time,
-  target_note text, target_student_count integer
+  target_note text, target_student_count integer, target_semester text default null
 )
 returns uuid
 language plpgsql
@@ -921,6 +921,7 @@ declare
   batch_room_type_id uuid;
   selected_room_type_id uuid;
   canonical_hash text;
+  nursing_skills_room_type_id constant uuid := '40000000-0000-0000-0000-000000000001'::uuid;
 begin
   if target_status not in ('imported', 'warning') then
     raise exception 'INVALID_IMPORT_ROW_STATUS' using errcode = '22023';
@@ -939,6 +940,13 @@ begin
   end if;
   if not (select private.can_import_schedules(batch_room_type_id)) then
     raise exception 'IMPORT_PERMISSION_REQUIRED' using errcode = '42501';
+  end if;
+  if batch_room_type_id = nursing_skills_room_type_id then
+    if target_semester is null or target_semester not in ('HK1', 'HK2', 'HK3', 'HK4') then
+      raise exception 'Học kỳ phải là HK1, HK2, HK3 hoặc HK4.' using errcode = '22023';
+    end if;
+  elsif target_semester is not null and target_semester not in ('HK1', 'HK2', 'HK3', 'HK4') then
+    raise exception 'Học kỳ phải là HK1, HK2, HK3 hoặc HK4.' using errcode = '22023';
   end if;
   select rooms.room_type_id into selected_room_type_id from public.rooms as rooms where rooms.id = target_room_id;
   if selected_room_type_id is null or selected_room_type_id <> batch_room_type_id
@@ -971,12 +979,12 @@ begin
   insert into public.class_schedules (
     course_id, course_code_snapshot, course_name_snapshot, room_id,
     lecturer_id, class_code, schedule_date, start_time, end_time,
-    source, source_row_id, import_batch_id, schedule_status, note, student_count,
+    source, source_row_id, import_batch_id, schedule_status, note, student_count, semester,
     created_by, published_by, published_at
   ) values (
     target_course_id, target_course_code, target_course_name, target_room_id,
     target_lecturer_id, null, target_date, target_start, target_end,
-    'import', null, target_batch_id, 'published', target_note, target_student_count,
+    'import', null, target_batch_id, 'published', target_note, target_student_count, target_semester,
     caller_id, caller_id, now()
   ) returning id into schedule_id;
 
@@ -997,13 +1005,13 @@ $$;
 
 revoke all on function public.create_import_schedule_row(
   uuid, integer, text, jsonb, jsonb, public.import_row_status, jsonb, jsonb,
-  uuid, text, text, uuid, uuid, date, time, time, text, integer
+  uuid, text, text, uuid, uuid, date, time, time, text, integer, text
 ) from public, anon;
 revoke all on function private.import_schedule_business_key(text, uuid, date, time, time) from public, anon, authenticated;
 revoke all on function private.import_schedule_hash(text, uuid, date, time, time) from public, anon, authenticated;
 grant execute on function public.create_import_schedule_row(
   uuid, integer, text, jsonb, jsonb, public.import_row_status, jsonb, jsonb,
-  uuid, text, text, uuid, uuid, date, time, time, text, integer
+  uuid, text, text, uuid, uuid, date, time, time, text, integer, text
 ) to authenticated;
 
 -- The legacy overload does not carry student_count or room-type scope checks.
@@ -1014,6 +1022,10 @@ revoke all on function public.create_import_schedule_row(
 drop function if exists public.create_import_schedule_row(
   uuid, integer, text, jsonb, jsonb, public.import_row_status, jsonb, jsonb,
   uuid, text, text, uuid, uuid, date, time, time, text
+);
+drop function if exists public.create_import_schedule_row(
+  uuid, integer, text, jsonb, jsonb, public.import_row_status, jsonb, jsonb,
+  uuid, text, text, uuid, uuid, date, time, time, text, integer
 );
 
 -- Keep the details RPC in the declarative schema as well as the migration chain.
@@ -1678,7 +1690,8 @@ create or replace function public.create_manual_class_schedule(
   target_start_time time,
   target_end_time time,
   target_note text,
-  target_student_count integer
+  target_student_count integer,
+  target_semester text
 )
 returns public.class_schedules
 language plpgsql
@@ -1696,6 +1709,10 @@ declare
 begin
   if actor_id is null or not (select private.is_active_user()) then
     raise exception 'AUTHENTICATION_REQUIRED' using errcode = '42501';
+  end if;
+
+  if target_semester is null or target_semester not in ('HK1', 'HK2', 'HK3', 'HK4') then
+    raise exception 'Học kỳ phải là HK1, HK2, HK3 hoặc HK4.' using errcode = '22023';
   end if;
 
   select courses.course_code, courses.course_name, courses.room_type_id
@@ -1735,15 +1752,16 @@ begin
   insert into public.class_schedules (
     course_id, course_code_snapshot, course_name_snapshot, room_id,
     lecturer_id, lecturer_2_id, schedule_date, start_time, end_time,
-    source, schedule_status, note, student_count, created_by, published_by, published_at
+    source, schedule_status, note, student_count, semester, created_by, published_by, published_at
   ) values (
     target_course_id, course_code_val, course_name_val, target_room_id,
     target_lecturer_id, target_lecturer_2_id, target_schedule_date, target_start_time, target_end_time,
-    'manual', 'published', target_note, target_student_count, actor_id, actor_id, clock_timestamp()
+    'manual', 'published', target_note, target_student_count, target_semester, actor_id, actor_id, clock_timestamp()
   ) returning * into created_row;
 
   return created_row;
 end;
 $$;
-revoke all on function public.create_manual_class_schedule(uuid,uuid,uuid,uuid,date,time,time,text,integer) from public, anon;
-grant execute on function public.create_manual_class_schedule(uuid,uuid,uuid,uuid,date,time,time,text,integer) to authenticated;
+
+revoke all on function public.create_manual_class_schedule(uuid,uuid,uuid,uuid,date,time,time,text,integer,text) from public, anon;
+grant execute on function public.create_manual_class_schedule(uuid,uuid,uuid,uuid,date,time,time,text,integer,text) to authenticated;

@@ -15,6 +15,7 @@ import {
   type EquipmentRequestStatus,
 } from "@/lib/equipment-requests";
 import { NURSING_SKILLS_ROOM_TYPE_ID } from "@/lib/room-types";
+import { isCanonicalSemester } from "@/lib/semesters";
 import { createClient } from "@/lib/supabase/server";
 
 export type EquipmentActionState = {
@@ -348,7 +349,6 @@ export async function updateEquipmentRequest(
 
   const requestId = String(formData.get("request_id") ?? "");
   const scheduleId = String(formData.get("class_schedule_id") ?? "");
-  const semester = String(formData.get("semester") ?? "");
   const responsibleId = String(formData.get("responsible_lecturer_id") ?? "");
   const receiveDate = String(formData.get("receive_date") ?? "");
   const receiveTime = String(formData.get("receive_time") ?? "");
@@ -374,7 +374,6 @@ export async function updateEquipmentRequest(
   if (
     !uuidPattern.test(requestId) ||
     !uuidPattern.test(scheduleId) ||
-    !["HK1", "HK2", "HK3", "HK4"].includes(semester) ||
     !uuidPattern.test(responsibleId) ||
     !/^\d{4}-\d{2}-\d{2}$/.test(receiveDate) ||
     !/^\d{2}:\d{2}$/.test(receiveTime) ||
@@ -383,8 +382,7 @@ export async function updateEquipmentRequest(
   ) {
     return {
       ok: false,
-      message:
-        "Vui lòng kiểm tra lớp, học kỳ, giảng viên và thời gian nhận/trả.",
+      message: "Vui lòng kiểm tra lớp, giảng viên và thời gian nhận/trả.",
     };
   }
   if (
@@ -412,13 +410,13 @@ export async function updateEquipmentRequest(
     supabase
       .from("equipment_requests")
       .select(
-        "id,registrant_id,status,receive_at,late_approval_status,late_registration_reason",
+        "id,class_schedule_id,registrant_id,status,semester,receive_at,late_approval_status,late_registration_reason",
       )
       .eq("id", requestId)
       .maybeSingle(),
     supabase
       .from("class_schedules")
-      .select("id,schedule_date,rooms!inner(room_type_id)")
+      .select("id,schedule_date,semester,rooms!inner(room_type_id)")
       .eq("id", scheduleId)
       .eq("rooms.room_type_id", NURSING_SKILLS_ROOM_TYPE_ID)
       .neq("schedule_status", "cancelled")
@@ -428,6 +426,26 @@ export async function updateEquipmentRequest(
       target_room_type_id: NURSING_SKILLS_ROOM_TYPE_ID,
     }),
   ]);
+
+  let effectiveSemester: string | null = null;
+  if (isCanonicalSemester(schedule?.semester)) {
+    effectiveSemester = schedule.semester;
+  } else if (
+    request?.class_schedule_id &&
+    request.class_schedule_id === scheduleId &&
+    isCanonicalSemester(request.semester)
+  ) {
+    effectiveSemester = request.semester;
+  } else {
+    effectiveSemester = null;
+  }
+
+  if (!isCanonicalSemester(effectiveSemester)) {
+    return {
+      ok: false,
+      message: "Lịch học chưa có thông tin Học kỳ hợp lệ.",
+    };
+  }
 
   const roles = (roleRows ?? []).map(({ role }) => role);
   const canManageAll = roles.some((role) => ["admin", "staff"].includes(role));
@@ -512,7 +530,7 @@ export async function updateEquipmentRequest(
     {
       target_request_id: requestId,
       target_class_schedule_id: scheduleId,
-      target_semester: semester,
+      target_semester: effectiveSemester,
       target_responsible_lecturer_id: responsibleId,
       target_receive_at: receiveAt.toISOString(),
       target_return_at: returnAt.toISOString(),
@@ -560,7 +578,6 @@ export async function createEquipmentRequest(
   if (!userId) return { ok: false, message: "Phiên đăng nhập đã hết hạn." };
 
   const scheduleId = String(formData.get("class_schedule_id") ?? "");
-  const semester = String(formData.get("semester") ?? "");
   const responsibleId = String(formData.get("responsible_lecturer_id") ?? "");
   const receiveDate = String(formData.get("receive_date") ?? "");
   const receiveTime = String(formData.get("receive_time") ?? "");
@@ -583,7 +600,6 @@ export async function createEquipmentRequest(
   }
   if (
     !scheduleId ||
-    !["HK1", "HK2", "HK3", "HK4"].includes(semester) ||
     !responsibleId ||
     !/^\d{4}-\d{2}-\d{2}$/.test(receiveDate) ||
     !/^\d{2}:\d{2}$/.test(receiveTime) ||
@@ -592,8 +608,7 @@ export async function createEquipmentRequest(
   ) {
     return {
       ok: false,
-      message:
-        "Vui lòng kiểm tra lớp, học kỳ, giảng viên và thời gian nhận/trả.",
+      message: "Vui lòng kiểm tra lớp, giảng viên và thời gian nhận/trả.",
     };
   }
   if (
@@ -624,7 +639,7 @@ export async function createEquipmentRequest(
       .single(),
     supabase
       .from("class_schedules")
-      .select("id,schedule_date,rooms!inner(room_type_id)")
+      .select("id,schedule_date,semester,rooms!inner(room_type_id)")
       .eq("id", scheduleId)
       .eq("rooms.room_type_id", NURSING_SKILLS_ROOM_TYPE_ID)
       .neq("schedule_status", "cancelled")
@@ -634,6 +649,15 @@ export async function createEquipmentRequest(
       target_room_type_id: NURSING_SKILLS_ROOM_TYPE_ID,
     }),
   ]);
+
+  const effectiveSemester = schedule?.semester;
+  if (!isCanonicalSemester(effectiveSemester)) {
+    return {
+      ok: false,
+      message: "Lịch học chưa có thông tin Học kỳ hợp lệ.",
+    };
+  }
+
   if (
     !profile?.is_active ||
     !(roleRows ?? []).some(({ role }) =>
@@ -706,7 +730,7 @@ export async function createEquipmentRequest(
     "create_equipment_request_with_items",
     {
       target_class_schedule_id: scheduleId,
-      target_semester: semester,
+      target_semester: effectiveSemester,
       target_responsible_lecturer_id: responsibleId,
       target_receive_at: receiveAt.toISOString(),
       target_return_at: returnAt.toISOString(),

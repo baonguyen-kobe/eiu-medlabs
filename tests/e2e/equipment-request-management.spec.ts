@@ -117,6 +117,7 @@ test("mã phiếu 12 số tải được và Admin thấy dòng bổ sung thiế
         target_end_time: "11:30",
         target_note: `E2E-${suffix} Kiểm thử quản lý phiếu thiết bị`,
         target_student_count: 20,
+        target_semester: "HK1",
       },
     );
     expect(rpcError).toBeNull();
@@ -377,6 +378,7 @@ test("calendar equipment request round trip follows the signed-in role", async (
         target_end_time: "11:30",
         target_note: `E2E-${suffix} Calendar equipment request`,
         target_student_count: 20,
+        target_semester: "HK1",
       },
     );
     expect(scheduleError).toBeNull();
@@ -393,6 +395,7 @@ test("calendar equipment request round trip follows the signed-in role", async (
         target_end_time: "16:00",
         target_note: `E2E-${suffix} Calendar no equipment request`,
         target_student_count: 20,
+        target_semester: "HK1",
       });
     expect(secondScheduleError).toBeNull();
     secondScheduleId = secondSchedule.id;

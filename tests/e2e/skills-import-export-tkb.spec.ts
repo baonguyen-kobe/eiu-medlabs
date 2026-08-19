@@ -34,6 +34,10 @@ test("Skills Lab normalizes LAB room codes, accepts no email and resolves lectur
   );
 
   await page.goto("/schedule-entry/import");
+  const semesterSelect = page.locator("#import-semester-select");
+  await expect(semesterSelect).toBeVisible();
+  await semesterSelect.selectOption("HK1");
+
   const fileInput = page.locator("#schedule-import-file");
   const stepTwo = page.locator(".stepper li").nth(1);
   await setInputFilesUntilState(
@@ -54,6 +58,7 @@ test("Skills Lab normalizes LAB room codes, accepts no email and resolves lectur
   await expect(page.locator(".preview-table tbody")).not.toContainText(
     "LAB105",
   );
+  await expect(page.locator(".file-summary")).toContainText("HK1");
 
   await continueButton.click();
   await expect(page.locator(".stepper li").nth(2)).toHaveClass(/active/);
@@ -104,6 +109,10 @@ test("Skills Lab preview displays and excludes an intra-file conflict", async ({
   );
 
   await page.goto("/schedule-entry/import");
+  const semesterSelect = page.locator("#import-semester-select");
+  await expect(semesterSelect).toBeVisible();
+  await semesterSelect.selectOption("HK1");
+
   const fileInput = page.locator("#schedule-import-file");
   const stepTwo = page.locator(".stepper li").nth(1);
   await setInputFilesUntilState(
@@ -123,4 +132,28 @@ test("Skills Lab preview displays and excludes an intra-file conflict", async ({
   await expect(conflict).toHaveText("Xung đột");
   await expect(conflict.locator("xpath=ancestor::tr")).toHaveClass(/row-error/);
   await expect(page.locator(".import-step-note")).toContainText("xung đột");
+});
+
+test("Skills Lab import blocks file upload until Semester is selected", async ({
+  page,
+}) => {
+  await page.goto("/login");
+  await page.locator('input[name="email"]').fill("admin@campus.local");
+  await page.locator('input[name="password"]').fill("LocalAdmin123!");
+  await page.locator('button[type="submit"]').click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+
+  await page.goto("/schedule-entry/import");
+  const semesterSelect = page.locator("#import-semester-select");
+  await expect(semesterSelect).toBeVisible();
+  await expect(semesterSelect).toHaveValue("");
+
+  const dropZone = page.locator(".drop-zone");
+  await dropZone.click();
+  await expect(page.locator(".form-error")).toContainText(
+    "Vui lòng chọn Học kỳ trước khi chọn file import.",
+  );
+
+  await semesterSelect.selectOption("HK2");
+  await expect(page.locator(".form-error")).toHaveCount(0);
 });

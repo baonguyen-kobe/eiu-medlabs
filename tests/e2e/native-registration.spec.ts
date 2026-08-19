@@ -87,13 +87,9 @@ test("form Y cơ sở tạo được đúng một buổi theo khung giờ của 
     await expect(sessionDate).toHaveAttribute("min", "2048-08-06");
     await expect(sessionDate).toHaveAttribute("max", "2048-08-06");
     await sessionDate.fill("2048-08-06");
-    await page
-      .getByRole("combobox", { name: "Buổi 1 - Giờ bắt đầu" })
-      .selectOption("19:00");
-    await page
-      .getByRole("combobox", { name: "Buổi 1 - Giờ kết thúc" })
-      .selectOption("21:00");
-    await sessionRow.locator('input:not([type="date"])').fill("Bài E2E");
+    await page.getByLabel("Buổi 1 - Giờ bắt đầu").fill("19:00");
+    await page.getByLabel("Buổi 1 - Giờ kết thúc").fill("21:00");
+    await page.getByLabel("Buổi 1 - Tên bài TN-TH").fill("Bài E2E");
     await page
       .getByRole("combobox", {
         name: "Buổi 1 - Giảng viên giảng dạy/hướng dẫn",
@@ -193,15 +189,11 @@ test("các trang đăng ký native hiển thị trên local", async ({ page }) =
   await expect(
     page.locator('select[name="responsible_lecturer_id"]'),
   ).toHaveValue("c18c4f94-a58a-4b5f-abd0-8c4856affab8");
-  await expect(page.locator('select[name="semester"]')).toHaveValue("");
-  await expect(page.locator('select[name="semester"] option')).toHaveCount(5);
-  await expect(page.locator('select[name="semester"] option')).toHaveText([
-    "Chọn học kỳ",
-    "HK1",
-    "HK2",
-    "HK3",
-    "HK4",
-  ]);
+  await expect(page.locator('input[name="semester"]')).toHaveValue("");
+  await expect(page.locator('input[name="semester"]')).toHaveAttribute(
+    "readonly",
+    "",
+  );
   await page.getByLabel("Số lượng kỹ năng/bài thực hành *").selectOption("2");
   await page.getByRole("button", { name: "+ Tạo bảng thiết bị" }).click();
   await expect(page.locator(".equipment-skill-card")).toHaveCount(2);
