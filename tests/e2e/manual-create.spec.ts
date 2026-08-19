@@ -10,6 +10,7 @@ import { clickUntilState, openCombobox } from "./helpers/interaction-readiness";
 type LocalServiceConfig = { url: string; serviceKey: string };
 
 async function loginAsAdmin(page: Page) {
+  await page.context().clearCookies();
   await page.goto("/login");
   await page.locator('input[name="email"]').fill("admin@campus.local");
   await page.locator('input[name="password"]').fill("LocalAdmin123!");
@@ -66,6 +67,7 @@ async function createManualClass(
   date: string,
   courseIndex = 1,
   roomIndex = 1,
+  studentCount = 25,
 ) {
   await page.goto("/schedule-entry/new");
   const courseCombobox = page.getByRole("combobox", {
@@ -77,6 +79,7 @@ async function createManualClass(
     .getByRole("option")
     .nth(courseIndex - 1)
     .click();
+  await page.locator('input[name="student_count"]').fill(String(studentCount));
   await page
     .locator('select[name="room_id"]')
     .selectOption({ index: roomIndex });
@@ -104,6 +107,82 @@ test("admin creates and removes a manual class schedule", async ({ page }) => {
     "2035-12-15",
   );
   await removeClassesForDate("2035-12-15", serviceConfig);
+});
+
+test("Skills schedule student_count: starts blank, rejects missing on server, persists explicit values 25 and 1", async ({
+  page,
+}) => {
+  const serviceConfig = await loadLocalServiceConfig();
+  assertLocalDestructiveTestTarget({
+    supabaseUrl: serviceConfig.url,
+    playwrightBaseUrl: process.env.PLAYWRIGHT_BASE_URL,
+  });
+  const client = createClient(serviceConfig.url, serviceConfig.serviceKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  await loginAsAdmin(page);
+  await removeClassesForDate("2035-12-17", serviceConfig);
+
+  try {
+    // A. NEW form starts blank and has required attribute
+    await page.goto("/schedule-entry/new");
+    const studentCountInput = page.locator('input[name="student_count"]');
+    await expect(studentCountInput).toHaveValue("");
+    await expect(studentCountInput).toHaveAttribute("required", "");
+    await expect(studentCountInput).toHaveAttribute("min", "1");
+    await expect(studentCountInput).toHaveAttribute("step", "1");
+
+    // C. Missing student count cannot silently become 1 -> Server validation rejects blank submission
+    const courseCombobox = page.getByRole("combobox", {
+      name: "Tìm và chọn môn học",
+    });
+    await openCombobox(courseCombobox);
+    await page.getByRole("listbox").getByRole("option").first().click();
+    await page.locator('select[name="room_id"]').selectOption({ index: 1 });
+    await page.locator('select[name="semester"]').selectOption("HK1");
+    await page.locator('input[name="schedule_date"]').fill("2035-12-17");
+    await page.locator('input[name="start_time"]').fill("07:30");
+    await page.locator('input[name="end_time"]').fill("11:30");
+
+    // Bypass browser required attribute only in test to exercise server action validation
+    await studentCountInput.evaluate((el: HTMLInputElement) => {
+      el.removeAttribute("required");
+    });
+    await page.getByRole("button", { name: "Tạo lịch" }).click();
+    await expect(page.getByRole("status")).toHaveText(
+      "Vui lòng nhập số sinh viên.",
+    );
+
+    // Verify DB has 0 rows for this date
+    const { count: emptyCount } = await client
+      .from("class_schedules")
+      .select("id", { count: "exact", head: true })
+      .eq("schedule_date", "2035-12-17");
+    expect(emptyCount).toBe(0);
+
+    // B. Explicit entry 25 persists accurately
+    await createManualClass(page, "2035-12-17", 1, 1, 25);
+    const { data: data25 } = await client
+      .from("class_schedules")
+      .select("student_count")
+      .eq("schedule_date", "2035-12-17")
+      .maybeSingle();
+    expect(data25?.student_count).toBe(25);
+
+    await removeClassesForDate("2035-12-17", serviceConfig);
+
+    // D. Explicit 1 remains valid
+    await createManualClass(page, "2035-12-17", 1, 1, 1);
+    const { data: data1 } = await client
+      .from("class_schedules")
+      .select("student_count")
+      .eq("schedule_date", "2035-12-17")
+      .maybeSingle();
+    expect(data1?.student_count).toBe(1);
+  } finally {
+    await removeClassesForDate("2035-12-17", serviceConfig);
+  }
 });
 
 test("manual form fields and section headings share the approved desktop layout", async ({

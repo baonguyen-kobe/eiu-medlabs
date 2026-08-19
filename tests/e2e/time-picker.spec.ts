@@ -619,6 +619,7 @@ test.describe("Shared Custom Time Picker E2E Verification", () => {
     await page.locator('select[name="room_id"]').selectOption({ index: 1 });
     await page.locator('select[name="semester"]').selectOption("HK1");
     await page.locator('input[name="schedule_date"]').fill("2048-09-10");
+    await page.locator('input[name="student_count"]').fill("25");
 
     await page.getByRole("button", { name: "Tạo lịch" }).click();
     // Action validation should return error message
