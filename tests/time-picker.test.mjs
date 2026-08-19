@@ -273,3 +273,42 @@ test("all migrated forms and components use TimePicker and contain no type=time 
     false,
   );
 });
+
+test("TimePicker: shared icon positioning and text padding provide clear horizontal gap without overlap", () => {
+  const css = readFileSync(
+    new URL("../app/globals.css", import.meta.url),
+    "utf8",
+  );
+  const component = readFileSync(
+    new URL("../components/time-picker.tsx", import.meta.url),
+    "utf8",
+  );
+
+  // 1. Component renders single Clock3 icon before input inside time-picker-control
+  assert.match(
+    component,
+    /<Clock3[^>]*className="time-picker-icon"[^>]*\/>\s*<input[^>]*className="time-picker-input"/,
+    "TimePicker renders single clock icon on the left followed by time input",
+  );
+
+  // 2. Icon is positioned on the left (11px)
+  assert.match(
+    css,
+    /\.time-picker-icon\s*\{[^}]*left:\s*11px/,
+    "TimePicker clock icon has left offset of 11px",
+  );
+
+  // 3. Shared input has 36px left padding (leaving a 9px gap after 16px icon)
+  assert.match(
+    css,
+    /\.time-picker-input\s*\{[^}]*padding:\s*0\s+11px\s+0\s+36px/,
+    "TimePicker input has 36px left padding for clean gap after icon",
+  );
+
+  // 4. Schedule-form container override protects .time-picker-input from container input rule resets
+  assert.match(
+    css,
+    /\.schedule-form\s+\.time-picker-control\s+input\.time-picker-input/,
+    "Schedule form protects time-picker-input padding and transparency against general input rules",
+  );
+});
