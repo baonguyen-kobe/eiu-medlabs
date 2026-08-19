@@ -9314,10 +9314,25 @@ body,
 .basic-medical-registration-detail-history {
   display: grid;
   grid-column: 1 / -1;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px 18px;
-  padding: 14px 16px 0;
+  grid-template-columns:
+    var(--basic-medical-track-1)
+    var(--basic-medical-track-2)
+    var(--basic-medical-track-3)
+    var(--basic-medical-track-4)
+    var(--basic-medical-track-5);
+  gap: 12px 0;
+  padding: 14px 0 0;
   border-top: 1px solid var(--line);
+}
+
+.basic-medical-registration-detail-history > div:first-child {
+  grid-column: 1;
+  padding-inline: 16px;
+}
+
+.basic-medical-registration-detail-history > div:last-child {
+  grid-column: 2;
+  padding-inline: 16px;
 }
 
 .basic-medical-registration-panel .basic-medical-session-viewport {

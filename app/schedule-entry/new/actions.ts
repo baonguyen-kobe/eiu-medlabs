@@ -60,7 +60,7 @@ export async function createScheduleDraft(
   const endTime = String(formData.get("end_time") ?? "");
   const semester = String(formData.get("semester") ?? "").trim();
   const note = String(formData.get("note") ?? "").trim();
-  const studentCount = Number(formData.get("student_count"));
+  const rawStudentCount = String(formData.get("student_count") ?? "").trim();
   const requestedLecturerIds = [
     ...new Set(
       formData
@@ -76,6 +76,10 @@ export async function createScheduleDraft(
   if (!isCanonicalSemester(semester)) {
     return { ok: false, message: "Vui lòng chọn Học kỳ." };
   }
+  if (!rawStudentCount) {
+    return { ok: false, message: "Vui lòng nhập số sinh viên." };
+  }
+  const studentCount = Number(rawStudentCount);
   if (!Number.isInteger(studentCount) || studentCount < 1) {
     return {
       ok: false,

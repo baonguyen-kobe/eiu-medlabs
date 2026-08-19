@@ -197,6 +197,8 @@ export async function deleteEquipmentRequest(
   revalidatePath("/equipment/mine");
   revalidatePath("/equipment/register");
   revalidatePath("/class-schedules");
+  revalidatePath("/classes/open");
+  revalidatePath("/classes/mine");
   return { ok: true, message: actionMessage };
 }
 

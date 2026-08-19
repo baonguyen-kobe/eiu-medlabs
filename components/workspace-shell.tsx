@@ -85,7 +85,6 @@ function buildNavigation(
 ): Array<{ label: string; items: NavItem[] }> {
   const isAdmin = roles.includes("admin");
   const isStaff = roles.includes("staff") && !isAdmin;
-  const isLecturer = roles.includes("lecturer") && !isAdmin && !isStaff;
   const hasSkillsScope = roomTypeCodes.includes("nursing_skills");
   const hasSkillsWorkspace = canUseSkillsWorkspace(roles, roomTypeCodes);
   const canImport =
@@ -171,7 +170,12 @@ function buildNavigation(
 
   // Group 3 — Quản lý lớp
   const quanLyLopItems: NavItem[] = [];
-  if (hasSkillsWorkspace && (isAdmin || isStaff || isLecturer)) {
+  if (
+    hasSkillsScope &&
+    roles.some((role) =>
+      ["admin", "staff", "lecturer", "teaching_assistant"].includes(role),
+    )
+  ) {
     quanLyLopItems.push({
       label: "Lớp đang mở",
       href: "/classes/open",
@@ -179,7 +183,7 @@ function buildNavigation(
       activeIcon: GraduationCapSolid,
     });
   }
-  if (hasSkillsWorkspace && isLecturer) {
+  if (hasSkillsScope && roles.includes("lecturer")) {
     quanLyLopItems.push({
       label: "Lớp của tôi",
       href: "/classes/mine",
@@ -187,7 +191,7 @@ function buildNavigation(
       activeIcon: ClipboardListSolid,
     });
   }
-  if (hasSkillsWorkspace && !isViewer) {
+  if (hasSkillsScope && !isViewer) {
     quanLyLopItems.push({
       label: "Phiếu thiết bị của tôi",
       href: "/equipment/mine",

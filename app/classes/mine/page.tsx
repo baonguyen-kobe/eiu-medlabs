@@ -7,10 +7,8 @@ import { getViewer } from "@/lib/viewer";
 import { resolveClassDateRange } from "@/lib/class-date-range";
 import { businessTodayString } from "@/lib/business-time";
 import { redirect } from "next/navigation";
-import {
-  canUseSkillsWorkspace,
-  defaultWorkspacePath,
-} from "@/lib/workspace-access";
+import { defaultWorkspacePath } from "@/lib/workspace-access";
+import { NURSING_SKILLS_ROOM_TYPE_ID } from "@/lib/room-types";
 
 export default async function MyClassesPage({
   searchParams,
@@ -35,30 +33,63 @@ export default async function MyClassesPage({
     canManageEmailNotifications,
   } = await getViewer();
   const roomTypeCodes = roomTypes.map(({ code }) => code);
-  if (!canUseSkillsWorkspace(roles, roomTypeCodes)) {
+  const hasSkillsScope = roomTypeCodes.includes("nursing_skills");
+
+  if (!hasSkillsScope || !roles.includes("lecturer")) {
     redirect(defaultWorkspacePath(roles, roomTypeCodes));
   }
-  if (!roles.includes("lecturer")) redirect("/dashboard");
+
   const range = resolveClassDateRange(await searchParams);
 
-  const [{ data }, { data: people }] = await Promise.all([
-    supabase
-      .from("class_schedules")
-      .select(
-        `
-      id, room_id, schedule_date, start_time, end_time, course_code_snapshot,
-      course_name_snapshot, lecturer_id, lecturer_2_id, student_count,
-      rooms (room_code, building_code, room_type_id, room_types (name))
+  const [{ data }, { data: people }, { data: rooms }, { data: courses }] =
+    await Promise.all([
+      supabase
+        .from("class_schedules")
+        .select(
+          `
+      id, room_id, course_id, schedule_date, start_time, end_time, course_code_snapshot,
+      course_name_snapshot, lecturer_id, lecturer_2_id, student_count, created_by,
+      rooms!inner (room_code, building_code, room_type_id, room_types (name))
     `,
-      )
-      .or(`lecturer_id.eq.${userId},lecturer_2_id.eq.${userId}`)
-      .neq("schedule_status", "cancelled")
-      .gte("schedule_date", range.from)
-      .lte("schedule_date", range.to)
-      .order("schedule_date")
-      .order("start_time"),
-    supabase.rpc("list_active_people"),
-  ]);
+        )
+        .eq("rooms.room_type_id", NURSING_SKILLS_ROOM_TYPE_ID)
+        .or(`lecturer_id.eq.${userId},lecturer_2_id.eq.${userId}`)
+        .neq("schedule_status", "cancelled")
+        .gte("schedule_date", range.from)
+        .lte("schedule_date", range.to)
+        .order("schedule_date")
+        .order("start_time"),
+      supabase.rpc("list_active_people"),
+      supabase
+        .from("rooms")
+        .select("id, room_code, building_code, room_type_id")
+        .eq("is_active", true)
+        .eq("room_type_id", NURSING_SKILLS_ROOM_TYPE_ID)
+        .order("room_code"),
+      supabase
+        .from("courses")
+        .select("id, course_code, course_name")
+        .eq("is_active", true)
+        .eq("room_type_id", NURSING_SKILLS_ROOM_TYPE_ID)
+        .order("course_code"),
+    ]);
+
+  const scheduleIds = (data ?? []).map((s) => s.id);
+  const { data: lockStatuses } = scheduleIds.length
+    ? await supabase.rpc("get_class_schedules_equipment_lock_status", {
+        target_schedule_ids: scheduleIds,
+      })
+    : { data: [] };
+
+  const lockMap = new Map(
+    (
+      (lockStatuses ?? []) as Array<{
+        schedule_id: string;
+        has_equipment_request: boolean;
+      }>
+    ).map((item) => [item.schedule_id, item.has_equipment_request]),
+  );
+
   const peopleById = new Map(
     ((people ?? []) as Array<{ id: string; full_name: string }>).map(
       (person) => [person.id, person.full_name],
@@ -74,6 +105,9 @@ export default async function MyClassesPage({
     } | null;
     return {
       ...item,
+      course_id: item.course_id,
+      created_by: item.created_by,
+      has_equipment_request: lockMap.get(item.id) ?? false,
       lecturerNames: [item.lecturer_id, item.lecturer_2_id]
         .filter(Boolean)
         .map((id) => peopleById.get(id as string) ?? "Giảng viên"),
@@ -83,7 +117,7 @@ export default async function MyClassesPage({
         : "Chưa xếp phòng",
       roomId: item.room_id,
       roomTypeId: room?.room_type_id ?? "",
-      roomTypeName: room?.room_types?.name ?? "Chưa phân loại",
+      roomTypeName: room?.room_types?.name ?? "Kỹ năng Điều dưỡng",
     };
   });
 
@@ -105,6 +139,13 @@ export default async function MyClassesPage({
         viewerId={userId}
         roles={roles}
         range={range}
+        courses={courses ?? []}
+        roomTypeOptions={roomTypes.filter((rt) => rt.code === "nursing_skills")}
+        roomOptions={(rooms ?? []).map((room) => ({
+          id: room.id,
+          label: `${room.room_code} · ${room.building_code}`,
+          roomTypeId: room.room_type_id,
+        }))}
         isRootAdministrator={isRootAdministrator}
       />
     </WorkspaceShell>

@@ -24,6 +24,7 @@ import { TABLE_PAGE_SIZE, totalPagesFor } from "@/lib/pagination";
 
 export type RegistrationClass = {
   id: string;
+  course_id?: string | null;
   schedule_date: string;
   start_time: string;
   end_time: string;
@@ -38,6 +39,8 @@ export type RegistrationClass = {
   roomTypeId: string;
   roomTypeName: string;
   student_count: number;
+  created_by?: string | null;
+  has_equipment_request?: boolean;
 };
 
 export function ClassRegistrationList({
@@ -46,6 +49,7 @@ export function ClassRegistrationList({
   viewerId,
   roles,
   range,
+  courses = [],
   lecturerOptionsByRoomType = {},
   roomTypeOptions = [],
   roomOptions = [],
@@ -56,6 +60,7 @@ export function ClassRegistrationList({
   viewerId: string;
   roles: AppRole[];
   range: ClassDateRange;
+  courses?: Array<{ id: string; course_code: string; course_name: string }>;
   lecturerOptionsByRoomType?: Record<string, ComboboxOption[]>;
   roomTypeOptions?: Array<{ id: string; name: string }>;
   roomOptions?: Array<{ id: string; label: string; roomTypeId: string }>;
@@ -73,6 +78,12 @@ export function ClassRegistrationList({
   const [customFrom, setCustomFrom] = useState(range.from);
   const [customTo, setCustomTo] = useState(range.to);
   const [pendingId, setPendingId] = useState<string | null>(null);
+
+  const courseMap = useMemo(
+    () => new Map(courses.map((c) => [c.id, c])),
+    [courses],
+  );
+
   const [assignmentDrafts, setAssignmentDrafts] = useState<
     Record<string, string[]>
   >(() =>
@@ -83,6 +94,7 @@ export function ClassRegistrationList({
       ]),
     ),
   );
+
   const [detailDrafts, setDetailDrafts] = useState<
     Record<
       string,
@@ -90,8 +102,9 @@ export function ClassRegistrationList({
         date: string;
         start: string;
         end: string;
+        courseId: string;
         roomId: string;
-        studentCount: number;
+        studentCount: string;
       }
     >
   >(() =>
@@ -102,12 +115,14 @@ export function ClassRegistrationList({
           date: item.schedule_date,
           start: item.start_time.slice(0, 5),
           end: item.end_time.slice(0, 5),
+          courseId: item.course_id ?? "",
           roomId: item.roomId,
-          studentCount: item.student_count,
+          studentCount: String(item.student_count ?? ""),
         },
       ]),
     ),
   );
+
   const [confirmation, setConfirmation] = useState<{
     item: RegistrationClass;
     action: "withdraw" | "delete";
@@ -116,15 +131,13 @@ export function ClassRegistrationList({
     range.error ? { ok: false, text: range.error } : null,
   );
   const [pending, startTransition] = useTransition();
+
+  const isManager = roles.some((role) => ["admin", "staff"].includes(role));
+  const isTA = roles.includes("teaching_assistant");
+  const isLecturer = roles.includes("lecturer");
   const canClaim =
     !isRootAdministrator &&
     (roles.includes("lecturer") || roles.includes("admin"));
-  const canDelete = roles.some((role) =>
-    ["staff", "admin", "teaching_assistant"].includes(role),
-  );
-  const canAssign = roles.some((role) =>
-    ["staff", "admin", "teaching_assistant"].includes(role),
-  );
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("vi");
@@ -142,6 +155,7 @@ export function ClassRegistrationList({
       ].some((value) => value.toLocaleLowerCase("vi").includes(normalized));
     });
   }, [classes, emptyOnly, mode, query, roomTypeId]);
+
   const safePage = Math.min(
     currentPage,
     totalPagesFor(filtered.length, TABLE_PAGE_SIZE),
@@ -256,17 +270,49 @@ export function ClassRegistrationList({
     });
   }
 
-  function runAssignment(item: RegistrationClass, lecturerIds: string[]) {
+  function saveRow(item: RegistrationClass) {
+    const draft = detailDrafts[item.id];
+    if (!draft) return;
+    if (!draft.date) {
+      setMessage({ ok: false, text: "Vui lòng chọn ngày học." });
+      return;
+    }
+    if (!draft.start || !draft.end || draft.end <= draft.start) {
+      setMessage({ ok: false, text: "Thời gian học không hợp lệ." });
+      return;
+    }
+    const rawStudentCount = draft.studentCount.trim();
+    if (!rawStudentCount) {
+      setMessage({ ok: false, text: "Vui lòng nhập số sinh viên." });
+      return;
+    }
+    const studentCount = Number(rawStudentCount);
+    if (!Number.isInteger(studentCount) || studentCount < 1) {
+      setMessage({
+        ok: false,
+        text: "Số sinh viên phải là số nguyên từ 1 trở lên.",
+      });
+      return;
+    }
+
+    const assignmentDraft = assignmentDrafts[item.id] ?? [
+      item.lecturer_id ?? "",
+      item.lecturer_2_id ?? "",
+    ];
+    const lecturerIds = isManager
+      ? assignmentDraft.filter(Boolean)
+      : ([item.lecturer_id, item.lecturer_2_id].filter(Boolean) as string[]);
+
     setMessage(null);
     setPendingId(item.id);
     startTransition(async () => {
-      const draft = detailDrafts[item.id];
       const result = await updateClassSchedule(item.id, {
         scheduleDate: draft.date,
         startTime: draft.start,
         endTime: draft.end,
+        courseId: draft.courseId || item.course_id || undefined,
         roomId: draft.roomId,
-        studentCount: draft.studentCount,
+        studentCount,
         lecturerIds,
       });
       setMessage({ ok: result.ok, text: result.message });
@@ -449,25 +495,64 @@ export function ClassRegistrationList({
               const lecturerIds = [item.lecturer_id, item.lecturer_2_id].filter(
                 Boolean,
               ) as string[];
-              const assignmentDraft = assignmentDrafts[item.id] ?? lecturerIds;
+              const assignmentDraft = assignmentDrafts[item.id] ?? [
+                item.lecturer_id ?? "",
+                item.lecturer_2_id ?? "",
+              ];
               const duplicateAssignment = Boolean(
                 assignmentDraft[0] &&
                 assignmentDraft[1] &&
                 assignmentDraft[0] === assignmentDraft[1],
               );
-              const owned = lecturerIds.includes(viewerId);
-              const canJoin =
-                canClaim && item.claimable && lecturerIds.length < 2 && !owned;
-              const detailDraft = detailDrafts[item.id];
+              const isTAOwner = isTA && item.created_by === viewerId;
+              const isLecturerAssigned =
+                isLecturer &&
+                (item.lecturer_id === viewerId ||
+                  item.lecturer_2_id === viewerId);
+              const isLecturerCreator =
+                isLecturer && item.created_by === viewerId;
+              const isLecturerRelated = isLecturerAssigned || isLecturerCreator;
+
+              const isLocked = Boolean(item.has_equipment_request);
+              const canEditDetails =
+                !isLocked && (isManager || isTAOwner || isLecturerRelated);
+              const canManageLecturers = !isLocked && isManager;
+              const canDeleteRow =
+                !isLocked && (isManager || isTAOwner || isLecturerCreator);
+              const canWithdrawRow =
+                !isLocked && isLecturerAssigned && canClaim && item.claimable;
+              const canJoinRow =
+                !isLocked &&
+                canClaim &&
+                item.claimable &&
+                lecturerIds.length < 2 &&
+                !lecturerIds.includes(viewerId);
+
+              const detailDraft = detailDrafts[item.id] ?? {
+                date: item.schedule_date,
+                start: item.start_time.slice(0, 5),
+                end: item.end_time.slice(0, 5),
+                courseId: item.course_id ?? "",
+                roomId: item.roomId,
+                studentCount: String(item.student_count ?? ""),
+              };
               const updateDetail = (patch: Partial<typeof detailDraft>) =>
                 setDetailDrafts((current) => ({
                   ...current,
-                  [item.id]: { ...current[item.id], ...patch },
+                  [item.id]: { ...(current[item.id] ?? detailDraft), ...patch },
                 }));
+
+              const displayedCourseName =
+                canEditDetails &&
+                detailDraft.courseId &&
+                courseMap.has(detailDraft.courseId)
+                  ? courseMap.get(detailDraft.courseId)!.course_name
+                  : item.course_name_snapshot;
+
               return (
                 <tr key={item.id}>
                   <td>
-                    {canAssign ? (
+                    {canEditDetails ? (
                       <input
                         aria-label={`Ngày học ${item.course_code_snapshot}`}
                         type="date"
@@ -481,7 +566,7 @@ export function ClassRegistrationList({
                     )}
                   </td>
                   <td className="mono">
-                    {canAssign ? (
+                    {canEditDetails ? (
                       <span className="inline-time-editor">
                         <TimePicker
                           ariaLabel={`Giờ bắt đầu ${item.course_code_snapshot}`}
@@ -501,11 +586,27 @@ export function ClassRegistrationList({
                     )}
                   </td>
                   <td>
-                    <strong>{item.course_code_snapshot}</strong>
+                    {canEditDetails && courses.length > 0 ? (
+                      <select
+                        aria-label={`Mã môn học ${item.course_code_snapshot}`}
+                        value={detailDraft.courseId || item.course_id || ""}
+                        onChange={(event) =>
+                          updateDetail({ courseId: event.target.value })
+                        }
+                      >
+                        {courses.map((course) => (
+                          <option key={course.id} value={course.id}>
+                            {course.course_code}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <strong>{item.course_code_snapshot}</strong>
+                    )}
                   </td>
-                  <td>{item.course_name_snapshot}</td>
+                  <td>{displayedCourseName}</td>
                   <td>
-                    {canAssign ? (
+                    {canEditDetails ? (
                       <select
                         aria-label={`Phòng ${item.course_code_snapshot}`}
                         value={detailDraft.roomId}
@@ -514,7 +615,11 @@ export function ClassRegistrationList({
                         }
                       >
                         {roomOptions
-                          .filter((room) => room.roomTypeId === item.roomTypeId)
+                          .filter(
+                            (room) =>
+                              !item.roomTypeId ||
+                              room.roomTypeId === item.roomTypeId,
+                          )
                           .map((room) => (
                             <option key={room.id} value={room.id}>
                               {room.label}
@@ -526,16 +631,17 @@ export function ClassRegistrationList({
                     )}
                   </td>
                   <td className="class-registration-student-count-cell">
-                    {canAssign ? (
+                    {canEditDetails ? (
                       <input
                         className="student-count-input"
                         aria-label={`Số sinh viên ${item.course_code_snapshot}`}
                         type="number"
                         min="1"
+                        step="1"
                         value={detailDraft.studentCount}
                         onChange={(event) =>
                           updateDetail({
-                            studentCount: Number(event.target.value),
+                            studentCount: event.target.value,
                           })
                         }
                       />
@@ -545,7 +651,7 @@ export function ClassRegistrationList({
                   </td>
                   {mode === "open" ? (
                     <td className="lecturer-name">
-                      {canAssign ? (
+                      {canManageLecturers ? (
                         <LecturerAssignmentFields
                           disabled={pending}
                           item={item}
@@ -573,19 +679,28 @@ export function ClassRegistrationList({
                   ) : null}
                   <td className="table-action">
                     <div className="row-actions">
-                      {canAssign ? (
+                      {isLocked ? (
+                        <span
+                          className="badge-tag badge-tag-warning"
+                          title="Lớp đã có Phiếu đăng ký thiết bị (khóa chỉnh sửa)"
+                        >
+                          Khóa thiết bị
+                        </span>
+                      ) : null}
+                      {canEditDetails ? (
                         <button
                           className="button button-primary row-action-button"
-                          disabled={pending || duplicateAssignment}
-                          type="button"
-                          onClick={() =>
-                            runAssignment(item, assignmentDraft.filter(Boolean))
+                          disabled={
+                            pending ||
+                            (canManageLecturers && duplicateAssignment)
                           }
+                          type="button"
+                          onClick={() => saveRow(item)}
                         >
                           Lưu
                         </button>
                       ) : null}
-                      {canJoin ? (
+                      {canJoinRow ? (
                         <button
                           className="button button-primary row-action-button"
                           disabled={pending}
@@ -594,7 +709,7 @@ export function ClassRegistrationList({
                           Nhận lớp
                         </button>
                       ) : null}
-                      {owned && canClaim && item.claimable ? (
+                      {canWithdrawRow ? (
                         <button
                           className="button button-danger row-action-button"
                           disabled={pending}
@@ -605,7 +720,7 @@ export function ClassRegistrationList({
                           Hủy
                         </button>
                       ) : null}
-                      {canDelete ? (
+                      {canDeleteRow ? (
                         <button
                           className="button button-outline-danger row-action-button"
                           disabled={pending}

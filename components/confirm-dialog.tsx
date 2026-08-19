@@ -1,7 +1,26 @@
 "use client";
 
-import { type ReactNode, useEffect, useId, useRef } from "react";
+import {
+  type ReactNode,
+  useEffect,
+  useId,
+  useRef,
+  useSyncExternalStore,
+} from "react";
+import { createPortal } from "react-dom";
 import { AlertTriangle } from "@/components/icons";
+
+function emptySubscribe() {
+  return () => {};
+}
+
+function useIsClient() {
+  return useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false,
+  );
+}
 
 export function ConfirmDialog({
   open,
@@ -30,10 +49,21 @@ export function ConfirmDialog({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const mounted = useIsClient();
   const titleId = useId();
   const descriptionId = useId();
   const cancelRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
+  const onCancelRef = useRef(onCancel);
+  const pendingRef = useRef(pending);
+
+  useEffect(() => {
+    onCancelRef.current = onCancel;
+  }, [onCancel]);
+
+  useEffect(() => {
+    pendingRef.current = pending;
+  }, [pending]);
 
   useEffect(() => {
     if (!open) return;
@@ -43,8 +73,8 @@ export function ConfirmDialog({
     cancelRef.current?.focus();
 
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape" && !pending) {
-        onCancel();
+      if (event.key === "Escape" && !pendingRef.current) {
+        onCancelRef.current?.();
         return;
       }
 
@@ -81,11 +111,11 @@ export function ConfirmDialog({
       document.body.style.overflow = previousOverflow;
       previousActiveElement?.focus();
     };
-  }, [onCancel, open, pending]);
+  }, [open]);
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
-  return (
+  return createPortal(
     <div className="confirm-dialog-layer">
       <button
         type="button"
@@ -130,6 +160,7 @@ export function ConfirmDialog({
           </button>
         </footer>
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }
