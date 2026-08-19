@@ -88,7 +88,9 @@ async function createManualClass(
   await page.locator('input[name="start_time"]').fill("07:30");
   await page.locator('input[name="end_time"]').fill("11:30");
   await page.getByRole("button", { name: "Tạo lịch" }).click();
-  await expect(page.getByRole("status")).toHaveText("Đã tạo lịch thành công.", { timeout: 20_000 });
+  await expect(page.getByRole("status")).toHaveText("Đã tạo lịch thành công.", {
+    timeout: 20_000,
+  });
 }
 
 test("admin creates and removes a manual class schedule", async ({ page }) => {
