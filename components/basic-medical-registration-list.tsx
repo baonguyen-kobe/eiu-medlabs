@@ -577,8 +577,9 @@ function SessionLecturerCell({
 }) {
   if (!isEditing) {
     const displayName =
-      instructors.find((instructor) => instructor.id === session.teaching_lecturer_id)
-        ?.full_name ??
+      instructors.find(
+        (instructor) => instructor.id === session.teaching_lecturer_id,
+      )?.full_name ??
       peopleById?.get(session.teaching_lecturer_id) ??
       session.teaching?.full_name ??
       "—";
