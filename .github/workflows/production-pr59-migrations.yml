@@ -1,0 +1,443 @@
+name: Production PR #59 migration
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: production-pr59-migrations
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    name: Apply reviewed PR #59 migration
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PROJECT_REF: bwhiivfhezoozrzvchmm
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.PRODUCTION_DB_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install the locked Supabase CLI
+        run: npm ci --ignore-scripts
+
+      - name: Verify release identity and reviewed migration files
+        shell: bash
+        run: |
+          set -euo pipefail
+          readonly target_versions=(
+            "20260818104500"
+            "20260818140000"
+            "20260818160000"
+            "20260818170000"
+          )
+          readonly target_files=(
+            "20260818104500_add_class_schedule_semester.sql"
+            "20260818140000_secure_equipment_request_semester_authority.sql"
+            "20260818160000_secure_equipment_import_semester_authority.sql"
+            "20260818170000_enforce_equipment_request_table_semester_authority.sql"
+          )
+          readonly target_blobs=(
+            "f73d29281fdc1f5e7633fe0786b5fc81e62ea72d"
+            "83421768202ba3508b791b7c7efde25d7bad5659"
+            "e0523ff6eb3b8a82d12217f8b714d9981b9b5adb"
+            "bf18a751ddc3e8415b0b8e78bcdbee0db27c341b"
+          )
+          readonly forbidden_versions=(
+            "20260809120000" "20260809130000" "20260809140000"
+            "20260809150000" "20260809160000" "20260810000000"
+            "20260810010000" "20260810020000" "20260810030000"
+          )
+
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || {
+            echo "RELEASE_IDENTITY_CHANGED: production migrations may run only from main."
+            exit 1
+          }
+          for index in "${!target_files[@]}"; do
+            file="supabase/migrations/${target_files[$index]}"
+            [[ -f "$file" ]] || { echo "RELEASE_IDENTITY_CHANGED: reviewed target migration is missing."; exit 1; }
+            [[ "$(git hash-object "$file")" == "${target_blobs[$index]}" ]] || {
+              echo "RELEASE_IDENTITY_CHANGED: reviewed target migration content differs."
+              exit 1
+            }
+          done
+          for version in "${forbidden_versions[@]}"; do
+            if compgen -G "supabase/migrations/${version}_*.sql" > /dev/null; then
+              echo "RELEASE_IDENTITY_CHANGED: frozen PR #2 migration is present locally."
+              exit 1
+            fi
+          done
+
+      - name: Link the fixed production project
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --no-install supabase link --project-ref "$PROJECT_REF" --yes
+
+      - name: Preflight the exact production migration history
+        shell: bash
+        run: |
+          set -euo pipefail
+          readonly target_versions=(
+            "20260818104500"
+            "20260818140000"
+            "20260818160000"
+            "20260818170000"
+          )
+          readonly forbidden_versions=(
+            "20260809120000" "20260809130000" "20260809140000"
+            "20260809150000" "20260809160000" "20260810000000"
+            "20260810010000" "20260810020000" "20260810030000"
+          )
+          history_json="$(npx --no-install supabase migration list --linked --output-format json)"
+          printf '%s\n' "$history_json" > "$RUNNER_TEMP/pr59-migrations-before.json"
+          mapfile -t remote_versions < <(jq -r '.migrations[] | (.remote // empty)' "$RUNNER_TEMP/pr59-migrations-before.json" | grep -E '^[0-9]{14}$' | sort -u)
+          mapfile -t local_versions < <(jq -r '.migrations[] | (.local // empty)' "$RUNNER_TEMP/pr59-migrations-before.json" | grep -E '^[0-9]{14}$' | sort -u)
+
+          for version in "${forbidden_versions[@]}"; do
+            if printf '%s\n' "${remote_versions[@]}" | grep -Fxq "$version"; then
+              echo "MIGRATION_ALLOWLIST_MISMATCH: frozen PR #2 migration is already applied remotely."
+              exit 1
+            fi
+          done
+          for version in "${target_versions[@]}"; do
+            if ! printf '%s\n' "${local_versions[@]}" | grep -Fxq "$version"; then
+              echo "MIGRATION_ALLOWLIST_MISMATCH: reviewed target migration is missing locally."
+              exit 1
+            fi
+            if printf '%s\n' "${remote_versions[@]}" | grep -Fxq "$version"; then
+              echo "MIGRATION_ALLOWLIST_MISMATCH: reviewed target migration is unexpectedly already remote."
+              exit 1
+            fi
+          done
+
+          expected_remote_before=()
+          for version in "${local_versions[@]}"; do
+            if ! printf '%s\n' "${target_versions[@]}" | grep -Fxq "$version"; then
+              expected_remote_before+=("$version")
+            fi
+          done
+          if [[ "$(printf '%s\n' "${remote_versions[@]}")" != "$(printf '%s\n' "${expected_remote_before[@]}")" ]]; then
+            echo "MIGRATION_ALLOWLIST_MISMATCH: remote history is not exactly the reviewed baseline."
+            exit 1
+          fi
+          printf '%s\n' "${remote_versions[@]}" > "$RUNNER_TEMP/pr59-remote-before.txt"
+          printf '%s\n' "${target_versions[@]}" > "$RUNNER_TEMP/pr59-pending-targets.txt"
+
+      - name: Dry-run and assert the exact ordered pending set
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t expected_pending < "$RUNNER_TEMP/pr59-pending-targets.txt"
+          npx --no-install supabase db push --linked --dry-run > "$RUNNER_TEMP/pr59-migrations-dry-run.txt" 2>&1 || {
+            echo "MIGRATION_DRY_RUN_FAILED"
+            exit 1
+          }
+          mapfile -t observed_pending < <(grep -oE '20[0-9]{12}' "$RUNNER_TEMP/pr59-migrations-dry-run.txt" | awk '!seen[$0]++')
+          if [[ "$(printf '%s\n' "${observed_pending[@]}")" != "$(printf '%s\n' "${expected_pending[@]}")" ]]; then
+            echo "MIGRATION_ALLOWLIST_MISMATCH: dry-run differs from the exact reviewed ordered set."
+            exit 1
+          fi
+
+      - name: Apply the exact reviewed pending migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --no-install supabase db push --linked
+
+      - name: Verify the exact final migration history
+        shell: bash
+        run: |
+          set -euo pipefail
+          history_json="$(npx --no-install supabase migration list --linked --output-format json)"
+          printf '%s\n' "$history_json" > "$RUNNER_TEMP/pr59-migrations-after.json"
+          mapfile -t remote_versions < <(jq -r '.migrations[] | (.remote // empty)' "$RUNNER_TEMP/pr59-migrations-after.json" | grep -E '^[0-9]{14}$' | sort -u)
+          mapfile -t local_versions < <(jq -r '.migrations[] | (.local // empty)' "$RUNNER_TEMP/pr59-migrations-after.json" | grep -E '^[0-9]{14}$' | sort -u)
+          if [[ "$(printf '%s\n' "${remote_versions[@]}")" != "$(printf '%s\n' "${local_versions[@]}")" ]]; then
+            echo "POST_PUSH_MIGRATION_VERIFICATION_FAILED: remote history differs from the exact reviewed local history."
+            exit 1
+          fi
+          for version in 20260818104500 20260818140000 20260818160000 20260818170000; do
+            if ! printf '%s\n' "${remote_versions[@]}" | grep -Fxq "$version"; then
+              echo "POST_PUSH_MIGRATION_VERIFICATION_FAILED: reviewed migration is missing remotely."
+              exit 1
+            fi
+          done
+          for version in 20260809120000 20260809130000 20260809140000 20260809150000 20260809160000 20260810000000 20260810010000 20260810020000 20260810030000; do
+            if printf '%s\n' "${remote_versions[@]}" | grep -Fxq "$version"; then
+              echo "POST_PUSH_MIGRATION_VERIFICATION_FAILED: frozen PR #2 migration is remotely applied."
+              exit 1
+            fi
+          done
+          mapfile -t remote_before < "$RUNNER_TEMP/pr59-remote-before.txt"
+          mapfile -t expected_added < "$RUNNER_TEMP/pr59-pending-targets.txt"
+          added_versions=()
+          for version in "${remote_versions[@]}"; do
+            if ! printf '%s\n' "${remote_before[@]}" | grep -Fxq "$version"; then added_versions+=("$version"); fi
+          done
+          if [[ "$(printf '%s\n' "${added_versions[@]}")" != "$(printf '%s\n' "${expected_added[@]}")" ]]; then
+            echo "POST_PUSH_MIGRATION_VERIFICATION_FAILED: remote history gained an unexpected migration."
+            exit 1
+          fi
+
+      - name: Verify database contract and semester authority security after migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/pr59-db-contract-postcheck.sql" <<'SQL'
+          select jsonb_build_object(
+            'class_schedules_semester_column_exists', exists (
+              select 1 from information_schema.columns
+              where table_schema = 'public'
+                and table_name = 'class_schedules'
+                and column_name = 'semester'
+            ),
+            'class_schedules_semester_check_exists', exists (
+              select 1 from pg_constraint c
+              join pg_class t on t.oid = c.conrelid
+              join pg_namespace n on n.oid = t.relnamespace
+              where n.nspname = 'public'
+                and t.relname = 'class_schedules'
+                and c.conname = 'class_schedules_semester_check'
+            ),
+            'create_manual_schedule_rpc_exists', exists (
+              select 1 from pg_proc p
+              join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public'
+                and p.proname = 'create_manual_class_schedule'
+            ),
+            'create_manual_schedule_rpc_secdef', coalesce((
+              select p.prosecdef from pg_proc p
+              join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public'
+                and p.proname = 'create_manual_class_schedule'
+            ), false),
+            'create_manual_schedule_authenticated_execute', has_function_privilege(
+              'authenticated',
+              'public.create_manual_class_schedule(uuid,uuid,uuid,uuid,date,time,time,text,integer,text)',
+              'execute'
+            ),
+            'create_manual_schedule_anon_execute', has_function_privilege(
+              'anon',
+              'public.create_manual_class_schedule(uuid,uuid,uuid,uuid,date,time,time,text,integer,text)',
+              'execute'
+            ),
+            'create_manual_schedule_public_execute', has_function_privilege(
+              'public',
+              'public.create_manual_class_schedule(uuid,uuid,uuid,uuid,date,time,time,text,integer,text)',
+              'execute'
+            ),
+            'import_skills_lab_schedule_rpc_exists', exists (
+              select 1 from pg_proc p
+              join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public'
+                and p.proname = 'import_skills_lab_schedule'
+            ),
+            'import_skills_lab_schedule_authenticated_execute', has_function_privilege(
+              'authenticated',
+              'public.import_skills_lab_schedule(jsonb,text)',
+              'execute'
+            ),
+            'import_skills_lab_schedule_anon_execute', has_function_privilege(
+              'anon',
+              'public.import_skills_lab_schedule(jsonb,text)',
+              'execute'
+            ),
+            'create_equipment_request_rpc_exists', exists (
+              select 1 from pg_proc p
+              join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public'
+                and p.proname = 'create_equipment_request'
+            ),
+            'create_equipment_request_rpc_secdef', coalesce((
+              select p.prosecdef from pg_proc p
+              join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public'
+                and p.proname = 'create_equipment_request'
+            ), false),
+            'create_equipment_request_authenticated_execute', has_function_privilege(
+              'authenticated',
+              'public.create_equipment_request(uuid,text,text,jsonb,text)',
+              'execute'
+            ),
+            'create_equipment_request_anon_execute', has_function_privilege(
+              'anon',
+              'public.create_equipment_request(uuid,text,text,jsonb,text)',
+              'execute'
+            ),
+            'update_equipment_request_rpc_exists', exists (
+              select 1 from pg_proc p
+              join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public'
+                and p.proname = 'update_equipment_request'
+            ),
+            'update_equipment_request_authenticated_execute', has_function_privilege(
+              'authenticated',
+              'public.update_equipment_request(uuid,uuid,text,text,jsonb,text)',
+              'execute'
+            ),
+            'update_equipment_request_anon_execute', has_function_privilege(
+              'anon',
+              'public.update_equipment_request(uuid,uuid,text,text,jsonb,text)',
+              'execute'
+            ),
+            'import_equipment_requests_rpc_exists', exists (
+              select 1 from pg_proc p
+              join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public'
+                and p.proname = 'import_equipment_requests'
+            ),
+            'import_equipment_requests_authenticated_execute', has_function_privilege(
+              'authenticated',
+              'public.import_equipment_requests(jsonb,text)',
+              'execute'
+            ),
+            'import_equipment_requests_anon_execute', has_function_privilege(
+              'anon',
+              'public.import_equipment_requests(jsonb,text)',
+              'execute'
+            ),
+            'dml_trigger_fn_exists', exists (
+              select 1 from pg_proc p
+              join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'private'
+                and p.proname = 'enforce_equipment_request_semester_authority'
+            ),
+            'dml_trigger_fn_authenticated_execute', has_function_privilege(
+              'authenticated',
+              'private.enforce_equipment_request_semester_authority()',
+              'execute'
+            ),
+            'dml_trigger_fn_anon_execute', has_function_privilege(
+              'anon',
+              'private.enforce_equipment_request_semester_authority()',
+              'execute'
+            ),
+            'dml_trigger_fn_public_execute', has_function_privilege(
+              'public',
+              'private.enforce_equipment_request_semester_authority()',
+              'execute'
+            ),
+            'dml_trigger_exists', exists (
+              select 1
+              from pg_trigger t
+              join pg_class c on c.oid = t.tgrelid
+              join pg_namespace n on n.oid = c.relnamespace
+              where n.nspname = 'public'
+                and c.relname = 'equipment_requests'
+                and t.tgname = 'equipment_requests_enforce_semester_authority'
+                and not t.tgisinternal
+            ),
+            'dml_trigger_enabled', coalesce((
+              select t.tgenabled = 'O'
+              from pg_trigger t
+              join pg_class c on c.oid = t.tgrelid
+              join pg_namespace n on n.oid = c.relnamespace
+              where n.nspname = 'public'
+                and c.relname = 'equipment_requests'
+                and t.tgname = 'equipment_requests_enforce_semester_authority'
+                and not t.tgisinternal
+            ), false),
+            'dml_trigger_function', (
+              select concat(fn_ns.nspname, '.', p.proname)
+              from pg_trigger t
+              join pg_class c on c.oid = t.tgrelid
+              join pg_namespace n on n.oid = c.relnamespace
+              join pg_proc p on p.oid = t.tgfoid
+              join pg_namespace fn_ns on fn_ns.oid = p.pronamespace
+              where n.nspname = 'public'
+                and c.relname = 'equipment_requests'
+                and t.tgname = 'equipment_requests_enforce_semester_authority'
+                and not t.tgisinternal
+            ),
+            'dml_trigger_definition', (
+              select pg_get_triggerdef(t.oid)
+              from pg_trigger t
+              join pg_class c on c.oid = t.tgrelid
+              join pg_namespace n on n.oid = c.relnamespace
+              where n.nspname = 'public'
+                and c.relname = 'equipment_requests'
+                and t.tgname = 'equipment_requests_enforce_semester_authority'
+                and not t.tgisinternal
+            )
+          ) as postcheck;
+          SQL
+          npx --no-install supabase db query --linked --output-format json --file "$RUNNER_TEMP/pr59-db-contract-postcheck.sql" > "$RUNNER_TEMP/pr59-db-contract-after.json"
+          RUNNER_TEMP="$RUNNER_TEMP" node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const result = JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP, 'pr59-db-contract-after.json'), 'utf8'));
+          const raw = result?.[0]?.postcheck ?? result?.rows?.[0]?.postcheck ?? result?.postcheck;
+          const postcheck = typeof raw === 'string' ? JSON.parse(raw) : raw;
+
+          if (!postcheck) {
+            throw new Error('POSTCHECK_EMPTY_RESULT');
+          }
+
+          // A: class_schedules.semester column and check constraint
+          if (postcheck.class_schedules_semester_column_exists !== true) throw new Error('SEMESTER_COLUMN_MISSING');
+          if (postcheck.class_schedules_semester_check_exists !== true) throw new Error('SEMESTER_CHECK_CONSTRAINT_MISSING');
+
+          // B: Schedule creation & import RPCs
+          if (postcheck.create_manual_schedule_rpc_exists !== true) throw new Error('CREATE_MANUAL_SCHEDULE_RPC_MISSING');
+          if (postcheck.create_manual_schedule_rpc_secdef !== true) throw new Error('CREATE_MANUAL_SCHEDULE_NOT_SECDEF');
+          if (postcheck.create_manual_schedule_authenticated_execute !== true) throw new Error('CREATE_MANUAL_SCHEDULE_AUTH_EXECUTE_MISSING');
+          if (postcheck.create_manual_schedule_anon_execute !== false) throw new Error('CREATE_MANUAL_SCHEDULE_ANON_EXECUTE_UNEXPECTED');
+          if (postcheck.create_manual_schedule_public_execute !== false) throw new Error('CREATE_MANUAL_SCHEDULE_PUBLIC_EXECUTE_UNEXPECTED');
+
+          if (postcheck.import_skills_lab_schedule_rpc_exists !== true) throw new Error('IMPORT_SKILLS_LAB_SCHEDULE_RPC_MISSING');
+          if (postcheck.import_skills_lab_schedule_authenticated_execute !== true) throw new Error('IMPORT_SKILLS_LAB_AUTH_EXECUTE_MISSING');
+          if (postcheck.import_skills_lab_schedule_anon_execute !== false) throw new Error('IMPORT_SKILLS_LAB_ANON_EXECUTE_UNEXPECTED');
+
+          // C: Equipment CREATE and UPDATE RPCs
+          if (postcheck.create_equipment_request_rpc_exists !== true) throw new Error('CREATE_EQUIPMENT_REQUEST_RPC_MISSING');
+          if (postcheck.create_equipment_request_rpc_secdef !== true) throw new Error('CREATE_EQUIPMENT_REQUEST_NOT_SECDEF');
+          if (postcheck.create_equipment_request_authenticated_execute !== true) throw new Error('CREATE_EQUIPMENT_REQUEST_AUTH_EXECUTE_MISSING');
+          if (postcheck.create_equipment_request_anon_execute !== false) throw new Error('CREATE_EQUIPMENT_REQUEST_ANON_EXECUTE_UNEXPECTED');
+
+          if (postcheck.update_equipment_request_rpc_exists !== true) throw new Error('UPDATE_EQUIPMENT_REQUEST_RPC_MISSING');
+          if (postcheck.update_equipment_request_authenticated_execute !== true) throw new Error('UPDATE_EQUIPMENT_REQUEST_AUTH_EXECUTE_MISSING');
+          if (postcheck.update_equipment_request_anon_execute !== false) throw new Error('UPDATE_EQUIPMENT_REQUEST_ANON_EXECUTE_UNEXPECTED');
+
+          // D: Equipment Import RPC
+          if (postcheck.import_equipment_requests_rpc_exists !== true) throw new Error('IMPORT_EQUIPMENT_REQUESTS_RPC_MISSING');
+          if (postcheck.import_equipment_requests_authenticated_execute !== true) throw new Error('IMPORT_EQUIPMENT_REQUESTS_AUTH_EXECUTE_MISSING');
+          if (postcheck.import_equipment_requests_anon_execute !== false) throw new Error('IMPORT_EQUIPMENT_REQUESTS_ANON_EXECUTE_UNEXPECTED');
+
+          // E: Direct Table DML Trigger and Function
+          if (postcheck.dml_trigger_fn_exists !== true) throw new Error('DML_TRIGGER_FN_MISSING');
+          if (postcheck.dml_trigger_fn_authenticated_execute !== false) throw new Error('DML_TRIGGER_FN_AUTH_EXECUTE_UNEXPECTED');
+          if (postcheck.dml_trigger_fn_anon_execute !== false) throw new Error('DML_TRIGGER_FN_ANON_EXECUTE_UNEXPECTED');
+          if (postcheck.dml_trigger_fn_public_execute !== false) throw new Error('DML_TRIGGER_FN_PUBLIC_EXECUTE_UNEXPECTED');
+
+          if (postcheck.dml_trigger_exists !== true) throw new Error('DML_TRIGGER_NOT_FOUND');
+          if (postcheck.dml_trigger_enabled !== true) throw new Error('DML_TRIGGER_NOT_ENABLED');
+          if (postcheck.dml_trigger_function !== 'private.enforce_equipment_request_semester_authority') {
+            throw new Error('DML_TRIGGER_WRONG_FUNCTION: ' + postcheck.dml_trigger_function);
+          }
+
+          const triggerDef = postcheck.dml_trigger_definition || '';
+          if (!triggerDef.includes('equipment_requests_enforce_semester_authority')) {
+            throw new Error('TRIGGER_DEF_NAME_MISMATCH');
+          }
+          if (!triggerDef.includes('BEFORE INSERT OR UPDATE')) {
+            throw new Error('TRIGGER_DEF_TIMING_MISMATCH');
+          }
+          if (!triggerDef.includes('private.enforce_equipment_request_semester_authority')) {
+            throw new Error('TRIGGER_DEF_FUNCTION_MISMATCH');
+          }
+
+          console.log('PR #59 database contract, semester authority RPCs, and DML trigger postcheck: PASS');
+          NODE
