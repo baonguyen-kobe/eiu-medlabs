@@ -291,11 +291,21 @@ test("TimePicker: shared icon positioning and text padding provide clear horizon
     "TimePicker renders single clock icon on the left followed by time input",
   );
 
-  // 2. Icon is positioned on the left (11px)
+  // 2. Icon is positioned on the left (11px) and vertically centered
   assert.match(
     css,
     /\.time-picker-icon\s*\{[^}]*left:\s*11px/,
     "TimePicker clock icon has left offset of 11px",
+  );
+  assert.match(
+    css,
+    /\.time-picker-icon\s*\{[^}]*top:\s*50%/,
+    "TimePicker clock icon has top: 50% for vertical centering",
+  );
+  assert.match(
+    css,
+    /\.time-picker-icon\s*\{[^}]*transform:\s*translateY\(-50%\)/,
+    "TimePicker clock icon has translateY(-50%) for precise centering",
   );
 
   // 3. Shared input has 36px left padding (leaving a 9px gap after 16px icon)
@@ -310,5 +320,17 @@ test("TimePicker: shared icon positioning and text padding provide clear horizon
     css,
     /\.schedule-form\s+\.time-picker-control\s+input\.time-picker-input/,
     "Schedule form protects time-picker-input padding and transparency against general input rules",
+  );
+
+  // 5. Compact variants have 8px left icon offset and 30px left padding
+  assert.match(
+    css,
+    /\.inline-time-editor\s+\.time-picker-icon,\s*\.drawer-time-editor\s+\.time-picker-icon\s*\{[^}]*left:\s*8px/,
+    "Compact time pickers have 8px left icon offset",
+  );
+  assert.match(
+    css,
+    /\.inline-time-editor\s+\.time-picker-input,\s*\.drawer-time-editor\s+\.time-picker-input\s*\{[^}]*padding:\s*0\s+6px\s+0\s+30px/,
+    "Compact time pickers have 30px left padding",
   );
 });

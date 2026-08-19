@@ -7144,6 +7144,8 @@ body,
 .time-picker-icon {
   position: absolute;
   left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
   color: var(--ink-500);
   pointer-events: none;
   flex-shrink: 0;

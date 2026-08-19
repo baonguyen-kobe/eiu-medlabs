@@ -1,12 +1,38 @@
 import nextEnv from "@next/env";
 import { resolve } from "node:path";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page, type Locator } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 
 nextEnv.loadEnvConfig(process.cwd());
 
 const ARTIFACTS_DIR =
   "C:/Users/User/.gemini/antigravity/brain/dffb3f58-6ffc-43d7-989c-33c163c573f8";
+
+async function assertTimePickerGeometry(
+  controlLocator: Locator,
+  iconLocator: Locator,
+) {
+  const controlBox = await controlLocator.boundingBox();
+  const iconBox = await iconLocator.boundingBox();
+  expect(controlBox).not.toBeNull();
+  expect(iconBox).not.toBeNull();
+  if (controlBox && iconBox) {
+    // 1. Icon top and bottom are inside control boundaries (1px tolerance for subpixel rounding)
+    expect(iconBox.y).toBeGreaterThanOrEqual(controlBox.y - 1);
+    expect(iconBox.y + iconBox.height).toBeLessThanOrEqual(
+      controlBox.y + controlBox.height + 1,
+    );
+    // 2. Icon is horizontally inside control
+    expect(iconBox.x).toBeGreaterThanOrEqual(controlBox.x);
+    expect(iconBox.x + iconBox.width).toBeLessThan(
+      controlBox.x + controlBox.width,
+    );
+    // 3. Icon is vertically centered within control (center Y distance <= 2px)
+    const iconCenterY = iconBox.y + iconBox.height / 2;
+    const controlCenterY = controlBox.y + controlBox.height / 2;
+    expect(Math.abs(iconCenterY - controlCenterY)).toBeLessThanOrEqual(2);
+  }
+}
 
 // Service-role client — can bypass RLS for fixture insert/cleanup
 const serviceDb = createClient(
@@ -52,12 +78,22 @@ test.describe("Shared Custom Time Picker E2E Verification", () => {
       "label:has-text('Giờ kết thúc *') .time-picker",
     );
 
-    // 1. DISPLAY CHECKS
+    // 1. DISPLAY & GEOMETRY CHECKS
     // Exactly 1 clock icon per field
     await expect(startTimeContainer.locator(".time-picker-icon")).toHaveCount(
       1,
     );
     await expect(endTimeContainer.locator(".time-picker-icon")).toHaveCount(1);
+
+    // Bounding-box geometry assertions: icon is strictly inside control and vertically centered
+    await assertTimePickerGeometry(
+      startTimeContainer.locator(".time-picker-control"),
+      startTimeContainer.locator(".time-picker-icon"),
+    );
+    await assertTimePickerGeometry(
+      endTimeContainer.locator(".time-picker-control"),
+      endTimeContainer.locator(".time-picker-icon"),
+    );
 
     // No input[type="time"]
     await expect(page.locator('input[type="time"]')).toHaveCount(0);
@@ -531,6 +567,16 @@ test.describe("Shared Custom Time Picker E2E Verification", () => {
       sessionEndPicker.locator("input.time-picker-input"),
     ).toHaveValue("21:00");
 
+    // Bounding-box geometry assertions: icons are strictly inside control and vertically centered
+    await assertTimePickerGeometry(
+      sessionStartPicker.locator(".time-picker-control"),
+      sessionStartPicker.locator(".time-picker-icon"),
+    );
+    await assertTimePickerGeometry(
+      sessionEndPicker.locator(".time-picker-control"),
+      sessionEndPicker.locator(".time-picker-icon"),
+    );
+
     // C9: Basic Medical — after selecting 20:30, the control must not show is-invalid
     // After selecting 20:30 above, it should be valid and no error
     await expect(
@@ -599,6 +645,16 @@ test.describe("Shared Custom Time Picker E2E Verification", () => {
     await expect(startTimePicker.locator(".time-picker-icon")).toHaveCount(1);
     await expect(endTimePicker.locator(".time-picker-icon")).toHaveCount(1);
     await expect(page.locator('input[type="time"]')).toHaveCount(0);
+
+    // Bounding-box geometry assertions: icons are strictly inside control and vertically centered
+    await assertTimePickerGeometry(
+      startTimePicker.locator(".time-picker-control"),
+      startTimePicker.locator(".time-picker-icon"),
+    );
+    await assertTimePickerGeometry(
+      endTimePicker.locator(".time-picker-control"),
+      endTimePicker.locator(".time-picker-icon"),
+    );
 
     // Check defaults
     await expect(
