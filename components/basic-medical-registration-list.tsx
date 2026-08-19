@@ -437,6 +437,7 @@ function SessionStatus({
   historicalConfirmations,
   evidenceEnabled,
   viewerId,
+  peopleById,
   now,
   onOpen,
 }: {
@@ -445,6 +446,7 @@ function SessionStatus({
   historicalConfirmations: BasicMedicalRegistrationSessionItem["confirmations"];
   evidenceEnabled: boolean;
   viewerId: string;
+  peopleById?: Map<string, string>;
   now: number;
   onOpen: () => void;
 }) {
@@ -507,7 +509,26 @@ function SessionStatus({
     );
   }
   if (session.class_schedules?.schedule_status === "cancelled") {
-    return <span className="request-status request-status-gray">Đã hủy</span>;
+    const cancellerName =
+      (session.cancelled_by ? peopleById?.get(session.cancelled_by) : null) ??
+      "Người dùng";
+    return (
+      <div className="basic-medical-session-status">
+        <span className="request-status request-status-gray">Đã hủy</span>
+        {session.cancellation_reason ? (
+          <div className="basic-medical-session-cancellation-metadata">
+            <div>
+              <span className="cancellation-meta-label">Người hủy lớp:</span>{" "}
+              <strong>{cancellerName}</strong>
+            </div>
+            <div>
+              <span className="cancellation-meta-label">Lý do hủy:</span>{" "}
+              <span>{session.cancellation_reason}</span>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    );
   }
   const isTeachingLecturer = session.teaching_lecturer_id === viewerId;
   const earliest = earliestConfirmationDate(session);
@@ -540,6 +561,7 @@ function SessionStatus({
 function SessionLecturerCell({
   session,
   instructors,
+  peopleById,
   isEditing,
   selectedLecturerId,
   onLecturerChange,
@@ -547,13 +569,20 @@ function SessionLecturerCell({
 }: {
   session: BasicMedicalRegistrationSessionItem;
   instructors: BasicMedicalInstructorOption[];
+  peopleById?: Map<string, string>;
   isEditing: boolean;
   selectedLecturerId: string;
   onLecturerChange: (lecturerId: string) => void;
   isSaving: boolean;
 }) {
   if (!isEditing) {
-    return <td>{session.teaching?.full_name ?? "—"}</td>;
+    const displayName =
+      instructors.find((instructor) => instructor.id === session.teaching_lecturer_id)
+        ?.full_name ??
+      peopleById?.get(session.teaching_lecturer_id) ??
+      session.teaching?.full_name ??
+      "—";
+    return <td>{displayName}</td>;
   }
 
   return (
@@ -583,10 +612,14 @@ function SessionAdministrativeActions({
   session,
   confirmation,
   registration,
+  viewerId,
+  isAdmin = false,
 }: {
   session: BasicMedicalRegistrationSessionItem;
   confirmation?: BasicMedicalSessionConfirmation;
   registration: BasicMedicalRegistrationListItem;
+  viewerId: string;
+  isAdmin?: boolean;
 }) {
   const [invalidateOpen, setInvalidateOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -595,7 +628,14 @@ function SessionAdministrativeActions({
   const [isPending, startTransition] = useTransition();
 
   if (session.class_schedules?.schedule_status === "cancelled") return null;
+
+  const canCancelSession =
+    isAdmin ||
+    registration.created_by === viewerId ||
+    session.teaching_lecturer_id === viewerId;
+
   if (!confirmation) {
+    if (!canCancelSession) return null;
     const formId = `cancel-session-${session.id}`;
     return (
       <>
@@ -645,6 +685,8 @@ function SessionAdministrativeActions({
       </>
     );
   }
+  if (!isAdmin) return null;
+
   const formId = `invalidate-confirmation-${confirmation.id}`;
   return (
     <>
@@ -700,6 +742,7 @@ export function BasicMedicalRegistrationList({
   registrations,
   inventories,
   instructors = [],
+  activePeople = [],
   viewerId,
   isAdmin = false,
   canDelete,
@@ -708,6 +751,7 @@ export function BasicMedicalRegistrationList({
   registrations: BasicMedicalRegistrationListItem[];
   inventories: BasicMedicalRoomInventoryItem[];
   instructors?: BasicMedicalInstructorOption[];
+  activePeople?: Array<{ id: string; full_name: string; title: string | null }>;
   viewerId: string;
   isAdmin?: boolean;
   canDelete: boolean;
@@ -732,6 +776,19 @@ export function BasicMedicalRegistrationList({
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [selectedLecturerId, setSelectedLecturerId] = useState<string>("");
   const [isSavingLecturer, startSavingTransition] = useTransition();
+
+  const peopleById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const person of activePeople) {
+      if (person.id && person.full_name) map.set(person.id, person.full_name);
+    }
+    for (const instructor of instructors) {
+      if (instructor.id && instructor.full_name) {
+        map.set(instructor.id, instructor.full_name);
+      }
+    }
+    return map;
+  }, [activePeople, instructors]);
 
   function handleStartEditLecturer(
     session: BasicMedicalRegistrationSessionItem,
@@ -974,6 +1031,41 @@ export function BasicMedicalRegistrationList({
                                 </div>
                               </div>
                             ) : null}
+                            {!isCancelled &&
+                              sessions
+                                .filter(
+                                  (s) =>
+                                    s.class_schedules?.schedule_status ===
+                                      "cancelled" || Boolean(s.cancelled_at),
+                                )
+                                .map((s) => {
+                                  const sCancellerName =
+                                    (s.cancelled_by
+                                      ? peopleById.get(s.cancelled_by)
+                                      : null) ?? "Người dùng";
+                                  return (
+                                    <div
+                                      key={`cancelled-session-${s.id}`}
+                                      className="basic-medical-registration-detail-session-cancellation"
+                                    >
+                                      <div className="basic-medical-session-cancel-track-1">
+                                        <span>Buổi học</span>
+                                        <strong>Buổi {s.session_number}</strong>
+                                      </div>
+                                      <div className="basic-medical-session-cancel-track-2">
+                                        <span>Người hủy lớp</span>
+                                        <strong>{sCancellerName}</strong>
+                                      </div>
+                                      <div className="basic-medical-session-cancel-track-3">
+                                        <span>Lý do hủy</span>
+                                        <strong>
+                                          {s.cancellation_reason ||
+                                            "Không có lý do"}
+                                        </strong>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
                           </div>
                           <div className="responsive-table basic-medical-session-viewport">
                             <table className="data-table basic-medical-session-table">
@@ -1033,6 +1125,7 @@ export function BasicMedicalRegistrationList({
                                       <SessionLecturerCell
                                         session={session}
                                         instructors={instructors}
+                                        peopleById={peopleById}
                                         isEditing={isEditing}
                                         selectedLecturerId={selectedLecturerId}
                                         onLecturerChange={setSelectedLecturerId}
@@ -1049,6 +1142,7 @@ export function BasicMedicalRegistrationList({
                                               }
                                               evidenceEnabled={evidenceEnabled}
                                               viewerId={viewerId}
+                                              peopleById={peopleById}
                                               now={confirmationNow}
                                               onOpen={() =>
                                                 setActive({
@@ -1119,13 +1213,13 @@ export function BasicMedicalRegistrationList({
                                               )
                                             ) : null}
                                           </div>
-                                          {canDelete ? (
-                                            <SessionAdministrativeActions
-                                              session={session}
-                                              confirmation={confirmation}
-                                              registration={registration}
-                                            />
-                                          ) : null}
+                                          <SessionAdministrativeActions
+                                            session={session}
+                                            confirmation={confirmation}
+                                            registration={registration}
+                                            viewerId={viewerId}
+                                            isAdmin={isAdmin}
+                                          />
                                         </div>
                                       </td>
                                     </tr>

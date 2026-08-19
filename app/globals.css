@@ -5593,9 +5593,9 @@ select {
 
 .confirm-dialog {
   position: relative;
-  width: min(460px, 100%);
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  width: min(520px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
   gap: 16px;
   padding: 24px;
   overflow: hidden;
@@ -5605,6 +5605,34 @@ select {
   border-radius: var(--radius-lg);
   box-shadow: 0 28px 80px rgb(20 31 41 / 28%);
   animation: confirm-dialog-in 160ms ease-out;
+}
+
+.confirm-dialog-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.confirm-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+}
+
+.confirm-dialog-body .form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.confirm-dialog-body .form-field input,
+.confirm-dialog-body .form-field textarea {
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .confirm-dialog-icon {
@@ -5643,7 +5671,6 @@ select {
 }
 
 .confirm-dialog-actions {
-  grid-column: 1 / -1;
   display: flex;
   justify-content: flex-end;
   gap: 10px;
@@ -5723,13 +5750,12 @@ select {
   }
 
   .confirm-dialog {
-    grid-template-columns: 1fr;
     padding: 20px;
   }
 
   .confirm-dialog-actions {
-    grid-column: 1;
     display: grid;
+    gap: 8px;
   }
 
   .confirm-dialog-actions .button {
@@ -9333,6 +9359,49 @@ body,
 .basic-medical-registration-detail-history > div:last-child {
   grid-column: 2;
   padding-inline: 16px;
+}
+
+.basic-medical-registration-detail-session-cancellation {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns:
+    var(--basic-medical-track-1)
+    var(--basic-medical-track-2)
+    var(--basic-medical-track-3)
+    var(--basic-medical-track-4)
+    var(--basic-medical-track-5);
+  gap: 12px 0;
+  padding: 14px 0 0;
+  border-top: 1px solid var(--line);
+}
+
+.basic-medical-session-cancel-track-1 {
+  grid-column: 1;
+  padding-inline: 16px;
+}
+
+.basic-medical-session-cancel-track-2 {
+  grid-column: 2;
+  padding-inline: 16px;
+}
+
+.basic-medical-session-cancel-track-3 {
+  grid-column: 3;
+  padding-inline: 16px;
+}
+
+.basic-medical-session-cancellation-metadata {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--ink-700);
+}
+
+.basic-medical-session-cancellation-metadata .cancellation-meta-label {
+  color: var(--ink-500);
+  font-size: 12px;
 }
 
 .basic-medical-registration-panel .basic-medical-session-viewport {
