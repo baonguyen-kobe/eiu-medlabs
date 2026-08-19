@@ -239,58 +239,79 @@ jobs:
               'public.create_manual_class_schedule(uuid,uuid,uuid,uuid,date,time,time,text,integer,text)',
               'execute'
             ),
-            'import_skills_lab_schedule_rpc_exists', exists (
+            'create_import_schedule_row_rpc_exists', exists (
               select 1 from pg_proc p
               join pg_namespace n on n.oid = p.pronamespace
               where n.nspname = 'public'
-                and p.proname = 'import_skills_lab_schedule'
+                and p.proname = 'create_import_schedule_row'
             ),
-            'import_skills_lab_schedule_authenticated_execute', has_function_privilege(
+            'create_import_schedule_row_rpc_secdef', coalesce((
+              select p.prosecdef from pg_proc p
+              join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public'
+                and p.proname = 'create_import_schedule_row'
+            ), false),
+            'create_import_schedule_row_authenticated_execute', has_function_privilege(
               'authenticated',
-              'public.import_skills_lab_schedule(jsonb,text)',
+              'public.create_import_schedule_row(uuid,integer,text,jsonb,jsonb,public.import_row_status,jsonb,jsonb,uuid,text,text,uuid,uuid,date,time,time,text,integer,text)',
               'execute'
             ),
-            'import_skills_lab_schedule_anon_execute', has_function_privilege(
+            'create_import_schedule_row_anon_execute', has_function_privilege(
               'anon',
-              'public.import_skills_lab_schedule(jsonb,text)',
+              'public.create_import_schedule_row(uuid,integer,text,jsonb,jsonb,public.import_row_status,jsonb,jsonb,uuid,text,text,uuid,uuid,date,time,time,text,integer,text)',
+              'execute'
+            ),
+            'create_import_schedule_row_public_execute', has_function_privilege(
+              'public',
+              'public.create_import_schedule_row(uuid,integer,text,jsonb,jsonb,public.import_row_status,jsonb,jsonb,uuid,text,text,uuid,uuid,date,time,time,text,integer,text)',
               'execute'
             ),
             'create_equipment_request_rpc_exists', exists (
               select 1 from pg_proc p
               join pg_namespace n on n.oid = p.pronamespace
               where n.nspname = 'public'
-                and p.proname = 'create_equipment_request'
+                and p.proname = 'create_equipment_request_with_items'
             ),
             'create_equipment_request_rpc_secdef', coalesce((
               select p.prosecdef from pg_proc p
               join pg_namespace n on n.oid = p.pronamespace
               where n.nspname = 'public'
-                and p.proname = 'create_equipment_request'
+                and p.proname = 'create_equipment_request_with_items'
             ), false),
             'create_equipment_request_authenticated_execute', has_function_privilege(
               'authenticated',
-              'public.create_equipment_request(uuid,text,text,jsonb,text)',
+              'public.create_equipment_request_with_items(uuid,text,uuid,timestamptz,timestamptz,text,text,jsonb)',
               'execute'
             ),
             'create_equipment_request_anon_execute', has_function_privilege(
               'anon',
-              'public.create_equipment_request(uuid,text,text,jsonb,text)',
+              'public.create_equipment_request_with_items(uuid,text,uuid,timestamptz,timestamptz,text,text,jsonb)',
+              'execute'
+            ),
+            'create_equipment_request_public_execute', has_function_privilege(
+              'public',
+              'public.create_equipment_request_with_items(uuid,text,uuid,timestamptz,timestamptz,text,text,jsonb)',
               'execute'
             ),
             'update_equipment_request_rpc_exists', exists (
               select 1 from pg_proc p
               join pg_namespace n on n.oid = p.pronamespace
               where n.nspname = 'public'
-                and p.proname = 'update_equipment_request'
+                and p.proname = 'update_equipment_request_content'
             ),
             'update_equipment_request_authenticated_execute', has_function_privilege(
               'authenticated',
-              'public.update_equipment_request(uuid,uuid,text,text,jsonb,text)',
+              'public.update_equipment_request_content(uuid,uuid,text,uuid,timestamptz,timestamptz,text,text,jsonb)',
               'execute'
             ),
             'update_equipment_request_anon_execute', has_function_privilege(
               'anon',
-              'public.update_equipment_request(uuid,uuid,text,text,jsonb,text)',
+              'public.update_equipment_request_content(uuid,uuid,text,uuid,timestamptz,timestamptz,text,text,jsonb)',
+              'execute'
+            ),
+            'update_equipment_request_public_execute', has_function_privilege(
+              'public',
+              'public.update_equipment_request_content(uuid,uuid,text,uuid,timestamptz,timestamptz,text,text,jsonb)',
               'execute'
             ),
             'import_equipment_requests_rpc_exists', exists (
@@ -301,12 +322,17 @@ jobs:
             ),
             'import_equipment_requests_authenticated_execute', has_function_privilege(
               'authenticated',
-              'public.import_equipment_requests(jsonb,text)',
+              'public.import_equipment_requests(jsonb)',
               'execute'
             ),
             'import_equipment_requests_anon_execute', has_function_privilege(
               'anon',
-              'public.import_equipment_requests(jsonb,text)',
+              'public.import_equipment_requests(jsonb)',
+              'execute'
+            ),
+            'import_equipment_requests_public_execute', has_function_privilege(
+              'public',
+              'public.import_equipment_requests(jsonb)',
               'execute'
             ),
             'dml_trigger_fn_exists', exists (
@@ -397,24 +423,29 @@ jobs:
           if (postcheck.create_manual_schedule_anon_execute !== false) throw new Error('CREATE_MANUAL_SCHEDULE_ANON_EXECUTE_UNEXPECTED');
           if (postcheck.create_manual_schedule_public_execute !== false) throw new Error('CREATE_MANUAL_SCHEDULE_PUBLIC_EXECUTE_UNEXPECTED');
 
-          if (postcheck.import_skills_lab_schedule_rpc_exists !== true) throw new Error('IMPORT_SKILLS_LAB_SCHEDULE_RPC_MISSING');
-          if (postcheck.import_skills_lab_schedule_authenticated_execute !== true) throw new Error('IMPORT_SKILLS_LAB_AUTH_EXECUTE_MISSING');
-          if (postcheck.import_skills_lab_schedule_anon_execute !== false) throw new Error('IMPORT_SKILLS_LAB_ANON_EXECUTE_UNEXPECTED');
+          if (postcheck.create_import_schedule_row_rpc_exists !== true) throw new Error('CREATE_IMPORT_SCHEDULE_ROW_RPC_MISSING');
+          if (postcheck.create_import_schedule_row_rpc_secdef !== true) throw new Error('CREATE_IMPORT_SCHEDULE_ROW_NOT_SECDEF');
+          if (postcheck.create_import_schedule_row_authenticated_execute !== true) throw new Error('CREATE_IMPORT_SCHEDULE_ROW_AUTH_EXECUTE_MISSING');
+          if (postcheck.create_import_schedule_row_anon_execute !== false) throw new Error('CREATE_IMPORT_SCHEDULE_ROW_ANON_EXECUTE_UNEXPECTED');
+          if (postcheck.create_import_schedule_row_public_execute !== false) throw new Error('CREATE_IMPORT_SCHEDULE_ROW_PUBLIC_EXECUTE_UNEXPECTED');
 
           // C: Equipment CREATE and UPDATE RPCs
           if (postcheck.create_equipment_request_rpc_exists !== true) throw new Error('CREATE_EQUIPMENT_REQUEST_RPC_MISSING');
           if (postcheck.create_equipment_request_rpc_secdef !== true) throw new Error('CREATE_EQUIPMENT_REQUEST_NOT_SECDEF');
           if (postcheck.create_equipment_request_authenticated_execute !== true) throw new Error('CREATE_EQUIPMENT_REQUEST_AUTH_EXECUTE_MISSING');
           if (postcheck.create_equipment_request_anon_execute !== false) throw new Error('CREATE_EQUIPMENT_REQUEST_ANON_EXECUTE_UNEXPECTED');
+          if (postcheck.create_equipment_request_public_execute !== false) throw new Error('CREATE_EQUIPMENT_REQUEST_PUBLIC_EXECUTE_UNEXPECTED');
 
           if (postcheck.update_equipment_request_rpc_exists !== true) throw new Error('UPDATE_EQUIPMENT_REQUEST_RPC_MISSING');
           if (postcheck.update_equipment_request_authenticated_execute !== true) throw new Error('UPDATE_EQUIPMENT_REQUEST_AUTH_EXECUTE_MISSING');
           if (postcheck.update_equipment_request_anon_execute !== false) throw new Error('UPDATE_EQUIPMENT_REQUEST_ANON_EXECUTE_UNEXPECTED');
+          if (postcheck.update_equipment_request_public_execute !== false) throw new Error('UPDATE_EQUIPMENT_REQUEST_PUBLIC_EXECUTE_UNEXPECTED');
 
           // D: Equipment Import RPC
           if (postcheck.import_equipment_requests_rpc_exists !== true) throw new Error('IMPORT_EQUIPMENT_REQUESTS_RPC_MISSING');
           if (postcheck.import_equipment_requests_authenticated_execute !== true) throw new Error('IMPORT_EQUIPMENT_REQUESTS_AUTH_EXECUTE_MISSING');
           if (postcheck.import_equipment_requests_anon_execute !== false) throw new Error('IMPORT_EQUIPMENT_REQUESTS_ANON_EXECUTE_UNEXPECTED');
+          if (postcheck.import_equipment_requests_public_execute !== false) throw new Error('IMPORT_EQUIPMENT_REQUESTS_PUBLIC_EXECUTE_UNEXPECTED');
 
           // E: Direct Table DML Trigger and Function
           if (postcheck.dml_trigger_fn_exists !== true) throw new Error('DML_TRIGGER_FN_MISSING');
