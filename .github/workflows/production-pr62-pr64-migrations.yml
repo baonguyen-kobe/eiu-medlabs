@@ -242,17 +242,10 @@ jobs:
           set -euo pipefail
           cat > "$RUNNER_TEMP/pr62-pr64-db-contract-postcheck.sql" <<'SQL'
           select jsonb_build_object(
-            'private_equipment_helper_exists', exists (
-              select 1 from pg_proc p
-              join pg_namespace n on n.oid = p.pronamespace
-              where n.nspname = 'private'
-                and p.proname = 'class_schedule_has_equipment_request'
-            ),
+            'private_equipment_helper_exists', to_regprocedure('private.class_schedule_has_equipment_request(uuid)') is not null,
             'private_equipment_helper_secdef', coalesce((
               select p.prosecdef from pg_proc p
-              join pg_namespace n on n.oid = p.pronamespace
-              where n.nspname = 'private'
-                and p.proname = 'class_schedule_has_equipment_request'
+              where p.oid = to_regprocedure('private.class_schedule_has_equipment_request(uuid)')
             ), false),
             'private_equipment_helper_public_execute', has_function_privilege(
               'public',
@@ -269,17 +262,10 @@ jobs:
               'private.class_schedule_has_equipment_request(uuid)',
               'execute'
             ),
-            'get_lock_status_rpc_exists', exists (
-              select 1 from pg_proc p
-              join pg_namespace n on n.oid = p.pronamespace
-              where n.nspname = 'public'
-                and p.proname = 'get_class_schedules_equipment_lock_status'
-            ),
+            'get_lock_status_rpc_exists', to_regprocedure('public.get_class_schedules_equipment_lock_status(uuid[])') is not null,
             'get_lock_status_rpc_secdef', coalesce((
               select p.prosecdef from pg_proc p
-              join pg_namespace n on n.oid = p.pronamespace
-              where n.nspname = 'public'
-                and p.proname = 'get_class_schedules_equipment_lock_status'
+              where p.oid = to_regprocedure('public.get_class_schedules_equipment_lock_status(uuid[])')
             ), false),
             'get_lock_status_authenticated_execute', has_function_privilege(
               'authenticated',
@@ -296,17 +282,10 @@ jobs:
               'public.get_class_schedules_equipment_lock_status(uuid[])',
               'execute'
             ),
-            'update_skills_lab_rpc_exists', exists (
-              select 1 from pg_proc p
-              join pg_namespace n on n.oid = p.pronamespace
-              where n.nspname = 'public'
-                and p.proname = 'update_skills_lab_class_schedule'
-            ),
+            'update_skills_lab_rpc_exists', to_regprocedure('public.update_skills_lab_class_schedule(uuid,date,time,time,uuid,uuid,integer,uuid[])') is not null,
             'update_skills_lab_rpc_secdef', coalesce((
               select p.prosecdef from pg_proc p
-              join pg_namespace n on n.oid = p.pronamespace
-              where n.nspname = 'public'
-                and p.proname = 'update_skills_lab_class_schedule'
+              where p.oid = to_regprocedure('public.update_skills_lab_class_schedule(uuid,date,time,time,uuid,uuid,integer,uuid[])')
             ), false),
             'update_skills_lab_authenticated_execute', has_function_privilege(
               'authenticated',
@@ -323,17 +302,10 @@ jobs:
               'public.update_skills_lab_class_schedule(uuid,date,time,time,uuid,uuid,integer,uuid[])',
               'execute'
             ),
-            'claim_class_rpc_exists', exists (
-              select 1 from pg_proc p
-              join pg_namespace n on n.oid = p.pronamespace
-              where n.nspname = 'public'
-                and p.proname = 'claim_class'
-            ),
+            'claim_class_rpc_exists', to_regprocedure('public.claim_class(uuid)') is not null,
             'claim_class_rpc_secdef', coalesce((
               select p.prosecdef from pg_proc p
-              join pg_namespace n on n.oid = p.pronamespace
-              where n.nspname = 'public'
-                and p.proname = 'claim_class'
+              where p.oid = to_regprocedure('public.claim_class(uuid)')
             ), false),
             'claim_class_authenticated_execute', has_function_privilege(
               'authenticated',
@@ -350,59 +322,16 @@ jobs:
               'public.claim_class(uuid)',
               'execute'
             ),
-            'claim_class_def', (
-              select pg_get_functiondef(p.oid) from pg_proc p
-              join pg_namespace n on n.oid = p.pronamespace
-              where n.nspname = 'public'
-                and p.proname = 'claim_class'
-                and pg_get_function_identity_arguments(p.oid) = 'target_schedule_id uuid'
-            ),
-            'withdraw_class_def', (
-              select pg_get_functiondef(p.oid) from pg_proc p
-              join pg_namespace n on n.oid = p.pronamespace
-              where n.nspname = 'public'
-                and p.proname = 'withdraw_class'
-                and pg_get_function_identity_arguments(p.oid) = 'target_schedule_id uuid'
-            ),
-            'delete_skills_lab_def', (
-              select pg_get_functiondef(p.oid) from pg_proc p
-              join pg_namespace n on n.oid = p.pronamespace
-              where n.nspname = 'public'
-                and p.proname = 'delete_skills_lab_class_schedule'
-                and pg_get_function_identity_arguments(p.oid) = 'target_schedule_id uuid'
-            ),
-            'reschedule_class_def', (
-              select pg_get_functiondef(p.oid) from pg_proc p
-              join pg_namespace n on n.oid = p.pronamespace
-              where n.nspname = 'public'
-                and p.proname = 'reschedule_class'
-                and pg_get_function_identity_arguments(p.oid) = 'target_schedule_id uuid, target_schedule_date date, target_start_time time without time zone, target_end_time time without time zone, target_room_id uuid'
-            ),
-            'assign_class_lecturers_def', (
-              select pg_get_functiondef(p.oid) from pg_proc p
-              join pg_namespace n on n.oid = p.pronamespace
-              where n.nspname = 'public'
-                and p.proname = 'assign_class_lecturers'
-                and pg_get_function_identity_arguments(p.oid) = 'target_schedule_id uuid, target_lecturer_id uuid, target_second_lecturer_id uuid'
-            ),
-            'update_details_core_def', (
-              select pg_get_functiondef(p.oid) from pg_proc p
-              join pg_namespace n on n.oid = p.pronamespace
-              where n.nspname = 'public'
-                and p.proname = 'update_class_schedule_details_core'
-                and pg_get_function_identity_arguments(p.oid) = 'target_schedule_id uuid, target_class_code text, target_student_count integer, target_note text'
-            ),
-            'cancel_basic_medical_session_exists', exists (
-              select 1 from pg_proc p
-              join pg_namespace n on n.oid = p.pronamespace
-              where n.nspname = 'public'
-                and p.proname = 'cancel_basic_medical_session'
-            ),
+            'claim_class_def', pg_get_functiondef(to_regprocedure('public.claim_class(uuid)')),
+            'withdraw_class_def', pg_get_functiondef(to_regprocedure('public.withdraw_class(uuid)')),
+            'delete_skills_lab_def', pg_get_functiondef(to_regprocedure('public.delete_skills_lab_class_schedule(uuid)')),
+            'reschedule_class_def', pg_get_functiondef(to_regprocedure('public.reschedule_class(uuid,date)')),
+            'assign_class_lecturers_def', pg_get_functiondef(to_regprocedure('public.assign_class_lecturers(uuid,uuid[])')),
+            'update_details_core_def', pg_get_functiondef(to_regprocedure('public.update_class_schedule_details_core(uuid,date,time,time,uuid,integer,uuid[])')),
+            'cancel_basic_medical_session_exists', to_regprocedure('public.cancel_basic_medical_session(uuid,text)') is not null,
             'cancel_basic_medical_session_secdef', coalesce((
               select p.prosecdef from pg_proc p
-              join pg_namespace n on n.oid = p.pronamespace
-              where n.nspname = 'public'
-                and p.proname = 'cancel_basic_medical_session'
+              where p.oid = to_regprocedure('public.cancel_basic_medical_session(uuid,text)')
             ), false),
             'cancel_basic_medical_session_authenticated_execute', has_function_privilege(
               'authenticated',
@@ -419,13 +348,7 @@ jobs:
               'public.cancel_basic_medical_session(uuid,text)',
               'execute'
             ),
-            'cancel_basic_medical_session_def', (
-              select pg_get_functiondef(p.oid) from pg_proc p
-              join pg_namespace n on n.oid = p.pronamespace
-              where n.nspname = 'public'
-                and p.proname = 'cancel_basic_medical_session'
-                and pg_get_function_identity_arguments(p.oid) = 'target_session_id uuid, target_reason text'
-            )
+            'cancel_basic_medical_session_def', pg_get_functiondef(to_regprocedure('public.cancel_basic_medical_session(uuid,text)'))
           ) as postcheck_json;
           SQL
 
@@ -439,7 +362,8 @@ jobs:
           RUNNER_TEMP="$RUNNER_TEMP" node <<'NODE'
           import { readFileSync } from 'node:fs';
 
-          const rows = JSON.parse(readFileSync(process.env.RUNNER_TEMP + '/pr62-pr64-db-contract-after.json', 'utf8'));
+          const payload = JSON.parse(readFileSync(process.env.RUNNER_TEMP + '/pr62-pr64-db-contract-after.json', 'utf8'));
+          const rows = Array.isArray(payload) ? payload : (payload?.rows ?? []);
           const postcheck = rows[0]?.postcheck_json ?? rows[0];
 
           if (!postcheck) {
@@ -475,6 +399,7 @@ jobs:
           if (postcheck.claim_class_public_execute !== false) throw new Error('CLAIM_CLASS_PUBLIC_EXECUTE_UNEXPECTED');
 
           const claimDef = postcheck.claim_class_def || '';
+          if (!claimDef) throw new Error('CLAIM_CLASS_DEF_MISSING');
           if (!claimDef.includes('private.class_schedule_has_equipment_request')) throw new Error('CLAIM_CLASS_MISSING_EQUIPMENT_LOCK_HELPER');
           if (!claimDef.includes('CLASS_EQUIPMENT_REQUEST_EXISTS')) throw new Error('CLAIM_CLASS_MISSING_EQUIPMENT_LOCK_EXCEPTION');
 
@@ -489,6 +414,7 @@ jobs:
 
           for (const fn of lockedFunctions) {
             const def = fn.def || '';
+            if (!def) throw new Error(`${fn.name.toUpperCase()}_DEFINITION_MISSING`);
             if (!def.includes('private.class_schedule_has_equipment_request')) throw new Error(`${fn.name.toUpperCase()}_MISSING_EQUIPMENT_LOCK_HELPER`);
             if (!def.includes('CLASS_EQUIPMENT_REQUEST_EXISTS')) throw new Error(`${fn.name.toUpperCase()}_MISSING_EQUIPMENT_LOCK_EXCEPTION`);
           }
@@ -501,6 +427,7 @@ jobs:
           if (postcheck.cancel_basic_medical_session_public_execute !== false) throw new Error('CANCEL_BASIC_MEDICAL_SESSION_PUBLIC_EXECUTE_UNEXPECTED');
 
           const cancelDef = postcheck.cancel_basic_medical_session_def || '';
+          if (!cancelDef) throw new Error('CANCEL_BASIC_MEDICAL_SESSION_DEF_MISSING');
           if (!cancelDef.includes('private.is_admin()')) throw new Error('CANCEL_SESSION_MISSING_IS_ADMIN');
           if (!cancelDef.includes('registration_creator_id = actor_id')) throw new Error('CANCEL_SESSION_MISSING_CREATOR_AUTHORIZATION');
           if (!cancelDef.includes('session_row.teaching_lecturer_id = actor_id')) throw new Error('CANCEL_SESSION_MISSING_TEACHING_LECTURER_AUTHORIZATION');

@@ -228,10 +228,9 @@ test("PR62/PR64 postcheck SQL heredoc is SELECT-only with no mutation statements
   assert.match(sql, /^select\b/, "postcheck SQL must begin with SELECT");
 
   // B: Contains reviewed pg_catalog introspection contract
-  assert.match(sql, /pg_proc/);
-  assert.match(sql, /pg_namespace/);
   assert.match(sql, /has_function_privilege/);
   assert.match(sql, /pg_get_functiondef/);
+  assert.match(sql, /to_regprocedure/);
   assert.match(sql, /jsonb_build_object/);
 
   // C: No mutation keywords as executable statements
@@ -253,6 +252,64 @@ test("PR62/PR64 postcheck SQL heredoc is SELECT-only with no mutation statements
   // E: No second db query invocation
   const queryMatches = [...workflow.matchAll(/supabase db query/g)];
   assert.equal(queryMatches.length, 1);
+});
+
+test("PR62/PR64 postcheck uses exact reviewed regprocedure signatures and rejects stale signatures", () => {
+  const reviewedLockedSignatures = [
+    "public.withdraw_class(uuid)",
+    "public.delete_skills_lab_class_schedule(uuid)",
+    "public.reschedule_class(uuid,date)",
+    "public.assign_class_lecturers(uuid,uuid[])",
+    "public.update_class_schedule_details_core(uuid,date,time,time,uuid,integer,uuid[])",
+  ];
+
+  for (const sig of reviewedLockedSignatures) {
+    const escapedSig = sig
+      .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+      .replace(/,/g, "\\s*,\\s*");
+    assert.match(
+      workflow,
+      new RegExp(`to_regprocedure\\('${escapedSig}'\\)`),
+      `workflow must contain exact regprocedure lookup for: ${sig}`,
+    );
+  }
+
+  // Other reviewed functions
+  assert.match(workflow, /to_regprocedure\('public\.claim_class\(uuid\)'\)/);
+  assert.match(
+    workflow,
+    /to_regprocedure\('public\.cancel_basic_medical_session\(uuid,text\)'\)/,
+  );
+  assert.match(
+    workflow,
+    /to_regprocedure\('public\.update_skills_lab_class_schedule\(uuid,date,time,time,uuid,uuid,integer,uuid\[\]\)'\)/,
+  );
+  assert.match(
+    workflow,
+    /to_regprocedure\('public\.get_class_schedules_equipment_lock_status\(uuid\[\]\)'\)/,
+  );
+  assert.match(
+    workflow,
+    /to_regprocedure\('private\.class_schedule_has_equipment_request\(uuid\)'\)/,
+  );
+
+  // Explicitly reject the three stale signatures
+  const staleSignatures = [
+    /reschedule_class\(uuid,\s*date,\s*time,\s*time,\s*uuid\)/,
+    /assign_class_lecturers\(uuid,\s*uuid,\s*uuid\)/,
+    /update_class_schedule_details_core\(uuid,\s*text,\s*integer,\s*text\)/,
+    /target_schedule_id uuid, target_schedule_date date, target_start_time time/,
+    /target_schedule_id uuid, target_lecturer_id uuid, target_second_lecturer_id uuid/,
+    /target_schedule_id uuid, target_class_code text, target_student_count integer/,
+  ];
+
+  for (const stale of staleSignatures) {
+    assert.doesNotMatch(
+      workflow,
+      stale,
+      `workflow must NOT contain stale function signature: ${stale}`,
+    );
+  }
 });
 
 test("PR62/PR64 postcheck is SELECT-only and asserts contracts, locks, and cancellation", () => {
