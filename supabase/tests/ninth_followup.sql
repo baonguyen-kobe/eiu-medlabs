@@ -297,7 +297,7 @@ declare
   v_room_type_id uuid;
   v_result jsonb;
 begin
-  select id into v_creator_id from public.profiles where is_active limit 1;
+  select id into v_creator_id from public.profiles where email = 'admin@campus.local' limit 1;
   select id into v_room_type_id from public.room_types limit 1;
   if v_creator_id is null then return true; end if;
 

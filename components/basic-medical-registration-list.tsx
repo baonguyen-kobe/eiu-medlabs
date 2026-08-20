@@ -508,7 +508,11 @@ function SessionStatus({
       </div>
     );
   }
-  if (session.class_schedules?.schedule_status === "cancelled") {
+  const isCancelled = Boolean(
+    session.cancelled_at ||
+      session.class_schedules?.schedule_status === "cancelled",
+  );
+  if (isCancelled) {
     const cancellerName =
       (session.cancelled_by ? peopleById?.get(session.cancelled_by) : null) ??
       "Người dùng";
@@ -628,7 +632,12 @@ function SessionAdministrativeActions({
   const [cancellationReason, setCancellationReason] = useState("");
   const [isPending, startTransition] = useTransition();
 
-  if (session.class_schedules?.schedule_status === "cancelled") return null;
+  if (
+    session.cancelled_at ||
+    session.class_schedules?.schedule_status === "cancelled"
+  ) {
+    return null;
+  }
 
   const canCancelSession =
     isAdmin ||

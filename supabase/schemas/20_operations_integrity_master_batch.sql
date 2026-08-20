@@ -197,45 +197,116 @@ create or replace function public.cancel_basic_medical_session(
   target_session_id uuid,
   target_reason text default null
 )
-returns jsonb language plpgsql security definer set search_path = '' as $$
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
 declare
   actor_id uuid := (select auth.uid());
   session_row public.basic_medical_registration_sessions%rowtype;
+  registration_creator_id uuid;
   schedule_id uuid;
   already_cancelled boolean;
   normalized_reason text;
 begin
-  if actor_id is null or not (select private.is_admin()) then
-    raise exception 'ADMIN_REQUIRED' using errcode = '42501';
+  if actor_id is null or not (select private.is_active_user()) then
+    raise exception 'AUTHENTICATION_REQUIRED' using errcode = '42501';
   end if;
+
   normalized_reason := nullif(btrim(coalesce(target_reason, '')), '');
   if normalized_reason is null then
     raise exception 'BASIC_MEDICAL_SESSION_CANCELLATION_REASON_REQUIRED' using errcode = '22023';
   end if;
-  select sessions.* into session_row from public.basic_medical_registration_sessions sessions
-  where sessions.id = target_session_id for update;
-  if not found then raise exception 'BASIC_MEDICAL_SESSION_NOT_FOUND' using errcode = 'P0002'; end if;
-  select schedules.id, schedules.schedule_status = 'cancelled' into schedule_id, already_cancelled
-  from public.class_schedules schedules where schedules.id = session_row.class_schedule_id for update;
-  if not found then raise exception 'BASIC_MEDICAL_LINKED_SCHEDULE_INCONSISTENT' using errcode = 'P0001'; end if;
-  if exists (select 1 from public.basic_medical_session_confirmations confirmations
-    where confirmations.session_id = target_session_id and confirmations.invalidated_at is null) then
+
+  select sessions.* into session_row
+  from public.basic_medical_registration_sessions as sessions
+  where sessions.id = target_session_id
+  for update;
+
+  if not found then
+    raise exception 'BASIC_MEDICAL_SESSION_NOT_FOUND' using errcode = 'P0002';
+  end if;
+
+  -- Load registration creator to authorize creator alongside teaching lecturer and admin
+  select registrations.created_by into registration_creator_id
+  from public.basic_medical_registrations as registrations
+  where registrations.id = session_row.registration_id;
+
+  -- Authorization check: Admin OR Registration Creator OR Session Teaching Lecturer
+  if not (
+    (select private.is_admin())
+    or registration_creator_id = actor_id
+    or session_row.teaching_lecturer_id = actor_id
+  ) then
+    raise exception 'BASIC_MEDICAL_SESSION_CANCEL_FORBIDDEN' using errcode = '42501';
+  end if;
+
+  select schedules.id, schedules.schedule_status = 'cancelled'
+  into schedule_id, already_cancelled
+  from public.class_schedules as schedules
+  where schedules.id = session_row.class_schedule_id
+  for update;
+
+  if not found then
+    raise exception 'BASIC_MEDICAL_LINKED_SCHEDULE_INCONSISTENT' using errcode = 'P0001';
+  end if;
+
+  if exists (
+    select 1
+    from public.basic_medical_session_confirmations as confirmations
+    where confirmations.session_id = target_session_id
+      and confirmations.invalidated_at is null
+  ) then
     raise exception 'BASIC_MEDICAL_SESSION_CONFIRMATION_INVALIDATION_REQUIRED' using errcode = '22023';
   end if;
-  if already_cancelled then return jsonb_build_object('session_id', target_session_id, 'cancelled', true, 'idempotent', true); end if;
-  -- The linked-schedule trigger rejects generic writes.  This transaction-local
+
+  if already_cancelled or session_row.cancelled_at is not null then
+    return jsonb_build_object('session_id', target_session_id, 'cancelled', true, 'idempotent', true);
+  end if;
+
+  -- The linked-schedule trigger rejects generic writes. This transaction-local
   -- marker authorizes only this aggregate mutation and rolls back with it.
   perform set_config('app.basic_medical_registration_mutation', 'true', true);
-  update public.class_schedules set schedule_status = 'cancelled', cancelled_at = clock_timestamp(), cancelled_by = actor_id
+
+  update public.class_schedules
+  set schedule_status = 'cancelled',
+      cancelled_at = clock_timestamp(),
+      cancelled_by = actor_id
   where id = schedule_id;
-  update public.basic_medical_registration_sessions set cancelled_at = clock_timestamp(), cancelled_by = actor_id,
-    cancellation_reason = normalized_reason where id = target_session_id;
+
+  update public.basic_medical_registration_sessions
+  set cancelled_at = clock_timestamp(),
+      cancelled_by = actor_id,
+      cancellation_reason = normalized_reason
+  where id = target_session_id;
+
   perform private.enqueue_basic_medical_schedule_outbox_event(
-    schedule_id, 'schedule_cancelled', actor_id, null
+    schedule_id,
+    'schedule_cancelled',
+    actor_id,
+    null
   );
-  insert into public.audit_logs(actor_id, action, entity_type, entity_id, metadata)
-  values (actor_id, 'basic_medical.session_cancelled', 'basic_medical_registration_session', target_session_id,
-    jsonb_build_object('registration_id', session_row.registration_id, 'schedule_id', schedule_id, 'reason', normalized_reason));
+
+  insert into public.audit_logs(
+    actor_id,
+    action,
+    entity_type,
+    entity_id,
+    metadata
+  )
+  values (
+    actor_id,
+    'basic_medical.session_cancelled',
+    'basic_medical_registration_session',
+    target_session_id,
+    jsonb_build_object(
+      'registration_id', session_row.registration_id,
+      'schedule_id', schedule_id,
+      'reason', normalized_reason
+    )
+  );
+
   return jsonb_build_object('session_id', target_session_id, 'cancelled', true, 'idempotent', false);
 end;
 $$;

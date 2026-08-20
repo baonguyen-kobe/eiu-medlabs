@@ -1144,9 +1144,14 @@ security definer
 set search_path = ''
 as $$
 declare
+  actor_id uuid := (select auth.uid());
   before_row public.class_schedules;
   claimed public.class_schedules;
 begin
+  if actor_id is null or not (select private.is_active_user()) then
+    raise exception 'AUTHENTICATION_REQUIRED' using errcode = '42501';
+  end if;
+
   if not ((select private.has_role('lecturer')) or (select private.has_role('admin'))) then
     raise exception 'LECTURER_ROLE_REQUIRED' using errcode = '42501';
   end if;
@@ -1161,28 +1166,45 @@ begin
   if before_row.id is null then
     raise exception 'CLASS_NOT_AVAILABLE' using errcode = 'P0001';
   end if;
+
   if not (select private.can_access_room(before_row.room_id)) then
     raise exception 'ROOM_TYPE_SCOPE_REQUIRED' using errcode = '42501';
   end if;
-  if (select auth.uid()) in (before_row.lecturer_id, before_row.lecturer_2_id) then
+
+  -- Equipment Request Lock Guard: Any row in equipment_requests locks the class
+  if (select private.class_schedule_has_equipment_request(target_schedule_id)) then
+    raise exception 'CLASS_EQUIPMENT_REQUEST_EXISTS' using errcode = '42501';
+  end if;
+
+  if actor_id in (before_row.lecturer_id, before_row.lecturer_2_id) then
     raise exception 'CLASS_ALREADY_CLAIMED' using errcode = 'P0001';
   end if;
 
   if before_row.lecturer_id is null then
-    update public.class_schedules set lecturer_id = (select auth.uid()), updated_at = now()
-    where id = target_schedule_id returning * into claimed;
+    update public.class_schedules
+    set lecturer_id = actor_id,
+        updated_at = now()
+    where id = target_schedule_id
+    returning * into claimed;
   elsif before_row.lecturer_2_id is null then
-    update public.class_schedules set lecturer_2_id = (select auth.uid()), updated_at = now()
-    where id = target_schedule_id returning * into claimed;
+    update public.class_schedules
+    set lecturer_2_id = actor_id,
+        updated_at = now()
+    where id = target_schedule_id
+    returning * into claimed;
   else
     raise exception 'CLASS_NOT_AVAILABLE' using errcode = 'P0001';
   end if;
+
   return claimed;
 exception
   when exclusion_violation then
     raise exception 'LECTURER_SCHEDULE_CONFLICT' using errcode = '23P01';
 end;
 $$;
+
+revoke all on function public.claim_class(uuid) from public, anon;
+grant execute on function public.claim_class(uuid) to authenticated;
 
 create or replace function public.withdraw_class(target_schedule_id uuid)
 returns public.class_schedules
