@@ -132,14 +132,18 @@ export function ConfirmDialog({
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
       >
-        <div className={`confirm-dialog-icon confirm-dialog-icon-${tone}`}>
-          <AlertTriangle size={26} />
+        <div className="confirm-dialog-header">
+          <div className={`confirm-dialog-icon confirm-dialog-icon-${tone}`}>
+            <AlertTriangle size={26} />
+          </div>
+          <div className="confirm-dialog-copy">
+            <h2 id={titleId}>{title}</h2>
+            <p id={descriptionId}>{description}</p>
+          </div>
         </div>
-        <div className="confirm-dialog-copy">
-          <h2 id={titleId}>{title}</h2>
-          <p id={descriptionId}>{description}</p>
-        </div>
-        {children}
+        {children ? (
+          <div className="confirm-dialog-body">{children}</div>
+        ) : null}
         <footer className="confirm-dialog-actions">
           <button
             ref={cancelRef}

@@ -176,11 +176,11 @@ test("Basic Medical Lecturer Edit: UI component implements inline lecturer edit 
   // SessionLecturerCell exists and handles read vs edit mode
   assert.ok(listSource.includes("function SessionLecturerCell"));
 
-  // In read mode, lecturer cell renders plain text only (no Sửa or Đổi GV button inside lecturer cell)
+  // In read mode, lecturer cell renders resolved display name as text
   assert.match(
     listSource,
-    /if \(!isEditing\) \{\s*return <td>\{session\.teaching\?\.full_name \?\? "—"\}<\/td>;\s*\}/,
-    "Lecturer cell is read-only text in read mode",
+    /if \(!isEditing\) \{\s*const displayName =[\s\S]*return <td>\{displayName\}<\/td>;\s*\}/,
+    "Lecturer cell renders resolved display name in read mode",
   );
   assert.doesNotMatch(
     listSource,
@@ -301,7 +301,7 @@ test("Basic Medical Lecturer Edit: Session status and lecturer action row layout
   // 5. SessionAdministrativeActions is OUTSIDE the lecturer action group
   assert.match(
     listSource,
-    /<\/div>\s*\{canDelete \? \(\s*<SessionAdministrativeActions/,
+    /<\/div>\s*<SessionAdministrativeActions/,
     "SessionAdministrativeActions is outside the status-row and lecturer action group",
   );
 

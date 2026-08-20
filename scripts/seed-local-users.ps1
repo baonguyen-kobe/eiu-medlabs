@@ -150,7 +150,7 @@ foreach ($entry in $users) {
     Out-Null
 
   & $npxCommand supabase db query --local `
-    "update public.profiles set phone = '$($entry.phone)' where id = '$userId';" |
+    "update public.profiles set full_name = '$($entry.full_name)', phone = '$($entry.phone)' where id = '$userId';" |
     Out-Null
 
   if ($entry.can_import_schedules) {

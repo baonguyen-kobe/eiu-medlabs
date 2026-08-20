@@ -5,7 +5,7 @@ import {
 } from "@/components/class-registration-list";
 import { WorkspaceShell } from "@/components/workspace-shell";
 import { resolveClassDateRange } from "@/lib/class-date-range";
-import { businessTodayString } from "@/lib/business-time";
+import { isClassStartInFuture } from "@/lib/business-time";
 import { getViewer } from "@/lib/viewer";
 import Link from "next/link";
 import { Plus } from "@/components/icons";
@@ -133,7 +133,7 @@ export default async function OpenClassesPage({
       lecturerNames: [item.lecturer_id, item.lecturer_2_id]
         .filter(Boolean)
         .map((id) => peopleById.get(id as string) ?? "Giảng viên"),
-      claimable: item.schedule_date >= businessTodayString(),
+      claimable: isClassStartInFuture(item.schedule_date, item.start_time),
       roomLabel: room
         ? `${room.room_code} · ${room.building_code}`
         : "Chưa xếp phòng",

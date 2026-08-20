@@ -56,3 +56,20 @@ export function isValidBasicMedicalSessionTime(
     endTime > startTime
   );
 }
+
+export function isClassStartInFuture(
+  scheduleDate: string,
+  startTime: string,
+  now = new Date(),
+): boolean {
+  if (!scheduleDate || !startTime) return false;
+  const time = startTime.slice(0, 5);
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(scheduleDate) ||
+    !/^\d{2}:\d{2}$/.test(time)
+  ) {
+    return false;
+  }
+  const classStart = new Date(`${scheduleDate}T${time}:00+07:00`);
+  return classStart.getTime() > now.getTime();
+}

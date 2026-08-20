@@ -5,7 +5,7 @@ import {
 import { WorkspaceShell } from "@/components/workspace-shell";
 import { getViewer } from "@/lib/viewer";
 import { resolveClassDateRange } from "@/lib/class-date-range";
-import { businessTodayString } from "@/lib/business-time";
+import { isClassStartInFuture } from "@/lib/business-time";
 import { redirect } from "next/navigation";
 import { defaultWorkspacePath } from "@/lib/workspace-access";
 import { NURSING_SKILLS_ROOM_TYPE_ID } from "@/lib/room-types";
@@ -111,7 +111,7 @@ export default async function MyClassesPage({
       lecturerNames: [item.lecturer_id, item.lecturer_2_id]
         .filter(Boolean)
         .map((id) => peopleById.get(id as string) ?? "Giảng viên"),
-      claimable: item.schedule_date >= businessTodayString(),
+      claimable: isClassStartInFuture(item.schedule_date, item.start_time),
       roomLabel: room
         ? `${room.room_code} · ${room.building_code}`
         : "Chưa xếp phòng",

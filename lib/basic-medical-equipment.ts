@@ -153,6 +153,9 @@ export type BasicMedicalRegistrationSessionItem = {
   lesson_title: string;
   teaching_lecturer_id: string;
   teaching: { full_name: string } | null;
+  cancelled_at?: string | null;
+  cancelled_by?: string | null;
+  cancellation_reason?: string | null;
   class_schedules: {
     schedule_date: string;
     start_time: string;
