@@ -1,0 +1,521 @@
+name: Production PR62 PR64 migrations
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: production-pr62-pr64-migrations
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    name: Apply reviewed PR #62 and PR #64 migrations
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PROJECT_REF: bwhiivfhezoozrzvchmm
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.PRODUCTION_DB_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install the locked Supabase CLI
+        run: npm ci --ignore-scripts
+
+      - name: Verify release identity, git delta, and reviewed migration files
+        shell: bash
+        run: |
+          set -euo pipefail
+          readonly approved_baseline="596fb891ee422d315aaef32c8e22c10c501d2094"
+          readonly target_versions=(
+            "20260819140000"
+            "20260819231500"
+          )
+          readonly target_files=(
+            "20260819140000_consolidated_skills_class_edit_and_equipment_lock.sql"
+            "20260819231500_post_pr62_cancellation_and_claim_hardening.sql"
+          )
+          readonly target_blobs=(
+            "af359cb1e0372c097974eaaa86a17b50346192a3"
+            "0c20d83348500c1460eba3906e5cf4540e70e5d2"
+          )
+          readonly forbidden_versions=(
+            "20260809120000" "20260809130000" "20260809140000"
+            "20260809150000" "20260809160000" "20260810000000"
+            "20260810010000" "20260810020000" "20260810030000"
+          )
+          readonly allowed_delta_paths=(
+            ".github/workflows/production-pr62-pr64-migrations.yml"
+            "tests/production-pr62-pr64-migrations-workflow.test.mjs"
+          )
+
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || {
+            echo "RELEASE_IDENTITY_CHANGED: production migrations may run only from main."
+            exit 1
+          }
+
+          git rev-parse --verify "$approved_baseline^{commit}" > /dev/null 2>&1 || {
+            echo "RELEASE_IDENTITY_CHANGED: approved baseline commit $approved_baseline not found in history."
+            exit 1
+          }
+
+          if ! git merge-base --is-ancestor "$approved_baseline" HEAD; then
+            echo "RELEASE_IDENTITY_CHANGED: approved baseline $approved_baseline is not an ancestor of HEAD."
+            exit 1
+          }
+
+          mapfile -t changed_since_baseline < <(git diff --name-only "$approved_baseline...HEAD" | sort -u)
+          for changed_path in "${changed_since_baseline[@]}"; do
+            [[ -n "$changed_path" ]] || continue
+            if ! printf '%s\n' "${allowed_delta_paths[@]}" | grep -Fxq "$changed_path"; then
+              echo "RELEASE_IDENTITY_CHANGED: unexpected path changed since approved baseline: $changed_path"
+              exit 1
+            fi
+          done
+
+          for index in "${!target_files[@]}"; do
+            file="supabase/migrations/${target_files[$index]}"
+            [[ -f "$file" ]] || { echo "RELEASE_IDENTITY_CHANGED: reviewed target migration is missing: $file"; exit 1; }
+            [[ "$(git hash-object "$file")" == "${target_blobs[$index]}" ]] || {
+              echo "RELEASE_IDENTITY_CHANGED: reviewed target migration content differs: $file"
+              exit 1
+            }
+          done
+
+          for version in "${forbidden_versions[@]}"; do
+            if compgen -G "supabase/migrations/${version}_*.sql" > /dev/null; then
+              echo "RELEASE_IDENTITY_CHANGED: frozen PR #2 migration is present locally."
+              exit 1
+            fi
+          done
+
+          # Mechanical local tail verification: only the 2 target migrations may exist after 20260818170000
+          mapfile -t local_migration_files < <(find supabase/migrations -maxdepth 1 -name '*.sql' -printf '%f\n' | sort)
+          local_tail_versions=()
+          for f in "${local_migration_files[@]}"; do
+            v="${f%%_*}"
+            if [[ "$v" > "20260818170000" ]]; then
+              local_tail_versions+=("$v")
+            fi
+          done
+
+          if [[ "$(printf '%s\n' "${local_tail_versions[@]}")" != "$(printf '%s\n' "${target_versions[@]}")" ]]; then
+            echo "MIGRATION_ALLOWLIST_MISMATCH: local migrations after 20260818170000 do not match the exact target set."
+            exit 1
+          fi
+
+      - name: Link the fixed production project
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --no-install supabase link --project-ref "$PROJECT_REF" --yes
+
+      - name: Preflight the exact production migration history
+        shell: bash
+        run: |
+          set -euo pipefail
+          readonly target_versions=(
+            "20260819140000"
+            "20260819231500"
+          )
+          readonly forbidden_versions=(
+            "20260809120000" "20260809130000" "20260809140000"
+            "20260809150000" "20260809160000" "20260810000000"
+            "20260810010000" "20260810020000" "20260810030000"
+          )
+          history_json="$(npx --no-install supabase migration list --linked --output-format json)"
+          printf '%s\n' "$history_json" > "$RUNNER_TEMP/pr62-pr64-migrations-before.json"
+          mapfile -t remote_versions < <(jq -r '.migrations[] | (.remote // empty)' "$RUNNER_TEMP/pr62-pr64-migrations-before.json" | grep -E '^[0-9]{14}$' | sort -u)
+          mapfile -t local_versions < <(jq -r '.migrations[] | (.local // empty)' "$RUNNER_TEMP/pr62-pr64-migrations-before.json" | grep -E '^[0-9]{14}$' | sort -u)
+
+          for version in "${forbidden_versions[@]}"; do
+            if printf '%s\n' "${remote_versions[@]}" | grep -Fxq "$version"; then
+              echo "MIGRATION_ALLOWLIST_MISMATCH: frozen PR #2 migration is already applied remotely."
+              exit 1
+            fi
+          done
+
+          for version in "${target_versions[@]}"; do
+            if ! printf '%s\n' "${local_versions[@]}" | grep -Fxq "$version"; then
+              echo "MIGRATION_ALLOWLIST_MISMATCH: reviewed target migration is missing locally."
+              exit 1
+            fi
+            if printf '%s\n' "${remote_versions[@]}" | grep -Fxq "$version"; then
+              echo "MIGRATION_ALLOWLIST_MISMATCH: reviewed target migration is unexpectedly already remote."
+              exit 1
+            fi
+          done
+
+          expected_remote_before=()
+          for version in "${local_versions[@]}"; do
+            if ! printf '%s\n' "${target_versions[@]}" | grep -Fxq "$version"; then
+              expected_remote_before+=("$version")
+            fi
+          done
+
+          if [[ "$(printf '%s\n' "${remote_versions[@]}")" != "$(printf '%s\n' "${expected_remote_before[@]}")" ]]; then
+            echo "MIGRATION_ALLOWLIST_MISMATCH: remote history is not exactly the reviewed baseline through 20260818170000."
+            exit 1
+          fi
+
+          # Prove every local migration through 20260818170000 is present remotely
+          if ! printf '%s\n' "${remote_versions[@]}" | grep -Fxq "20260818170000"; then
+            echo "MIGRATION_ALLOWLIST_MISMATCH: last confirmed production migration 20260818170000 is missing remotely."
+            exit 1
+          fi
+
+          printf '%s\n' "${remote_versions[@]}" > "$RUNNER_TEMP/pr62-pr64-remote-before.txt"
+          printf '%s\n' "${target_versions[@]}" > "$RUNNER_TEMP/pr62-pr64-pending-targets.txt"
+
+      - name: Dry-run and assert the exact ordered pending set
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t expected_pending < "$RUNNER_TEMP/pr62-pr64-pending-targets.txt"
+          npx --no-install supabase db push --linked --dry-run > "$RUNNER_TEMP/pr62-pr64-migrations-dry-run.txt" 2>&1 || {
+            echo "MIGRATION_DRY_RUN_FAILED"
+            exit 1
+          }
+          mapfile -t observed_pending < <(grep -oE '20[0-9]{12}' "$RUNNER_TEMP/pr62-pr64-migrations-dry-run.txt" | awk '!seen[$0]++')
+          if [[ "$(printf '%s\n' "${observed_pending[@]}")" != "$(printf '%s\n' "${expected_pending[@]}")" ]]; then
+            echo "MIGRATION_ALLOWLIST_MISMATCH: dry-run differs from the exact reviewed ordered set."
+            exit 1
+          fi
+
+      - name: Apply the exact reviewed pending migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --no-install supabase db push --linked
+
+      - name: Verify the exact final migration history
+        shell: bash
+        run: |
+          set -euo pipefail
+          history_json="$(npx --no-install supabase migration list --linked --output-format json)"
+          printf '%s\n' "$history_json" > "$RUNNER_TEMP/pr62-pr64-migrations-after.json"
+          mapfile -t remote_versions < <(jq -r '.migrations[] | (.remote // empty)' "$RUNNER_TEMP/pr62-pr64-migrations-after.json" | grep -E '^[0-9]{14}$' | sort -u)
+          mapfile -t local_versions < <(jq -r '.migrations[] | (.local // empty)' "$RUNNER_TEMP/pr62-pr64-migrations-after.json" | grep -E '^[0-9]{14}$' | sort -u)
+          if [[ "$(printf '%s\n' "${remote_versions[@]}")" != "$(printf '%s\n' "${local_versions[@]}")" ]]; then
+            echo "POST_PUSH_MIGRATION_VERIFICATION_FAILED: remote history differs from the exact reviewed local history."
+            exit 1
+          fi
+          for version in 20260819140000 20260819231500; do
+            if ! printf '%s\n' "${remote_versions[@]}" | grep -Fxq "$version"; then
+              echo "POST_PUSH_MIGRATION_VERIFICATION_FAILED: reviewed migration is missing remotely: $version"
+              exit 1
+            fi
+          done
+          for version in 20260809120000 20260809130000 20260809140000 20260809150000 20260809160000 20260810000000 20260810010000 20260810020000 20260810030000; do
+            if printf '%s\n' "${remote_versions[@]}" | grep -Fxq "$version"; then
+              echo "POST_PUSH_MIGRATION_VERIFICATION_FAILED: frozen PR #2 migration is remotely applied."
+              exit 1
+            fi
+          done
+          mapfile -t remote_before < "$RUNNER_TEMP/pr62-pr64-remote-before.txt"
+          mapfile -t expected_added < "$RUNNER_TEMP/pr62-pr64-pending-targets.txt"
+          added_versions=()
+          for version in "${remote_versions[@]}"; do
+            if ! printf '%s\n' "${remote_before[@]}" | grep -Fxq "$version"; then added_versions+=("$version"); fi
+          done
+          if [[ "$(printf '%s\n' "${added_versions[@]}")" != "$(printf '%s\n' "${expected_added[@]}")" ]]; then
+            echo "POST_PUSH_MIGRATION_VERIFICATION_FAILED: remote history gained an unexpected migration."
+            exit 1
+          fi
+
+      - name: Verify database contract and security after PR62 and PR64 migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/pr62-pr64-db-contract-postcheck.sql" <<'SQL'
+          select jsonb_build_object(
+            'private_equipment_helper_exists', exists (
+              select 1 from pg_proc p
+              join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'private'
+                and p.proname = 'class_schedule_has_equipment_request'
+            ),
+            'private_equipment_helper_secdef', coalesce((
+              select p.prosecdef from pg_proc p
+              join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'private'
+                and p.proname = 'class_schedule_has_equipment_request'
+            ), false),
+            'private_equipment_helper_public_execute', has_function_privilege(
+              'public',
+              'private.class_schedule_has_equipment_request(uuid)',
+              'execute'
+            ),
+            'private_equipment_helper_anon_execute', has_function_privilege(
+              'anon',
+              'private.class_schedule_has_equipment_request(uuid)',
+              'execute'
+            ),
+            'private_equipment_helper_authenticated_execute', has_function_privilege(
+              'authenticated',
+              'private.class_schedule_has_equipment_request(uuid)',
+              'execute'
+            ),
+            'get_lock_status_rpc_exists', exists (
+              select 1 from pg_proc p
+              join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public'
+                and p.proname = 'get_class_schedules_equipment_lock_status'
+            ),
+            'get_lock_status_rpc_secdef', coalesce((
+              select p.prosecdef from pg_proc p
+              join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public'
+                and p.proname = 'get_class_schedules_equipment_lock_status'
+            ), false),
+            'get_lock_status_authenticated_execute', has_function_privilege(
+              'authenticated',
+              'public.get_class_schedules_equipment_lock_status(uuid[])',
+              'execute'
+            ),
+            'get_lock_status_anon_execute', has_function_privilege(
+              'anon',
+              'public.get_class_schedules_equipment_lock_status(uuid[])',
+              'execute'
+            ),
+            'get_lock_status_public_execute', has_function_privilege(
+              'public',
+              'public.get_class_schedules_equipment_lock_status(uuid[])',
+              'execute'
+            ),
+            'update_skills_lab_rpc_exists', exists (
+              select 1 from pg_proc p
+              join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public'
+                and p.proname = 'update_skills_lab_class_schedule'
+            ),
+            'update_skills_lab_rpc_secdef', coalesce((
+              select p.prosecdef from pg_proc p
+              join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public'
+                and p.proname = 'update_skills_lab_class_schedule'
+            ), false),
+            'update_skills_lab_authenticated_execute', has_function_privilege(
+              'authenticated',
+              'public.update_skills_lab_class_schedule(uuid,date,time,time,uuid,uuid,integer,uuid[])',
+              'execute'
+            ),
+            'update_skills_lab_anon_execute', has_function_privilege(
+              'anon',
+              'public.update_skills_lab_class_schedule(uuid,date,time,time,uuid,uuid,integer,uuid[])',
+              'execute'
+            ),
+            'update_skills_lab_public_execute', has_function_privilege(
+              'public',
+              'public.update_skills_lab_class_schedule(uuid,date,time,time,uuid,uuid,integer,uuid[])',
+              'execute'
+            ),
+            'claim_class_rpc_exists', exists (
+              select 1 from pg_proc p
+              join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public'
+                and p.proname = 'claim_class'
+            ),
+            'claim_class_rpc_secdef', coalesce((
+              select p.prosecdef from pg_proc p
+              join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public'
+                and p.proname = 'claim_class'
+            ), false),
+            'claim_class_authenticated_execute', has_function_privilege(
+              'authenticated',
+              'public.claim_class(uuid)',
+              'execute'
+            ),
+            'claim_class_anon_execute', has_function_privilege(
+              'anon',
+              'public.claim_class(uuid)',
+              'execute'
+            ),
+            'claim_class_public_execute', has_function_privilege(
+              'public',
+              'public.claim_class(uuid)',
+              'execute'
+            ),
+            'claim_class_def', (
+              select pg_get_functiondef(p.oid) from pg_proc p
+              join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public'
+                and p.proname = 'claim_class'
+                and pg_get_function_identity_arguments(p.oid) = 'target_schedule_id uuid'
+            ),
+            'withdraw_class_def', (
+              select pg_get_functiondef(p.oid) from pg_proc p
+              join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public'
+                and p.proname = 'withdraw_class'
+                and pg_get_function_identity_arguments(p.oid) = 'target_schedule_id uuid'
+            ),
+            'delete_skills_lab_def', (
+              select pg_get_functiondef(p.oid) from pg_proc p
+              join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public'
+                and p.proname = 'delete_skills_lab_class_schedule'
+                and pg_get_function_identity_arguments(p.oid) = 'target_schedule_id uuid'
+            ),
+            'reschedule_class_def', (
+              select pg_get_functiondef(p.oid) from pg_proc p
+              join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public'
+                and p.proname = 'reschedule_class'
+                and pg_get_function_identity_arguments(p.oid) = 'target_schedule_id uuid, target_schedule_date date, target_start_time time without time zone, target_end_time time without time zone, target_room_id uuid'
+            ),
+            'assign_class_lecturers_def', (
+              select pg_get_functiondef(p.oid) from pg_proc p
+              join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public'
+                and p.proname = 'assign_class_lecturers'
+                and pg_get_function_identity_arguments(p.oid) = 'target_schedule_id uuid, target_lecturer_id uuid, target_second_lecturer_id uuid'
+            ),
+            'update_details_core_def', (
+              select pg_get_functiondef(p.oid) from pg_proc p
+              join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public'
+                and p.proname = 'update_class_schedule_details_core'
+                and pg_get_function_identity_arguments(p.oid) = 'target_schedule_id uuid, target_class_code text, target_student_count integer, target_note text'
+            ),
+            'cancel_basic_medical_session_exists', exists (
+              select 1 from pg_proc p
+              join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public'
+                and p.proname = 'cancel_basic_medical_session'
+            ),
+            'cancel_basic_medical_session_secdef', coalesce((
+              select p.prosecdef from pg_proc p
+              join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public'
+                and p.proname = 'cancel_basic_medical_session'
+            ), false),
+            'cancel_basic_medical_session_authenticated_execute', has_function_privilege(
+              'authenticated',
+              'public.cancel_basic_medical_session(uuid,text)',
+              'execute'
+            ),
+            'cancel_basic_medical_session_anon_execute', has_function_privilege(
+              'anon',
+              'public.cancel_basic_medical_session(uuid,text)',
+              'execute'
+            ),
+            'cancel_basic_medical_session_public_execute', has_function_privilege(
+              'public',
+              'public.cancel_basic_medical_session(uuid,text)',
+              'execute'
+            ),
+            'cancel_basic_medical_session_def', (
+              select pg_get_functiondef(p.oid) from pg_proc p
+              join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public'
+                and p.proname = 'cancel_basic_medical_session'
+                and pg_get_function_identity_arguments(p.oid) = 'target_session_id uuid, target_reason text'
+            )
+          ) as postcheck_json;
+          SQL
+
+          node <<'NODE'
+          import { execFileSync } from 'node:child_process';
+          import { readFileSync } from 'node:fs';
+
+          const sqlPath = process.env.RUNNER_TEMP + '/pr62-pr64-db-contract-postcheck.sql';
+          const sql = readFileSync(sqlPath, 'utf8');
+
+          const stdout = execFileSync('npx', [
+            '--no-install',
+            'supabase',
+            'db',
+            'query',
+            '--linked',
+            '--output-format',
+            'json',
+            sql,
+          ], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+
+          const rows = JSON.parse(stdout);
+          const postcheck = rows[0]?.postcheck_json ?? rows[0];
+
+          if (!postcheck) {
+            throw new Error('POSTCHECK_FAILED: query returned no result payload');
+          }
+
+          // A: Private equipment helper assertions
+          if (postcheck.private_equipment_helper_exists !== true) throw new Error('PRIVATE_EQUIPMENT_HELPER_MISSING');
+          if (postcheck.private_equipment_helper_secdef !== true) throw new Error('PRIVATE_EQUIPMENT_HELPER_SECDEF_MISSING');
+          if (postcheck.private_equipment_helper_public_execute !== false) throw new Error('PRIVATE_EQUIPMENT_HELPER_PUBLIC_EXECUTE_UNEXPECTED');
+          if (postcheck.private_equipment_helper_anon_execute !== false) throw new Error('PRIVATE_EQUIPMENT_HELPER_ANON_EXECUTE_UNEXPECTED');
+          if (postcheck.private_equipment_helper_authenticated_execute !== false) throw new Error('PRIVATE_EQUIPMENT_HELPER_AUTH_EXECUTE_UNEXPECTED');
+
+          // B: Public equipment lock status RPC assertions
+          if (postcheck.get_lock_status_rpc_exists !== true) throw new Error('GET_LOCK_STATUS_RPC_MISSING');
+          if (postcheck.get_lock_status_rpc_secdef !== true) throw new Error('GET_LOCK_STATUS_RPC_SECDEF_MISSING');
+          if (postcheck.get_lock_status_authenticated_execute !== true) throw new Error('GET_LOCK_STATUS_AUTH_EXECUTE_MISSING');
+          if (postcheck.get_lock_status_anon_execute !== false) throw new Error('GET_LOCK_STATUS_ANON_EXECUTE_UNEXPECTED');
+          if (postcheck.get_lock_status_public_execute !== false) throw new Error('GET_LOCK_STATUS_PUBLIC_EXECUTE_UNEXPECTED');
+
+          // C: Skills edit RPC assertions
+          if (postcheck.update_skills_lab_rpc_exists !== true) throw new Error('UPDATE_SKILLS_LAB_RPC_MISSING');
+          if (postcheck.update_skills_lab_rpc_secdef !== true) throw new Error('UPDATE_SKILLS_LAB_RPC_SECDEF_MISSING');
+          if (postcheck.update_skills_lab_authenticated_execute !== true) throw new Error('UPDATE_SKILLS_LAB_AUTH_EXECUTE_MISSING');
+          if (postcheck.update_skills_lab_anon_execute !== false) throw new Error('UPDATE_SKILLS_LAB_ANON_EXECUTE_UNEXPECTED');
+          if (postcheck.update_skills_lab_public_execute !== false) throw new Error('UPDATE_SKILLS_LAB_PUBLIC_EXECUTE_UNEXPECTED');
+
+          // D: Claim class RPC assertions
+          if (postcheck.claim_class_rpc_exists !== true) throw new Error('CLAIM_CLASS_RPC_MISSING');
+          if (postcheck.claim_class_rpc_secdef !== true) throw new Error('CLAIM_CLASS_RPC_SECDEF_MISSING');
+          if (postcheck.claim_class_authenticated_execute !== true) throw new Error('CLAIM_CLASS_AUTH_EXECUTE_MISSING');
+          if (postcheck.claim_class_anon_execute !== false) throw new Error('CLAIM_CLASS_ANON_EXECUTE_UNEXPECTED');
+          if (postcheck.claim_class_public_execute !== false) throw new Error('CLAIM_CLASS_PUBLIC_EXECUTE_UNEXPECTED');
+
+          const claimDef = postcheck.claim_class_def || '';
+          if (!claimDef.includes('private.class_schedule_has_equipment_request')) throw new Error('CLAIM_CLASS_MISSING_EQUIPMENT_LOCK_HELPER');
+          if (!claimDef.includes('CLASS_EQUIPMENT_REQUEST_EXISTS')) throw new Error('CLAIM_CLASS_MISSING_EQUIPMENT_LOCK_EXCEPTION');
+
+          // E: PR62 locked mutation function assertions
+          const lockedFunctions = [
+            { name: 'withdraw_class', def: postcheck.withdraw_class_def },
+            { name: 'delete_skills_lab_class_schedule', def: postcheck.delete_skills_lab_def },
+            { name: 'reschedule_class', def: postcheck.reschedule_class_def },
+            { name: 'assign_class_lecturers', def: postcheck.assign_class_lecturers_def },
+            { name: 'update_class_schedule_details_core', def: postcheck.update_details_core_def },
+          ];
+
+          for (const fn of lockedFunctions) {
+            const def = fn.def || '';
+            if (!def.includes('private.class_schedule_has_equipment_request')) throw new Error(`${fn.name.toUpperCase()}_MISSING_EQUIPMENT_LOCK_HELPER`);
+            if (!def.includes('CLASS_EQUIPMENT_REQUEST_EXISTS')) throw new Error(`${fn.name.toUpperCase()}_MISSING_EQUIPMENT_LOCK_EXCEPTION`);
+          }
+
+          // F: Basic Medical session cancellation assertions
+          if (postcheck.cancel_basic_medical_session_exists !== true) throw new Error('CANCEL_BASIC_MEDICAL_SESSION_MISSING');
+          if (postcheck.cancel_basic_medical_session_secdef !== true) throw new Error('CANCEL_BASIC_MEDICAL_SESSION_SECDEF_MISSING');
+          if (postcheck.cancel_basic_medical_session_authenticated_execute !== true) throw new Error('CANCEL_BASIC_MEDICAL_SESSION_AUTH_EXECUTE_MISSING');
+          if (postcheck.cancel_basic_medical_session_anon_execute !== false) throw new Error('CANCEL_BASIC_MEDICAL_SESSION_ANON_EXECUTE_UNEXPECTED');
+          if (postcheck.cancel_basic_medical_session_public_execute !== false) throw new Error('CANCEL_BASIC_MEDICAL_SESSION_PUBLIC_EXECUTE_UNEXPECTED');
+
+          const cancelDef = postcheck.cancel_basic_medical_session_def || '';
+          if (!cancelDef.includes('private.is_admin()')) throw new Error('CANCEL_SESSION_MISSING_IS_ADMIN');
+          if (!cancelDef.includes('registration_creator_id = actor_id')) throw new Error('CANCEL_SESSION_MISSING_CREATOR_AUTHORIZATION');
+          if (!cancelDef.includes('session_row.teaching_lecturer_id = actor_id')) throw new Error('CANCEL_SESSION_MISSING_TEACHING_LECTURER_AUTHORIZATION');
+          if (!cancelDef.includes('BASIC_MEDICAL_SESSION_CONFIRMATION_INVALIDATION_REQUIRED')) throw new Error('CANCEL_SESSION_MISSING_CONFIRMATION_GUARD');
+          if (!cancelDef.includes('cancelled_by')) throw new Error('CANCEL_SESSION_MISSING_CANCELLED_BY');
+          if (!cancelDef.includes('cancellation_reason')) throw new Error('CANCEL_SESSION_MISSING_CANCELLATION_REASON');
+          if (!cancelDef.includes('private.enqueue_basic_medical_schedule_outbox_event')) throw new Error('CANCEL_SESSION_MISSING_OUTBOX_ENQUEUE');
+          if (!cancelDef.includes('basic_medical.session_cancelled')) throw new Error('CANCEL_SESSION_MISSING_AUDIT_LOG');
+
+          console.log('PR #62 and PR #64 database contracts, equipment locks, and cancellation authority postcheck: PASS');
+          NODE
