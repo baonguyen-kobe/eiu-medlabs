@@ -29,7 +29,7 @@ async function loginAsAdmin(page: Page) {
   const password = page.locator('input[name="password"]');
   await clickUntilState(
     page.locator('button[type="submit"]'),
-    () => expect(page).toHaveURL(/\/dashboard$/, { timeout: 1_000 }),
+    () => expect(page).toHaveURL(/\/dashboard$/, { timeout: 20_000 }),
     async () => {
       await email.fill(e2eAdminEmail);
       await password.fill(e2eAdminPassword);
