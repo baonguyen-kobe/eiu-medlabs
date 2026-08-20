@@ -228,10 +228,9 @@ begin
     raise exception 'BASIC_MEDICAL_SESSION_NOT_FOUND' using errcode = 'P0002';
   end if;
 
-  -- Load registration creator to authorize creator alongside teaching lecturer and admin
-  select registrations.created_by into registration_creator_id
-  from public.basic_medical_registrations as registrations
-  where registrations.id = session_row.registration_id;
+  select reg.created_by into registration_creator_id
+  from public.basic_medical_registrations as reg
+  where reg.id = session_row.registration_id;
 
   -- Authorization check: Admin OR Registration Creator OR Session Teaching Lecturer
   if not (
@@ -261,7 +260,7 @@ begin
     raise exception 'BASIC_MEDICAL_SESSION_CONFIRMATION_INVALIDATION_REQUIRED' using errcode = '22023';
   end if;
 
-  if already_cancelled or session_row.cancelled_at is not null then
+  if already_cancelled then
     return jsonb_build_object('session_id', target_session_id, 'cancelled', true, 'idempotent', true);
   end if;
 
@@ -282,19 +281,10 @@ begin
   where id = target_session_id;
 
   perform private.enqueue_basic_medical_schedule_outbox_event(
-    schedule_id,
-    'schedule_cancelled',
-    actor_id,
-    null
+    schedule_id, 'schedule_cancelled', actor_id, null
   );
 
-  insert into public.audit_logs(
-    actor_id,
-    action,
-    entity_type,
-    entity_id,
-    metadata
-  )
+  insert into public.audit_logs(actor_id, action, entity_type, entity_id, metadata)
   values (
     actor_id,
     'basic_medical.session_cancelled',

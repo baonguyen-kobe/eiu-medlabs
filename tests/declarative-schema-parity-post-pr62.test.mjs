@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
@@ -28,7 +28,24 @@ const cancelSchemaPath = path.join(
   "20_operations_integrity_master_batch.sql",
 );
 
-test("Declarative Schema Parity: public.claim_class(uuid) mirrors post-PR62 migration", async () => {
+/**
+ * Normalizes SQL for non-semantic formatting differences only.
+ * Strips comments, collapses consecutive whitespace, and normalizes line endings.
+ * Preserves all identifiers, operators, keywords, statements, conditions, branches, and error names.
+ */
+function normalizeSql(sql) {
+  return sql
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .replace(/--.*$/gm, "")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n\s+/g, "\n")
+    .replace(/\s+\n/g, "\n")
+    .replace(/\n+/g, "\n")
+    .trim();
+}
+
+test("Declarative Schema Parity: public.claim_class(uuid) mirrors post-PR62 migration exactly", async () => {
   const [migrationContent, schemaContent] = await Promise.all([
     readFile(migrationPath, "utf8"),
     readFile(claimSchemaPath, "utf8"),
@@ -51,53 +68,31 @@ test("Declarative Schema Parity: public.claim_class(uuid) mirrors post-PR62 migr
   );
   const schemaClaim = schemaClaimMatch[0];
 
-  // 1. Both must enforce equipment request claim lock
-  assert.ok(
-    migrationClaim.includes(
-      "private.class_schedule_has_equipment_request(target_schedule_id)",
-    ),
-    "Migration must check private.class_schedule_has_equipment_request",
+  // Complete definition parity assertion
+  assert.equal(
+    normalizeSql(schemaClaim),
+    normalizeSql(migrationClaim),
+    "public.claim_class in declarative schema must be identical to migration",
   );
+
+  // Security guard checks
   assert.ok(
     schemaClaim.includes(
       "private.class_schedule_has_equipment_request(target_schedule_id)",
     ),
     "Schema must check private.class_schedule_has_equipment_request",
   );
-
-  assert.ok(
-    migrationClaim.includes("CLASS_EQUIPMENT_REQUEST_EXISTS"),
-    "Migration must throw CLASS_EQUIPMENT_REQUEST_EXISTS",
-  );
   assert.ok(
     schemaClaim.includes("CLASS_EQUIPMENT_REQUEST_EXISTS"),
     "Schema must throw CLASS_EQUIPMENT_REQUEST_EXISTS",
-  );
-
-  // 2. Both must enforce active authenticated actor and roles
-  assert.ok(
-    migrationClaim.includes("AUTHENTICATION_REQUIRED"),
-    "Migration must enforce AUTHENTICATION_REQUIRED",
   );
   assert.ok(
     schemaClaim.includes("AUTHENTICATION_REQUIRED"),
     "Schema must enforce AUTHENTICATION_REQUIRED",
   );
   assert.ok(
-    migrationClaim.includes("LECTURER_ROLE_REQUIRED"),
-    "Migration must enforce LECTURER_ROLE_REQUIRED",
-  );
-  assert.ok(
     schemaClaim.includes("LECTURER_ROLE_REQUIRED"),
     "Schema must enforce LECTURER_ROLE_REQUIRED",
-  );
-
-  // 3. Both must enforce future start time boundary
-  assert.ok(
-    migrationClaim.includes(
-      "(schedule_date + start_time) > (now() at time zone 'Asia/Ho_Chi_Minh')",
-    ),
-    "Migration must enforce future start boundary",
   );
   assert.ok(
     schemaClaim.includes(
@@ -106,7 +101,7 @@ test("Declarative Schema Parity: public.claim_class(uuid) mirrors post-PR62 migr
     "Schema must enforce future start boundary",
   );
 
-  // 4. Grants and revokes
+  // Grants and revokes
   assert.match(
     schemaContent,
     /revoke all on function public\.claim_class\(uuid\) from public, anon;/,
@@ -119,7 +114,7 @@ test("Declarative Schema Parity: public.claim_class(uuid) mirrors post-PR62 migr
   );
 });
 
-test("Declarative Schema Parity: public.cancel_basic_medical_session mirrors post-PR62 migration", async () => {
+test("Declarative Schema Parity: public.cancel_basic_medical_session mirrors post-PR62 migration exactly", async () => {
   const [migrationContent, schemaContent] = await Promise.all([
     readFile(migrationPath, "utf8"),
     readFile(cancelSchemaPath, "utf8"),
@@ -145,60 +140,43 @@ test("Declarative Schema Parity: public.cancel_basic_medical_session mirrors pos
   );
   const schemaCancel = schemaCancelMatch[0];
 
-  // 1. Both must authorize Admin, Creator, and Teaching Lecturer
-  assert.ok(
-    migrationCancel.includes("registration_creator_id = actor_id"),
-    "Migration must authorize registration creator",
+  // Complete definition parity assertion
+  assert.equal(
+    normalizeSql(schemaCancel),
+    normalizeSql(migrationCancel),
+    "public.cancel_basic_medical_session in declarative schema must be identical to migration",
   );
+
+  // Structural branch parity assertion: must use strictly 'if already_cancelled then'
+  assert.ok(
+    schemaCancel.includes("if already_cancelled then"),
+    "Schema must use exact aggregate check 'if already_cancelled then'",
+  );
+  assert.ok(
+    !schemaCancel.includes("session_row.cancelled_at is not null"),
+    "Schema must not bypass schedule aggregate cancellation via session_row.cancelled_at shortcut",
+  );
+
+  // Security and authority checks
   assert.ok(
     schemaCancel.includes("registration_creator_id = actor_id"),
     "Schema must authorize registration creator",
-  );
-
-  assert.ok(
-    migrationCancel.includes("session_row.teaching_lecturer_id = actor_id"),
-    "Migration must authorize session teaching lecturer",
   );
   assert.ok(
     schemaCancel.includes("session_row.teaching_lecturer_id = actor_id"),
     "Schema must authorize session teaching lecturer",
   );
-
-  assert.ok(
-    migrationCancel.includes("private.is_admin()"),
-    "Migration must authorize Admin",
-  );
   assert.ok(
     schemaCancel.includes("private.is_admin()"),
     "Schema must authorize Admin",
-  );
-
-  assert.ok(
-    migrationCancel.includes("BASIC_MEDICAL_SESSION_CANCEL_FORBIDDEN"),
-    "Migration must throw BASIC_MEDICAL_SESSION_CANCEL_FORBIDDEN for unauthorized actors",
   );
   assert.ok(
     schemaCancel.includes("BASIC_MEDICAL_SESSION_CANCEL_FORBIDDEN"),
     "Schema must throw BASIC_MEDICAL_SESSION_CANCEL_FORBIDDEN for unauthorized actors",
   );
-
-  // 2. Both must enforce reason requirement and active confirmation guard
-  assert.ok(
-    migrationCancel.includes(
-      "BASIC_MEDICAL_SESSION_CANCELLATION_REASON_REQUIRED",
-    ),
-    "Migration must require non-blank reason",
-  );
   assert.ok(
     schemaCancel.includes("BASIC_MEDICAL_SESSION_CANCELLATION_REASON_REQUIRED"),
     "Schema must require non-blank reason",
-  );
-
-  assert.ok(
-    migrationCancel.includes(
-      "BASIC_MEDICAL_SESSION_CONFIRMATION_INVALIDATION_REQUIRED",
-    ),
-    "Migration must preserve confirmation invalidation guard",
   );
   assert.ok(
     schemaCancel.includes(
@@ -206,18 +184,12 @@ test("Declarative Schema Parity: public.cancel_basic_medical_session mirrors pos
     ),
     "Schema must preserve confirmation invalidation guard",
   );
-
-  // 3. Both must record session cancellation metadata
-  assert.ok(
-    migrationCancel.includes("cancellation_reason = normalized_reason"),
-    "Migration must record cancellation_reason",
-  );
   assert.ok(
     schemaCancel.includes("cancellation_reason = normalized_reason"),
     "Schema must record cancellation_reason",
   );
 
-  // 4. Grants and revokes
+  // Grants and revokes
   assert.match(
     schemaContent,
     /revoke all on function public\.cancel_basic_medical_session\(uuid,text\)/,
