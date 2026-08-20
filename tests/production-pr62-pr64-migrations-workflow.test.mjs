@@ -32,8 +32,11 @@ const pr2 = [
   "20260810020000",
   "20260810030000",
 ];
-const allowedDeltaPaths = [
+
+// Exact allowed release delta — deterministic sorted order, no wildcards
+const exactAllowedDeltaPaths = [
   ".github/workflows/production-pr62-pr64-migrations.yml",
+  "tests/e2e/personnel-management.spec.ts",
   "tests/production-pr62-pr64-migrations-workflow.test.mjs",
 ];
 
@@ -69,7 +72,7 @@ test("PR62/PR64 production migration rail is fixed, main-only, and credential-sa
   );
 });
 
-test("PR62/PR64 rail pins approved baseline SHA and exact allowed release delta", () => {
+test("PR62/PR64 rail pins approved baseline SHA and exact allowed release delta (parsed exact-array, no wildcards)", () => {
   assert.match(workflow, new RegExp(approvedBaseline));
   assert.match(
     workflow,
@@ -79,9 +82,29 @@ test("PR62/PR64 rail pins approved baseline SHA and exact allowed release delta"
     workflow,
     /git diff --name-only "\$approved_baseline\.\.\.HEAD"/,
   );
-  for (const deltaPath of allowedDeltaPaths) {
-    assert.match(workflow, new RegExp(deltaPath.replace(/\./g, "\\.")));
-  }
+
+  // Parse the readonly allowed_delta_paths=(...) array from the workflow
+  const deltaArrayMatch = workflow.match(
+    /readonly allowed_delta_paths=\(([\s\S]*?)\)/,
+  );
+  assert.ok(deltaArrayMatch, "allowed_delta_paths array must be present");
+  const parsedPaths = [...deltaArrayMatch[1].matchAll(/"([^"\n]+)"/g)].map(
+    (m) => m[1],
+  );
+
+  // Assert exact equality — no missing path, no extra path, no wildcard
+  assert.deepEqual(
+    parsedPaths,
+    exactAllowedDeltaPaths,
+    "allowed_delta_paths must equal exactly the three reviewed paths in sorted order",
+  );
+
+  // Assert no wildcard patterns in the delta paths array
+  assert.doesNotMatch(
+    deltaArrayMatch[1],
+    /\*/,
+    "allowed_delta_paths must not contain wildcards",
+  );
 });
 
 test("PR62/PR64 rail pins exactly the two reviewed migrations, blobs, and excludes frozen PR2", () => {
@@ -155,7 +178,84 @@ test("PR62/PR64 rail enforces dry-run and exactly one mutating push", () => {
   assert.doesNotMatch(workflow, /vercel/i);
 });
 
-test("PR62/PR64 postcheck is fixed SELECT-only and asserts contracts, locks, and cancellation", () => {
+test("PR62/PR64 postcheck uses proven --file mechanism, captures JSON, no positional SQL arg", () => {
+  // SQL written to a file
+  assert.match(
+    workflow,
+    /cat > "\$RUNNER_TEMP\/pr62-pr64-db-contract-postcheck\.sql" <<'SQL'/,
+  );
+
+  // Query invoked via --file, not via positional SQL argument
+  assert.match(
+    workflow,
+    /supabase db query\s+\\\s+--linked\s+\\\s+--output-format json\s+\\\s+--file "\$RUNNER_TEMP\/pr62-pr64-db-contract-postcheck\.sql"/,
+  );
+
+  // Result captured to a JSON file
+  assert.match(
+    workflow,
+    /> "\$RUNNER_TEMP\/pr62-pr64-db-contract-after\.json"/,
+  );
+
+  // Node reads the JSON file, not execFileSync
+  assert.match(
+    workflow,
+    /readFileSync\(process\.env\.RUNNER_TEMP \+ '\/pr62-pr64-db-contract-after\.json'/,
+  );
+
+  // No raw SQL as positional argument (execFileSync with sql variable)
+  assert.doesNotMatch(workflow, /execFileSync.*supabase/s);
+  assert.doesNotMatch(workflow, /'supabase',\s*\[\s*'--no-install'/s);
+
+  // Exactly one db query invocation
+  const queryMatches = [...workflow.matchAll(/supabase db query/g)];
+  assert.equal(
+    queryMatches.length,
+    1,
+    "must have exactly one supabase db query invocation",
+  );
+});
+
+test("PR62/PR64 postcheck SQL heredoc is SELECT-only with no mutation statements", () => {
+  // Extract the SQL heredoc between the SQL markers
+  const heredocMatch = workflow.match(
+    /cat > "\$RUNNER_TEMP\/pr62-pr64-db-contract-postcheck\.sql" <<'SQL'\n([\s\S]*?)\n\s+SQL\n/,
+  );
+  assert.ok(heredocMatch, "SQL heredoc must be extractable from the workflow");
+  const sql = heredocMatch[1].trim().toLowerCase();
+
+  // A: SQL begins with 'select'
+  assert.match(sql, /^select\b/, "postcheck SQL must begin with SELECT");
+
+  // B: Contains reviewed pg_catalog introspection contract
+  assert.match(sql, /pg_proc/);
+  assert.match(sql, /pg_namespace/);
+  assert.match(sql, /has_function_privilege/);
+  assert.match(sql, /pg_get_functiondef/);
+  assert.match(sql, /jsonb_build_object/);
+
+  // C: No mutation keywords as executable statements
+  // Scan the SQL text (not JavaScript error strings) for mutation keywords
+  const mutationPattern =
+    /^\s*(?:insert|update|delete|merge|upsert|create|alter|drop|truncate|grant|revoke)\b/m;
+  assert.doesNotMatch(
+    sql,
+    mutationPattern,
+    "postcheck SQL must not contain mutation statements",
+  );
+
+  // D: Workflow invokes the heredoc via --file
+  assert.match(
+    workflow,
+    /--file "\$RUNNER_TEMP\/pr62-pr64-db-contract-postcheck\.sql"/,
+  );
+
+  // E: No second db query invocation
+  const queryMatches = [...workflow.matchAll(/supabase db query/g)];
+  assert.equal(queryMatches.length, 1);
+});
+
+test("PR62/PR64 postcheck is SELECT-only and asserts contracts, locks, and cancellation", () => {
   assert.match(
     workflow,
     /cat > "\$RUNNER_TEMP\/pr62-pr64-db-contract-postcheck\.sql" <<'SQL'/,

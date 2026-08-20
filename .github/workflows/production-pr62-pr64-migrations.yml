@@ -58,6 +58,7 @@ jobs:
           )
           readonly allowed_delta_paths=(
             ".github/workflows/production-pr62-pr64-migrations.yml"
+            "tests/e2e/personnel-management.spec.ts"
             "tests/production-pr62-pr64-migrations-workflow.test.mjs"
           )
 
@@ -428,25 +429,17 @@ jobs:
           ) as postcheck_json;
           SQL
 
-          node <<'NODE'
-          import { execFileSync } from 'node:child_process';
+
+          npx --no-install supabase db query \
+            --linked \
+            --output-format json \
+            --file "$RUNNER_TEMP/pr62-pr64-db-contract-postcheck.sql" \
+            > "$RUNNER_TEMP/pr62-pr64-db-contract-after.json"
+
+          RUNNER_TEMP="$RUNNER_TEMP" node <<'NODE'
           import { readFileSync } from 'node:fs';
 
-          const sqlPath = process.env.RUNNER_TEMP + '/pr62-pr64-db-contract-postcheck.sql';
-          const sql = readFileSync(sqlPath, 'utf8');
-
-          const stdout = execFileSync('npx', [
-            '--no-install',
-            'supabase',
-            'db',
-            'query',
-            '--linked',
-            '--output-format',
-            'json',
-            sql,
-          ], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-
-          const rows = JSON.parse(stdout);
+          const rows = JSON.parse(readFileSync(process.env.RUNNER_TEMP + '/pr62-pr64-db-contract-after.json', 'utf8'));
           const postcheck = rows[0]?.postcheck_json ?? rows[0];
 
           if (!postcheck) {
