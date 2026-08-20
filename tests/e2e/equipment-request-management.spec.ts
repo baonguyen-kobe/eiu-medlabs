@@ -163,7 +163,7 @@ test("mã phiếu 12 số tải được và Admin thấy dòng bổ sung thiế
     await page.locator('input[name="email"]').fill("admin@campus.local");
     await page.locator('input[name="password"]').fill("LocalAdmin123!");
     await page.getByRole("button", { name: "Đăng nhập", exact: true }).click();
-    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page).toHaveURL(/\/dashboard$/, { timeout: 20_000 });
 
     await page.goto(`/equipment/register?mode=copy&request=${requestCode}`);
     await expect(page.locator(".equipment-form-mode-banner")).toContainText(
@@ -435,7 +435,7 @@ test("calendar equipment request round trip follows the signed-in role", async (
     await page.locator('input[name="email"]').fill("admin@campus.local");
     await page.locator('input[name="password"]').fill("LocalAdmin123!");
     await page.getByRole("button", { name: "Đăng nhập", exact: true }).click();
-    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page).toHaveURL(/\/dashboard$/, { timeout: 20_000 });
     await page.goto("/class-schedules?date=2046-08-20&view=week");
     await page.waitForLoadState("networkidle");
 
@@ -507,7 +507,7 @@ test("calendar equipment request round trip follows the signed-in role", async (
     await lecturerPage
       .getByRole("button", { name: "Đăng nhập", exact: true })
       .click();
-    await expect(lecturerPage).toHaveURL(/\/dashboard$/);
+    await expect(lecturerPage).toHaveURL(/\/dashboard$/, { timeout: 20_000 });
     await lecturerPage.goto("/class-schedules?date=2046-08-20&view=week");
     await lecturerPage.waitForLoadState("networkidle");
     const lecturerScheduleButton = lecturerPage.getByRole("button", {

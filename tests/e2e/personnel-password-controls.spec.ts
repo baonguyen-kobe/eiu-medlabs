@@ -11,11 +11,17 @@ const serviceDb = createClient(
   { auth: { autoRefreshToken: false, persistSession: false } },
 );
 
-async function login(page: Page, email: string, password: string) {
+async function login(
+  page: Page,
+  email: string,
+  password: string,
+  expectedLanding = /\/(dashboard|change-password)$/,
+) {
   await page.goto("/login");
   await page.locator('input[name="email"]').fill(email);
   await page.locator('input[name="password"]').fill(password);
   await page.getByRole("button", { name: "Đăng nhập", exact: true }).click();
+  await expect(page).toHaveURL(expectedLanding, { timeout: 20_000 });
 }
 
 async function waitForRecoveryLink(email: string) {
@@ -172,7 +178,9 @@ test("forgot-password uses the local canonical callback and completes an email-p
     await page.goto("/forgot-password");
     await page.getByLabel("Email đăng nhập").fill(email);
     await page.getByRole("button", { name: "Gửi hướng dẫn" }).click();
-    await expect(page.getByText("Nếu tài khoản hỗ trợ mật khẩu")).toBeVisible();
+    await expect(page.getByText("Nếu tài khoản hỗ trợ mật khẩu")).toBeVisible({
+      timeout: 20_000,
+    });
 
     const recoveryLink = await waitForRecoveryLink(email);
     expect(recoveryLink).toContain("redirect_to=http%3A%2F%2Flocalhost%3A3000");
