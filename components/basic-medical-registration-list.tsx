@@ -510,7 +510,7 @@ function SessionStatus({
   }
   const isCancelled = Boolean(
     session.cancelled_at ||
-      session.class_schedules?.schedule_status === "cancelled",
+    session.class_schedules?.schedule_status === "cancelled",
   );
   if (isCancelled) {
     const cancellerName =

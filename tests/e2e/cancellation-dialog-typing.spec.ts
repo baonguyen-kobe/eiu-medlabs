@@ -94,10 +94,18 @@ const ids = {
 
 test.describe("Cancellation Dialog & UI Hardening E2E", () => {
   test.beforeAll(async () => {
-    const adminId = localSql("select id from public.profiles where email = 'admin@campus.local' limit 1;");
-    const lecturerId = localSql("select id from public.profiles where email = 'giangvien@campus.local' limit 1;");
-    const importerId = localSql("select id from public.profiles where email = 'importer@campus.local' limit 1;");
-    const assistantId = localSql("select id from public.profiles where email = 'trogiang@campus.local' limit 1;");
+    const adminId = localSql(
+      "select id from public.profiles where email = 'admin@campus.local' limit 1;",
+    );
+    const lecturerId = localSql(
+      "select id from public.profiles where email = 'giangvien@campus.local' limit 1;",
+    );
+    const importerId = localSql(
+      "select id from public.profiles where email = 'importer@campus.local' limit 1;",
+    );
+    const assistantId = localSql(
+      "select id from public.profiles where email = 'trogiang@campus.local' limit 1;",
+    );
 
     localSql(`
       begin;
@@ -322,7 +330,9 @@ test.describe("Cancellation Dialog & UI Hardening E2E", () => {
     const backdrop = dialogLayers.locator(".confirm-dialog-backdrop");
     await expect(backdrop).toBeVisible();
 
-    const dialog = dialogLayers.locator('section.confirm-dialog[role="dialog"]');
+    const dialog = dialogLayers.locator(
+      'section.confirm-dialog[role="dialog"]',
+    );
     await expect(dialog).toBeVisible();
     await expect(dialog).toHaveAttribute("aria-modal", "true");
 
@@ -334,7 +344,9 @@ test.describe("Cancellation Dialog & UI Hardening E2E", () => {
     await expect(body).toBeVisible();
     await expect(actions).toBeVisible();
 
-    const reasonInput = body.locator('label:has-text("Lý do hủy buổi học *") input');
+    const reasonInput = body.locator(
+      'label:has-text("Lý do hủy buổi học *") input',
+    );
     await expect(reasonInput).toBeVisible();
 
     // A. Desktop viewport geometry (1280x720)
@@ -351,7 +363,9 @@ test.describe("Cancellation Dialog & UI Hardening E2E", () => {
     expect(dialogBox!.y + dialogBox!.height).toBeLessThanOrEqual(720);
     // Reason input must be physically bounded inside the dialog body
     expect(inputBox!.x).toBeGreaterThanOrEqual(bodyBox!.x - 1);
-    expect(inputBox!.x + inputBox!.width).toBeLessThanOrEqual(bodyBox!.x + bodyBox!.width + 1);
+    expect(inputBox!.x + inputBox!.width).toBeLessThanOrEqual(
+      bodyBox!.x + bodyBox!.width + 1,
+    );
 
     // B. Short-height viewport verification (1280x420)
     await page.setViewportSize({ width: 1280, height: 420 });
@@ -375,7 +389,9 @@ test.describe("Cancellation Dialog & UI Hardening E2E", () => {
 
     // Check no horizontal overflow on body or dialog
     const hasHorizontalOverflow = await page.evaluate(() => {
-      const el = document.querySelector('section.confirm-dialog[role="dialog"]');
+      const el = document.querySelector(
+        'section.confirm-dialog[role="dialog"]',
+      );
       return el ? el.scrollWidth > el.clientWidth : false;
     });
     expect(hasHorizontalOverflow).toBe(false);
@@ -411,7 +427,9 @@ test.describe("Cancellation Dialog & UI Hardening E2E", () => {
     await expect(cancelSessionBtn).toBeVisible();
     await cancelSessionBtn.click();
 
-    const dialog = page.locator('body > .confirm-dialog-layer section.confirm-dialog[role="dialog"]');
+    const dialog = page.locator(
+      'body > .confirm-dialog-layer section.confirm-dialog[role="dialog"]',
+    );
     await expect(dialog).toBeVisible();
 
     // Set DOM instance marker on the mounted dialog element
@@ -419,7 +437,9 @@ test.describe("Cancellation Dialog & UI Hardening E2E", () => {
       el.setAttribute("data-mount-marker", "initial-dialog-instance");
     });
 
-    const reasonInput = dialog.locator('label:has-text("Lý do hủy buổi học *") input');
+    const reasonInput = dialog.locator(
+      'label:has-text("Lý do hủy buổi học *") input',
+    );
     await expect(reasonInput).toBeVisible();
     await reasonInput.focus();
     await expect(reasonInput).toBeFocused();
@@ -446,7 +466,10 @@ test.describe("Cancellation Dialog & UI Hardening E2E", () => {
     await expect(dialog).toBeVisible();
 
     // Close modal via 'Quay lại'
-    const backBtn = dialog.getByRole("button", { name: "Quay lại", exact: true });
+    const backBtn = dialog.getByRole("button", {
+      name: "Quay lại",
+      exact: true,
+    });
     await backBtn.click();
     await expect(page.locator("body > .confirm-dialog-layer")).toHaveCount(0);
   });
@@ -469,23 +492,35 @@ test.describe("Cancellation Dialog & UI Hardening E2E", () => {
     await expect(detailRow).toBeVisible();
 
     // Creator has cancellation button
-    const cancelBtn = detailRow.locator("button.button-danger.basic-medical-confirm-button").first();
+    const cancelBtn = detailRow
+      .locator("button.button-danger.basic-medical-confirm-button")
+      .first();
     await expect(cancelBtn).toBeVisible();
     await cancelBtn.click();
 
-    const dialog = page.locator('body > .confirm-dialog-layer section.confirm-dialog[role="dialog"]');
+    const dialog = page.locator(
+      'body > .confirm-dialog-layer section.confirm-dialog[role="dialog"]',
+    );
     await expect(dialog).toBeVisible();
 
-    const reasonInput = dialog.locator('label:has-text("Lý do hủy buổi học *") input');
-    const creatorReason = "Người tạo phiếu hủy buổi học do điều chỉnh kế hoạch giảng viên";
+    const reasonInput = dialog.locator(
+      'label:has-text("Lý do hủy buổi học *") input',
+    );
+    const creatorReason =
+      "Người tạo phiếu hủy buổi học do điều chỉnh kế hoạch giảng viên";
     await reasonInput.fill(creatorReason);
 
     // Submit cancellation
-    const confirmBtn = dialog.getByRole("button", { name: "Hủy buổi học", exact: true });
+    const confirmBtn = dialog.getByRole("button", {
+      name: "Hủy buổi học",
+      exact: true,
+    });
     await confirmBtn.click();
 
     // Wait for dialog to dismiss and status to update
-    await expect(page.locator("body > .confirm-dialog-layer")).toHaveCount(0, { timeout: 10_000 });
+    await expect(page.locator("body > .confirm-dialog-layer")).toHaveCount(0, {
+      timeout: 10_000,
+    });
 
     // Reload page and verify persistence
     await page.reload();
@@ -496,10 +531,24 @@ test.describe("Cancellation Dialog & UI Hardening E2E", () => {
     await expect(reloadedRegRow).toBeVisible();
     await reloadedRegRow.click();
 
-    const reloadedDetailRow = page.locator("tr.equipment-request-detail-row").first();
-    await expect(reloadedDetailRow.locator(".request-status", { hasText: "Đã hủy" }).first()).toBeVisible();
-    await expect(reloadedDetailRow.locator(".basic-medical-session-cancellation-metadata").first()).toContainText("Trần Minh Anh");
-    await expect(reloadedDetailRow.locator(".basic-medical-session-cancellation-metadata").first()).toContainText(creatorReason);
+    const reloadedDetailRow = page
+      .locator("tr.equipment-request-detail-row")
+      .first();
+    await expect(
+      reloadedDetailRow
+        .locator(".request-status", { hasText: "Đã hủy" })
+        .first(),
+    ).toBeVisible();
+    await expect(
+      reloadedDetailRow
+        .locator(".basic-medical-session-cancellation-metadata")
+        .first(),
+    ).toContainText("Trần Minh Anh");
+    await expect(
+      reloadedDetailRow
+        .locator(".basic-medical-session-cancellation-metadata")
+        .first(),
+    ).toContainText(creatorReason);
   });
 
   test("4. Teaching Lecturer cancellation UI flow: assigned lecturer cancels session, persists after reload", async ({
@@ -521,21 +570,32 @@ test.describe("Cancellation Dialog & UI Hardening E2E", () => {
     await expect(detailRow).toBeVisible();
 
     // Teaching lecturer sees 'Hủy lớp' on unconfirmed session
-    const cancelBtn = detailRow.locator("button.button-danger.basic-medical-confirm-button").first();
+    const cancelBtn = detailRow
+      .locator("button.button-danger.basic-medical-confirm-button")
+      .first();
     await expect(cancelBtn).toBeVisible();
     await cancelBtn.click();
 
-    const dialog = page.locator('body > .confirm-dialog-layer section.confirm-dialog[role="dialog"]');
+    const dialog = page.locator(
+      'body > .confirm-dialog-layer section.confirm-dialog[role="dialog"]',
+    );
     await expect(dialog).toBeVisible();
 
-    const reasonInput = dialog.locator('label:has-text("Lý do hủy buổi học *") input');
+    const reasonInput = dialog.locator(
+      'label:has-text("Lý do hủy buổi học *") input',
+    );
     const lecturerReason = "Giảng viên phụ trách hủy buổi do công tác đột xuất";
     await reasonInput.fill(lecturerReason);
 
-    const confirmBtn = dialog.getByRole("button", { name: "Hủy buổi học", exact: true });
+    const confirmBtn = dialog.getByRole("button", {
+      name: "Hủy buổi học",
+      exact: true,
+    });
     await confirmBtn.click();
 
-    await expect(page.locator("body > .confirm-dialog-layer")).toHaveCount(0, { timeout: 10_000 });
+    await expect(page.locator("body > .confirm-dialog-layer")).toHaveCount(0, {
+      timeout: 10_000,
+    });
 
     // Reload page to verify persistence
     await page.reload();
@@ -546,10 +606,24 @@ test.describe("Cancellation Dialog & UI Hardening E2E", () => {
     await expect(reloadedRegRow).toBeVisible();
     await reloadedRegRow.click();
 
-    const reloadedDetailRow = page.locator("tr.equipment-request-detail-row").first();
-    await expect(reloadedDetailRow.locator(".request-status", { hasText: "Đã hủy" }).first()).toBeVisible();
-    await expect(reloadedDetailRow.locator(".basic-medical-session-cancellation-metadata").first()).toContainText("Nguyễn Ngọc Diễm");
-    await expect(reloadedDetailRow.locator(".basic-medical-session-cancellation-metadata").first()).toContainText(lecturerReason);
+    const reloadedDetailRow = page
+      .locator("tr.equipment-request-detail-row")
+      .first();
+    await expect(
+      reloadedDetailRow
+        .locator(".request-status", { hasText: "Đã hủy" })
+        .first(),
+    ).toBeVisible();
+    await expect(
+      reloadedDetailRow
+        .locator(".basic-medical-session-cancellation-metadata")
+        .first(),
+    ).toContainText("Nguyễn Ngọc Diễm");
+    await expect(
+      reloadedDetailRow
+        .locator(".basic-medical-session-cancellation-metadata")
+        .first(),
+    ).toContainText(lecturerReason);
   });
 
   test("5. Unrelated actor UI contract: cancellation action is NOT offered to unrelated actors", async ({
@@ -570,7 +644,9 @@ test.describe("Cancellation Dialog & UI Hardening E2E", () => {
     await expect(detailRow).toBeVisible();
 
     // Cancellation button 'Hủy lớp' must NOT be rendered for unrelated actor
-    const cancelBtn = detailRow.locator("button.button-danger.basic-medical-confirm-button");
+    const cancelBtn = detailRow.locator(
+      "button.button-danger.basic-medical-confirm-button",
+    );
     await expect(cancelBtn).toHaveCount(0);
   });
 
@@ -590,24 +666,38 @@ test.describe("Cancellation Dialog & UI Hardening E2E", () => {
     const detailRow = page.locator("tr.equipment-request-detail-row").first();
     await expect(detailRow).toBeVisible();
 
-    const sessionRows = detailRow.locator("table.basic-medical-session-table tbody tr");
+    const sessionRows = detailRow.locator(
+      "table.basic-medical-session-table tbody tr",
+    );
     await expect(sessionRows).toHaveCount(2);
 
     // Session 1: Cancelled by Admin with 'Bảo trì phòng máy thực hành'
     const sess1Row = sessionRows.nth(0);
     await expect(sess1Row.locator(".request-status")).toHaveText("Đã hủy");
-    await expect(sess1Row.locator(".basic-medical-session-cancellation-metadata")).toContainText("Nguyễn An");
-    await expect(sess1Row.locator(".basic-medical-session-cancellation-metadata")).toContainText("Bảo trì phòng máy thực hành");
+    await expect(
+      sess1Row.locator(".basic-medical-session-cancellation-metadata"),
+    ).toContainText("Nguyễn An");
+    await expect(
+      sess1Row.locator(".basic-medical-session-cancellation-metadata"),
+    ).toContainText("Bảo trì phòng máy thực hành");
 
     // Session 2: Cancelled by Lecturer with 'Giảng viên bận công tác hội thảo'
     const sess2Row = sessionRows.nth(1);
     await expect(sess2Row.locator(".request-status")).toHaveText("Đã hủy");
-    await expect(sess2Row.locator(".basic-medical-session-cancellation-metadata")).toContainText("Nguyễn Ngọc Diễm");
-    await expect(sess2Row.locator(".basic-medical-session-cancellation-metadata")).toContainText("Giảng viên bận công tác hội thảo");
+    await expect(
+      sess2Row.locator(".basic-medical-session-cancellation-metadata"),
+    ).toContainText("Nguyễn Ngọc Diễm");
+    await expect(
+      sess2Row.locator(".basic-medical-session-cancellation-metadata"),
+    ).toContainText("Giảng viên bận công tác hội thảo");
 
     // Ensure they are distinctly attributed and did not bleed across rows
-    await expect(sess1Row.locator(".basic-medical-session-cancellation-metadata")).not.toContainText("Giảng viên bận công tác hội thảo");
-    await expect(sess2Row.locator(".basic-medical-session-cancellation-metadata")).not.toContainText("Bảo trì phòng máy thực hành");
+    await expect(
+      sess1Row.locator(".basic-medical-session-cancellation-metadata"),
+    ).not.toContainText("Giảng viên bận công tác hội thảo");
+    await expect(
+      sess2Row.locator(".basic-medical-session-cancellation-metadata"),
+    ).not.toContainText("Bảo trì phòng máy thực hành");
   });
 
   test("7. Sequential keystroke typing does not lose focus in Invalidation reason input", async ({
@@ -648,7 +738,8 @@ test.describe("Cancellation Dialog & UI Hardening E2E", () => {
     await expect(invalidationInput).toBeVisible();
 
     // Focus input and sequentially type multi-word Vietnamese reason
-    const invalidationReason = "Vô hiệu hóa do sai lệch thông tin thiết bị thực tế";
+    const invalidationReason =
+      "Vô hiệu hóa do sai lệch thông tin thiết bị thực tế";
     await invalidationInput.focus();
     await expect(invalidationInput).toBeFocused();
 
@@ -741,4 +832,3 @@ test.describe("Cancellation Dialog & UI Hardening E2E", () => {
     }
   });
 });
-
