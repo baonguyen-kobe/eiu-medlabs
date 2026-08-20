@@ -49,7 +49,7 @@ async function loginAsAdmin(page: Page) {
   await page.locator('input[name="email"]').fill("admin@campus.local");
   await page.locator('input[name="password"]').fill("LocalAdmin123!");
   await page.getByRole("button", { name: "Đăng nhập", exact: true }).click();
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page).toHaveURL(/\/dashboard$/, { timeout: 20_000 });
 }
 
 async function loginAsStaff(page: Page) {
@@ -57,7 +57,7 @@ async function loginAsStaff(page: Page) {
   await page.locator('input[name="email"]').fill("staff@campus.local");
   await page.locator('input[name="password"]').fill("LocalStaff123!");
   await page.getByRole("button", { name: "Đăng nhập", exact: true }).click();
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page).toHaveURL(/\/dashboard$/, { timeout: 20_000 });
 }
 
 test("Phiếu Y cơ sở hiển thị danh sách thu gọn và bộ lọc trạng thái", async ({

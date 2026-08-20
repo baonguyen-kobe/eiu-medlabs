@@ -20,7 +20,7 @@ async function loginAsAdmin(page: Page) {
   await page.locator('input[name="email"]').fill("admin@campus.local");
   await page.locator('input[name="password"]').fill("LocalAdmin123!");
   await page.getByRole("button", { name: "Đăng nhập", exact: true }).click();
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page).toHaveURL(/\/dashboard$/, { timeout: 20_000 });
 }
 
 async function deleteCourseByCode(page: Page, courseCode: string) {

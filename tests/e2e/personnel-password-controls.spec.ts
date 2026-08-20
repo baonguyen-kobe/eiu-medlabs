@@ -11,11 +11,17 @@ const serviceDb = createClient(
   { auth: { autoRefreshToken: false, persistSession: false } },
 );
 
-async function login(page: Page, email: string, password: string) {
+async function login(
+  page: Page,
+  email: string,
+  password: string,
+  expectedLanding = /\/(dashboard|change-password)$/,
+) {
   await page.goto("/login");
   await page.locator('input[name="email"]').fill(email);
   await page.locator('input[name="password"]').fill(password);
   await page.getByRole("button", { name: "Đăng nhập", exact: true }).click();
+  await expect(page).toHaveURL(expectedLanding, { timeout: 20_000 });
 }
 
 async function waitForRecoveryLink(email: string) {

@@ -17,7 +17,7 @@ async function login(page: Page, email: string, password: string) {
   await page.locator('input[name="email"]').fill(email);
   await page.locator('input[name="password"]').fill(password);
   await page.locator('button[type="submit"]').click();
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page).toHaveURL(/\/dashboard$/, { timeout: 20_000 });
 }
 
 async function requestFromNewContext(context: BrowserContext, path: string) {

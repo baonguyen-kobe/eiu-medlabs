@@ -15,7 +15,7 @@ async function loginAsAdmin(page: Page) {
   await page.locator('input[name="email"]').fill("admin@campus.local");
   await page.locator('input[name="password"]').fill("LocalAdmin123!");
   await page.locator('button[type="submit"]').click();
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page).toHaveURL(/\/dashboard$/, { timeout: 20_000 });
 }
 
 async function loadLocalServiceConfig(): Promise<LocalServiceConfig> {

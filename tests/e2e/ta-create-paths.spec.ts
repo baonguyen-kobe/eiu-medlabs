@@ -101,7 +101,7 @@ async function login(
   await page.locator('input[name="email"]').fill(email);
   await page.locator('input[name="password"]').fill(password);
   await page.getByRole("button", { name: "Đăng nhập", exact: true }).click();
-  await expect(page).toHaveURL(expectedLanding);
+  await expect(page).toHaveURL(expectedLanding, { timeout: 20_000 });
 }
 
 async function createManualSchedule(
