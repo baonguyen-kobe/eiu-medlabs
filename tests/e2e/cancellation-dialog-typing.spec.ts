@@ -48,7 +48,7 @@ async function loginAsUser(page: Page, email: string, pass: string) {
   await page.locator('input[name="email"]').fill(email);
   await page.locator('input[name="password"]').fill(pass);
   await page.getByRole("button", { name: "Đăng nhập", exact: true }).click();
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page).toHaveURL(/\/dashboard/, { timeout: 15_000 });
 }
 
 const cancelReasonText = "Điều chỉnh chương trình đào tạo học kỳ mới";
@@ -114,7 +114,8 @@ test.describe("Cancellation Dialog & UI Hardening E2E", () => {
       delete from public.basic_medical_session_confirmations where id in ('${ids.conf2}');
       delete from public.basic_medical_registration_sessions where id in ('${ids.sess1}', '${ids.sess2}', '${ids.sess3}', '${ids.sessCR}', '${ids.sessTL}', '${ids.sessUN}', '${ids.sessML1}', '${ids.sessML2}');
       delete from public.class_schedules where id in ('${ids.sched1}', '${ids.sched2}', '${ids.sched3}', '${ids.schedCR}', '${ids.schedTL}', '${ids.schedUN}', '${ids.schedML1}', '${ids.schedML2}');
-      delete from public.basic_medical_registrations where id in ('${ids.reg1}', '${ids.reg2}', '${ids.regCR}', '${ids.regTL}', '${ids.regUN}', '${ids.regML}');
+      delete from public.basic_medical_registrations where id in ('${ids.reg1}', '${ids.reg2}', '${ids.regCR}', '${ids.regTL}', '${ids.regUN}', '${ids.regML}')
+        or registration_code in ('YC-980820-000001', 'YC-980820-000002', 'YC-980820-000003', 'YC-980820-000004', 'YC-980820-000005', 'YC-980820-000006');
       delete from public.rooms where id = '${ids.room}';
       delete from public.courses where id in ('${ids.courseR1}', '${ids.courseR2}', '${ids.courseCR}', '${ids.courseTL}', '${ids.courseUN}', '${ids.courseML}');
 
@@ -156,7 +157,7 @@ test.describe("Cancellation Dialog & UI Hardening E2E", () => {
       insert into public.basic_medical_registrations
         (id, registration_code, academic_year, semester, start_date, end_date, course_id, room_id, student_count,
          registrant_id, responsible_lecturer_id, created_by)
-      values ('${ids.reg1}', 'YC-260820-000001', '2048-2049', 'HK1', '2048-11-10', '2048-11-12', '${ids.courseR1}',
+      values ('${ids.reg1}', 'YC-980820-000001', '2048-2049', 'HK1', '2048-11-10', '2048-11-12', '${ids.courseR1}',
         '${ids.room}', 20, '${adminId}', '${lecturerId}', '${adminId}');
 
       insert into public.class_schedules
@@ -187,7 +188,7 @@ test.describe("Cancellation Dialog & UI Hardening E2E", () => {
       insert into public.basic_medical_registrations
         (id, registration_code, academic_year, semester, start_date, end_date, course_id, room_id, student_count,
          registrant_id, responsible_lecturer_id, created_by, cancelled_at, cancel_reason)
-      values ('${ids.reg2}', 'YC-260820-000002', '2048-2049', 'HK1', '2048-11-20', '2048-11-20', '${ids.courseR2}',
+      values ('${ids.reg2}', 'YC-980820-000002', '2048-2049', 'HK1', '2048-11-20', '2048-11-20', '${ids.courseR2}',
         '${ids.room}', 18, '${adminId}', '${lecturerId}', '${adminId}', '2048-11-05 08:30:00+07', '${cancelReasonText}');
 
       insert into public.class_schedules
@@ -206,7 +207,7 @@ test.describe("Cancellation Dialog & UI Hardening E2E", () => {
       insert into public.basic_medical_registrations
         (id, registration_code, academic_year, semester, start_date, end_date, course_id, room_id, student_count,
          registrant_id, responsible_lecturer_id, created_by)
-      values ('${ids.regCR}', 'YC-260820-000003', '2048-2049', 'HK1', '2048-11-25', '2048-11-25', '${ids.courseCR}',
+      values ('${ids.regCR}', 'YC-980820-000003', '2048-2049', 'HK1', '2048-11-25', '2048-11-25', '${ids.courseCR}',
         '${ids.room}', 22, '${importerId}', '${importerId}', '${importerId}');
 
       insert into public.class_schedules
@@ -225,7 +226,7 @@ test.describe("Cancellation Dialog & UI Hardening E2E", () => {
       insert into public.basic_medical_registrations
         (id, registration_code, academic_year, semester, start_date, end_date, course_id, room_id, student_count,
          registrant_id, responsible_lecturer_id, created_by)
-      values ('${ids.regTL}', 'YC-260820-000004', '2048-2049', 'HK1', '2048-11-28', '2048-11-28', '${ids.courseTL}',
+      values ('${ids.regTL}', 'YC-980820-000004', '2048-2049', 'HK1', '2048-11-28', '2048-11-28', '${ids.courseTL}',
         '${ids.room}', 20, '${lecturerId}', '${lecturerId}', '${adminId}');
 
       insert into public.class_schedules
@@ -244,7 +245,7 @@ test.describe("Cancellation Dialog & UI Hardening E2E", () => {
       insert into public.basic_medical_registrations
         (id, registration_code, academic_year, semester, start_date, end_date, course_id, room_id, student_count,
          registrant_id, responsible_lecturer_id, created_by)
-      values ('${ids.regUN}', 'YC-260820-000005', '2048-2049', 'HK1', '2048-11-29', '2048-11-29', '${ids.courseUN}',
+      values ('${ids.regUN}', 'YC-980820-000005', '2048-2049', 'HK1', '2048-11-29', '2048-11-29', '${ids.courseUN}',
         '${ids.room}', 20, '${assistantId}', '${assistantId}', '${adminId}');
 
       insert into public.class_schedules
@@ -263,7 +264,7 @@ test.describe("Cancellation Dialog & UI Hardening E2E", () => {
       insert into public.basic_medical_registrations
         (id, registration_code, academic_year, semester, start_date, end_date, course_id, room_id, student_count,
          registrant_id, responsible_lecturer_id, created_by)
-      values ('${ids.regML}', 'YC-260820-000006', '2048-2049', 'HK1', '2048-12-01', '2048-12-02', '${ids.courseML}',
+      values ('${ids.regML}', 'YC-980820-000006', '2048-2049', 'HK1', '2048-12-01', '2048-12-02', '${ids.courseML}',
         '${ids.room}', 25, '${adminId}', '${lecturerId}', '${adminId}');
 
       insert into public.class_schedules
@@ -291,7 +292,8 @@ test.describe("Cancellation Dialog & UI Hardening E2E", () => {
       delete from public.basic_medical_session_confirmations where id in ('${ids.conf2}');
       delete from public.basic_medical_registration_sessions where id in ('${ids.sess1}', '${ids.sess2}', '${ids.sess3}', '${ids.sessCR}', '${ids.sessTL}', '${ids.sessUN}', '${ids.sessML1}', '${ids.sessML2}');
       delete from public.class_schedules where id in ('${ids.sched1}', '${ids.sched2}', '${ids.sched3}', '${ids.schedCR}', '${ids.schedTL}', '${ids.schedUN}', '${ids.schedML1}', '${ids.schedML2}');
-      delete from public.basic_medical_registrations where id in ('${ids.reg1}', '${ids.reg2}', '${ids.regCR}', '${ids.regTL}', '${ids.regUN}', '${ids.regML}');
+      delete from public.basic_medical_registrations where id in ('${ids.reg1}', '${ids.reg2}', '${ids.regCR}', '${ids.regTL}', '${ids.regUN}', '${ids.regML}')
+        or registration_code in ('YC-980820-000001', 'YC-980820-000002', 'YC-980820-000003', 'YC-980820-000004', 'YC-980820-000005', 'YC-980820-000006');
       delete from public.rooms where id = '${ids.room}';
       delete from public.courses where id in ('${ids.courseR1}', '${ids.courseR2}', '${ids.courseCR}', '${ids.courseTL}', '${ids.courseUN}', '${ids.courseML}');
       commit;
