@@ -25,16 +25,10 @@ const e2eAdminProfileEmail =
 
 async function loginAsAdmin(page: Page) {
   await page.goto("/login");
-  const email = page.locator('input[name="email"]');
-  const password = page.locator('input[name="password"]');
-  await clickUntilState(
-    page.locator('button[type="submit"]'),
-    () => expect(page).toHaveURL(/\/dashboard$/, { timeout: 20_000 }),
-    async () => {
-      await email.fill(e2eAdminEmail);
-      await password.fill(e2eAdminPassword);
-    },
-  );
+  await page.locator('input[name="email"]').fill(e2eAdminEmail);
+  await page.locator('input[name="password"]').fill(e2eAdminPassword);
+  await page.locator('button[type="submit"]').click();
+  await expect(page).toHaveURL(/\/dashboard$/, { timeout: 20_000 });
 }
 
 async function login(page: Page, email: string, password: string) {
