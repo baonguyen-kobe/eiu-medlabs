@@ -7,6 +7,10 @@ const migrationPath =
   "supabase/migrations/20260822110000_basic_medical_equipment_request_wave_1.sql";
 const schemaPath =
   "supabase/schemas/25_basic_medical_equipment_request_wave_1.sql";
+const blockerMigrationPath =
+  "supabase/migrations/20260822130000_basic_medical_equipment_request_blockers.sql";
+const blockerSchemaPath =
+  "supabase/schemas/26_basic_medical_equipment_request_blockers.sql";
 
 async function source(path) {
   return readFile(new URL(path, root), "utf8");
@@ -65,4 +69,18 @@ test("Wave 1 Basic Medical edits reconcile by immutable session identity", async
   assert.match(actions, /session_id: session\.sessionId \?\? null/);
   assert.match(page, /sessionId: mode === "edit" \? session\.id : undefined/);
   assert.match(form, /sessionId: s\.sessionId/);
+});
+
+test("Wave 1 blocker correction stays declarative and preserves domain contracts", async () => {
+  const [migration, schema] = await Promise.all([
+    source(blockerMigrationPath),
+    source(blockerSchemaPath),
+  ]);
+
+  assert.equal(migration, schema);
+  assert.match(migration, /BASIC_MEDICAL_SAVE_FORBIDDEN/);
+  assert.match(migration, /allow_basic_medical_access/);
+  assert.match(migration, /session_number = session_number \+ 1000000/);
+  assert.match(migration, /enqueue_equipment_request_outbox_event/);
+  assert.match(migration, /equipment_request\.hard_deleted/);
 });
