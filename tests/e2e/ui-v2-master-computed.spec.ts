@@ -18,7 +18,7 @@ function localSql(sql: string) {
     [
       "ps",
       "--filter",
-      "label=com.supabase.cli.project=lich-truc-app",
+      `label=com.supabase.cli.project=${process.env.SUPABASE_LOCAL_PROJECT_ID ?? "lich-truc-app"}`,
       "--format",
       "{{.Names}}",
     ],

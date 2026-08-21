@@ -1,3 +1,7 @@
+param(
+  [string]$SupabaseWorkdir = $env:CI_SUPABASE_WORKDIR
+)
+
 $ErrorActionPreference = "Stop"
 
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
@@ -5,18 +9,26 @@ $OutputEncoding = $utf8NoBom
 [Console]::OutputEncoding = $utf8NoBom
 $npxCommand = if ($IsWindows -or $env:OS -eq "Windows_NT") { "npx.cmd" } else { "npx" }
 
+if ([string]::IsNullOrWhiteSpace($SupabaseWorkdir)) {
+  $SupabaseWorkdir = "."
+}
+$SupabaseWorkdir = (Resolve-Path -LiteralPath $SupabaseWorkdir).Path
+if (-not (Test-Path -LiteralPath (Join-Path $SupabaseWorkdir "supabase/config.toml"))) {
+  throw "Supabase config not found in workdir: $SupabaseWorkdir"
+}
+
 function Invoke-LocalSqlFile {
   param([Parameter(Mandatory = $true)][string]$Path)
 
-  Get-Content -LiteralPath $Path -Raw -Encoding utf8 |
-    docker exec -i supabase_db_lich-truc-app `
-      psql -U postgres -d postgres -v ON_ERROR_STOP=1
+  & $npxCommand supabase db query --workdir $SupabaseWorkdir --local --file $Path |
+    Out-Null
   if ($LASTEXITCODE -ne 0) {
     throw "Không thể nạp file SQL: $Path"
   }
 }
 
-$statusLines = & $npxCommand supabase status -o env
+$statusLines = & $npxCommand supabase status --workdir $SupabaseWorkdir -o env
+$apiLine = $statusLines | Where-Object { $_ -like "API_URL=*" }
 $secretLine = $statusLines | Where-Object { $_ -like "SERVICE_ROLE_KEY=*" }
 if (-not $secretLine) {
   $secretLine = $statusLines | Where-Object { $_ -like "SECRET_KEY=*" }
@@ -26,6 +38,10 @@ if (-not $secretLine) {
 }
 
 $secretKey = ($secretLine -split "=", 2)[1].Trim('"')
+if (-not $apiLine) {
+  throw "Supabase local API URL not found. Start Supabase first."
+}
+$apiUrl = ($apiLine -split "=", 2)[1].Trim('"')
 $headers = @{
   Authorization  = "Bearer $secretKey"
   apikey         = $secretKey
@@ -117,7 +133,7 @@ foreach ($entry in $users) {
 
   try {
     $created = Invoke-RestMethod `
-      -Uri "http://127.0.0.1:54321/auth/v1/admin/users" `
+      -Uri "$apiUrl/auth/v1/admin/users" `
       -Method Post `
       -Headers $headers `
       -Body $bodyBytes
@@ -125,7 +141,7 @@ foreach ($entry in $users) {
   }
   catch {
     $list = Invoke-RestMethod `
-      -Uri "http://127.0.0.1:54321/auth/v1/admin/users?per_page=100" `
+      -Uri "$apiUrl/auth/v1/admin/users?per_page=100" `
       -Method Get `
       -Headers $headers
     $userId = (
@@ -145,22 +161,22 @@ foreach ($entry in $users) {
       ForEach-Object { "('$userId','$_')" }
   ) -join ","
 
-  & $npxCommand supabase db query --local `
+  & $npxCommand supabase db query --workdir $SupabaseWorkdir --local `
     "insert into public.user_roles (user_id, role) values $roleValues on conflict do nothing;" |
     Out-Null
 
-  & $npxCommand supabase db query --local `
+  & $npxCommand supabase db query --workdir $SupabaseWorkdir --local `
     "update public.profiles set full_name = '$($entry.full_name)', phone = '$($entry.phone)' where id = '$userId';" |
     Out-Null
 
   if ($entry.can_import_schedules) {
-    & $npxCommand supabase db query --local `
+    & $npxCommand supabase db query --workdir $SupabaseWorkdir --local `
       "update public.profiles set can_import_schedules = true where id = '$userId';" |
       Out-Null
   }
 
   if ($entry.allow_early_equipment_handover) {
-    & $npxCommand supabase db query --local `
+    & $npxCommand supabase db query --workdir $SupabaseWorkdir --local `
       "update public.profiles set allow_early_equipment_handover = true where id = '$userId';" |
       Out-Null
   }
@@ -170,13 +186,13 @@ foreach ($entry in $users) {
 
 $rootId = $userIds["admin@campus.local"]
 $personnelManagerId = $userIds["bao.nguyen@eiu.edu.vn"]
-& $npxCommand supabase db query --local `
+& $npxCommand supabase db query --workdir $SupabaseWorkdir --local `
   "insert into public.system_security_principals (singleton, root_admin_id, personnel_manager_id, configured_by) values (true, '$rootId', '$personnelManagerId', '$rootId') on conflict (singleton) do update set root_admin_id = excluded.root_admin_id, personnel_manager_id = excluded.personnel_manager_id, configured_by = excluded.configured_by, configured_at = clock_timestamp()" |
   Out-Null
 if ($LASTEXITCODE -ne 0) {
   throw "Không thể cấu hình Root Administrator và Personnel Manager local."
 }
-& $npxCommand supabase db query --local `
+& $npxCommand supabase db query --workdir $SupabaseWorkdir --local `
   "insert into public.audit_logs (actor_id, action, entity_type, entity_id, metadata) values ('$rootId', 'personnel.security_bootstrapped', 'system_security_principals', null, jsonb_build_object('source','local_seed'))" |
   Out-Null
 if ($LASTEXITCODE -ne 0) {
@@ -184,7 +200,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Output "Đã cấu hình Root Administrator và Personnel Manager local."
 
-Invoke-LocalSqlFile "supabase/demo-schedules.sql"
-Invoke-LocalSqlFile "supabase/demo-shifts.sql"
-Invoke-LocalSqlFile "supabase/demo-imports.sql"
+Invoke-LocalSqlFile (Join-Path $SupabaseWorkdir "supabase/demo-schedules.sql")
+Invoke-LocalSqlFile (Join-Path $SupabaseWorkdir "supabase/demo-shifts.sql")
+Invoke-LocalSqlFile (Join-Path $SupabaseWorkdir "supabase/demo-imports.sql")
 Write-Output "Đã tạo dữ liệu lịch mẫu."
