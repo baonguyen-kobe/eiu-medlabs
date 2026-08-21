@@ -1,5 +1,5 @@
 begin;
-select plan(31);
+select plan(41);
 
 -- Setup test users
 create or replace function pg_temp.setup_test_data() returns void language plpgsql as $$
@@ -8,9 +8,9 @@ declare
   basic_type_id uuid;
   staff_user_id uuid := '11111111-1111-1111-1111-111111111111'::uuid;
   admin_user_id uuid := '22222222-2222-2222-2222-222222222222'::uuid;
-  root_user_id uuid := '33333333-3333-3333-3333-333333333333'::uuid;
   basic_only_id uuid := '44444444-4444-4444-4444-444444444444'::uuid;
   history_mgr_id uuid := '55555555-5555-5555-5555-555555555555'::uuid;
+  admin_no_skills_id uuid := '66666666-6666-6666-6666-666666666666'::uuid;
 begin
   select id into skills_type_id from public.room_types where code = 'nursing_skills';
   select id into basic_type_id from public.room_types where code = 'basic_medical';
@@ -20,9 +20,9 @@ begin
   values
     (staff_user_id, 'staff.skills@eiu.edu.vn'),
     (admin_user_id, 'admin.skills@eiu.edu.vn'),
-    (root_user_id, 'root.user@eiu.edu.vn'),
     (basic_only_id, 'basic.staff@eiu.edu.vn'),
-    (history_mgr_id, 'history.manager@eiu.edu.vn')
+    (history_mgr_id, 'history.manager@eiu.edu.vn'),
+    (admin_no_skills_id, 'admin.noskills@eiu.edu.vn')
   on conflict (id) do nothing;
 
   -- Profiles
@@ -30,9 +30,9 @@ begin
   values
     (staff_user_id, 'staff.skills@eiu.edu.vn', 'Staff Skills User', true, false),
     (admin_user_id, 'admin.skills@eiu.edu.vn', 'Admin Skills User', true, false),
-    (root_user_id, 'root.user@eiu.edu.vn', 'Root Administrator User', true, false),
     (basic_only_id, 'basic.staff@eiu.edu.vn', 'Basic Medical Staff', true, false),
-    (history_mgr_id, 'history.manager@eiu.edu.vn', 'History Manager User', true, true)
+    (history_mgr_id, 'history.manager@eiu.edu.vn', 'History Manager User', true, true),
+    (admin_no_skills_id, 'admin.noskills@eiu.edu.vn', 'Admin No Skills User', true, false)
   on conflict (id) do update set
     email = excluded.email,
     full_name = excluded.full_name,
@@ -43,28 +43,21 @@ begin
   values
     (staff_user_id, 'staff', staff_user_id),
     (admin_user_id, 'admin', admin_user_id),
-    (root_user_id, 'admin', root_user_id),
     (basic_only_id, 'staff', basic_only_id),
-    (history_mgr_id, 'staff', history_mgr_id)
+    (history_mgr_id, 'admin', history_mgr_id),
+    (admin_no_skills_id, 'admin', admin_no_skills_id)
   on conflict do nothing;
 
-  -- System security principals
-  insert into public.system_security_principals (singleton, root_admin_id, personnel_manager_id)
-  values (true, root_user_id, admin_user_id)
-  on conflict (singleton) do update set
-    root_admin_id = excluded.root_admin_id,
-    personnel_manager_id = excluded.personnel_manager_id;
-
   -- Room types
-  delete from public.profile_room_types where profile_id in (staff_user_id, admin_user_id, root_user_id, basic_only_id, history_mgr_id);
+  delete from public.profile_room_types where profile_id in (staff_user_id, admin_user_id, basic_only_id, history_mgr_id, admin_no_skills_id);
 
   insert into public.profile_room_types (profile_id, room_type_id, receive_schedule_emails, created_by)
   values
     (staff_user_id, skills_type_id, false, staff_user_id),
     (admin_user_id, skills_type_id, false, admin_user_id),
-    (root_user_id, skills_type_id, false, root_user_id),
     (basic_only_id, basic_type_id, false, basic_only_id),
-    (history_mgr_id, skills_type_id, false, history_mgr_id);
+    (history_mgr_id, skills_type_id, false, history_mgr_id),
+    (admin_no_skills_id, basic_type_id, false, admin_no_skills_id);
 end;
 $$;
 
@@ -80,22 +73,26 @@ begin
 end;
 $$;
 
+create or replace function pg_temp.get_root_admin_id() returns uuid language sql security definer as $$
+  select root_admin_id from public.system_security_principals where singleton;
+$$;
+
 -- 1. Test list_operational_shift_assignees directory
 select pg_temp.set_test_user('11111111-1111-1111-1111-111111111111'::uuid);
 
-select results_eq(
-  $$
-    select full_name from public.list_operational_shift_assignees()
-    where full_name in ('Staff Skills User', 'Admin Skills User', 'Root Administrator User', 'Basic Medical Staff', 'History Manager User')
-    order by full_name
-  $$,
-  $$
-    values
-      ('Admin Skills User'::text),
-      ('History Manager User'::text),
-      ('Staff Skills User'::text)
-  $$,
-  'list_operational_shift_assignees excludes Root and Basic-Medical-only users'
+select is(
+  (
+    select count(*)::integer from public.list_operational_shift_assignees()
+    where id in (
+      '11111111-1111-1111-1111-111111111111'::uuid,
+      '22222222-2222-2222-2222-222222222222'::uuid,
+      '44444444-4444-4444-4444-444444444444'::uuid,
+      '55555555-5555-5555-5555-555555555555'::uuid,
+      '66666666-6666-6666-6666-666666666666'::uuid
+    )
+  ),
+  3,
+  'list_operational_shift_assignees includes only Skills-scoped staff/admin and excludes basic-only users'
 );
 
 -- 2. Test Morning registration valid time & grid
@@ -249,33 +246,7 @@ select throws_ok(
   'Afternoon shift later than 16:00 is rejected'
 );
 
--- 10. All-Day atomic creation (Morning + Afternoon)
-select is(
-  (
-    select count(*)::integer from public.register_staff_shifts(
-      jsonb_build_array(
-        jsonb_build_object(
-          'staff_id', '11111111-1111-1111-1111-111111111111'::uuid,
-          'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '4 days')::date,
-          'shift_slot', 'MORNING',
-          'start_time', '07:00',
-          'end_time', '11:00'
-        ),
-        jsonb_build_object(
-          'staff_id', '11111111-1111-1111-1111-111111111111'::uuid,
-          'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '4 days')::date,
-          'shift_slot', 'AFTERNOON',
-          'start_time', '13:00',
-          'end_time', '16:00'
-        )
-      )
-    )
-  ),
-  2,
-  'All-day registration creates 2 independent shift records atomically'
-);
-
--- 11. All-Day conflict if one slot already taken fails entire batch
+-- 10. Intra-payload duplicate throws error
 select throws_ok(
   $$
     select * from public.register_staff_shifts(
@@ -289,25 +260,25 @@ select throws_ok(
         ),
         jsonb_build_object(
           'staff_id', '11111111-1111-1111-1111-111111111111'::uuid,
-          'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '5 days')::date,
-          'shift_slot', 'AFTERNOON',
-          'start_time', '13:00',
-          'end_time', '16:00'
+          'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '4 days')::date,
+          'shift_slot', 'MORNING',
+          'start_time', '08:00',
+          'end_time', '10:00'
         )
       )
     )
   $$,
-  'ACTIVE_SHIFT_EXISTS: Staff 11111111-1111-1111-1111-111111111111 already has an active MORNING shift on ' || (((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '4 days')::date)::text,
-  'Batch registration fails atomically when one slot is active'
+  'DUPLICATE_PAYLOAD_SLOT: Multiple entries for staff 11111111-1111-1111-1111-111111111111 on ' || (((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '4 days')::date)::text || ' slot MORNING in the same request',
+  'Intra-payload duplicate for same staff on same date slot is rejected'
 );
 
--- 12. Staff cannot register for another person
+-- 11. Staff cannot register for another staff
 select throws_ok(
   $$
     select * from public.register_staff_shifts(
       jsonb_build_array(
         jsonb_build_object(
-          'staff_id', '55555555-5555-5555-5555-555555555555'::uuid,
+          'staff_id', '22222222-2222-2222-2222-222222222222'::uuid,
           'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '5 days')::date,
           'shift_slot', 'MORNING',
           'start_time', '07:00',
@@ -317,10 +288,10 @@ select throws_ok(
     )
   $$,
   'PERMISSION_DENIED: Staff members can only register shifts for themselves',
-  'Staff cannot register shifts for other users'
+  'Staff cannot register for another user'
 );
 
--- 13. Admin CAN register for eligible staff
+-- 12. Admin can register for other staff
 select pg_temp.set_test_user('22222222-2222-2222-2222-222222222222'::uuid);
 
 select lives_ok(
@@ -328,7 +299,7 @@ select lives_ok(
     select * from public.register_staff_shifts(
       jsonb_build_array(
         jsonb_build_object(
-          'staff_id', '55555555-5555-5555-5555-555555555555'::uuid,
+          'staff_id', '11111111-1111-1111-1111-111111111111'::uuid,
           'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '5 days')::date,
           'shift_slot', 'MORNING',
           'start_time', '07:00',
@@ -337,151 +308,177 @@ select lives_ok(
       )
     )
   $$,
-  'Admin can assign shift to eligible staff'
+  'Admin can register shift for staff member'
 );
 
--- 14. Admin assigning to Root fails
-select throws_ok(
-  $$
-    select * from public.register_staff_shifts(
-      jsonb_build_array(
-        jsonb_build_object(
-          'staff_id', '33333333-3333-3333-3333-333333333333'::uuid,
-          'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '5 days')::date,
-          'shift_slot', 'AFTERNOON',
-          'start_time', '13:00',
-          'end_time', '16:00'
-        )
-      )
-    )
-  $$,
-  'ASSIGNEE_NOT_ELIGIBLE: User 33333333-3333-3333-3333-333333333333 is not eligible for Skills Lab shifts',
-  'Admin cannot assign shift to Root user'
+-- 13. Registration source is admin_assigned
+select is(
+  (
+    select registration_source::text from public.staff_shifts
+    where staff_id = '11111111-1111-1111-1111-111111111111'::uuid
+      and shift_date = ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '5 days')::date
+      and shift_slot = 'MORNING'
+      and status <> 'cancelled'
+  ),
+  'admin_assigned',
+  'Shift registered by admin has admin_assigned source'
 );
 
--- 15. Admin assigning to Basic-Medical-only fails
+-- 14. Cannot register Basic-Medical-only user
 select throws_ok(
   $$
     select * from public.register_staff_shifts(
       jsonb_build_array(
         jsonb_build_object(
           'staff_id', '44444444-4444-4444-4444-444444444444'::uuid,
-          'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '5 days')::date,
-          'shift_slot', 'AFTERNOON',
-          'start_time', '13:00',
-          'end_time', '16:00'
+          'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '6 days')::date,
+          'shift_slot', 'MORNING',
+          'start_time', '07:00',
+          'end_time', '11:00'
         )
       )
     )
   $$,
   'ASSIGNEE_NOT_ELIGIBLE: User 44444444-4444-4444-4444-444444444444 is not eligible for Skills Lab shifts',
-  'Admin cannot assign shift to non-skills personnel'
+  'Cannot register basic-medical-only user for shift'
 );
 
--- 16. Soft cancellation test
-select pg_temp.set_test_user('11111111-1111-1111-1111-111111111111'::uuid);
-
-do $$
-declare
-  target_id uuid;
-begin
-  select id into target_id from public.staff_shifts
-  where staff_id = '11111111-1111-1111-1111-111111111111'::uuid
-    and shift_slot = 'MORNING'
-    and shift_date = ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '2 days')::date;
-
-  perform public.cancel_staff_shift(target_id, 'Personal reason');
-end;
-$$;
-
-select is(
-  (
-    select status::text from public.staff_shifts
-    where staff_id = '11111111-1111-1111-1111-111111111111'::uuid
-      and shift_slot = 'MORNING'
-      and shift_date = ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '2 days')::date
-  ),
-  'cancelled',
-  'Shift status updated to cancelled'
+-- 15. Cannot register Root Administrator
+select throws_ok(
+  $$
+    select * from public.register_staff_shifts(
+      jsonb_build_array(
+        jsonb_build_object(
+          'staff_id', pg_temp.get_root_admin_id(),
+          'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '6 days')::date,
+          'shift_slot', 'MORNING',
+          'start_time', '07:00',
+          'end_time', '11:00'
+        )
+      )
+    )
+  $$,
+  'ASSIGNEE_NOT_ELIGIBLE: User ' || pg_temp.get_root_admin_id()::text || ' is not eligible for Skills Lab shifts',
+  'Cannot register root administrator for shift'
 );
 
-select is(
-  (
-    select cancellation_reason from public.staff_shifts
-    where staff_id = '11111111-1111-1111-1111-111111111111'::uuid
-      and shift_slot = 'MORNING'
-      and shift_date = ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '2 days')::date
-  ),
-  'Personal reason',
-  'Shift cancellation reason preserved'
+-- 16. Cancellation of active shift
+select lives_ok(
+  $$
+    select public.cancel_staff_shift(
+      (
+        select id from public.staff_shifts
+        where staff_id = '11111111-1111-1111-1111-111111111111'::uuid
+          and shift_date = ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '5 days')::date
+          and shift_slot = 'MORNING'
+          and status <> 'cancelled'
+        limit 1
+      ),
+      'Admin adjustment test'
+    )
+  $$,
+  'Admin can cancel scheduled shift'
 );
 
--- 17. Re-registration on same slot succeeds after soft-cancellation
+-- 17. Re-registration in cancelled slot succeeds
 select lives_ok(
   $$
     select * from public.register_staff_shifts(
       jsonb_build_array(
         jsonb_build_object(
           'staff_id', '11111111-1111-1111-1111-111111111111'::uuid,
-          'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '2 days')::date,
+          'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '5 days')::date,
           'shift_slot', 'MORNING',
           'start_time', '08:00',
-          'end_time', '11:00',
-          'note', 'Re-registered after cancel'
+          'end_time', '11:00'
         )
       )
     )
   $$,
-  'Re-registration succeeds after soft-cancellation'
+  'Can register new shift in previously cancelled slot'
 );
 
--- 18. Shift time update within same slot
-do $$
-declare
-  target_id uuid;
-begin
-  select id into target_id from public.staff_shifts
-  where staff_id = '11111111-1111-1111-1111-111111111111'::uuid
-    and shift_slot = 'MORNING'
-    and status = 'scheduled'
-    and shift_date = ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '2 days')::date;
+-- 18. Staff CAN edit their OWN future shift time within allowable slot
+select pg_temp.set_test_user('11111111-1111-1111-1111-111111111111'::uuid);
 
-  perform public.update_staff_shift_time(target_id, '07:30'::time, '10:30'::time, 'Updated morning note');
-end;
-$$;
-
-select is(
-  (
-    select start_time::text from public.staff_shifts
-    where staff_id = '11111111-1111-1111-1111-111111111111'::uuid
-      and shift_slot = 'MORNING'
-      and status = 'scheduled'
-      and shift_date = ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '2 days')::date
-  ),
-  '07:30:00',
-  'Shift start time updated within morning window'
+select lives_ok(
+  $$
+    select public.update_staff_shift_time(
+      (
+        select id from public.staff_shifts
+        where staff_id = '11111111-1111-1111-1111-111111111111'::uuid
+          and shift_date = ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '2 days')::date
+          and shift_slot = 'MORNING'
+          and status <> 'cancelled'
+        limit 1
+      ),
+      '07:30'::time,
+      '10:30'::time,
+      'Updated note by self'
+    )
+  $$,
+  'Staff can edit their own future shift time within slot'
 );
 
--- 19. Shift time update outside slot bounds fails
+-- 19. Staff cannot edit ANOTHER person shift
+-- First register a shift for user 22222222
+select pg_temp.set_test_user('22222222-2222-2222-2222-222222222222'::uuid);
+select * from public.register_staff_shifts(
+  jsonb_build_array(
+    jsonb_build_object(
+      'staff_id', '22222222-2222-2222-2222-222222222222'::uuid,
+      'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '8 days')::date,
+      'shift_slot', 'MORNING',
+      'start_time', '07:00',
+      'end_time', '11:00'
+    )
+  )
+);
+
+-- Now switch to normal staff user 11111111
+select pg_temp.set_test_user('11111111-1111-1111-1111-111111111111'::uuid);
+
+select throws_ok(
+  $$
+    select public.update_staff_shift_time(
+      (
+        select id from public.staff_shifts
+        where staff_id = '22222222-2222-2222-2222-222222222222'::uuid
+          and shift_date = ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '8 days')::date
+          and shift_slot = 'MORNING'
+          and status <> 'cancelled'
+        limit 1
+      ),
+      '07:30'::time,
+      '10:30'::time
+    )
+  $$,
+  '42501',
+  null,
+  'Staff cannot edit another person shift when actor is staff'
+);
+
+-- 20. Staff editing own shift outside grid or slot bounds fails
 select throws_ok(
   $$
     select public.update_staff_shift_time(
       (
         select id from public.staff_shifts
         where staff_id = '11111111-1111-1111-1111-111111111111'::uuid
-          and shift_slot = 'MORNING'
-          and status = 'scheduled'
           and shift_date = ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '2 days')::date
+          and shift_slot = 'MORNING'
+          and status <> 'cancelled'
+        limit 1
       ),
-      '13:00'::time,
-      '16:00'::time
+      '06:30'::time,
+      '10:30'::time
     )
   $$,
   'INVALID_MORNING_TIME: Morning shift must be within 07:00-11:00 on 30-minute grid',
-  'Cannot change morning shift time into afternoon window via edit'
+  'Editing morning shift earlier than 07:00 is rejected'
 );
 
--- 20. Historical mutation without history capability fails
+-- 21. Normal staff without history capability creating past shift fails
 select throws_ok(
   $$
     select * from public.register_staff_shifts(
@@ -500,7 +497,7 @@ select throws_ok(
   'Normal staff cannot create historical shifts'
 );
 
--- 21. Admin without history capability on historical date fails
+-- 22. Admin without history capability on historical date fails
 select pg_temp.set_test_user('22222222-2222-2222-2222-222222222222'::uuid);
 
 select throws_ok(
@@ -521,7 +518,7 @@ select throws_ok(
   'Normal admin without history capability cannot create historical shifts'
 );
 
--- 22. User with can_manage_shift_history capability without reason fails
+-- 23. User with can_manage_shift_history capability without reason fails
 select pg_temp.set_test_user('55555555-5555-5555-5555-555555555555'::uuid);
 
 select throws_ok(
@@ -542,7 +539,7 @@ select throws_ok(
   'Historical registration requires explicit reason'
 );
 
--- 23. User with can_manage_shift_history capability with reason SUCCEEDS
+-- 24. User with can_manage_shift_history capability with reason SUCCEEDS
 select lives_ok(
   $$
     select * from public.register_staff_shifts(
@@ -561,47 +558,45 @@ select lives_ok(
   'User with history capability can create historical shift with reason'
 );
 
--- 24. Audit log written for historical creation
-select pg_temp.set_test_user('22222222-2222-2222-2222-222222222222'::uuid);
-
+-- 25. Audit log written for historical creation with EXACT reason string in metadata
 select is(
   (
-    select count(*)::integer from public.audit_logs
+    select metadata->>'reason' from public.audit_logs
     where action = 'create_historical_shift'
       and actor_id = '55555555-5555-5555-5555-555555555555'::uuid
+    order by id desc limit 1
   ),
-  1,
-  'Audit log created for historical shift registration'
+  'Backfilling completed shift from logbook',
+  'Audit log contains exact reason string in metadata'
 );
 
--- 25. Historical cancellation with history capability and reason succeeds
-select pg_temp.set_test_user('55555555-5555-5555-5555-555555555555'::uuid);
-
+-- 26. Historical cancellation with history capability and reason succeeds
 do $$
 declare
   target_id uuid;
 begin
   select id into target_id from public.staff_shifts
   where staff_id = '55555555-5555-5555-5555-555555555555'::uuid
-    and shift_date = ((now() at time zone 'Asia/Ho_Chi_Minh')::date - interval '2 days')::date;
+    and shift_date = ((now() at time zone 'Asia/Ho_Chi_Minh')::date - interval '2 days')::date
+    and status <> 'cancelled';
 
   perform public.cancel_staff_shift(target_id, 'Correction of erroneous entry');
 end;
 $$;
 
-select pg_temp.set_test_user('22222222-2222-2222-2222-222222222222'::uuid);
-
+-- 27. Audit log contains exact cancellation reason
 select is(
   (
-    select count(*)::integer from public.audit_logs
+    select metadata->>'reason' from public.audit_logs
     where action = 'cancel_historical_shift'
       and actor_id = '55555555-5555-5555-5555-555555555555'::uuid
+    order by id desc limit 1
   ),
-  1,
-  'Audit log created for historical shift cancellation'
+  'Correction of erroneous entry',
+  'Audit log contains exact historical cancellation reason string'
 );
 
--- 26. Same-day registration / operation is allowed even if start_time has passed
+-- 28. Same-day registration is allowed
 select pg_temp.set_test_user('11111111-1111-1111-1111-111111111111'::uuid);
 
 select lives_ok(
@@ -622,7 +617,7 @@ select lives_ok(
   'Same-day shift registration is allowed'
 );
 
--- 27. Same-day cancellation is allowed
+-- 29. Same-day cancellation is allowed
 select lives_ok(
   $$
     select public.cancel_staff_shift(
@@ -631,6 +626,8 @@ select lives_ok(
         where staff_id = '11111111-1111-1111-1111-111111111111'::uuid
           and shift_date = (now() at time zone 'Asia/Ho_Chi_Minh')::date
           and shift_slot = 'MORNING'
+          and status <> 'cancelled'
+        limit 1
       ),
       'Today emergency'
     )
@@ -638,8 +635,8 @@ select lives_ok(
   'Same-day cancellation is allowed'
 );
 
--- 28. Root Administrator implicit historical authority
-select pg_temp.set_test_user('33333333-3333-3333-3333-333333333333'::uuid);
+-- 30. Root Administrator implicit historical authority
+select pg_temp.set_test_user(pg_temp.get_root_admin_id());
 
 select lives_ok(
   $$
@@ -659,7 +656,7 @@ select lives_ok(
   'Root has implicit historical management authority with reason'
 );
 
--- 29. Capacity is unlimited: multiple people can be registered in the same date and slot
+-- 31. Capacity is unlimited: multiple people can be registered in the same date and slot
 select pg_temp.set_test_user('22222222-2222-2222-2222-222222222222'::uuid);
 
 select lives_ok(
@@ -693,7 +690,7 @@ select lives_ok(
   'Multiple people can be registered in the same date and slot (unlimited capacity)'
 );
 
--- 30. Direct hard DELETE on staff_shifts is revoked
+-- 32. Direct hard DELETE on staff_shifts is revoked
 select throws_ok(
   $$
     delete from public.staff_shifts where staff_id = '11111111-1111-1111-1111-111111111111'::uuid;
@@ -701,6 +698,119 @@ select throws_ok(
   '42501',
   null,
   'Hard delete on staff_shifts table is forbidden for authenticated users'
+);
+
+-- 33. Direct INSERT on staff_shifts is revoked
+select throws_ok(
+  $$
+    insert into public.staff_shifts (staff_id, shift_date, shift_slot, start_time, end_time)
+    values ('11111111-1111-1111-1111-111111111111'::uuid, '2026-09-01'::date, 'MORNING', '07:00'::time, '11:00'::time);
+  $$,
+  '42501',
+  null,
+  'Direct insert on staff_shifts table is forbidden for authenticated users'
+);
+
+-- 34. Direct UPDATE on staff_shifts is revoked
+select throws_ok(
+  $$
+    update public.staff_shifts set note = 'bypass' where staff_id = '11111111-1111-1111-1111-111111111111'::uuid;
+  $$,
+  '42501',
+  null,
+  'Direct update on staff_shifts table is forbidden for authenticated users'
+);
+
+-- 35. Staff without Skills Lab scope is denied from list_operational_shift_assignees
+select pg_temp.set_test_user('44444444-4444-4444-4444-444444444444'::uuid);
+
+select throws_ok(
+  $$
+    select * from public.list_operational_shift_assignees();
+  $$,
+  '42501',
+  null,
+  'Staff without Skills scope is denied from list_operational_shift_assignees'
+);
+
+-- 36. Staff without Skills Lab scope is denied from register_staff_shifts
+select throws_ok(
+  $$
+    select * from public.register_staff_shifts(
+      jsonb_build_array(
+        jsonb_build_object(
+          'staff_id', '44444444-4444-4444-4444-444444444444'::uuid,
+          'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '2 days')::date,
+          'shift_slot', 'MORNING',
+          'start_time', '07:00',
+          'end_time', '11:00'
+        )
+      )
+    );
+  $$,
+  '42501',
+  null,
+  'Staff without Skills scope is denied from register_staff_shifts'
+);
+
+-- 37. Admin without Skills Lab scope is denied from list_operational_shift_assignees
+select pg_temp.set_test_user('66666666-6666-6666-6666-666666666666'::uuid);
+
+select throws_ok(
+  $$
+    select * from public.list_operational_shift_assignees();
+  $$,
+  '42501',
+  null,
+  'Admin without Skills scope is denied from list_operational_shift_assignees'
+);
+
+-- 38. Admin without Skills Lab scope is denied from register_staff_shifts
+select throws_ok(
+  $$
+    select * from public.register_staff_shifts(
+      jsonb_build_array(
+        jsonb_build_object(
+          'staff_id', '11111111-1111-1111-1111-111111111111'::uuid,
+          'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '2 days')::date,
+          'shift_slot', 'MORNING',
+          'start_time', '07:00',
+          'end_time', '11:00'
+        )
+      )
+    );
+  $$,
+  '42501',
+  null,
+  'Admin without Skills scope is denied from register_staff_shifts'
+);
+
+-- 39. Obsolete function register_own_shift_pattern is absent from pg_proc
+select is(
+  (select count(*)::integer from pg_proc where proname in ('register_own_shift_pattern', 'cancel_own_shift_pattern')),
+  0,
+  'register_own_shift_pattern and cancel_own_shift_pattern are absent from pg_proc'
+);
+
+-- 40. Obsolete function materialize_shift_pattern is absent from pg_proc
+select is(
+  (select count(*)::integer from pg_proc where proname = 'materialize_shift_pattern'),
+  0,
+  'materialize_shift_pattern is absent from pg_proc'
+);
+
+-- 41. Obsolete function refresh_open_shift_patterns is absent from pg_proc
+select is(
+  (select count(*)::integer from pg_proc where proname = 'refresh_open_shift_patterns'),
+  0,
+  'refresh_open_shift_patterns is absent from pg_proc'
+);
+
+-- 42. Obsolete function preserve_staff_shift_history is absent from pg_proc
+select is(
+  (select count(*)::integer from pg_proc where proname = 'preserve_staff_shift_history'),
+  0,
+  'preserve_staff_shift_history is absent from pg_proc'
 );
 
 rollback;

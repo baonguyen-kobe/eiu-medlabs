@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   cancelStaffShiftAction,
   registerStaffShiftsAction,
@@ -12,6 +12,7 @@ import {
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import {
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   CircleAlert,
@@ -55,10 +56,11 @@ export type ShiftTab = "roster" | "register";
 
 type SlotOption = "MORNING" | "AFTERNOON" | "ALL_DAY" | "CUSTOM";
 
-type WeekDayRegistrationRow = {
+export type WeekDayRegistrationRow = {
   date: string;
   dayLabel: string;
   included: boolean;
+  selectedAssigneeIds: string[];
   slotOption: SlotOption;
   customSlot: ShiftSlot;
   startTime: string;
@@ -66,9 +68,10 @@ type WeekDayRegistrationRow = {
   note: string;
 };
 
-type FreeformRegistrationRow = {
+export type FreeformRegistrationRow = {
   id: string;
   date: string;
+  selectedAssigneeIds: string[];
   slotOption: SlotOption;
   customSlot: ShiftSlot;
   startTime: string;
@@ -101,7 +104,10 @@ function defaultEndFor(slot: ShiftSlot): string {
   return slot === "MORNING" ? "11:00" : "16:00";
 }
 
-function generateWeekRows(anchor: string): WeekDayRegistrationRow[] {
+function generateWeekRows(
+  anchor: string,
+  defaultAssigneeIds: string[],
+): WeekDayRegistrationRow[] {
   const parts = anchor.split("-").map(Number);
   const d = new Date(parts[0], parts[1] - 1, parts[2]);
   const dayOfWeek = d.getDay();
@@ -121,6 +127,7 @@ function generateWeekRows(anchor: string): WeekDayRegistrationRow[] {
       date: dateStr,
       dayLabel: `${weekdayFullNames[cur.getDay()]}, ${dt}/${m}/${y}`,
       included: false,
+      selectedAssigneeIds: [...defaultAssigneeIds],
       slotOption: "MORNING",
       customSlot: "MORNING",
       startTime: "07:00",
@@ -129,6 +136,146 @@ function generateWeekRows(anchor: string): WeekDayRegistrationRow[] {
     });
   }
   return generated;
+}
+
+/** Per-row Assignee Multi-Select Dropdown for Admin */
+function RowAssigneePicker({
+  assignees,
+  selectedIds,
+  onChange,
+  onApplyToAll,
+}: {
+  assignees: Assignee[];
+  selectedIds: string[];
+  onChange: (ids: string[]) => void;
+  onApplyToAll?: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        popoverRef.current &&
+        !popoverRef.current.contains(event.target as Node)
+      ) {
+        setOpen(false);
+      }
+    }
+    if (open) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [open]);
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return assignees;
+    const q = search.toLowerCase();
+    return assignees.filter((a) => a.fullName.toLowerCase().includes(q));
+  }, [assignees, search]);
+
+  const summaryText = useMemo(() => {
+    if (selectedIds.length === 0) return "Chọn người trực";
+    if (selectedIds.length === 1) {
+      const p = assignees.find((a) => a.id === selectedIds[0]);
+      return p?.fullName ?? "1 người trực";
+    }
+    return `${selectedIds.length} người trực`;
+  }, [selectedIds, assignees]);
+
+  return (
+    <div className="relative inline-block text-left" ref={popoverRef}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={`input text-xs py-1 px-2.5 flex items-center justify-between gap-1.5 min-w-[150px] max-w-[200px] text-left ${
+          selectedIds.length === 0
+            ? "text-neutral-400 border-dashed"
+            : "text-neutral-900 font-medium"
+        }`}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        <span className="truncate">{summaryText}</span>
+        <ChevronDown size={13} className="text-neutral-400 flex-shrink-0" />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-full mt-1 w-64 bg-white rounded-lg border border-neutral-200 shadow-lg p-2.5 z-40 space-y-2">
+          <input
+            type="text"
+            placeholder="Tìm nhân sự..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="input text-xs px-2 py-1 w-full"
+            autoFocus
+          />
+
+          <div className="flex items-center justify-between text-[11px] px-0.5">
+            <button
+              type="button"
+              onClick={() => onChange(assignees.map((a) => a.id))}
+              className="text-primary-700 hover:underline font-medium"
+            >
+              Chọn tất cả
+            </button>
+            <button
+              type="button"
+              onClick={() => onChange([])}
+              className="text-neutral-500 hover:underline"
+            >
+              Bỏ chọn
+            </button>
+            {onApplyToAll && (
+              <button
+                type="button"
+                onClick={() => {
+                  onApplyToAll();
+                  setOpen(false);
+                }}
+                className="text-sky-700 hover:underline font-medium"
+                title="Áp dụng danh sách người trực này cho tất cả các dòng"
+              >
+                Áp dụng cho tất cả
+              </button>
+            )}
+          </div>
+
+          <div className="max-h-40 overflow-y-auto space-y-1 divide-y divide-neutral-100">
+            {filtered.map((person) => {
+              const checked = selectedIds.includes(person.id);
+              return (
+                <label
+                  key={person.id}
+                  className="flex items-center gap-2 p-1.5 rounded hover:bg-neutral-50 cursor-pointer text-xs select-none"
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        onChange([...selectedIds, person.id]);
+                      } else {
+                        onChange(selectedIds.filter((id) => id !== person.id));
+                      }
+                    }}
+                    className="w-3.5 h-3.5 rounded border-neutral-300 text-primary-600 focus:ring-primary-500"
+                  />
+                  <span className="truncate">{person.fullName}</span>
+                </label>
+              );
+            })}
+            {filtered.length === 0 && (
+              <div className="text-[11px] text-neutral-400 py-2 text-center">
+                Không tìm thấy nhân sự
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function StaffShiftRoster({
@@ -193,7 +340,7 @@ export function StaffShiftRoster({
     historicalReason: string;
   } | null>(null);
 
-  // 2. Edit Shift Time Modal (Admin)
+  // 2. Edit Shift Time Modal (Admin or Shift Owner)
   const [editShiftModal, setEditShiftModal] = useState<{
     open: boolean;
     shift: Shift;
@@ -210,23 +357,36 @@ export function StaffShiftRoster({
     historicalReason: string;
   } | null>(null);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (quickRegisterModal) setQuickRegisterModal(null);
+        if (editShiftModal) setEditShiftModal(null);
+        if (cancelShiftDialog) setCancelShiftDialog(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [quickRegisterModal, editShiftModal, cancelShiftDialog]);
+
   // Tab 2: Registration State
   const [regMode, setRegMode] = useState<"week" | "freeform">("week");
-  const [regAssigneeIds, setRegAssigneeIds] = useState<string[]>(
-    isAdmin ? [] : [userId],
-  );
-  const [regAssigneeSearch, setRegAssigneeSearch] = useState("");
   const [regHistoricalReason, setRegHistoricalReason] = useState("");
+
+  const defaultAssigneeIds = useMemo(
+    () => (isAdmin ? [] : [userId]),
+    [isAdmin, userId],
+  );
 
   // Tab 2: Week mode rows (7 days from anchorDate's week)
   const [weekAnchor, setWeekAnchor] = useState(anchorDate);
   const [weekRows, setWeekRows] = useState<WeekDayRegistrationRow[]>(() =>
-    generateWeekRows(anchorDate),
+    generateWeekRows(anchorDate, defaultAssigneeIds),
   );
 
   const updateWeekAnchor = (newAnchor: string) => {
     setWeekAnchor(newAnchor);
-    setWeekRows(generateWeekRows(newAnchor));
+    setWeekRows(generateWeekRows(newAnchor, defaultAssigneeIds));
   };
 
   // Tab 2: Freeform mode rows
@@ -234,6 +394,7 @@ export function StaffShiftRoster({
     {
       id: "row-1",
       date: todayStr,
+      selectedAssigneeIds: [...defaultAssigneeIds],
       slotOption: "MORNING",
       customSlot: "MORNING",
       startTime: "07:00",
@@ -242,7 +403,7 @@ export function StaffShiftRoster({
     },
   ]);
 
-  // Handle Quick Register Form Submit
+  // Handle Quick Register Form Submit (Tab 1 calendar click)
   const handleQuickRegisterSubmit = () => {
     if (!quickRegisterModal) return;
     const {
@@ -299,11 +460,12 @@ export function StaffShiftRoster({
       setActionMessage(res);
       if (res.ok) {
         setQuickRegisterModal(null);
+        router.refresh();
       }
     });
   };
 
-  // Handle Edit Shift Time Submit
+  // Handle Edit Shift Submit (Staff own shift or Admin)
   const handleEditShiftSubmit = () => {
     if (!editShiftModal) return;
     const { shift, startTime, endTime, note, historicalReason } =
@@ -330,12 +492,13 @@ export function StaffShiftRoster({
         shift.id,
         startTime,
         endTime,
-        note,
+        note.trim() || null,
         shift.shift_date < todayStr ? historicalReason : undefined,
       );
       setActionMessage(res);
       if (res.ok) {
         setEditShiftModal(null);
+        router.refresh();
       }
     });
   };
@@ -364,158 +527,217 @@ export function StaffShiftRoster({
     startTransition(async () => {
       const res = await cancelStaffShiftAction(
         shift.id,
-        historicalReason.trim() || undefined,
+        shift.shift_date < todayStr ? historicalReason : undefined,
       );
       setActionMessage(res);
       if (res.ok) {
         setCancelShiftDialog(null);
+        router.refresh();
       }
     });
   };
 
-  // Handle Tab 2 Batch Registration Submit
-  const handleTab2RegisterSubmit = () => {
-    const targetAssignees = isAdmin ? regAssigneeIds : [userId];
-    if (targetAssignees.length === 0) {
+  // Helper to convert a single registration row into payload items
+  const buildRowPayload = (
+    date: string,
+    slotOption: SlotOption,
+    customSlot: ShiftSlot,
+    startTime: string,
+    endTime: string,
+    note: string,
+    assigneeIds: string[],
+  ): ShiftRegistrationPayloadItem[] => {
+    const assigneesToUse = isAdmin ? assigneeIds : [userId];
+    const items: ShiftRegistrationPayloadItem[] = [];
+
+    for (const staffId of assigneesToUse) {
+      if (slotOption === "MORNING") {
+        items.push({
+          staff_id: staffId,
+          shift_date: date,
+          shift_slot: "MORNING",
+          start_time: "07:00",
+          end_time: "11:00",
+          note: note.trim() || null,
+        });
+      } else if (slotOption === "AFTERNOON") {
+        items.push({
+          staff_id: staffId,
+          shift_date: date,
+          shift_slot: "AFTERNOON",
+          start_time: "13:00",
+          end_time: "16:00",
+          note: note.trim() || null,
+        });
+      } else if (slotOption === "ALL_DAY") {
+        items.push({
+          staff_id: staffId,
+          shift_date: date,
+          shift_slot: "MORNING",
+          start_time: "07:00",
+          end_time: "11:00",
+          note: note.trim() || null,
+        });
+        items.push({
+          staff_id: staffId,
+          shift_date: date,
+          shift_slot: "AFTERNOON",
+          start_time: "13:00",
+          end_time: "16:00",
+          note: note.trim() || null,
+        });
+      } else {
+        // CUSTOM
+        items.push({
+          staff_id: staffId,
+          shift_date: date,
+          shift_slot: customSlot,
+          start_time: startTime,
+          end_time: endTime,
+          note: note.trim() || null,
+        });
+      }
+    }
+    return items;
+  };
+
+  // Handle Per-Row Submission ("Đăng ký ca")
+  const handleSingleRowSubmit = (
+    date: string,
+    slotOption: SlotOption,
+    customSlot: ShiftSlot,
+    startTime: string,
+    endTime: string,
+    note: string,
+    assigneeIds: string[],
+    onSuccessCallback?: () => void,
+  ) => {
+    const assigneesToUse = isAdmin ? assigneeIds : [userId];
+    if (assigneesToUse.length === 0) {
       setActionMessage({
         ok: false,
-        message: "Vui lòng chọn ít nhất một người trực.",
+        message: "Vui lòng chọn ít nhất một người trực cho dòng này.",
       });
       return;
     }
 
+    const isPast = date < todayStr;
+    if (isPast && !canManageShiftHistory) {
+      setActionMessage({
+        ok: false,
+        message: "Không thể đăng ký ca trực trong quá khứ.",
+      });
+      return;
+    }
+
+    if (isPast && !regHistoricalReason.trim()) {
+      setActionMessage({
+        ok: false,
+        message: "Vui lòng nhập lý do điều chỉnh lịch sử ở cuối trang.",
+      });
+      return;
+    }
+
+    const payload = buildRowPayload(
+      date,
+      slotOption,
+      customSlot,
+      startTime,
+      endTime,
+      note,
+      assigneesToUse,
+    );
+
+    startTransition(async () => {
+      const res = await registerStaffShiftsAction(
+        payload,
+        isPast ? regHistoricalReason : undefined,
+      );
+      setActionMessage(res);
+      if (res.ok) {
+        onSuccessCallback?.();
+        router.refresh();
+      }
+    });
+  };
+
+  // Handle Batch Submission ("Đăng ký các dòng đã điền")
+  const handleBatchRegisterSubmit = () => {
     const payload: ShiftRegistrationPayloadItem[] = [];
     let hasHistorical = false;
 
     if (regMode === "week") {
-      const includedWeekRows = weekRows.filter((r) => r.included);
-      if (includedWeekRows.length === 0) {
+      const activeRows = weekRows.filter((r) => r.included);
+      if (activeRows.length === 0) {
         setActionMessage({
           ok: false,
-          message: "Vui lòng tích chọn ít nhất một ngày trong tuần để đăng ký.",
+          message: "Vui lòng tích chọn ít nhất một ngày trực.",
         });
         return;
       }
 
-      for (const row of includedWeekRows) {
-        if (row.date < todayStr) hasHistorical = true;
-
-        for (const staffId of targetAssignees) {
-          if (row.slotOption === "ALL_DAY") {
-            const groupId = crypto.randomUUID();
-            payload.push({
-              staff_id: staffId,
-              shift_date: row.date,
-              shift_slot: "MORNING",
-              start_time: "07:00",
-              end_time: "11:00",
-              note: row.note.trim() || null,
-              creation_group_id: groupId,
-            });
-            payload.push({
-              staff_id: staffId,
-              shift_date: row.date,
-              shift_slot: "AFTERNOON",
-              start_time: "13:00",
-              end_time: "16:00",
-              note: row.note.trim() || null,
-              creation_group_id: groupId,
-            });
-          } else if (row.slotOption === "MORNING") {
-            payload.push({
-              staff_id: staffId,
-              shift_date: row.date,
-              shift_slot: "MORNING",
-              start_time: "07:00",
-              end_time: "11:00",
-              note: row.note.trim() || null,
-            });
-          } else if (row.slotOption === "AFTERNOON") {
-            payload.push({
-              staff_id: staffId,
-              shift_date: row.date,
-              shift_slot: "AFTERNOON",
-              start_time: "13:00",
-              end_time: "16:00",
-              note: row.note.trim() || null,
-            });
-          } else {
-            // CUSTOM
-            payload.push({
-              staff_id: staffId,
-              shift_date: row.date,
-              shift_slot: row.customSlot,
-              start_time: row.startTime,
-              end_time: row.endTime,
-              note: row.note.trim() || null,
-            });
-          }
-        }
-      }
-    } else {
-      // Freeform mode
-      for (const row of freeformRows) {
-        if (!row.date) {
+      for (const row of activeRows) {
+        const assigneesToUse = isAdmin ? row.selectedAssigneeIds : [userId];
+        if (assigneesToUse.length === 0) {
           setActionMessage({
             ok: false,
-            message: "Vui lòng nhập ngày cho tất cả các dòng.",
+            message: `Dòng ngày ${formatBusinessDate(row.date)} chưa có người trực được chọn.`,
           });
           return;
         }
-        if (row.date < todayStr) hasHistorical = true;
 
-        for (const staffId of targetAssignees) {
-          if (row.slotOption === "ALL_DAY") {
-            const groupId = crypto.randomUUID();
-            payload.push({
-              staff_id: staffId,
-              shift_date: row.date,
-              shift_slot: "MORNING",
-              start_time: "07:00",
-              end_time: "11:00",
-              note: row.note.trim() || null,
-              creation_group_id: groupId,
-            });
-            payload.push({
-              staff_id: staffId,
-              shift_date: row.date,
-              shift_slot: "AFTERNOON",
-              start_time: "13:00",
-              end_time: "16:00",
-              note: row.note.trim() || null,
-              creation_group_id: groupId,
-            });
-          } else if (row.slotOption === "MORNING") {
-            payload.push({
-              staff_id: staffId,
-              shift_date: row.date,
-              shift_slot: "MORNING",
-              start_time: "07:00",
-              end_time: "11:00",
-              note: row.note.trim() || null,
-            });
-          } else if (row.slotOption === "AFTERNOON") {
-            payload.push({
-              staff_id: staffId,
-              shift_date: row.date,
-              shift_slot: "AFTERNOON",
-              start_time: "13:00",
-              end_time: "16:00",
-              note: row.note.trim() || null,
-            });
-          } else {
-            // CUSTOM
-            payload.push({
-              staff_id: staffId,
-              shift_date: row.date,
-              shift_slot: row.customSlot,
-              start_time: row.startTime,
-              end_time: row.endTime,
-              note: row.note.trim() || null,
-            });
-          }
-        }
+        if (row.date < todayStr) hasHistorical = true;
+        const rowItems = buildRowPayload(
+          row.date,
+          row.slotOption,
+          row.customSlot,
+          row.startTime,
+          row.endTime,
+          row.note,
+          assigneesToUse,
+        );
+        payload.push(...rowItems);
       }
+    } else {
+      // freeform mode
+      if (freeformRows.length === 0) {
+        setActionMessage({
+          ok: false,
+          message: "Vui lòng thêm ít nhất một ngày trực.",
+        });
+        return;
+      }
+
+      for (const row of freeformRows) {
+        const assigneesToUse = isAdmin ? row.selectedAssigneeIds : [userId];
+        if (assigneesToUse.length === 0) {
+          setActionMessage({
+            ok: false,
+            message: `Dòng ngày ${formatBusinessDate(row.date)} chưa có người trực được chọn.`,
+          });
+          return;
+        }
+
+        if (row.date < todayStr) hasHistorical = true;
+        const rowItems = buildRowPayload(
+          row.date,
+          row.slotOption,
+          row.customSlot,
+          row.startTime,
+          row.endTime,
+          row.note,
+          assigneesToUse,
+        );
+        payload.push(...rowItems);
+      }
+    }
+
+    if (payload.length === 0) {
+      setActionMessage({
+        ok: false,
+        message: "Không có ca trực nào được tạo từ các dòng đã chọn.",
+      });
+      return;
     }
 
     if (hasHistorical && !canManageShiftHistory) {
@@ -541,7 +763,6 @@ export function StaffShiftRoster({
       );
       setActionMessage(res);
       if (res.ok) {
-        // Reset form or switch to roster tab
         setRegHistoricalReason("");
         if (regMode === "week") {
           setWeekRows((prev) =>
@@ -552,6 +773,7 @@ export function StaffShiftRoster({
             {
               id: `row-${Date.now()}`,
               date: todayStr,
+              selectedAssigneeIds: [...defaultAssigneeIds],
               slotOption: "MORNING",
               customSlot: "MORNING",
               startTime: "07:00",
@@ -577,14 +799,8 @@ export function StaffShiftRoster({
     return map;
   }, [shifts]);
 
-  const filteredAssignees = useMemo(() => {
-    if (!regAssigneeSearch.trim()) return assignees;
-    const q = regAssigneeSearch.toLowerCase();
-    return assignees.filter((a) => a.fullName.toLowerCase().includes(q));
-  }, [assignees, regAssigneeSearch]);
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full max-w-full min-w-0">
       {/* Tab Navigation */}
       <div className="flex border-b border-neutral-200">
         <Link
@@ -696,9 +912,16 @@ export function StaffShiftRoster({
             </div>
           </div>
 
-          {/* Calendar Grid */}
-          <div className="bg-white rounded-xl border border-neutral-200 overflow-x-auto shadow-xs">
-            <table className="w-full text-left border-collapse min-w-[720px]">
+          {/* Calendar Grid with Accessible role="region" */}
+          <div
+            className="shift-calendar-stack bg-white rounded-xl border border-neutral-200 overflow-x-auto shadow-xs w-full max-w-full min-w-0"
+            role="region"
+            aria-label={
+              view === "month" ? "Lịch trực theo tháng" : "Lịch trực theo tuần"
+            }
+            tabIndex={0}
+          >
+            <table className="w-full text-left border-collapse min-w-[840px]">
               <thead>
                 <tr className="bg-neutral-50/80 border-b border-neutral-200">
                   <th className="p-3 w-28 text-xs font-semibold text-neutral-500 uppercase tracking-wider sticky left-0 bg-neutral-50/95 z-10">
@@ -791,9 +1014,9 @@ export function StaffShiftRoster({
                                       </span>
                                     )}
                                   </span>
-                                  {/* Shift Card Actions */}
+                                  {/* Shift Card Actions: Edit for Admin OR Self */}
                                   <div className="flex items-center gap-0.5 opacity-90 hover:opacity-100">
-                                    {isAdmin && (
+                                    {(isAdmin || isMe) && (
                                       <button
                                         type="button"
                                         title="Chỉnh sửa giờ trực"
@@ -864,7 +1087,7 @@ export function StaffShiftRoster({
                                   historicalReason: "",
                                 })
                               }
-                              className="w-full py-1 text-[11px] font-medium text-neutral-400 hover:text-primary-700 hover:bg-primary-50/50 rounded border border-dashed border-neutral-200 hover:border-primary-300 flex items-center justify-center gap-1 transition-colors"
+                              className="empty-shift-action w-full py-1 text-[11px] font-medium text-neutral-400 hover:text-primary-700 hover:bg-primary-50/50 rounded border border-dashed border-neutral-200 hover:border-primary-300 flex items-center justify-center gap-1 transition-colors"
                               aria-label={`Đăng ký trực sáng ngày ${dateStr}`}
                             >
                               <Plus size={12} />
@@ -931,9 +1154,9 @@ export function StaffShiftRoster({
                                       </span>
                                     )}
                                   </span>
-                                  {/* Shift Card Actions */}
+                                  {/* Shift Card Actions: Edit for Admin OR Self */}
                                   <div className="flex items-center gap-0.5 opacity-90 hover:opacity-100">
-                                    {isAdmin && (
+                                    {(isAdmin || isMe) && (
                                       <button
                                         type="button"
                                         title="Chỉnh sửa giờ trực"
@@ -1004,7 +1227,7 @@ export function StaffShiftRoster({
                                   historicalReason: "",
                                 })
                               }
-                              className="w-full py-1 text-[11px] font-medium text-neutral-400 hover:text-primary-700 hover:bg-primary-50/50 rounded border border-dashed border-neutral-200 hover:border-primary-300 flex items-center justify-center gap-1 transition-colors"
+                              className="empty-shift-action w-full py-1 text-[11px] font-medium text-neutral-400 hover:text-primary-700 hover:bg-primary-50/50 rounded border border-dashed border-neutral-200 hover:border-primary-300 flex items-center justify-center gap-1 transition-colors"
                               aria-label={`Đăng ký trực chiều ngày ${dateStr}`}
                             >
                               <Plus size={12} />
@@ -1024,15 +1247,16 @@ export function StaffShiftRoster({
 
       {/* TAB 2: ĐĂNG KÝ LỊCH TRỰC */}
       {tab === "register" && (
-        <div className="max-w-4xl mx-auto space-y-6">
+        <div className="max-w-5xl mx-auto space-y-6">
           <div className="bg-white p-6 rounded-xl border border-neutral-200 shadow-xs space-y-6">
             <div>
               <h2 className="text-base font-bold text-neutral-900">
                 Đăng ký ca trực mới
               </h2>
               <p className="text-xs text-neutral-500 mt-0.5">
-                Chọn người trực và các ngày trực theo tuần hoặc tự chọn danh
-                sách ngày.
+                Điền thông tin trực theo dòng. Có thể nhấn &quot;Đăng ký
+                ca&quot; tại từng dòng hoặc &quot;Đăng ký các dòng đã điền&quot;
+                để lưu toàn bộ.
               </p>
             </div>
 
@@ -1060,96 +1284,6 @@ export function StaffShiftRoster({
               >
                 Tự chọn ngày trực
               </button>
-            </div>
-
-            {/* Assignee Selection Field */}
-            <div className="border-t border-neutral-200 pt-4 space-y-3">
-              <label className="block text-xs font-semibold text-neutral-700">
-                Người trực
-              </label>
-
-              {!isAdmin ? (
-                // Staff: Readonly self display
-                <div className="p-3 bg-neutral-50 rounded-lg border border-neutral-200 text-xs font-medium text-neutral-800 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                    <span>{userFullName} (Tài khoản của bạn)</span>
-                  </div>
-                  <span className="text-[11px] text-neutral-400">
-                    Chỉ đăng ký cho chính mình
-                  </span>
-                </div>
-              ) : (
-                // Admin: Multi-select personnel
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      placeholder="Tìm kiếm nhân sự..."
-                      value={regAssigneeSearch}
-                      onChange={(e) => setRegAssigneeSearch(e.target.value)}
-                      className="input text-xs px-3 py-1.5 flex-1"
-                    />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setRegAssigneeIds(assignees.map((a) => a.id))
-                      }
-                      className="button button-secondary text-xs px-2.5 py-1.5"
-                    >
-                      Chọn tất cả
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setRegAssigneeIds([])}
-                      className="button button-secondary text-xs px-2.5 py-1.5"
-                    >
-                      Bỏ chọn
-                    </button>
-                  </div>
-
-                  <div className="max-h-40 overflow-y-auto border border-neutral-200 rounded-lg p-2 grid grid-cols-2 sm:grid-cols-3 gap-2 bg-neutral-50/50">
-                    {filteredAssignees.map((person) => {
-                      const checked = regAssigneeIds.includes(person.id);
-                      return (
-                        <label
-                          key={person.id}
-                          className={`flex items-center gap-2 p-2 rounded-md border text-xs cursor-pointer select-none transition-colors ${
-                            checked
-                              ? "bg-primary-50 border-primary-300 text-primary-950 font-medium"
-                              : "bg-white border-neutral-200 text-neutral-700 hover:bg-neutral-100/60"
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setRegAssigneeIds((prev) => [
-                                  ...prev,
-                                  person.id,
-                                ]);
-                              } else {
-                                setRegAssigneeIds((prev) =>
-                                  prev.filter((id) => id !== person.id),
-                                );
-                              }
-                            }}
-                            className="rounded border-neutral-300 text-primary-600 focus:ring-primary-500"
-                          />
-                          <span className="truncate">{person.fullName}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                  {regAssigneeIds.length > 0 && (
-                    <div className="text-[11px] text-neutral-500">
-                      Đã chọn <strong>{regAssigneeIds.length}</strong> nhân sự
-                      (mỗi nhân sự sẽ được tạo một ca trực riêng).
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
 
             {/* Mode 1: Theo tuần */}
@@ -1198,20 +1332,21 @@ export function StaffShiftRoster({
                   </div>
                 </div>
 
-                <div className="space-y-2.5">
+                <div className="space-y-3">
                   {weekRows.map((row, idx) => {
                     const isPast = row.date < todayStr;
                     return (
                       <div
                         key={row.date}
-                        className={`p-3 rounded-lg border transition-all ${
+                        className={`p-3.5 rounded-lg border transition-all ${
                           row.included
                             ? "bg-white border-primary-400 shadow-xs ring-1 ring-primary-400"
-                            : "bg-neutral-50/60 border-neutral-200 opacity-75"
+                            : "bg-neutral-50/60 border-neutral-200 opacity-80"
                         }`}
                       >
                         <div className="flex flex-wrap items-center justify-between gap-3">
-                          <label className="flex items-center gap-2 cursor-pointer select-none">
+                          {/* Column 1: Ngày checkbox & label */}
+                          <label className="flex items-center gap-2 cursor-pointer select-none min-w-[180px]">
                             <input
                               type="checkbox"
                               checked={row.included}
@@ -1239,8 +1374,35 @@ export function StaffShiftRoster({
                           </label>
 
                           {row.included && (
-                            <div className="flex flex-wrap items-center gap-2">
-                              {/* Slot selector */}
+                            <div className="flex flex-wrap items-center gap-2.5">
+                              {/* Column 2: Người trực */}
+                              {isAdmin ? (
+                                <RowAssigneePicker
+                                  assignees={assignees}
+                                  selectedIds={row.selectedAssigneeIds}
+                                  onChange={(ids) => {
+                                    const next = [...weekRows];
+                                    next[idx].selectedAssigneeIds = ids;
+                                    setWeekRows(next);
+                                  }}
+                                  onApplyToAll={() => {
+                                    const ids = row.selectedAssigneeIds;
+                                    setWeekRows((prev) =>
+                                      prev.map((r) => ({
+                                        ...r,
+                                        selectedAssigneeIds: [...ids],
+                                      })),
+                                    );
+                                  }}
+                                />
+                              ) : (
+                                <div className="text-xs bg-neutral-100 text-neutral-800 px-2.5 py-1 rounded font-medium flex items-center gap-1.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                  <span>{userFullName}</span>
+                                </div>
+                              )}
+
+                              {/* Column 3: Buổi trực */}
                               <select
                                 value={row.slotOption}
                                 onChange={(e) => {
@@ -1258,7 +1420,7 @@ export function StaffShiftRoster({
                                   }
                                   setWeekRows(next);
                                 }}
-                                className="input text-xs py-1 px-2.5 font-medium"
+                                className="input text-xs py-1 px-2 font-medium"
                               >
                                 <option value="MORNING">
                                   Sáng (07:00 – 11:00)
@@ -1272,7 +1434,7 @@ export function StaffShiftRoster({
                                 <option value="CUSTOM">Tùy chỉnh giờ</option>
                               </select>
 
-                              {/* Custom Time Pickers */}
+                              {/* Column 4: Thời gian tùy chỉnh */}
                               {row.slotOption === "CUSTOM" && (
                                 <div className="flex items-center gap-1.5">
                                   <select
@@ -1324,18 +1486,43 @@ export function StaffShiftRoster({
                                 </div>
                               )}
 
-                              {/* Note */}
+                              {/* Column 5: Ghi chú */}
                               <input
                                 type="text"
-                                placeholder="Ghi chú (tùy chọn)..."
+                                placeholder="Ghi chú..."
                                 value={row.note}
                                 onChange={(e) => {
                                   const next = [...weekRows];
                                   next[idx].note = e.target.value;
                                   setWeekRows(next);
                                 }}
-                                className="input text-xs py-1 px-2.5 max-w-[200px]"
+                                className="input text-xs py-1 px-2.5 max-w-[150px]"
                               />
+
+                              {/* Column 6: Thao tác đăng ký từng dòng */}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleSingleRowSubmit(
+                                    row.date,
+                                    row.slotOption,
+                                    row.customSlot,
+                                    row.startTime,
+                                    row.endTime,
+                                    row.note,
+                                    row.selectedAssigneeIds,
+                                    () => {
+                                      const next = [...weekRows];
+                                      next[idx].included = false;
+                                      setWeekRows(next);
+                                    },
+                                  )
+                                }
+                                disabled={pending}
+                                className="button button-secondary text-xs px-2.5 py-1 flex items-center gap-1 font-semibold text-primary-700 hover:bg-primary-50"
+                              >
+                                <Plus size={13} /> Đăng ký ca
+                              </button>
                             </div>
                           )}
                         </div>
@@ -1361,6 +1548,7 @@ export function StaffShiftRoster({
                         {
                           id: `row-${Date.now()}`,
                           date: todayStr,
+                          selectedAssigneeIds: [...defaultAssigneeIds],
                           slotOption: "MORNING",
                           customSlot: "MORNING",
                           startTime: "07:00",
@@ -1381,10 +1569,11 @@ export function StaffShiftRoster({
                     return (
                       <div
                         key={row.id}
-                        className="p-3 bg-white rounded-lg border border-neutral-200 shadow-2xs space-y-2.5"
+                        className="p-3.5 bg-white rounded-lg border border-neutral-200 shadow-2xs space-y-2.5"
                       >
-                        <div className="flex flex-wrap items-center justify-between gap-2.5">
-                          <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          {/* Column 1: Ngày trực */}
+                          <div className="flex items-center gap-2 min-w-[160px]">
                             <input
                               type="date"
                               value={row.date}
@@ -1402,8 +1591,35 @@ export function StaffShiftRoster({
                             )}
                           </div>
 
-                          <div className="flex flex-wrap items-center gap-2">
-                            {/* Slot Selector */}
+                          <div className="flex flex-wrap items-center gap-2.5">
+                            {/* Column 2: Người trực */}
+                            {isAdmin ? (
+                              <RowAssigneePicker
+                                assignees={assignees}
+                                selectedIds={row.selectedAssigneeIds}
+                                onChange={(ids) => {
+                                  const next = [...freeformRows];
+                                  next[idx].selectedAssigneeIds = ids;
+                                  setFreeformRows(next);
+                                }}
+                                onApplyToAll={() => {
+                                  const ids = row.selectedAssigneeIds;
+                                  setFreeformRows((prev) =>
+                                    prev.map((r) => ({
+                                      ...r,
+                                      selectedAssigneeIds: [...ids],
+                                    })),
+                                  );
+                                }}
+                              />
+                            ) : (
+                              <div className="text-xs bg-neutral-100 text-neutral-800 px-2.5 py-1 rounded font-medium flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                <span>{userFullName}</span>
+                              </div>
+                            )}
+
+                            {/* Column 3: Buổi trực */}
                             <select
                               value={row.slotOption}
                               onChange={(e) => {
@@ -1421,7 +1637,7 @@ export function StaffShiftRoster({
                                 }
                                 setFreeformRows(next);
                               }}
-                              className="input text-xs py-1 px-2.5 font-medium"
+                              className="input text-xs py-1 px-2 font-medium"
                             >
                               <option value="MORNING">
                                 Sáng (07:00 – 11:00)
@@ -1435,7 +1651,7 @@ export function StaffShiftRoster({
                               <option value="CUSTOM">Tùy chỉnh giờ</option>
                             </select>
 
-                            {/* Custom Time Pickers */}
+                            {/* Column 4: Thời gian tùy chỉnh */}
                             {row.slotOption === "CUSTOM" && (
                               <div className="flex items-center gap-1.5">
                                 <select
@@ -1485,18 +1701,45 @@ export function StaffShiftRoster({
                               </div>
                             )}
 
-                            {/* Note */}
+                            {/* Column 5: Ghi chú */}
                             <input
                               type="text"
-                              placeholder="Ghi chú (tùy chọn)..."
+                              placeholder="Ghi chú..."
                               value={row.note}
                               onChange={(e) => {
                                 const next = [...freeformRows];
                                 next[idx].note = e.target.value;
                                 setFreeformRows(next);
                               }}
-                              className="input text-xs py-1 px-2.5 max-w-[200px]"
+                              className="input text-xs py-1 px-2.5 max-w-[150px]"
                             />
+
+                            {/* Column 6: Đăng ký từng dòng */}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleSingleRowSubmit(
+                                  row.date,
+                                  row.slotOption,
+                                  row.customSlot,
+                                  row.startTime,
+                                  row.endTime,
+                                  row.note,
+                                  row.selectedAssigneeIds,
+                                  () => {
+                                    if (freeformRows.length > 1) {
+                                      setFreeformRows((prev) =>
+                                        prev.filter((r) => r.id !== row.id),
+                                      );
+                                    }
+                                  },
+                                )
+                              }
+                              disabled={pending}
+                              className="button button-secondary text-xs px-2.5 py-1 flex items-center gap-1 font-semibold text-primary-700 hover:bg-primary-50"
+                            >
+                              <Plus size={13} /> Đăng ký ca
+                            </button>
 
                             {/* Remove Row Button */}
                             {freeformRows.length > 1 && (
@@ -1522,7 +1765,7 @@ export function StaffShiftRoster({
               </div>
             )}
 
-            {/* Historical Reason Field (if any date is past) */}
+            {/* Historical Reason Field (if any active date is past) */}
             {((regMode === "week" &&
               weekRows.some((r) => r.included && r.date < todayStr)) ||
               (regMode === "freeform" &&
@@ -1554,29 +1797,52 @@ export function StaffShiftRoster({
               </div>
             )}
 
-            {/* Submit Button */}
-            <div className="border-t border-neutral-200 pt-4 flex items-center justify-end gap-3">
+            {/* Batch Submit Button ("Đăng ký các dòng đã điền") */}
+            <div className="border-t border-neutral-200 pt-4 flex items-center justify-between gap-3">
+              <div className="text-xs text-neutral-500">
+                {regMode === "week" ? (
+                  <span>
+                    Đã chọn{" "}
+                    <strong>{weekRows.filter((r) => r.included).length}</strong>{" "}
+                    ngày trong tuần
+                  </span>
+                ) : (
+                  <span>
+                    Đang có <strong>{freeformRows.length}</strong> dòng ngày
+                    trực
+                  </span>
+                )}
+              </div>
               <button
                 type="button"
-                onClick={handleTab2RegisterSubmit}
+                onClick={handleBatchRegisterSubmit}
                 disabled={pending}
                 className="button button-primary text-xs px-6 py-2.5 font-semibold"
               >
-                {pending ? "Đang xử lý..." : "Xác nhận đăng ký"}
+                {pending ? "Đang xử lý..." : "Đăng ký các dòng đã điền"}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* DIALOG 1: Quick Register Modal */}
+      {/* DIALOG 1: Quick Register Modal (Accessible canonical dialog) */}
       {quickRegisterModal?.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-neutral-950/40 backdrop-blur-xs">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-neutral-950/40 backdrop-blur-xs"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Tạo lịch trực"
+          aria-labelledby="quick-register-modal-title"
+        >
           <div className="bg-white rounded-xl max-w-md w-full p-5 shadow-xl border border-neutral-200 space-y-4 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between border-b border-neutral-200 pb-3">
               <div>
-                <h3 className="text-sm font-bold text-neutral-900">
-                  {isAdmin ? "Thêm người trực" : "Đăng ký ca trực"}
+                <h3
+                  id="quick-register-modal-title"
+                  className="text-sm font-bold text-neutral-900"
+                >
+                  Tạo lịch trực
                 </h3>
                 <p className="text-xs text-neutral-500">
                   {getDayOfWeekLabel(quickRegisterModal.date)},{" "}
@@ -1755,13 +2021,21 @@ export function StaffShiftRoster({
         </div>
       )}
 
-      {/* DIALOG 2: Edit Shift Time Modal (Admin only) */}
+      {/* DIALOG 2: Edit Shift Time Modal (Accessible canonical dialog for Admin or Self) */}
       {editShiftModal?.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-neutral-950/40 backdrop-blur-xs">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-neutral-950/40 backdrop-blur-xs"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="edit-shift-modal-title"
+        >
           <div className="bg-white rounded-xl max-w-md w-full p-5 shadow-xl border border-neutral-200 space-y-4 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between border-b border-neutral-200 pb-3">
               <div>
-                <h3 className="text-sm font-bold text-neutral-900">
+                <h3
+                  id="edit-shift-modal-title"
+                  className="text-sm font-bold text-neutral-900"
+                >
                   Chỉnh sửa giờ ca trực
                 </h3>
                 <p className="text-xs text-neutral-500">

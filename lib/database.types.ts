@@ -1,4 +1,4 @@
-export type Json =
+﻿export type Json =
   | string
   | number
   | boolean
@@ -2784,40 +2784,6 @@ export type Database = {
           target_user_id: string
         }
         Returns: undefined
-      }
-      register_own_shift: {
-        Args: {
-          target_date: string
-          target_end: string
-          target_note?: string
-          target_shift_type: string
-          target_start: string
-          target_template_id?: string
-        }
-        Returns: {
-          cancellation_reason: string | null
-          cancelled_at: string | null
-          cancelled_by: string | null
-          created_at: string
-          created_by: string
-          creation_group_id: string | null
-          end_time: string
-          id: string
-          note: string | null
-          registration_source: Database["public"]["Enums"]["shift_registration_source"]
-          shift_date: string
-          shift_slot: string
-          staff_id: string
-          start_time: string
-          status: Database["public"]["Enums"]["shift_status"]
-          updated_at: string
-        }
-        SetofOptions: {
-          from: "*"
-          to: "staff_shifts"
-          isOneToOne: true
-          isSetofReturn: false
-        }
       }
       register_staff_shifts: {
         Args: { adjustment_reason?: string; shifts_payload: Json }

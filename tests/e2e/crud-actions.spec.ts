@@ -714,22 +714,22 @@ test("staff shift registration and cancellation work in V2", async ({
     // Mode 2: Tự chọn ngày trực
     await page.getByRole("button", { name: "Tự chọn ngày trực" }).click();
     await page.locator('input[type="date"]').first().fill(shiftDate);
-    await page.getByRole("button", { name: "Xác nhận đăng ký" }).click();
+    await page
+      .getByRole("button", { name: /Đăng ký ca|Đăng ký các dòng đã điền/ })
+      .first()
+      .click();
     await expect(page.getByRole("status")).toContainText(
       "Đã đăng ký thành công",
     );
 
     // Verify shift card is visible on roster
     await page.goto(`/staff-shifts?tab=roster&view=week&date=${shiftDate}`);
-    const shiftCard = page
-      .locator('div[class*="rounded-lg"]')
-      .filter({ hasText: "Nguyễn Bảo" });
-    await expect(shiftCard.first()).toBeVisible();
+    const cancelButton = page
+      .getByRole("button", { name: /Hủy lịch trực/ })
+      .first();
+    await expect(cancelButton).toBeVisible();
 
     // Cancel own shift
-    const cancelButton = shiftCard
-      .first()
-      .locator('button[aria-label*="Hủy lịch trực"]');
     await cancelButton.click();
     await page.getByRole("button", { name: "Hủy ca trực" }).click();
     await expect(page.getByRole("status")).toContainText(

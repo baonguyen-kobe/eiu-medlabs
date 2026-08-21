@@ -11,6 +11,7 @@ import {
   startOfMonth,
   startOfWeek,
 } from "date-fns";
+import { redirect } from "next/navigation";
 import { StaffShiftRoster } from "@/components/staff-shift-roster";
 import { WorkspaceShell } from "@/components/workspace-shell";
 import { businessToday } from "@/lib/business-time";
@@ -37,6 +38,13 @@ export default async function StaffShiftsPage({
     canManageEmailNotifications,
     isRootAdministrator,
   } = await getViewer();
+
+  const isSkillsScope = roomTypes.some((rt) => rt.code === "nursing_skills");
+  const isStaffOrAdmin = roles.includes("admin") || roles.includes("staff");
+  const isAllowed = isRootAdministrator || (isSkillsScope && isStaffOrAdmin);
+  if (!isAllowed) {
+    redirect("/dashboard");
+  }
   const query = await searchParams;
   const parsedDate = query.date ? parseISO(query.date) : businessToday();
   const baseDate = isValid(parsedDate) ? parsedDate : businessToday();

@@ -943,6 +943,57 @@ begin
 end;
 $$;
 
+create or replace function private.can_operate_skills_shifts(actor_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  is_active boolean;
+  is_root boolean;
+  has_role boolean;
+  has_scope boolean;
+begin
+  if actor_id is null then
+    return false;
+  end if;
+
+  select
+    p.is_active,
+    (ssp.root_admin_id = actor_id)
+  into is_active, is_root
+  from public.profiles p
+  left join public.system_security_principals ssp on ssp.singleton = true
+  where p.id = actor_id;
+
+  if not coalesce(is_active, false) then
+    return false;
+  end if;
+
+  if coalesce(is_root, false) then
+    return true;
+  end if;
+
+  select exists (
+    select 1 from public.user_roles ur
+    where ur.user_id = actor_id and ur.role in ('admin', 'staff')
+  ) into has_role;
+
+  if not has_role then
+    return false;
+  end if;
+
+  select exists (
+    select 1 from public.profile_room_types prt
+    join public.room_types rt on rt.id = prt.room_type_id
+    where prt.profile_id = actor_id and rt.code = 'nursing_skills'
+  ) into has_scope;
+
+  return has_scope;
+end;
+$$;
+
 create or replace function private.can_manage_shift_history(actor_id uuid)
 returns boolean
 language plpgsql
@@ -1027,9 +1078,10 @@ security definer
 set search_path = ''
 as $$
 begin
-  if not (select private.is_active_user()) then
-    raise exception 'AUTH_REQUIRED' using errcode = '42501';
+  if not private.can_operate_skills_shifts(auth.uid()) then
+    raise exception 'PERMISSION_DENIED: User lacks Skills Lab operational scope' using errcode = '42501';
   end if;
+
   return query
   select profiles.id, profiles.full_name, profiles.title
   from public.profiles profiles
@@ -1059,6 +1111,7 @@ as $$
 declare
   actor_id uuid := auth.uid();
   is_admin boolean;
+  is_root boolean;
   can_history boolean;
   business_today date;
   row_elem jsonb;
@@ -1071,22 +1124,29 @@ declare
   target_group_id uuid;
   assigned_source public.shift_registration_source;
   created_row public.staff_shifts;
-  results public.staff_shifts[];
   seen_keys text[] := '{}';
   row_key text;
 begin
   if actor_id is null then
-    raise exception 'AUTH_REQUIRED: Authentication is required';
+    raise exception 'AUTH_REQUIRED: Authentication is required' using errcode = '42501';
+  end if;
+
+  if not private.can_operate_skills_shifts(actor_id) then
+    raise exception 'PERMISSION_DENIED: User lacks Skills Lab operational scope' using errcode = '42501';
   end if;
 
   is_admin := private.is_admin();
+  is_root := exists (
+    select 1 from public.system_security_principals where singleton and root_admin_id = actor_id
+  );
   can_history := private.can_manage_shift_history(actor_id);
   business_today := (now() at time zone 'Asia/Ho_Chi_Minh')::date;
 
   if shifts_payload is null or jsonb_array_length(shifts_payload) = 0 then
-    raise exception 'INVALID_PAYLOAD: Shift payload must be a non-empty array';
+    raise exception 'INVALID_PAYLOAD: Shift payload must be a non-empty array' using errcode = '22023';
   end if;
 
+  -- Phase 1: Validate all rows in payload
   for row_elem in select * from jsonb_array_elements(shifts_payload) loop
     target_staff_id := (row_elem->>'staff_id')::uuid;
     target_date := (row_elem->>'shift_date')::date;
@@ -1097,62 +1157,72 @@ begin
     target_group_id := (row_elem->>'creation_group_id')::uuid;
 
     if target_staff_id is null then
-      raise exception 'INVALID_STAFF_ID: staff_id is required';
+      raise exception 'INVALID_STAFF_ID: staff_id is required' using errcode = '22023';
     end if;
 
     if target_date is null then
-      raise exception 'INVALID_SHIFT_DATE: shift_date is required';
+      raise exception 'INVALID_SHIFT_DATE: shift_date is required' using errcode = '22023';
     end if;
 
     if target_slot not in ('MORNING', 'AFTERNOON') then
-      raise exception 'INVALID_SHIFT_SLOT: shift_slot must be MORNING or AFTERNOON';
+      raise exception 'INVALID_SHIFT_SLOT: shift_slot must be MORNING or AFTERNOON' using errcode = '22023';
     end if;
 
     if target_start is null or target_end is null or target_start >= target_end then
-      raise exception 'INVALID_TIME_RANGE: start_time must be earlier than end_time';
+      raise exception 'INVALID_TIME_RANGE: start_time must be earlier than end_time' using errcode = '22023';
     end if;
 
+    -- Slot-specific time rules
     if target_slot = 'MORNING' then
       if target_start < '07:00'::time or target_end > '11:00'::time or
          extract(minute from target_start)::integer not in (0, 30) or extract(second from target_start)::integer <> 0 or
          extract(minute from target_end)::integer not in (0, 30) or extract(second from target_end)::integer <> 0 then
-        raise exception 'INVALID_MORNING_TIME: Morning shift must be within 07:00-11:00 on 30-minute grid';
+        raise exception 'INVALID_MORNING_TIME: Morning shift must be within 07:00-11:00 on 30-minute grid' using errcode = '22023';
       end if;
     elsif target_slot = 'AFTERNOON' then
       if target_start < '13:00'::time or target_end > '16:00'::time or
          extract(minute from target_start)::integer not in (0, 30) or extract(second from target_start)::integer <> 0 or
          extract(minute from target_end)::integer not in (0, 30) or extract(second from target_end)::integer <> 0 then
-        raise exception 'INVALID_AFTERNOON_TIME: Afternoon shift must be within 13:00-16:00 on 30-minute grid';
+        raise exception 'INVALID_AFTERNOON_TIME: Afternoon shift must be within 13:00-16:00 on 30-minute grid' using errcode = '22023';
       end if;
     end if;
 
+    -- Assignee eligibility
     if not private.is_eligible_shift_assignee(target_staff_id) then
-      raise exception 'ASSIGNEE_NOT_ELIGIBLE: User % is not eligible for Skills Lab shifts', target_staff_id;
+      raise exception 'ASSIGNEE_NOT_ELIGIBLE: User % is not eligible for Skills Lab shifts', target_staff_id using errcode = '42501';
     end if;
 
-    if target_staff_id <> actor_id and not is_admin then
-      raise exception 'PERMISSION_DENIED: Staff members can only register shifts for themselves';
+    -- Root cannot be assigned
+    if exists (
+      select 1 from public.system_security_principals principals
+      where principals.singleton and principals.root_admin_id = target_staff_id
+    ) then
+      raise exception 'ASSIGN_ROOT_NOT_ALLOWED: Root administrator cannot be assigned to shifts' using errcode = '42501';
     end if;
 
-    if not is_admin and not private.is_eligible_shift_assignee(actor_id) then
-      raise exception 'PERMISSION_DENIED: User lacks Skills Lab operational scope';
+    -- Authority check: Staff can only register shifts for themselves
+    if target_staff_id <> actor_id and not is_admin and not is_root then
+      raise exception 'PERMISSION_DENIED: Staff members can only register shifts for themselves' using errcode = '42501';
     end if;
 
+    -- Temporal policy
     if target_date < business_today then
-      if not can_history then
-        raise exception 'HISTORICAL_MUTATION_FORBIDDEN: Historical shifts require history management capability';
+      if not can_history and not is_root then
+        raise exception 'HISTORICAL_MUTATION_FORBIDDEN: Historical shifts require history management capability' using errcode = '42501';
       end if;
       if adjustment_reason is null or btrim(adjustment_reason) = '' then
-        raise exception 'HISTORICAL_REASON_REQUIRED: Reason is required for historical shift mutations';
+        raise exception 'HISTORICAL_REASON_REQUIRED: Reason is required for historical shift mutations' using errcode = '22023';
       end if;
     end if;
 
+    -- Intra-payload duplicate check
     row_key := target_staff_id::text || ':' || target_date::text || ':' || target_slot;
     if row_key = any(seen_keys) then
-      raise exception 'DUPLICATE_PAYLOAD_SLOT: Multiple entries for staff % on % slot % in the same request', target_staff_id, target_date, target_slot;
+      raise exception 'DUPLICATE_PAYLOAD_SLOT: Multiple entries for staff % on % slot % in the same request', target_staff_id, target_date, target_slot using errcode = '23505';
     end if;
     seen_keys := array_append(seen_keys, row_key);
 
+    -- Database active slot conflict check
     if exists (
       select 1
       from public.staff_shifts s
@@ -1161,10 +1231,11 @@ begin
         and s.shift_slot = target_slot
         and s.status <> 'cancelled'
     ) then
-      raise exception 'ACTIVE_SHIFT_EXISTS: Staff % already has an active % shift on %', target_staff_id, target_slot, target_date;
+      raise exception 'ACTIVE_SHIFT_EXISTS: Staff % already has an active % shift on %', target_staff_id, target_slot, target_date using errcode = '23505';
     end if;
   end loop;
 
+  -- Phase 2: Insert rows atomically
   for row_elem in select * from jsonb_array_elements(shifts_payload) loop
     target_staff_id := (row_elem->>'staff_id')::uuid;
     target_date := (row_elem->>'shift_date')::date;
@@ -1175,7 +1246,7 @@ begin
     target_group_id := (row_elem->>'creation_group_id')::uuid;
 
     assigned_source := case
-      when target_staff_id = actor_id and not is_admin then 'self_registered'::public.shift_registration_source
+      when target_staff_id = actor_id and not is_admin and not is_root then 'self_registered'::public.shift_registration_source
       else 'admin_assigned'::public.shift_registration_source
     end;
 
@@ -1203,6 +1274,7 @@ begin
       actor_id
     ) returning * into created_row;
 
+    -- Audit log if historical
     if target_date < business_today then
       insert into public.audit_logs (
         actor_id,
@@ -1238,16 +1310,24 @@ as $$
 declare
   actor_id uuid := auth.uid();
   is_admin boolean;
+  is_root boolean;
   can_history boolean;
   business_today date;
   target_shift public.staff_shifts;
   cancelled_row public.staff_shifts;
 begin
   if actor_id is null then
-    raise exception 'AUTH_REQUIRED: Authentication is required';
+    raise exception 'AUTH_REQUIRED: Authentication is required' using errcode = '42501';
+  end if;
+
+  if not private.can_operate_skills_shifts(actor_id) then
+    raise exception 'PERMISSION_DENIED: User lacks Skills Lab operational scope' using errcode = '42501';
   end if;
 
   is_admin := private.is_admin();
+  is_root := exists (
+    select 1 from public.system_security_principals where singleton and root_admin_id = actor_id
+  );
   can_history := private.can_manage_shift_history(actor_id);
   business_today := (now() at time zone 'Asia/Ho_Chi_Minh')::date;
 
@@ -1257,23 +1337,25 @@ begin
   for update;
 
   if target_shift.id is null then
-    raise exception 'SHIFT_NOT_FOUND: Staff shift % not found', target_shift_id;
+    raise exception 'SHIFT_NOT_FOUND: Staff shift % not found', target_shift_id using errcode = 'P0002';
   end if;
 
   if target_shift.status = 'cancelled' then
     return target_shift;
   end if;
 
-  if target_shift.staff_id <> actor_id and not is_admin then
-    raise exception 'PERMISSION_DENIED: Staff members can only cancel their own shifts';
+  -- Authority check: Staff can only cancel their own shift
+  if target_shift.staff_id <> actor_id and not is_admin and not is_root then
+    raise exception 'PERMISSION_DENIED: Staff members can only cancel their own shifts' using errcode = '42501';
   end if;
 
+  -- Temporal check
   if target_shift.shift_date < business_today then
-    if not can_history then
-      raise exception 'HISTORICAL_MUTATION_FORBIDDEN: Historical cancellation requires history capability';
+    if not can_history and not is_root then
+      raise exception 'HISTORICAL_MUTATION_FORBIDDEN: Historical cancellation requires history capability' using errcode = '42501';
     end if;
     if reason is null or btrim(reason) = '' then
-      raise exception 'HISTORICAL_REASON_REQUIRED: Reason is required for historical shift cancellation';
+      raise exception 'HISTORICAL_REASON_REQUIRED: Reason is required for historical shift cancellation' using errcode = '22023';
     end if;
   end if;
 
@@ -1324,16 +1406,24 @@ as $$
 declare
   actor_id uuid := auth.uid();
   is_admin boolean;
+  is_root boolean;
   can_history boolean;
   business_today date;
   target_shift public.staff_shifts;
   updated_row public.staff_shifts;
 begin
   if actor_id is null then
-    raise exception 'AUTH_REQUIRED: Authentication is required';
+    raise exception 'AUTH_REQUIRED: Authentication is required' using errcode = '42501';
+  end if;
+
+  if not private.can_operate_skills_shifts(actor_id) then
+    raise exception 'PERMISSION_DENIED: User lacks Skills Lab operational scope' using errcode = '42501';
   end if;
 
   is_admin := private.is_admin();
+  is_root := exists (
+    select 1 from public.system_security_principals where singleton and root_admin_id = actor_id
+  );
   can_history := private.can_manage_shift_history(actor_id);
   business_today := (now() at time zone 'Asia/Ho_Chi_Minh')::date;
 
@@ -1343,41 +1433,44 @@ begin
   for update;
 
   if target_shift.id is null then
-    raise exception 'SHIFT_NOT_FOUND: Staff shift % not found', target_shift_id;
+    raise exception 'SHIFT_NOT_FOUND: Staff shift % not found', target_shift_id using errcode = 'P0002';
   end if;
 
   if target_shift.status = 'cancelled' then
-    raise exception 'SHIFT_CANCELLED: Cannot edit a cancelled shift';
+    raise exception 'SHIFT_CANCELLED: Cannot edit a cancelled shift' using errcode = '22023';
   end if;
 
-  if target_shift.staff_id <> actor_id and not is_admin then
-    raise exception 'PERMISSION_DENIED: Staff members can only edit their own shifts';
+  -- Authority check: Staff can only edit their own shifts
+  if target_shift.staff_id <> actor_id and not is_admin and not is_root then
+    raise exception 'PERMISSION_DENIED: Staff members can only edit their own shifts' using errcode = '42501';
   end if;
 
+  -- Temporal check
   if target_shift.shift_date < business_today then
-    if not can_history then
-      raise exception 'HISTORICAL_MUTATION_FORBIDDEN: Historical shift edit requires history capability';
+    if not can_history and not is_root then
+      raise exception 'HISTORICAL_MUTATION_FORBIDDEN: Historical shift edit requires history capability' using errcode = '42501';
     end if;
     if reason is null or btrim(reason) = '' then
-      raise exception 'HISTORICAL_REASON_REQUIRED: Reason is required for historical shift edit';
+      raise exception 'HISTORICAL_REASON_REQUIRED: Reason is required for historical shift edit' using errcode = '22023';
     end if;
   end if;
 
   if target_start_time is null or target_end_time is null or target_start_time >= target_end_time then
-    raise exception 'INVALID_TIME_RANGE: start_time must be earlier than end_time';
+    raise exception 'INVALID_TIME_RANGE: start_time must be earlier than end_time' using errcode = '22023';
   end if;
 
+  -- Slot rule enforcement
   if target_shift.shift_slot = 'MORNING' then
     if target_start_time < '07:00'::time or target_end_time > '11:00'::time or
        extract(minute from target_start_time)::integer not in (0, 30) or extract(second from target_start_time)::integer <> 0 or
        extract(minute from target_end_time)::integer not in (0, 30) or extract(second from target_end_time)::integer <> 0 then
-      raise exception 'INVALID_MORNING_TIME: Morning shift must be within 07:00-11:00 on 30-minute grid';
+      raise exception 'INVALID_MORNING_TIME: Morning shift must be within 07:00-11:00 on 30-minute grid' using errcode = '22023';
     end if;
   elsif target_shift.shift_slot = 'AFTERNOON' then
     if target_start_time < '13:00'::time or target_end_time > '16:00'::time or
        extract(minute from target_start_time)::integer not in (0, 30) or extract(second from target_start_time)::integer <> 0 or
        extract(minute from target_end_time)::integer not in (0, 30) or extract(second from target_end_time)::integer <> 0 then
-      raise exception 'INVALID_AFTERNOON_TIME: Afternoon shift must be within 13:00-16:00 on 30-minute grid';
+      raise exception 'INVALID_AFTERNOON_TIME: Afternoon shift must be within 13:00-16:00 on 30-minute grid' using errcode = '22023';
     end if;
   end if;
 
@@ -1745,16 +1838,6 @@ create policy staff_shifts_select on public.staff_shifts
 for select to authenticated
 using ((select private.is_active_user()));
 
-create policy staff_shifts_admin_all on public.staff_shifts
-for all to authenticated
-using ((select private.has_role('admin')))
-with check ((select private.has_role('admin')));
-
-create policy staff_shifts_staff_manage_own on public.staff_shifts
-for all to authenticated
-using (staff_id = (select auth.uid()))
-with check (staff_id = (select auth.uid()));
-
 create policy audit_logs_admin_select on public.audit_logs
 for select to authenticated
 using ((select private.has_role('admin')));
@@ -1767,10 +1850,9 @@ grant select on public.profiles, public.user_roles, public.courses, public.rooms
   public.class_schedules, public.staff_shifts to authenticated;
 grant select, insert, update on public.import_batches, public.import_rows to authenticated;
 grant insert, update on public.class_schedules to authenticated;
-grant select, insert, update on public.staff_shifts to authenticated;
+grant select on public.staff_shifts to authenticated, anon;
+revoke insert, update, delete, truncate on public.staff_shifts from authenticated, anon, public;
 grant all on public.staff_shifts to service_role;
-grant select on public.staff_shifts to anon;
-revoke delete on public.staff_shifts from authenticated;
 grant all on public.profiles, public.user_roles, public.courses, public.rooms,
   public.class_schedules to authenticated;
 grant select on public.audit_logs, public.email_notifications to authenticated;

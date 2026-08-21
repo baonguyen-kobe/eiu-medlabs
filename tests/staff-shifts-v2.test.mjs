@@ -68,6 +68,37 @@ test("Staff Shift V2 — list_operational_shift_assignees directory", async () =
   }
 });
 
+test("Staff Shift V2 — Direct table mutations are denied for authenticated clients", async () => {
+  const staff = await signIn("staff@campus.local", "LocalStaff123!");
+
+  // Direct insert
+  const insertRes = await staff.supabase.from("staff_shifts").insert({
+    staff_id: staff.user.id,
+    shift_date: "2035-08-01",
+    shift_slot: "MORNING",
+    start_time: "07:00",
+    end_time: "11:00",
+  });
+  assert.ok(insertRes.error);
+  assert.match(insertRes.error.message, /permission denied/i);
+
+  // Direct update
+  const updateRes = await staff.supabase
+    .from("staff_shifts")
+    .update({ note: "bypass" })
+    .eq("staff_id", staff.user.id);
+  assert.ok(updateRes.error);
+  assert.match(updateRes.error.message, /permission denied/i);
+
+  // Direct delete
+  const deleteRes = await staff.supabase
+    .from("staff_shifts")
+    .delete()
+    .eq("staff_id", staff.user.id);
+  assert.ok(deleteRes.error);
+  assert.match(deleteRes.error.message, /permission denied/i);
+});
+
 test("Staff Shift V2 — Self registration, duplicate conflict, and soft cancellation", async () => {
   const staff = await signIn("staff@campus.local", "LocalStaff123!");
   const targetDate = "2035-05-15";
@@ -138,6 +169,88 @@ test("Staff Shift V2 — Self registration, duplicate conflict, and soft cancell
   }
 });
 
+test("Staff Shift V2 — Staff own-time edit and security denial on others' shifts", async () => {
+  const otherUser = await signIn("dieuphoi@eiu.edu.vn", "LocalCoordinator123!");
+  const staff = await signIn("staff@campus.local", "LocalStaff123!");
+  const targetDate = "2035-06-20";
+
+  // Other staff registers shift
+  const otherShiftRes = await otherUser.supabase.rpc("register_staff_shifts", {
+    shifts_payload: [
+      {
+        staff_id: otherUser.user.id,
+        shift_date: targetDate,
+        shift_slot: "MORNING",
+        start_time: "07:00",
+        end_time: "11:00",
+      },
+    ],
+  });
+  assert.ifError(otherShiftRes.error);
+  const otherShift = otherShiftRes.data[0];
+
+  // Staff registers shift for staff
+  const staffShiftRes = await staff.supabase.rpc("register_staff_shifts", {
+    shifts_payload: [
+      {
+        staff_id: staff.user.id,
+        shift_date: targetDate,
+        shift_slot: "MORNING",
+        start_time: "07:00",
+        end_time: "11:00",
+      },
+    ],
+  });
+  assert.ifError(staffShiftRes.error);
+  const staffShift = staffShiftRes.data[0];
+
+  try {
+    // Staff editing OWN shift time within slot SUCCEEDS
+    const ownEditRes = await staff.supabase.rpc("update_staff_shift_time", {
+      target_shift_id: staffShift.id,
+      target_start_time: "07:30",
+      target_end_time: "10:30",
+      target_note: "Updated own shift note",
+    });
+    assert.ifError(ownEditRes.error);
+    assert.equal(ownEditRes.data.start_time, "07:30:00");
+    assert.equal(ownEditRes.data.end_time, "10:30:00");
+
+    // Staff editing OWN shift time OUTSIDE slot bounds FAILS
+    const invalidSlotEditRes = await staff.supabase.rpc(
+      "update_staff_shift_time",
+      {
+        target_shift_id: staffShift.id,
+        target_start_time: "06:30",
+        target_end_time: "10:30",
+      },
+    );
+    assert.ok(invalidSlotEditRes.error);
+    assert.match(invalidSlotEditRes.error.message, /INVALID_MORNING_TIME/);
+
+    // Staff editing OTHER user's shift FAILS with permission denied
+    const otherEditRes = await staff.supabase.rpc("update_staff_shift_time", {
+      target_shift_id: otherShift.id,
+      target_start_time: "08:00",
+      target_end_time: "11:00",
+    });
+    assert.ok(otherEditRes.error);
+    assert.match(
+      otherEditRes.error.message,
+      /PERMISSION_DENIED|permission denied/i,
+    );
+  } finally {
+    await otherUser.supabase.rpc("cancel_staff_shift", {
+      target_shift_id: otherShift.id,
+      reason: "Cleanup",
+    });
+    await staff.supabase.rpc("cancel_staff_shift", {
+      target_shift_id: staffShift.id,
+      reason: "Cleanup",
+    });
+  }
+});
+
 test("Staff Shift V2 — All Day atomic registration and time boundary enforcement", async () => {
   const staff = await signIn("staff@campus.local", "LocalStaff123!");
   const targetDate = "2035-05-16";
@@ -187,17 +300,6 @@ test("Staff Shift V2 — All Day atomic registration and time boundary enforceme
   assert.equal(aShift.shift_slot, "AFTERNOON");
   assert.equal(mShift.creation_group_id, groupId);
   assert.equal(aShift.creation_group_id, groupId);
-
-  // Update time of morning shift
-  const updateRes = await staff.supabase.rpc("update_staff_shift_time", {
-    target_shift_id: mShift.id,
-    target_start_time: "07:30",
-    target_end_time: "10:30",
-    target_note: "Updated note",
-  });
-  assert.ifError(updateRes.error);
-  assert.equal(updateRes.data.start_time, "07:30:00");
-  assert.equal(updateRes.data.end_time, "10:30:00");
 
   // Cleanup
   await staff.supabase.rpc("cancel_staff_shift", {
