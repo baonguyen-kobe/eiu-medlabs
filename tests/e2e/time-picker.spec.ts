@@ -630,20 +630,26 @@ test.describe("Shared Custom Time Picker E2E Verification", () => {
     await expect(errorMsg).toContainText("sau giờ bắt đầu");
   });
 
-  test("Admin shift templates form uses TimePicker with exact-one clock icon", async ({
+  test("Staff shifts registration form uses TimePicker with exact-one clock icon", async ({
     page,
   }) => {
     await loginAsAdmin(page);
-    await page.goto("/admin/shift-templates");
-    await expect(page.locator("h1")).toContainText("Mẫu ca trực");
+    await page.goto("/staff-shifts?tab=register");
+    await expect(page.locator("h2")).toContainText("Đăng ký ca trực mới");
 
-    const form = page.locator("form.admin-create-form");
-    const startTimePicker = form.locator(
-      "label:has-text('Bắt đầu') .time-picker",
-    );
-    const endTimePicker = form.locator(
-      "label:has-text('Kết thúc') .time-picker",
-    );
+    // Mode 2: Tự chọn ngày trực
+    await page.getByRole("button", { name: "Tự chọn ngày trực" }).click();
+    const slotSelect = page
+      .locator("select")
+      .filter({ hasText: "Sáng (07:00 – 11:00)" })
+      .first();
+    await slotSelect.selectOption("CUSTOM");
+
+    const timePickers = page.locator(".time-picker");
+    await expect(timePickers.first()).toBeVisible();
+
+    const startTimePicker = timePickers.nth(0);
+    const endTimePicker = timePickers.nth(1);
 
     await expect(startTimePicker.locator(".time-picker-icon")).toHaveCount(1);
     await expect(endTimePicker.locator(".time-picker-icon")).toHaveCount(1);
@@ -659,15 +665,7 @@ test.describe("Shared Custom Time Picker E2E Verification", () => {
       endTimePicker.locator(".time-picker-icon"),
     );
 
-    // Check defaults
-    await expect(
-      startTimePicker.locator("input.time-picker-input"),
-    ).toHaveValue("07:00");
-    await expect(endTimePicker.locator("input.time-picker-input")).toHaveValue(
-      "11:30",
-    );
-
-    // Screenshot 3: Admin shift template shared picker
+    // Screenshot 3: Staff shift custom shared picker
     await page.screenshot({
       path: resolve(ARTIFACTS_DIR, "time_picker_admin_shift.png"),
       fullPage: false,

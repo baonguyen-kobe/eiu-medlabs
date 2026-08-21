@@ -16,6 +16,28 @@ export const TIME_PICKER_HOURS = [
 
 export const TIME_PICKER_MINUTES = ["00", "30"] as const;
 
+export const MORNING_SHIFT_ALLOWED_TIMES: readonly string[] = [
+  "07:00",
+  "07:30",
+  "08:00",
+  "08:30",
+  "09:00",
+  "09:30",
+  "10:00",
+  "10:30",
+  "11:00",
+];
+
+export const AFTERNOON_SHIFT_ALLOWED_TIMES: readonly string[] = [
+  "13:00",
+  "13:30",
+  "14:00",
+  "14:30",
+  "15:00",
+  "15:30",
+  "16:00",
+];
+
 /**
  * Standard default half-hour options from 07:00 to 19:30.
  */

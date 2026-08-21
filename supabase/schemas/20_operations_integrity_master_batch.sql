@@ -69,10 +69,6 @@ drop trigger if exists staff_shift_operational_assignee on public.staff_shifts;
 create trigger staff_shift_operational_assignee
 before insert or update of staff_id on public.staff_shifts
 for each row execute function private.guard_operational_assignment('staff_id');
-drop trigger if exists staff_shift_pattern_operational_assignee on public.staff_shift_patterns;
-create trigger staff_shift_pattern_operational_assignee
-before insert or update of staff_id on public.staff_shift_patterns
-for each row execute function private.guard_operational_assignment('staff_id');
 drop trigger if exists equipment_request_operational_responsible on public.equipment_requests;
 create trigger equipment_request_operational_responsible
 before insert or update of responsible_lecturer_id on public.equipment_requests

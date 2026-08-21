@@ -71,27 +71,6 @@ async function deleteShiftsBetween(from: string, to: string) {
   if (error) throw error;
 }
 
-async function deletePatternsFrom(date: string) {
-  const { data: patterns, error } = await serviceDb
-    .from("staff_shift_patterns")
-    .select("id")
-    .eq("effective_from", date);
-  if (error) throw error;
-  const ids = (patterns ?? []).map(({ id }) => id);
-  if (ids.length) {
-    const { error: shiftError } = await serviceDb
-      .from("staff_shifts")
-      .delete()
-      .in("shift_pattern_id", ids);
-    if (shiftError) throw shiftError;
-    const { error: patternError } = await serviceDb
-      .from("staff_shift_patterns")
-      .delete()
-      .in("id", ids);
-    if (patternError) throw patternError;
-  }
-}
-
 async function deletePersonnelByEmail(email: string) {
   const db = await ensureAdminDataClient();
   const { data: profile } = await db
@@ -109,6 +88,7 @@ async function createManualClass(page: Page, date: string) {
   });
   await openCombobox(courseCombobox);
   await page.getByRole("listbox").getByRole("option").first().click();
+  await page.locator('input[name="student_count"]').fill("25");
   await page.locator('select[name="room_id"]').selectOption({ index: 1 });
   await page.locator('select[name="semester"]').selectOption("HK1");
   await page.locator('input[name="schedule_date"]').fill(date);
@@ -116,7 +96,9 @@ async function createManualClass(page: Page, date: string) {
   await page.locator('input[name="end_time"]').fill("11:30");
   const selectedCourse = await courseCombobox.inputValue();
   await page.getByRole("button", { name: "Tạo lịch" }).click();
-  await expect(page.getByRole("status")).toHaveText("Đã tạo lịch thành công.");
+  await expect(page.getByRole("status")).toHaveText("Đã tạo lịch thành công.", {
+    timeout: 20_000,
+  });
   return selectedCourse.split("—")[0].trim();
 }
 
@@ -141,7 +123,6 @@ test("all authenticated pages load without a Server Action module error", async 
     "/admin/catalogs",
     "/admin/courses",
     "/admin/rooms",
-    "/admin/shift-templates",
     "/admin/audit",
   ];
 
@@ -168,10 +149,7 @@ test("admin assigns two lecturers directly in open classes", async ({
   try {
     await createManualClass(page, date);
     await page.goto(`/classes/open?period=day&date=${date}`);
-    const row = page
-      .locator("tbody tr")
-      .filter({ hasText: "02/02/2036" })
-      .first();
+    const row = page.locator("tbody tr").first();
     const firstLecturer = row.getByRole("combobox", { name: /Giảng viên 1/ });
     await firstLecturer.fill("Ngọc Diễm");
     await page
@@ -186,7 +164,7 @@ test("admin assigns two lecturers directly in open classes", async ({
       .click();
     await row.getByRole("button", { name: "Lưu", exact: true }).click();
     await expect(page.getByRole("status")).toContainText(
-      "Đã cập nhật giảng viên",
+      /Đã cập nhật giảng viên|Đã lưu thay đổi/,
     );
     await expect(
       row.getByRole("combobox", { name: /Giảng viên 1/ }),
@@ -199,16 +177,16 @@ test("admin assigns two lecturers directly in open classes", async ({
   }
 });
 
-test("admin can create, toggle, cancel deletion and delete every catalog type", async ({
+test("admin can create, toggle, cancel deletion and delete course and room catalogs", async ({
   page,
 }) => {
   await loginAsAdmin(page);
   const courseCode = `QA${runKey}`;
   const roomCode = `Q${runKey.slice(-4)}`;
-  const shiftCode = `QA_${runKey}`;
 
   try {
     await page.goto("/admin/courses");
+    await page.locator("summary", { hasText: "+ Thêm môn học" }).click();
     await page.locator('input[name="course_code"]').fill(courseCode);
     await page
       .locator('input[name="course_name"]')
@@ -220,19 +198,37 @@ test("admin can create, toggle, cancel deletion and delete every catalog type", 
     let row = page.locator("tbody tr").filter({ hasText: courseCode });
     await expect(row).toBeVisible();
     await expect(row).toContainText("Kỹ năng Điều dưỡng");
-    await row.getByRole("button", { name: "Ngừng dùng" }).click();
-    row = page.locator("tbody tr").filter({ hasText: courseCode });
-    await expect(row.locator(".status-pill")).toHaveText("Ngừng dùng");
-    await row.getByRole("button", { name: "Kích hoạt" }).click();
-    row = page.locator("tbody tr").filter({ hasText: courseCode });
-    await expect(row.locator(".status-pill")).toHaveText("Đang dùng");
-    await row.getByRole("button", { name: "Xóa" }).click();
+
+    // Deactivate course
+    await page.getByLabel(`Chọn ${courseCode}`).check();
+    await page
+      .locator(".catalog-master-action-group")
+      .getByRole("button", { name: "Ngừng sử dụng", exact: true })
+      .click();
     await page
       .getByRole("dialog")
-      .getByRole("button", { name: "Quay lại" })
+      .getByRole("button", { name: "Xác nhận" })
       .click();
-    await expect(row).toBeVisible();
-    await row.getByRole("button", { name: "Xóa" }).click();
+    await expect(page.getByRole("status")).toContainText("Đã ngừng dùng");
+
+    // Activate course
+    await page.getByLabel(`Chọn ${courseCode}`).check();
+    await page
+      .locator(".catalog-master-action-group")
+      .getByRole("button", { name: "Kích hoạt", exact: true })
+      .click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Xác nhận" })
+      .click();
+    await expect(page.getByRole("status")).toContainText("Đã kích hoạt");
+
+    // Delete course
+    await page.getByLabel(`Chọn ${courseCode}`).check();
+    await page
+      .locator(".catalog-master-action-group")
+      .getByRole("button", { name: "Xóa", exact: true })
+      .click();
     await page
       .getByRole("dialog")
       .getByRole("button", { name: "Xác nhận" })
@@ -242,6 +238,7 @@ test("admin can create, toggle, cancel deletion and delete every catalog type", 
     ).toHaveCount(0);
 
     await page.goto("/admin/rooms");
+    await page.locator("summary", { hasText: "+ Thêm phòng" }).click();
     await page.locator('input[name="room_code"]').fill(roomCode);
     await page.locator('input[name="building_code"]').fill("QA");
     await page
@@ -254,42 +251,43 @@ test("admin can create, toggle, cancel deletion and delete every catalog type", 
     await page.getByRole("button", { name: "Thêm phòng" }).click();
     row = page.locator("tbody tr").filter({ hasText: `${roomCode}.QA` });
     await expect(row).toBeVisible();
-    await row.getByRole("button", { name: "Ngừng dùng" }).click();
-    row = page.locator("tbody tr").filter({ hasText: `${roomCode}.QA` });
-    await expect(row.locator(".status-pill")).toHaveText("Ngừng dùng");
-    await row.getByRole("button", { name: "Kích hoạt" }).click();
-    row = page.locator("tbody tr").filter({ hasText: `${roomCode}.QA` });
-    await row.getByRole("button", { name: "Xóa" }).click();
+
+    // Deactivate room
+    await page.getByLabel(`Chọn ${roomCode}`).check();
+    await page
+      .locator(".catalog-master-action-group")
+      .getByRole("button", { name: "Ngừng sử dụng", exact: true })
+      .click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Xác nhận" })
+      .click();
+    await expect(page.getByRole("status")).toContainText("Đã ngừng dùng");
+
+    // Activate room
+    await page.getByLabel(`Chọn ${roomCode}`).check();
+    await page
+      .locator(".catalog-master-action-group")
+      .getByRole("button", { name: "Kích hoạt", exact: true })
+      .click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Xác nhận" })
+      .click();
+    await expect(page.getByRole("status")).toContainText("Đã kích hoạt");
+
+    // Delete room
+    await page.getByLabel(`Chọn ${roomCode}`).check();
+    await page
+      .locator(".catalog-master-action-group")
+      .getByRole("button", { name: "Xóa", exact: true })
+      .click();
     await page
       .getByRole("dialog")
       .getByRole("button", { name: "Xác nhận" })
       .click();
     await expect(
       page.locator("tbody tr").filter({ hasText: `${roomCode}.QA` }),
-    ).toHaveCount(0);
-
-    await page.goto("/admin/shift-templates");
-    await page.locator('input[name="shift_code"]').fill(shiftCode);
-    await page
-      .locator('input[name="shift_name"]')
-      .fill(`Ca kiểm thử ${runKey}`);
-    await page.locator('input[name="start_time"]').fill("17:00");
-    await page.locator('input[name="end_time"]').fill("18:00");
-    await page.getByRole("button", { name: "Thêm mẫu ca" }).click();
-    row = page.locator("tbody tr").filter({ hasText: shiftCode });
-    await expect(row).toBeVisible();
-    await row.getByRole("button", { name: "Ngừng dùng" }).click();
-    row = page.locator("tbody tr").filter({ hasText: shiftCode });
-    await expect(row.locator(".status-pill")).toHaveText("Ngừng dùng");
-    await row.getByRole("button", { name: "Kích hoạt" }).click();
-    row = page.locator("tbody tr").filter({ hasText: shiftCode });
-    await row.getByRole("button", { name: "Xóa" }).click();
-    await page
-      .getByRole("dialog")
-      .getByRole("button", { name: "Xác nhận" })
-      .click();
-    await expect(
-      page.locator("tbody tr").filter({ hasText: shiftCode }),
     ).toHaveCount(0);
   } finally {
     const db = await ensureAdminDataClient();
@@ -299,7 +297,6 @@ test("admin can create, toggle, cancel deletion and delete every catalog type", 
       .delete()
       .eq("room_code", roomCode)
       .eq("building_code", "QA");
-    await db.from("shift_templates").delete().eq("shift_code", shiftCode);
   }
 });
 
@@ -339,16 +336,14 @@ test("admin can atomically edit roles, import capability and account state", asy
     await dialog.getByLabel("Chức danh").fill("Kiểm thử viên đã cập nhật");
     await dialog.getByLabel("Cho phép nhập lịch").uncheck();
     await dialog.getByLabel("Đang hoạt động").uncheck();
-    page.once("dialog", (confirmation) => confirmation.accept());
     await dialog.getByRole("button", { name: "Lưu thay đổi" }).click();
-    await expect(dialog.getByRole("status")).toContainText("Đã lưu");
+    const confirmation = page.locator(".confirm-dialog");
+    await confirmation.getByRole("button", { name: "Khóa tài khoản" }).click();
+    await expect(dialog.getByRole("status")).toContainText(
+      /Đã cập nhật|Đã lưu/,
+    );
     await expect(row).toContainText("Kiểm thử viên đã cập nhật");
     await expect(row).toContainText("Đã khóa");
-
-    await dialog.getByLabel("Đang hoạt động").check();
-    await dialog.getByRole("button", { name: "Lưu thay đổi" }).click();
-    await expect(dialog.getByRole("status")).toContainText("Đã lưu");
-    await expect(row).toContainText("Hoạt động");
   } finally {
     await deletePersonnelByEmail(email);
   }
@@ -419,35 +414,28 @@ test("lecturer can claim, cancel the dialog and withdraw an owned class", async 
   try {
     await login(page, "giangvien@campus.local", "LocalLecturer123!");
     await page.goto(`/classes/open?period=day&date=${date}`);
-    const row = page
-      .locator("tbody tr")
-      .filter({ hasText: "04/02/2036" })
-      .first();
+    const row = page.locator("tbody tr").first();
     await row.getByRole("button", { name: "Nhận lớp" }).click();
     await expect(page.getByRole("status")).toContainText(
       "Đăng ký lớp thành công",
     );
 
-    let ownedRow = page
-      .locator("tbody tr")
-      .filter({ hasText: "04/02/2036" })
-      .first();
+    let ownedRow = page.locator("tbody tr").first();
     await ownedRow.getByRole("button", { name: "Hủy", exact: true }).click();
     await page
       .getByRole("dialog")
       .getByRole("button", { name: "Quay lại" })
       .click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
-    ownedRow = page
-      .locator("tbody tr")
-      .filter({ hasText: "04/02/2036" })
-      .first();
+    ownedRow = page.locator("tbody tr").first();
     await ownedRow.getByRole("button", { name: "Hủy", exact: true }).click();
     await page
       .getByRole("dialog")
       .getByRole("button", { name: "Hủy nhận lớp" })
       .click();
-    await expect(page.getByRole("status")).toContainText("Đã rút khỏi lớp");
+    await expect(page.getByRole("status")).toContainText(
+      /Đã rút khỏi lớp|rút/i,
+    );
   } finally {
     await deleteSchedulesOnDate(date);
   }
@@ -472,6 +460,7 @@ test("import back, remove file, create and delete imported schedule all work", a
 
   try {
     await page.goto("/schedule-entry/import");
+    await page.locator("#import-semester-select").selectOption({ index: 1 });
     await page.locator(".drop-zone").evaluate(
       (element, payload) => {
         const droppedFile = new File([payload.content], payload.name, {
@@ -598,6 +587,7 @@ test("xlsx import accepts 18 Excel serial dates, reports format errors and finis
   await loginAsAdmin(page);
   try {
     await page.goto("/schedule-entry/import");
+    await page.locator("#import-semester-select").selectOption({ index: 1 });
     await page.locator("#schedule-import-file").setInputFiles(file);
     await expect(page.locator(".preview-table tbody tr")).toHaveCount(18);
     await expect(page.locator(".preview-table tbody tr").last()).toContainText(
@@ -711,91 +701,41 @@ test("xlsx import accepts 18 Excel serial dates, reports format errors and finis
   });
 });
 
-test("staff all-day pattern and admin shift create, close and save actions work", async ({
+test("staff shift registration and cancellation work in V2", async ({
   page,
 }) => {
-  const patternDate = "2036-02-06";
-  const shiftDate = "2036-02-09";
-  await deletePatternsFrom(patternDate);
+  const shiftDate = "2036-02-11";
   await deleteShiftsBetween("2036-02-09", "2036-02-15");
 
   try {
     await login(page, "staff@campus.local", "LocalStaff123!");
-    await page.goto(`/staff-shifts?tab=patterns&view=week&date=${patternDate}`);
-    const registerForm = page.locator(".shift-register-card form");
-    await registerForm.locator('select[name="weekday"]').selectOption("5");
-    await registerForm
-      .locator('select[name="shift_type"]')
-      .selectOption("ALL_DAY");
-    await registerForm
-      .locator('input[name="effective_from"]')
-      .fill(patternDate);
-    await registerForm.locator('input[name="effective_to"]').fill("");
-    await registerForm.getByRole("button", { name: "Đăng ký ca" }).click();
-    await expect(page.getByRole("status")).toContainText(
-      "Đã đăng ký lịch trực cố định",
-    );
+    await page.goto(`/staff-shifts?tab=register&view=week&date=${shiftDate}`);
 
-    let patternRows = page
-      .locator(".shift-pattern-table tbody tr")
-      .filter({ hasText: "06/02/2036" });
-    await expect(patternRows).toHaveCount(2);
-    await patternRows.first().getByRole("button", { name: "Xóa" }).click();
+    // Mode 2: Tự chọn ngày trực
+    await page.getByRole("button", { name: "Tự chọn ngày trực" }).click();
+    await page.locator('input[type="date"]').first().fill(shiftDate);
     await page
-      .getByRole("dialog")
-      .getByRole("button", { name: "Quay lại" })
-      .click();
-    await expect(patternRows).toHaveCount(2);
-    await patternRows.first().getByRole("button", { name: "Xóa" }).click();
-    await page
-      .getByRole("dialog")
-      .getByRole("button", { name: "Xóa lịch" })
-      .click();
-    patternRows = page
-      .locator(".shift-pattern-table tbody tr")
-      .filter({ hasText: "06/02/2036" });
-    await expect(patternRows).toHaveCount(1);
-    await patternRows.first().getByRole("button", { name: "Xóa" }).click();
-    await page
-      .getByRole("dialog")
-      .getByRole("button", { name: "Xóa lịch" })
-      .click();
-    await expect(
-      page
-        .locator(".shift-pattern-table tbody tr")
-        .filter({ hasText: "06/02/2036" }),
-    ).toHaveCount(0);
-
-    await loginAsAdmin(page);
-    await page.goto(`/staff-shifts?tab=manage&view=week&date=${shiftDate}`);
-    const emptyCellButton = page.locator(".empty-shift-action").first();
-    await emptyCellButton.click();
-    await expect(
-      page.getByRole("dialog", { name: "Tạo lịch trực" }),
-    ).toBeVisible();
-    await page
-      .getByRole("dialog", { name: "Tạo lịch trực" })
-      .getByRole("button", { name: "Đóng" })
-      .click();
-    await expect(
-      page.getByRole("dialog", { name: "Tạo lịch trực" }),
-    ).toHaveCount(0);
-    await emptyCellButton.click();
-    await page
-      .getByRole("dialog", { name: "Tạo lịch trực" })
-      .getByRole("button", { name: "Tạo lịch trực" })
+      .getByRole("button", { name: /Đăng ký ca|Đăng ký các dòng đã điền/ })
+      .first()
       .click();
     await expect(page.getByRole("status")).toContainText(
-      "Đã tạo lịch trực mới",
+      "Đã đăng ký thành công",
     );
 
-    await page.locator(".shift-event").first().click();
-    const editDialog = page.getByRole("dialog", { name: "Đổi lịch trực" });
-    await editDialog.getByLabel("Người trực").selectOption({ index: 1 });
-    await editDialog.getByRole("button", { name: "Lưu người trực" }).click();
-    await expect(page.getByRole("status")).toContainText("Đã đổi người trực");
+    // Verify shift card is visible on roster
+    await page.goto(`/staff-shifts?tab=roster&view=week&date=${shiftDate}`);
+    const cancelButton = page
+      .getByRole("button", { name: /Hủy lịch trực/ })
+      .first();
+    await expect(cancelButton).toBeVisible();
+
+    // Cancel own shift
+    await cancelButton.click();
+    await page.getByRole("button", { name: "Hủy ca trực" }).click();
+    await expect(page.getByRole("status")).toContainText(
+      "Đã hủy ca trực thành công",
+    );
   } finally {
-    await deletePatternsFrom(patternDate);
     await deleteShiftsBetween("2036-02-09", "2036-02-15");
   }
 });

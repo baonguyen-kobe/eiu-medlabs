@@ -17,7 +17,6 @@ test("operations integrity migration has declarative parity", async () => {
     "invalidate_basic_medical_session_confirmation",
     "ROOT_ADMIN_OPERATIONAL_ASSIGNMENT_FORBIDDEN",
     "class_schedule_operational_lecturer",
-    "staff_shift_pattern_operational_assignee",
     "equipment_request_operational_responsible",
     "list_scoped_lecturers",
     "list_scoped_import_lecturers",
@@ -163,9 +162,14 @@ test("review correction UI coverage keeps capability, calendar, Root, and reconc
   assert.match(staffShifts, /list_operational_shift_assignees/);
   assert.match(staffShifts, /historicalPeople/);
   assert.match(staffShifts, /createAdminClient/);
-  assert.match(classSchedules, /list_operational_shift_assignees/);
+  assert.match(classSchedules, /shift_slot/);
+  assert.match(classSchedules, /shift\.shift_slot === "MORNING"/);
+  assert.match(classSchedules, /shift\.shift_slot === "AFTERNOON"/);
+  assert.doesNotMatch(classSchedules, /shift_type/);
+  assert.doesNotMatch(classSchedules, /list_operational_shift_assignees/);
+  assert.doesNotMatch(classSchedules, /shiftAssignees/);
   assert.doesNotMatch(classSchedules, /directoryRoles/);
-  assert.match(dashboard, /shiftAssignees\.map/);
+  assert.doesNotMatch(dashboard, /shiftAssignees/);
   assert.match(adminActions, /auth_update_outcome_unknown/);
   assert.match(adminActions, /let updateThrew = false/);
   assert.match(

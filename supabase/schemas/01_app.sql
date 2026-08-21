@@ -26,6 +26,7 @@ create table public.profiles (
   is_active boolean not null default true,
   must_change_password boolean not null default false,
   can_import_schedules boolean not null default false,
+  can_manage_shift_history boolean not null default false,
   allow_basic_medical_access boolean not null default false,
   access_version integer not null default 1,
   created_at timestamptz not null default now(),
@@ -229,94 +230,58 @@ create index import_rows_batch_status_idx on public.import_rows (import_batch_id
 create index import_rows_hash_idx on public.import_rows (normalized_row_hash);
 create index import_rows_schedule_idx on public.import_rows (class_schedule_id);
 
-create table public.shift_templates (
-  id uuid primary key default gen_random_uuid(),
-  shift_code text not null,
-  shift_name text not null,
-  start_time time not null,
-  end_time time not null,
-  is_active boolean not null default true,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  constraint shift_templates_code_not_blank check (btrim(shift_code) <> ''),
-  constraint shift_templates_name_not_blank check (btrim(shift_name) <> ''),
-  constraint shift_templates_valid_time check (end_time > start_time)
-);
-
-create unique index shift_templates_code_unique_idx on public.shift_templates (upper(btrim(shift_code)));
-
-create table public.staff_shift_patterns (
-  id uuid primary key default gen_random_uuid(),
-  staff_id uuid not null references public.profiles(id) on delete restrict,
-  weekday smallint not null,
-  start_time time not null,
-  end_time time not null,
-  time_range tsrange generated always as (
-    tsrange(date '2000-01-01' + start_time, date '2000-01-01' + end_time, '[)')
-  ) stored,
-  shift_type text not null,
-  effective_from date not null,
-  effective_to date not null,
-  effective_range daterange generated always as (
-    daterange(effective_from, effective_to + 1, '[)')
-  ) stored,
-  is_active boolean not null default true,
-  note text,
-  created_by uuid not null references public.profiles(id) on delete restrict,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  constraint shift_patterns_weekday_valid check (weekday between 1 and 7),
-  constraint shift_patterns_time_valid check (end_time > start_time),
-  constraint shift_patterns_dates_valid check (effective_to >= effective_from),
-  constraint staff_shift_patterns_no_overlap exclude using gist (
-    staff_id with =,
-    weekday with =,
-    time_range with &&,
-    effective_range with &&
-  ) where (is_active)
-);
-
-create index staff_shift_patterns_staff_idx on public.staff_shift_patterns (staff_id, is_active);
-create index staff_shift_patterns_created_by_idx on public.staff_shift_patterns (created_by);
-
 create table public.staff_shifts (
   id uuid primary key default gen_random_uuid(),
   staff_id uuid not null references public.profiles(id) on delete restrict,
   shift_date date not null,
+  shift_slot text not null check (shift_slot in ('MORNING', 'AFTERNOON')),
   start_time time not null,
   end_time time not null,
-  time_range tsrange generated always as (
-    tsrange(shift_date + start_time, shift_date + end_time, '[)')
-  ) stored,
-  shift_type text not null,
-  shift_template_id uuid references public.shift_templates(id) on delete restrict,
-  shift_pattern_id uuid references public.staff_shift_patterns(id) on delete set null,
-  note text,
   status public.shift_status not null default 'scheduled',
   registration_source public.shift_registration_source not null,
+  note text,
+  creation_group_id uuid,
   created_by uuid not null references public.profiles(id) on delete restrict,
   cancelled_by uuid references public.profiles(id) on delete set null,
   cancelled_at timestamptz,
+  cancellation_reason text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
+  constraint staff_shifts_slot_check check (shift_slot in ('MORNING', 'AFTERNOON')),
   constraint staff_shifts_valid_time check (end_time > start_time),
+  constraint staff_shifts_morning_time_check check (
+    shift_slot <> 'MORNING' or (
+      start_time >= '07:00'::time
+      and start_time < end_time
+      and end_time <= '11:00'::time
+      and extract(minute from start_time)::integer in (0, 30)
+      and extract(second from start_time)::integer = 0
+      and extract(minute from end_time)::integer in (0, 30)
+      and extract(second from end_time)::integer = 0
+    )
+  ),
+  constraint staff_shifts_afternoon_time_check check (
+    shift_slot <> 'AFTERNOON' or (
+      start_time >= '13:00'::time
+      and start_time < end_time
+      and end_time <= '16:00'::time
+      and extract(minute from start_time)::integer in (0, 30)
+      and extract(second from start_time)::integer = 0
+      and extract(minute from end_time)::integer in (0, 30)
+      and extract(second from end_time)::integer = 0
+    )
+  ),
   constraint staff_shifts_cancel_metadata check (
     (status <> 'cancelled') or (cancelled_at is not null and cancelled_by is not null)
-  ),
-  constraint staff_shifts_staff_no_overlap exclude using gist (
-    staff_id with =,
-    time_range with &&
-  ) where (status <> 'cancelled')
+  )
 );
 
 create index staff_shifts_staff_date_idx on public.staff_shifts (staff_id, shift_date);
 create index staff_shifts_date_status_idx on public.staff_shifts (shift_date, status);
-create index staff_shifts_template_idx on public.staff_shifts (shift_template_id);
-create index staff_shifts_pattern_idx on public.staff_shifts (shift_pattern_id, shift_date);
 create index staff_shifts_created_by_idx on public.staff_shifts (created_by);
-create unique index staff_shifts_pattern_occurrence_unique_idx
-  on public.staff_shifts (shift_pattern_id, shift_date)
-  where shift_pattern_id is not null;
+create index staff_shifts_creation_group_idx on public.staff_shifts (creation_group_id) where creation_group_id is not null;
+create unique index staff_shifts_active_slot_unique_idx on public.staff_shifts (staff_id, shift_date, shift_slot) where (status <> 'cancelled');
+
 
 create table public.audit_logs (
   id uuid primary key default gen_random_uuid(),
@@ -510,10 +475,6 @@ create trigger class_schedules_prevent_lecturer_overlap
 before insert or update of lecturer_id, lecturer_2_id, schedule_date, start_time, end_time, schedule_status
 on public.class_schedules
 for each row execute function private.prevent_class_lecturer_overlap();
-create trigger shift_templates_set_updated_at before update on public.shift_templates
-for each row execute function private.set_updated_at();
-create trigger staff_shift_patterns_set_updated_at before update on public.staff_shift_patterns
-for each row execute function private.set_updated_at();
 create trigger staff_shifts_set_updated_at before update on public.staff_shifts
 for each row execute function private.set_updated_at();
 
@@ -617,12 +578,6 @@ begin
       when old.status is distinct from new.status then 'staff_shift.status_changed'
       else 'staff_shift.updated'
     end;
-  elsif tg_table_name = 'staff_shift_patterns' then
-    action_name := case
-      when tg_op = 'INSERT' then 'staff_shift_pattern.created'
-      when old.is_active is distinct from new.is_active then 'staff_shift_pattern.status_changed'
-      else 'staff_shift_pattern.updated'
-    end;
   elsif tg_table_name = 'import_batches' then
     action_name := case
       when tg_op = 'INSERT' then 'import.started'
@@ -656,9 +611,6 @@ after insert or update or delete on public.class_schedules
 for each row execute function private.audit_business_change();
 create trigger staff_shifts_audit
 after insert or update on public.staff_shifts
-for each row execute function private.audit_business_change();
-create trigger staff_shift_patterns_audit
-after insert or update on public.staff_shift_patterns
 for each row execute function private.audit_business_change();
 create trigger import_batches_audit
 after insert or update on public.import_batches
@@ -984,8 +936,6 @@ begin
         when lecturer_id = (select auth.uid()) then lecturer_2_id
         else lecturer_id
       end,
-      lecturer_2_id = null,
-      updated_at = now()
   where id = target_schedule_id
   returning * into withdrawn;
 
@@ -993,13 +943,364 @@ begin
 end;
 $$;
 
-create or replace function public.register_own_shift(
-  target_date date,
-  target_start time,
-  target_end time,
-  target_shift_type text,
-  target_template_id uuid default null,
-  target_note text default null
+create or replace function private.can_operate_skills_shifts(actor_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  is_active boolean;
+  is_root boolean;
+  has_role boolean;
+  has_scope boolean;
+begin
+  if actor_id is null then
+    return false;
+  end if;
+
+  select
+    p.is_active,
+    (ssp.root_admin_id = actor_id)
+  into is_active, is_root
+  from public.profiles p
+  left join public.system_security_principals ssp on ssp.singleton = true
+  where p.id = actor_id;
+
+  if not coalesce(is_active, false) then
+    return false;
+  end if;
+
+  if coalesce(is_root, false) then
+    return true;
+  end if;
+
+  select exists (
+    select 1 from public.user_roles ur
+    where ur.user_id = actor_id and ur.role in ('admin', 'staff')
+  ) into has_role;
+
+  if not has_role then
+    return false;
+  end if;
+
+  select exists (
+    select 1 from public.profile_room_types prt
+    join public.room_types rt on rt.id = prt.room_type_id
+    where prt.profile_id = actor_id and rt.code = 'nursing_skills'
+  ) into has_scope;
+
+  return has_scope;
+end;
+$$;
+
+create or replace function private.can_manage_shift_history(actor_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if actor_id is null then
+    return false;
+  end if;
+
+  if exists (
+    select 1
+    from public.system_security_principals principals
+    where principals.singleton and principals.root_admin_id = actor_id
+  ) then
+    return true;
+  end if;
+
+  return exists (
+    select 1
+    from public.profiles p
+    where p.id = actor_id
+      and p.can_manage_shift_history = true
+  );
+end;
+$$;
+
+create or replace function private.is_eligible_shift_assignee(target_staff_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1
+    from public.profiles p
+    where p.id = target_staff_id
+      and (select private.is_operationally_assignable(p.id))
+      and exists (
+        select 1
+        from public.user_roles r
+        where r.user_id = p.id
+          and r.role in ('staff', 'admin')
+      )
+      and exists (
+        select 1
+        from public.profile_room_types prt
+        join public.room_types rt on rt.id = prt.room_type_id
+        where prt.profile_id = p.id
+          and rt.code = 'nursing_skills'
+      )
+  );
+$$;
+
+create or replace function private.validate_staff_shift_operational_assignee()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if not private.is_eligible_shift_assignee(new.staff_id) then
+    raise exception 'ASSIGN_STAFF_NOT_ELIGIBLE: User % is not an eligible Skills Lab shift assignee', new.staff_id;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists staff_shift_operational_assignee on public.staff_shifts;
+create trigger staff_shift_operational_assignee
+before insert or update of staff_id on public.staff_shifts
+for each row
+execute function private.validate_staff_shift_operational_assignee();
+
+create or replace function public.list_operational_shift_assignees()
+returns table (id uuid, full_name text, title text)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  if not private.can_operate_skills_shifts(auth.uid()) then
+    raise exception 'PERMISSION_DENIED: User lacks Skills Lab operational scope' using errcode = '42501';
+  end if;
+
+  return query
+  select profiles.id, profiles.full_name, profiles.title
+  from public.profiles profiles
+  where (select private.is_operationally_assignable(profiles.id))
+    and exists (
+      select 1 from public.user_roles roles
+      where roles.user_id = profiles.id and roles.role in ('staff', 'admin')
+    )
+    and exists (
+      select 1 from public.profile_room_types prt
+      join public.room_types rt on rt.id = prt.room_type_id
+      where prt.profile_id = profiles.id and rt.code = 'nursing_skills'
+    )
+  order by profiles.full_name;
+end;
+$$;
+
+create or replace function public.register_staff_shifts(
+  shifts_payload jsonb,
+  adjustment_reason text default null
+)
+returns setof public.staff_shifts
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  actor_id uuid := auth.uid();
+  is_admin boolean;
+  is_root boolean;
+  can_history boolean;
+  business_today date;
+  row_elem jsonb;
+  target_staff_id uuid;
+  target_date date;
+  target_slot text;
+  target_start time;
+  target_end time;
+  target_note text;
+  target_group_id uuid;
+  assigned_source public.shift_registration_source;
+  created_row public.staff_shifts;
+  seen_keys text[] := '{}';
+  row_key text;
+begin
+  if actor_id is null then
+    raise exception 'AUTH_REQUIRED: Authentication is required' using errcode = '42501';
+  end if;
+
+  if not private.can_operate_skills_shifts(actor_id) then
+    raise exception 'PERMISSION_DENIED: User lacks Skills Lab operational scope' using errcode = '42501';
+  end if;
+
+  is_admin := private.is_admin();
+  is_root := exists (
+    select 1 from public.system_security_principals where singleton and root_admin_id = actor_id
+  );
+  can_history := private.can_manage_shift_history(actor_id);
+  business_today := (now() at time zone 'Asia/Ho_Chi_Minh')::date;
+
+  if shifts_payload is null or jsonb_array_length(shifts_payload) = 0 then
+    raise exception 'INVALID_PAYLOAD: Shift payload must be a non-empty array' using errcode = '22023';
+  end if;
+
+  -- Phase 1: Validate all rows in payload
+  for row_elem in select * from jsonb_array_elements(shifts_payload) loop
+    target_staff_id := (row_elem->>'staff_id')::uuid;
+    target_date := (row_elem->>'shift_date')::date;
+    target_slot := upper(btrim(coalesce(row_elem->>'shift_slot', '')));
+    target_start := (row_elem->>'start_time')::time;
+    target_end := (row_elem->>'end_time')::time;
+    target_note := nullif(btrim(coalesce(row_elem->>'note', '')), '');
+    target_group_id := (row_elem->>'creation_group_id')::uuid;
+
+    if target_staff_id is null then
+      raise exception 'INVALID_STAFF_ID: staff_id is required' using errcode = '22023';
+    end if;
+
+    if target_date is null then
+      raise exception 'INVALID_SHIFT_DATE: shift_date is required' using errcode = '22023';
+    end if;
+
+    if target_slot not in ('MORNING', 'AFTERNOON') then
+      raise exception 'INVALID_SHIFT_SLOT: shift_slot must be MORNING or AFTERNOON' using errcode = '22023';
+    end if;
+
+    if target_start is null or target_end is null or target_start >= target_end then
+      raise exception 'INVALID_TIME_RANGE: start_time must be earlier than end_time' using errcode = '22023';
+    end if;
+
+    -- Slot-specific time rules
+    if target_slot = 'MORNING' then
+      if target_start < '07:00'::time or target_end > '11:00'::time or
+         extract(minute from target_start)::integer not in (0, 30) or extract(second from target_start)::integer <> 0 or
+         extract(minute from target_end)::integer not in (0, 30) or extract(second from target_end)::integer <> 0 then
+        raise exception 'INVALID_MORNING_TIME: Morning shift must be within 07:00-11:00 on 30-minute grid' using errcode = '22023';
+      end if;
+    elsif target_slot = 'AFTERNOON' then
+      if target_start < '13:00'::time or target_end > '16:00'::time or
+         extract(minute from target_start)::integer not in (0, 30) or extract(second from target_start)::integer <> 0 or
+         extract(minute from target_end)::integer not in (0, 30) or extract(second from target_end)::integer <> 0 then
+        raise exception 'INVALID_AFTERNOON_TIME: Afternoon shift must be within 13:00-16:00 on 30-minute grid' using errcode = '22023';
+      end if;
+    end if;
+
+    -- Assignee eligibility
+    if not private.is_eligible_shift_assignee(target_staff_id) then
+      raise exception 'ASSIGNEE_NOT_ELIGIBLE: User % is not eligible for Skills Lab shifts', target_staff_id using errcode = '42501';
+    end if;
+
+    -- Root cannot be assigned
+    if exists (
+      select 1 from public.system_security_principals principals
+      where principals.singleton and principals.root_admin_id = target_staff_id
+    ) then
+      raise exception 'ASSIGN_ROOT_NOT_ALLOWED: Root administrator cannot be assigned to shifts' using errcode = '42501';
+    end if;
+
+    -- Authority check: Staff can only register shifts for themselves
+    if target_staff_id <> actor_id and not is_admin and not is_root then
+      raise exception 'PERMISSION_DENIED: Staff members can only register shifts for themselves' using errcode = '42501';
+    end if;
+
+    -- Temporal policy
+    if target_date < business_today then
+      if not can_history and not is_root then
+        raise exception 'HISTORICAL_MUTATION_FORBIDDEN: Historical shifts require history management capability' using errcode = '42501';
+      end if;
+      if adjustment_reason is null or btrim(adjustment_reason) = '' then
+        raise exception 'HISTORICAL_REASON_REQUIRED: Reason is required for historical shift mutations' using errcode = '22023';
+      end if;
+    end if;
+
+    -- Intra-payload duplicate check
+    row_key := target_staff_id::text || ':' || target_date::text || ':' || target_slot;
+    if row_key = any(seen_keys) then
+      raise exception 'DUPLICATE_PAYLOAD_SLOT: Multiple entries for staff % on % slot % in the same request', target_staff_id, target_date, target_slot using errcode = '23505';
+    end if;
+    seen_keys := array_append(seen_keys, row_key);
+
+    -- Database active slot conflict check
+    if exists (
+      select 1
+      from public.staff_shifts s
+      where s.staff_id = target_staff_id
+        and s.shift_date = target_date
+        and s.shift_slot = target_slot
+        and s.status <> 'cancelled'
+    ) then
+      raise exception 'ACTIVE_SHIFT_EXISTS: Staff % already has an active % shift on %', target_staff_id, target_slot, target_date using errcode = '23505';
+    end if;
+  end loop;
+
+  -- Phase 2: Insert rows atomically
+  for row_elem in select * from jsonb_array_elements(shifts_payload) loop
+    target_staff_id := (row_elem->>'staff_id')::uuid;
+    target_date := (row_elem->>'shift_date')::date;
+    target_slot := upper(btrim(coalesce(row_elem->>'shift_slot', '')));
+    target_start := (row_elem->>'start_time')::time;
+    target_end := (row_elem->>'end_time')::time;
+    target_note := nullif(btrim(coalesce(row_elem->>'note', '')), '');
+    target_group_id := (row_elem->>'creation_group_id')::uuid;
+
+    assigned_source := case
+      when target_staff_id = actor_id and not is_admin and not is_root then 'self_registered'::public.shift_registration_source
+      else 'admin_assigned'::public.shift_registration_source
+    end;
+
+    insert into public.staff_shifts (
+      staff_id,
+      shift_date,
+      shift_slot,
+      start_time,
+      end_time,
+      note,
+      status,
+      registration_source,
+      creation_group_id,
+      created_by
+    ) values (
+      target_staff_id,
+      target_date,
+      target_slot,
+      target_start,
+      target_end,
+      target_note,
+      'scheduled',
+      assigned_source,
+      target_group_id,
+      actor_id
+    ) returning * into created_row;
+
+    -- Audit log if historical
+    if target_date < business_today then
+      insert into public.audit_logs (
+        actor_id,
+        action,
+        entity_type,
+        entity_id,
+        new_data,
+        metadata
+      ) values (
+        actor_id,
+        'create_historical_shift',
+        'staff_shifts',
+        created_row.id,
+        to_jsonb(created_row),
+        jsonb_build_object('reason', adjustment_reason)
+      );
+    end if;
+
+    return next created_row;
+  end loop;
+end;
+$$;
+
+create or replace function public.cancel_staff_shift(
+  target_shift_id uuid,
+  reason text default null
 )
 returns public.staff_shifts
 language plpgsql
@@ -1007,334 +1308,200 @@ security definer
 set search_path = ''
 as $$
 declare
-  created_shift public.staff_shifts;
+  actor_id uuid := auth.uid();
+  is_admin boolean;
+  is_root boolean;
+  can_history boolean;
+  business_today date;
+  target_shift public.staff_shifts;
+  cancelled_row public.staff_shifts;
 begin
-  if not (select private.has_role('staff')) then
-    raise exception 'STAFF_ROLE_REQUIRED' using errcode = '42501';
-  end if;
-  if target_end <= target_start then
-    raise exception 'INVALID_SHIFT_TIME' using errcode = '22007';
-  end if;
-  if (target_date + target_start) <= (now() at time zone 'Asia/Ho_Chi_Minh') then
-    raise exception 'SHIFT_REGISTRATION_CLOSED' using errcode = 'P0001';
+  if actor_id is null then
+    raise exception 'AUTH_REQUIRED: Authentication is required' using errcode = '42501';
   end if;
 
-  insert into public.staff_shifts (
-    staff_id, shift_date, start_time, end_time, shift_type,
-    shift_template_id, note, registration_source, created_by
-  ) values (
-    (select auth.uid()), target_date, target_start, target_end,
-    btrim(target_shift_type), target_template_id, nullif(btrim(target_note), ''),
-    'self_registered', (select auth.uid())
-  )
-  returning * into created_shift;
-
-  return created_shift;
-exception
-  when exclusion_violation then
-    raise exception 'STAFF_SHIFT_CONFLICT' using errcode = '23P01';
-end;
-$$;
-
-create or replace function public.cancel_own_shift(target_shift_id uuid)
-returns public.staff_shifts
-language plpgsql
-security definer
-set search_path = ''
-as $$
-declare
-  before_row public.staff_shifts;
-  cancelled_shift public.staff_shifts;
-begin
-  if not (select private.has_role('staff')) then
-    raise exception 'STAFF_ROLE_REQUIRED' using errcode = '42501';
+  if not private.can_operate_skills_shifts(actor_id) then
+    raise exception 'PERMISSION_DENIED: User lacks Skills Lab operational scope' using errcode = '42501';
   end if;
 
-  select * into before_row
+  is_admin := private.is_admin();
+  is_root := exists (
+    select 1 from public.system_security_principals where singleton and root_admin_id = actor_id
+  );
+  can_history := private.can_manage_shift_history(actor_id);
+  business_today := (now() at time zone 'Asia/Ho_Chi_Minh')::date;
+
+  select * into target_shift
   from public.staff_shifts
   where id = target_shift_id
-    and staff_id = (select auth.uid())
   for update;
 
-  if before_row.id is null then
-    raise exception 'NOT_SHIFT_OWNER' using errcode = '42501';
+  if target_shift.id is null then
+    raise exception 'SHIFT_NOT_FOUND: Staff shift % not found', target_shift_id using errcode = 'P0002';
   end if;
-  if before_row.status <> 'scheduled'
-     or (before_row.shift_date + before_row.start_time) <=
-        (now() at time zone 'Asia/Ho_Chi_Minh') then
-    raise exception 'SHIFT_CANCELLATION_CLOSED' using errcode = 'P0001';
+
+  if target_shift.status = 'cancelled' then
+    return target_shift;
+  end if;
+
+  -- Authority check: Staff can only cancel their own shift
+  if target_shift.staff_id <> actor_id and not is_admin and not is_root then
+    raise exception 'PERMISSION_DENIED: Staff members can only cancel their own shifts' using errcode = '42501';
+  end if;
+
+  -- Temporal check
+  if target_shift.shift_date < business_today then
+    if not can_history and not is_root then
+      raise exception 'HISTORICAL_MUTATION_FORBIDDEN: Historical cancellation requires history capability' using errcode = '42501';
+    end if;
+    if reason is null or btrim(reason) = '' then
+      raise exception 'HISTORICAL_REASON_REQUIRED: Reason is required for historical shift cancellation' using errcode = '22023';
+    end if;
   end if;
 
   update public.staff_shifts
-  set status = 'cancelled',
-      cancelled_by = (select auth.uid()),
-      cancelled_at = now(),
-      updated_at = now()
+  set
+    status = 'cancelled',
+    cancelled_by = actor_id,
+    cancelled_at = now(),
+    cancellation_reason = nullif(btrim(coalesce(reason, '')), ''),
+    updated_at = now()
   where id = target_shift_id
-  returning * into cancelled_shift;
+  returning * into cancelled_row;
 
-  return cancelled_shift;
+  insert into public.audit_logs (
+    actor_id,
+    action,
+    entity_type,
+    entity_id,
+    old_data,
+    new_data,
+    metadata
+  ) values (
+    actor_id,
+    case when target_shift.shift_date < business_today then 'cancel_historical_shift' else 'cancel_shift' end,
+    'staff_shifts',
+    cancelled_row.id,
+    to_jsonb(target_shift),
+    to_jsonb(cancelled_row),
+    jsonb_build_object('reason', reason)
+  );
+
+  return cancelled_row;
 end;
 $$;
 
-create or replace function private.materialize_shift_pattern(
-  target_pattern_id uuid,
-  target_horizon_end date default null
+create or replace function public.update_staff_shift_time(
+  target_shift_id uuid,
+  target_start_time time,
+  target_end_time time,
+  target_note text default null,
+  reason text default null
 )
-returns void
+returns public.staff_shifts
 language plpgsql
 security definer
 set search_path = ''
 as $$
 declare
-  pattern public.staff_shift_patterns;
-  materialize_from date;
-  materialize_to date;
-  occurrence_date date;
-  business_now timestamp := now() at time zone 'Asia/Ho_Chi_Minh';
+  actor_id uuid := auth.uid();
+  is_admin boolean;
+  is_root boolean;
+  can_history boolean;
+  business_today date;
+  target_shift public.staff_shifts;
+  updated_row public.staff_shifts;
 begin
-  perform pg_catalog.pg_advisory_xact_lock(
-    pg_catalog.hashtextextended('medlabs:shift-pattern:' || target_pattern_id::text, 0)
+  if actor_id is null then
+    raise exception 'AUTH_REQUIRED: Authentication is required' using errcode = '42501';
+  end if;
+
+  if not private.can_operate_skills_shifts(actor_id) then
+    raise exception 'PERMISSION_DENIED: User lacks Skills Lab operational scope' using errcode = '42501';
+  end if;
+
+  is_admin := private.is_admin();
+  is_root := exists (
+    select 1 from public.system_security_principals where singleton and root_admin_id = actor_id
   );
-  select * into pattern
-  from public.staff_shift_patterns
-  where id = target_pattern_id
+  can_history := private.can_manage_shift_history(actor_id);
+  business_today := (now() at time zone 'Asia/Ho_Chi_Minh')::date;
+
+  select * into target_shift
+  from public.staff_shifts
+  where id = target_shift_id
   for update;
 
-  if pattern.id is null or not pattern.is_active then
-    return;
+  if target_shift.id is null then
+    raise exception 'SHIFT_NOT_FOUND: Staff shift % not found', target_shift_id using errcode = 'P0002';
   end if;
 
-  materialize_to := least(
-    pattern.effective_to,
-    coalesce(
-      target_horizon_end,
-      pattern.effective_to
-    )
+  if target_shift.status = 'cancelled' then
+    raise exception 'SHIFT_CANCELLED: Cannot edit a cancelled shift' using errcode = '22023';
+  end if;
+
+  -- Authority check: Staff can only edit their own shifts
+  if target_shift.staff_id <> actor_id and not is_admin and not is_root then
+    raise exception 'PERMISSION_DENIED: Staff members can only edit their own shifts' using errcode = '42501';
+  end if;
+
+  -- Temporal check
+  if target_shift.shift_date < business_today then
+    if not can_history and not is_root then
+      raise exception 'HISTORICAL_MUTATION_FORBIDDEN: Historical shift edit requires history capability' using errcode = '42501';
+    end if;
+    if reason is null or btrim(reason) = '' then
+      raise exception 'HISTORICAL_REASON_REQUIRED: Reason is required for historical shift edit' using errcode = '22023';
+    end if;
+  end if;
+
+  if target_start_time is null or target_end_time is null or target_start_time >= target_end_time then
+    raise exception 'INVALID_TIME_RANGE: start_time must be earlier than end_time' using errcode = '22023';
+  end if;
+
+  -- Slot rule enforcement
+  if target_shift.shift_slot = 'MORNING' then
+    if target_start_time < '07:00'::time or target_end_time > '11:00'::time or
+       extract(minute from target_start_time)::integer not in (0, 30) or extract(second from target_start_time)::integer <> 0 or
+       extract(minute from target_end_time)::integer not in (0, 30) or extract(second from target_end_time)::integer <> 0 then
+      raise exception 'INVALID_MORNING_TIME: Morning shift must be within 07:00-11:00 on 30-minute grid' using errcode = '22023';
+    end if;
+  elsif target_shift.shift_slot = 'AFTERNOON' then
+    if target_start_time < '13:00'::time or target_end_time > '16:00'::time or
+       extract(minute from target_start_time)::integer not in (0, 30) or extract(second from target_start_time)::integer <> 0 or
+       extract(minute from target_end_time)::integer not in (0, 30) or extract(second from target_end_time)::integer <> 0 then
+      raise exception 'INVALID_AFTERNOON_TIME: Afternoon shift must be within 13:00-16:00 on 30-minute grid' using errcode = '22023';
+    end if;
+  end if;
+
+  update public.staff_shifts
+  set
+    start_time = target_start_time,
+    end_time = target_end_time,
+    note = nullif(btrim(coalesce(target_note, '')), ''),
+    updated_at = now()
+  where id = target_shift_id
+  returning * into updated_row;
+
+  insert into public.audit_logs (
+    actor_id,
+    action,
+    entity_type,
+    entity_id,
+    old_data,
+    new_data,
+    metadata
+  ) values (
+    actor_id,
+    case when target_shift.shift_date < business_today then 'update_historical_shift_time' else 'update_shift_time' end,
+    'staff_shifts',
+    updated_row.id,
+    to_jsonb(target_shift),
+    to_jsonb(updated_row),
+    jsonb_build_object('reason', reason)
   );
-  materialize_from := greatest(
-    pattern.effective_from,
-    business_now::date
-  );
-  if materialize_from > materialize_to then return; end if;
 
-  for occurrence_date in
-    select generated.day_value::date
-    from generate_series(
-      materialize_from::timestamp,
-      materialize_to::timestamp,
-      interval '1 day'
-    ) as generated(day_value)
-    where extract(isodow from generated.day_value)::smallint = pattern.weekday
-      and generated.day_value::date + pattern.start_time > business_now
-    order by generated.day_value
-  loop
-    begin
-      insert into public.staff_shifts (
-        staff_id, shift_date, start_time, end_time, shift_type,
-        shift_template_id, shift_pattern_id, note, status,
-        registration_source, created_by
-      ) values (
-        pattern.staff_id, occurrence_date, pattern.start_time, pattern.end_time,
-        pattern.shift_type, null, pattern.id, pattern.note, 'scheduled',
-        'generated', pattern.created_by
-      )
-      on conflict (shift_pattern_id, shift_date) where shift_pattern_id is not null
-      do update set staff_id = excluded.staff_id, start_time = excluded.start_time,
-        end_time = excluded.end_time, shift_type = excluded.shift_type,
-        note = excluded.note, updated_at = now()
-      where staff_shifts.registration_source = 'generated'
-        and staff_shifts.status = 'scheduled';
-    exception when exclusion_violation then null;
-    end;
-  end loop;
-end;
-$$;
-
-create or replace function private.refresh_open_shift_patterns()
-returns void
-language plpgsql
-security definer
-set search_path = ''
-as $$
-declare
-  pattern_id uuid;
-  business_today date := (now() at time zone 'Asia/Ho_Chi_Minh')::date;
-begin
-  if not pg_catalog.pg_try_advisory_xact_lock(
-    pg_catalog.hashtextextended('medlabs:refresh-open-shift-patterns', 0)
-  ) then
-    return;
-  end if;
-  for pattern_id in
-    select patterns.id
-    from public.staff_shift_patterns as patterns
-    where patterns.is_active
-      and patterns.effective_from <= business_today + 365
-      and patterns.effective_to >= business_today
-    order by patterns.id
-  loop
-    perform private.materialize_shift_pattern(pattern_id);
-  end loop;
-end;
-$$;
-
-select cron.schedule(
-  'medlabs-refresh-open-shift-patterns',
-  '15 17 * * *',
-  'select private.refresh_open_shift_patterns();'
-);
-
-create or replace function private.preserve_staff_shift_history()
-returns trigger language plpgsql security definer set search_path = '' as $$
-begin
-  if old.registration_source <> 'generated'
-    or old.status in ('completed', 'cancelled')
-    or (old.shift_date + old.start_time)
-      <= (now() at time zone 'Asia/Ho_Chi_Minh') then
-    return null;
-  end if;
-  return old;
-end;
-$$;
-create trigger staff_shifts_preserve_history
-before delete on public.staff_shifts
-for each row execute function private.preserve_staff_shift_history();
-
-create or replace function public.register_own_shift_pattern(
-  target_weekday smallint,
-  target_shift_type text,
-  target_effective_from date,
-  target_effective_to date default null,
-  target_note text default null
-)
-returns setof public.staff_shift_patterns
-language plpgsql
-security definer
-set search_path = ''
-as $$
-declare
-  caller_id uuid := (select auth.uid());
-  normalized_type text := upper(btrim(target_shift_type));
-  resolved_effective_to date;
-  slot record;
-  replaced_pattern record;
-  created_pattern public.staff_shift_patterns;
-begin
-  if not (
-    (select private.has_role('staff'))
-    or (select private.has_role('admin'))
-  ) then
-    raise exception 'STAFF_ROLE_REQUIRED' using errcode = '42501';
-  end if;
-  if target_weekday not between 1 and 7 then
-    raise exception 'INVALID_SHIFT_WEEKDAY' using errcode = '22023';
-  end if;
-  if target_effective_from is null then
-    raise exception 'SHIFT_EFFECTIVE_FROM_REQUIRED' using errcode = '22004';
-  end if;
-  resolved_effective_to := coalesce(
-    target_effective_to,
-    (target_effective_from + interval '3 months')::date - 1
-  );
-  if resolved_effective_to < target_effective_from then
-    raise exception 'INVALID_SHIFT_EFFECTIVE_RANGE' using errcode = '22007';
-  end if;
-  if normalized_type not in ('MORNING', 'AFTERNOON', 'ALL_DAY') then
-    raise exception 'INVALID_SHIFT_TYPE' using errcode = '22023';
-  end if;
-
-  for slot in
-    select * from (
-      values
-        ('MORNING'::text, time '08:30', time '11:30'),
-        ('AFTERNOON'::text, time '13:30', time '16:30')
-    ) as available_slots(shift_type, start_time, end_time)
-    where normalized_type = 'ALL_DAY' or available_slots.shift_type = normalized_type
-    order by available_slots.start_time
-  loop
-    for replaced_pattern in
-      select id
-      from public.staff_shift_patterns
-      where staff_id = caller_id
-        and weekday = target_weekday
-        and is_active
-        and time_range && tsrange(
-          date '2000-01-01' + slot.start_time,
-          date '2000-01-01' + slot.end_time,
-          '[)'
-        )
-        and effective_range && daterange(
-          target_effective_from,
-          resolved_effective_to + 1,
-          '[)'
-        )
-      order by id
-      for update
-    loop
-      delete from public.staff_shifts
-      where shift_pattern_id = replaced_pattern.id;
-
-      update public.staff_shift_patterns
-      set is_active = false,
-          updated_at = now()
-      where id = replaced_pattern.id;
-    end loop;
-
-    insert into public.staff_shift_patterns (
-      staff_id, weekday, start_time, end_time, shift_type,
-      effective_from, effective_to, note, created_by
-    ) values (
-      caller_id, target_weekday, slot.start_time, slot.end_time, slot.shift_type,
-      target_effective_from, resolved_effective_to,
-      nullif(btrim(target_note), ''), caller_id
-    )
-    returning * into created_pattern;
-
-    perform private.materialize_shift_pattern(created_pattern.id);
-    return next created_pattern;
-  end loop;
-  return;
-exception
-  when exclusion_violation then
-    raise exception 'STAFF_SHIFT_PATTERN_CONFLICT' using errcode = '23P01';
-end;
-$$;
-
-create or replace function public.cancel_own_shift_pattern(target_pattern_id uuid)
-returns public.staff_shift_patterns
-language plpgsql
-security definer
-set search_path = ''
-as $$
-declare
-  before_row public.staff_shift_patterns;
-  cancelled_pattern public.staff_shift_patterns;
-begin
-  select * into before_row
-  from public.staff_shift_patterns
-  where id = target_pattern_id
-    and is_active
-    and (
-      staff_id = (select auth.uid())
-      or (select private.has_role('admin'))
-    )
-  for update;
-
-  if before_row.id is null then
-    raise exception 'NOT_SHIFT_PATTERN_OWNER' using errcode = '42501';
-  end if;
-
-  delete from public.staff_shifts
-  where shift_pattern_id = target_pattern_id;
-
-  update public.staff_shift_patterns
-  set is_active = false,
-      updated_at = now()
-  where id = target_pattern_id
-  returning * into cancelled_pattern;
-
-  return cancelled_pattern;
+  return updated_row;
 end;
 $$;
 
@@ -1474,10 +1641,6 @@ grant execute on function private.can_create_schedule_entries() to authenticated
 
 revoke execute on function public.claim_class(uuid) from public, anon;
 revoke execute on function public.withdraw_class(uuid) from public, anon;
-revoke execute on function public.register_own_shift(date, time, time, text, uuid, text) from public, anon;
-revoke execute on function public.cancel_own_shift(uuid) from public, anon;
-revoke execute on function public.register_own_shift_pattern(smallint, text, date, date, text) from public, anon;
-revoke execute on function public.cancel_own_shift_pattern(uuid) from public, anon;
 revoke execute on function public.claim_email_notifications(integer) from public, anon, authenticated;
 
 create or replace function public.list_active_people()
@@ -1506,14 +1669,8 @@ grant execute on function public.list_active_people() to authenticated;
 
 grant execute on function public.claim_class(uuid) to authenticated;
 grant execute on function public.withdraw_class(uuid) to authenticated;
-grant execute on function public.register_own_shift(date, time, time, text, uuid, text) to authenticated;
-grant execute on function public.cancel_own_shift(uuid) to authenticated;
-grant execute on function public.register_own_shift_pattern(smallint, text, date, date, text) to authenticated;
-grant execute on function public.cancel_own_shift_pattern(uuid) to authenticated;
 grant execute on function public.claim_email_notifications(integer) to service_role;
 revoke all on function private.snapshot_email_delivery_mode() from public, anon, authenticated;
-revoke all on function private.preserve_staff_shift_history() from public, anon, authenticated;
-revoke all on function private.materialize_shift_pattern(uuid, date) from public, anon, authenticated;
 revoke execute on function public.create_import_schedule_row(
   uuid, integer, text, jsonb, jsonb, public.import_row_status, jsonb, jsonb,
   uuid, text, text, uuid, uuid, date, time, time, text
@@ -1530,8 +1687,6 @@ alter table public.rooms enable row level security;
 alter table public.import_batches enable row level security;
 alter table public.import_rows enable row level security;
 alter table public.class_schedules enable row level security;
-alter table public.shift_templates enable row level security;
-alter table public.staff_shift_patterns enable row level security;
 alter table public.staff_shifts enable row level security;
 alter table public.audit_logs enable row level security;
 alter table public.email_notifications enable row level security;
@@ -1667,32 +1822,9 @@ with check (
   )
 );
 
-create policy shift_templates_select_active on public.shift_templates
-for select to authenticated
-using ((select private.is_active_user()));
-
-create policy shift_templates_admin_all on public.shift_templates
-for all to authenticated
-using ((select private.has_role('admin')))
-with check ((select private.has_role('admin')));
-
-create policy shift_patterns_select on public.staff_shift_patterns
-for select to authenticated
-using ((select private.is_active_user()));
-
-create policy shift_patterns_admin_all on public.staff_shift_patterns
-for all to authenticated
-using ((select private.has_role('admin')))
-with check ((select private.has_role('admin')));
-
 create policy staff_shifts_select on public.staff_shifts
 for select to authenticated
-using ((select private.is_active_user()));
-
-create policy staff_shifts_admin_all on public.staff_shifts
-for all to authenticated
-using ((select private.has_role('admin')))
-with check ((select private.has_role('admin')));
+using ((select private.can_operate_skills_shifts((select auth.uid()))));
 
 create policy audit_logs_admin_select on public.audit_logs
 for select to authenticated
@@ -1703,13 +1835,15 @@ for select to authenticated
 using ((select private.has_role('admin')));
 
 grant select on public.profiles, public.user_roles, public.courses, public.rooms,
-  public.class_schedules, public.shift_templates, public.staff_shift_patterns,
-  public.staff_shifts to authenticated;
+  public.class_schedules, public.staff_shifts to authenticated;
 grant select, insert, update on public.import_batches, public.import_rows to authenticated;
 grant insert, update on public.class_schedules to authenticated;
+revoke select on public.staff_shifts from anon, public;
+grant select on public.staff_shifts to authenticated;
+revoke insert, update, delete, truncate on public.staff_shifts from authenticated, anon, public;
+grant all on public.staff_shifts to service_role;
 grant all on public.profiles, public.user_roles, public.courses, public.rooms,
-  public.class_schedules, public.shift_templates, public.staff_shift_patterns,
-  public.staff_shifts to authenticated;
+  public.class_schedules to authenticated;
 grant select on public.audit_logs, public.email_notifications to authenticated;
 
 -- Server-side directory imports use the secret/service role. Keep this grant

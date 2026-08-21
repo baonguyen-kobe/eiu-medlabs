@@ -61,7 +61,6 @@ export default async function ClassSchedulesPage({
     { data: schedules },
     { data: shifts },
     { data: people },
-    { data: operationalShiftAssignees },
     { data: roomTypes },
     { data: scopedLecturers },
     { data: rooms },
@@ -97,7 +96,7 @@ export default async function ClassSchedulesPage({
     supabase
       .from("staff_shifts")
       .select(
-        "id, staff_id, shift_date, start_time, end_time, shift_type, status, note",
+        "id, staff_id, shift_date, start_time, end_time, shift_slot, status, note",
       )
       .gte("shift_date", periodStartText)
       .lte("shift_date", periodEndText)
@@ -105,7 +104,6 @@ export default async function ClassSchedulesPage({
       .order("shift_date")
       .order("start_time"),
     supabase.rpc("list_active_people"),
-    supabase.rpc("list_operational_shift_assignees"),
     supabase.from("room_types").select("id, code, name").eq("is_active", true),
     supabase.rpc("list_scoped_lecturers", {
       target_room_type_id: NURSING_SKILLS_ROOM_TYPE_ID,
@@ -244,11 +242,11 @@ export default async function ClassSchedulesPage({
       end: shift.end_time.slice(0, 5),
       title: "Ca trực kho",
       subtitle:
-        shift.shift_type === "MORNING"
+        shift.shift_slot === "MORNING"
           ? "Ca sáng"
-          : shift.shift_type === "AFTERNOON"
+          : shift.shift_slot === "AFTERNOON"
             ? "Ca chiều"
-            : "Ca tùy chỉnh",
+            : "Ca trực",
       person: peopleById.get(shift.staff_id) ?? "Nhân sự",
       personId: shift.staff_id,
       status: shift.status,
@@ -294,14 +292,6 @@ export default async function ClassSchedulesPage({
         label: `${room.room_code} · ${room.building_code}`,
         roomTypeId: room.room_type_id,
       }))}
-      shiftAssignees={(
-        (operationalShiftAssignees ?? []) as Array<{
-          id: string;
-          full_name: string;
-        }>
-      )
-        .map(({ id, full_name }) => ({ id, fullName: full_name }))
-        .sort((a, b) => a.fullName.localeCompare(b.fullName, "vi"))}
     />
   );
 }

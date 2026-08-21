@@ -232,7 +232,7 @@ test("all migrated forms and components use TimePicker and contain no type=time 
     "components/schedule-form.tsx",
     "components/class-registration-list.tsx",
     "components/dashboard.tsx",
-    "app/admin/shift-templates/page.tsx",
+    "components/staff-shift-roster.tsx",
     "components/basic-medical-registration-form.tsx",
   ];
 

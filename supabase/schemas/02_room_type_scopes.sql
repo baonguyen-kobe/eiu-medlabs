@@ -1550,44 +1550,6 @@ $$;
 revoke all on function public.delete_catalog_course(uuid) from public, anon;
 grant execute on function public.delete_catalog_course(uuid) to authenticated;
 
-create or replace function public.delete_catalog_shift_template(
-  target_shift_template_id uuid
-)
-returns void
-language plpgsql
-security definer
-set search_path = ''
-as $$
-begin
-  if not (select private.is_admin()) then
-    raise exception 'ADMIN_REQUIRED' using errcode = '42501';
-  end if;
-
-  perform 1
-  from public.shift_templates
-  where id = target_shift_template_id
-  for update;
-  if not found then
-    raise exception 'CATALOG_NOT_FOUND' using errcode = 'P0002';
-  end if;
-
-  if exists (
-    select 1 from public.staff_shifts
-    where shift_template_id = target_shift_template_id and status <> 'cancelled'
-  ) then
-    raise exception 'CATALOG_HAS_ACTIVE_SHIFTS' using errcode = '23503';
-  end if;
-
-  delete from public.staff_shifts
-  where shift_template_id = target_shift_template_id and status = 'cancelled';
-
-  delete from public.shift_templates where id = target_shift_template_id;
-end;
-$$;
-
-revoke all on function public.delete_catalog_shift_template(uuid) from public, anon;
-grant execute on function public.delete_catalog_shift_template(uuid) to authenticated;
-
 -- Fourth follow-up: import RPCs require the capability in the requested scope.
 grant insert, update, delete on public.class_schedules to service_role;
 grant insert, update, delete on public.import_batches to service_role;

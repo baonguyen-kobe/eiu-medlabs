@@ -72,9 +72,9 @@ test("historical Root shift stays readable but Root is absent from reassignment 
       begin;
       alter table public.staff_shifts disable trigger staff_shift_operational_assignee;
       insert into public.staff_shifts
-        (id, staff_id, shift_date, start_time, end_time, shift_type, status, registration_source, created_by, note)
+        (id, staff_id, shift_date, shift_slot, start_time, end_time, status, registration_source, created_by, note)
       values
-        ('${shiftId}', '${rootId}', '${date}', '08:30', '11:30', 'MORNING', 'scheduled', 'admin_assigned', '${rootId}', 'historical Root fixture');
+        ('${shiftId}', '${rootId}', '${date}', 'MORNING', '08:30', '11:30', 'scheduled', 'admin_assigned', '${rootId}', 'historical Root fixture');
       alter table public.staff_shifts enable trigger staff_shift_operational_assignee;
       commit;
     `);

@@ -12,6 +12,7 @@ import {
   CalendarDaysIcon,
   CheckCircleIcon,
   CheckIcon,
+  ChevronDownIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   ClipboardDocumentListIcon,
@@ -87,6 +88,7 @@ export const Plus = createIcon(PlusIcon);
 export const Settings = createIcon(Cog6ToothIcon);
 export const Users = createIcon(UserGroupIcon);
 export const Check = createIcon(CheckIcon);
+export const ChevronDown = createIcon(ChevronDownIcon);
 export const ChevronLeft = createIcon(ChevronLeftIcon);
 export const ChevronRight = createIcon(ChevronRightIcon);
 export const CircleAlert = createIcon(ExclamationCircleIcon);

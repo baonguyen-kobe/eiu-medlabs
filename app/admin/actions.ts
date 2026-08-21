@@ -509,11 +509,7 @@ export async function setPersonnelEmailNotificationCapability(
 }
 
 function catalogRedirect(
-  path:
-    | "/admin/courses"
-    | "/admin/rooms"
-    | "/admin/shift-templates"
-    | "/admin/personnel",
+  path: "/admin/courses" | "/admin/rooms" | "/admin/personnel",
   kind: "notice" | "error",
   message: string,
 ): never {
@@ -864,47 +860,6 @@ export async function deleteRoom(formData: FormData) {
   });
   if (error) throw new Error("CATALOG_DELETE_BLOCKED");
   revalidatePath("/admin/rooms");
-}
-
-export async function createShiftTemplate(formData: FormData) {
-  const { supabase } = await adminContext();
-  const code = String(formData.get("shift_code") ?? "").trim();
-  const name = String(formData.get("shift_name") ?? "").trim();
-  const start = String(formData.get("start_time") ?? "");
-  const end = String(formData.get("end_time") ?? "");
-  if (!code || !name || !start || !end || end <= start) return;
-  await supabase.from("shift_templates").insert({
-    shift_code: code,
-    shift_name: name,
-    start_time: start,
-    end_time: end,
-  });
-  revalidatePath("/admin/shift-templates");
-}
-
-export async function toggleShiftTemplate(formData: FormData) {
-  const { supabase } = await adminContext();
-  await supabase
-    .from("shift_templates")
-    .update({ is_active: String(formData.get("active")) === "true" })
-    .eq("id", String(formData.get("id") ?? ""));
-  revalidatePath("/admin/shift-templates");
-}
-
-export async function deleteShiftTemplate(formData: FormData) {
-  const { supabase } = await adminContext();
-  const { error } = await supabase.rpc("delete_catalog_shift_template", {
-    target_shift_template_id: String(formData.get("id") ?? ""),
-  });
-  if (error) {
-    catalogRedirect(
-      "/admin/shift-templates",
-      "error",
-      "Mẫu ca đang được sử dụng nên chưa thể xóa.",
-    );
-  }
-  revalidatePath("/admin/shift-templates");
-  catalogRedirect("/admin/shift-templates", "notice", "Đã xóa mẫu ca trực.");
 }
 
 export async function toggleProfile(formData: FormData) {

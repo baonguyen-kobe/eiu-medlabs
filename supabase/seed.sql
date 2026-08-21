@@ -15,13 +15,3 @@ insert into public.rooms (
   ('20000000-0000-0000-0000-000000000004', '302', 'B3', 'Phòng học 302', 'Phòng lý thuyết', 48),
   ('20000000-0000-0000-0000-000000000005', 'LAB-5', 'D1', 'Clinical Practice Lab', 'Phòng thực hành', 20)
 on conflict do nothing;
-
-insert into public.shift_templates (
-  id, shift_code, shift_name, start_time, end_time
-) values
-  ('30000000-0000-0000-0000-000000000001', 'MORNING', 'Ca sáng', '08:30', '11:30'),
-  ('30000000-0000-0000-0000-000000000002', 'AFTERNOON', 'Ca chiều', '13:30', '16:30'),
-  ('30000000-0000-0000-0000-000000000003', 'EARLY_MORNING', 'Ca sáng sớm', '07:30', '10:30'),
-  ('30000000-0000-0000-0000-000000000004', 'MIDDAY', 'Ca giữa ngày', '10:30', '13:30'),
-  ('30000000-0000-0000-0000-000000000005', 'LATE_AFTERNOON', 'Ca chiều muộn', '13:30', '16:30')
-on conflict do nothing;

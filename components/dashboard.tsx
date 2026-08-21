@@ -28,7 +28,7 @@ import {
   adminCancelClass,
   adminCancelBasicMedicalSession,
   adminInvalidateBasicMedicalSessionConfirmation,
-  adminReassignShift,
+  cancelStaffShiftAction,
   claimClass,
   withdrawClass,
   rescheduleClass,
@@ -306,7 +306,6 @@ export function Dashboard({
   todayDate,
   lecturers,
   rooms = [],
-  shiftAssignees,
   calendarKind = "combined",
   roomTypeCodes = [],
   allowBasicMedicalAccess = false,
@@ -327,7 +326,6 @@ export function Dashboard({
   todayDate: string;
   lecturers: PersonOption[];
   rooms?: RoomOption[];
-  shiftAssignees: PersonOption[];
   calendarKind?: "combined" | "basic_medical";
   roomTypeCodes?: string[];
   allowBasicMedicalAccess?: boolean;
@@ -365,7 +363,6 @@ export function Dashboard({
     null,
   );
   const [selectedLecturerIds, setSelectedLecturerIds] = useState<string[]>([]);
-  const [selectedShiftAssigneeId, setSelectedShiftAssigneeId] = useState("");
   const [selectedScheduleDate, setSelectedScheduleDate] = useState("");
   const [selectedStartTime, setSelectedStartTime] = useState("");
   const [selectedEndTime, setSelectedEndTime] = useState("");
@@ -426,9 +423,6 @@ export function Dashboard({
           ? [event.personId].filter((id): id is string => Boolean(id))
           : (event.personIds ?? (event.personId ? [event.personId] : []))
         : [],
-    );
-    setSelectedShiftAssigneeId(
-      event.type === "shift" ? (event.personId ?? "") : "",
     );
     setSelectedScheduleDate(event.date);
     setSelectedStartTime(event.start);
@@ -1013,20 +1007,6 @@ export function Dashboard({
                         </select>
                       ) : null}
                     </span>
-                  ) : role === "admin" && selectedEvent.type === "shift" ? (
-                    <select
-                      value={selectedShiftAssigneeId}
-                      onChange={(event) =>
-                        setSelectedShiftAssigneeId(event.target.value)
-                      }
-                      aria-label="Chọn người trực"
-                    >
-                      {shiftAssignees.map((person) => (
-                        <option value={person.id} key={person.id}>
-                          {person.fullName}
-                        </option>
-                      ))}
-                    </select>
                   ) : (
                     <span className="lecturer-name-list">
                       {(selectedEvent.person ?? "Chưa có giảng viên")
@@ -1224,20 +1204,24 @@ export function Dashboard({
                   </button>
                 )
               ) : null}
-              {role === "admin" && selectedEvent.type === "shift" ? (
+              {(role === "admin" || selectedEvent.owned) &&
+              selectedEvent.type === "shift" ? (
                 <button
-                  className="button button-primary full-width"
-                  disabled={pending || !selectedShiftAssigneeId}
+                  className="button button-secondary full-width"
+                  disabled={pending}
                   onClick={() =>
-                    runEventAction(() =>
-                      adminReassignShift(
-                        selectedEvent.id,
-                        selectedShiftAssigneeId,
-                      ),
+                    runEventAction(
+                      () => cancelStaffShiftAction(selectedEvent.id),
+                      {
+                        title: "Hủy ca trực?",
+                        description:
+                          "Ca trực sẽ được chuyển sang trạng thái đã hủy.",
+                        confirmLabel: "Hủy ca trực",
+                      },
                     )
                   }
                 >
-                  Đổi lịch trực
+                  Hủy ca trực
                 </button>
               ) : null}
             </div>

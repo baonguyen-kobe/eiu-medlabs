@@ -48,7 +48,9 @@ async function loginAsUser(page: Page, email: string, pass: string) {
   await page.locator('input[name="email"]').fill(email);
   await page.locator('input[name="password"]').fill(pass);
   await page.getByRole("button", { name: "Đăng nhập", exact: true }).click();
-  await expect(page).toHaveURL(/\/dashboard/, { timeout: 15_000 });
+  await expect(page).toHaveURL(/(dashboard|basic-medical|classes|equipment)/, {
+    timeout: 15_000,
+  });
 }
 
 const cancelReasonText = "Điều chỉnh chương trình đào tạo học kỳ mới";

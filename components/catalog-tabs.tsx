@@ -3,7 +3,6 @@ import Link from "next/link";
 const items = [
   ["/admin/courses", "Môn học"],
   ["/admin/rooms", "Phòng"],
-  ["/admin/shift-templates", "Mẫu ca trực"],
   ["/admin/audit", "Lịch sử thay đổi"],
 ] as const;
 
