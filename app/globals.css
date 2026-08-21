@@ -885,16 +885,18 @@ span.filter-control {
   gap: 4px;
 }
 
-.date-nav button {
+.date-nav :is(button, a) {
   height: 31px;
   min-width: 31px;
   display: grid;
   place-items: center;
   padding: 0 8px;
+  color: var(--ink-700);
   background: white;
   border: 1px solid var(--line);
   border-radius: 8px;
   cursor: pointer;
+  text-decoration: none;
 }
 
 .date-nav .today-button {
@@ -961,8 +963,11 @@ span.filter-control {
   border-radius: 9px;
 }
 
-.segmented-control button {
+.segmented-control :is(button, a) {
   height: 27px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 0 9px;
   color: var(--ink-500);
   background: transparent;
@@ -970,9 +975,10 @@ span.filter-control {
   border-radius: 6px;
   cursor: pointer;
   font-size: 9px;
+  text-decoration: none;
 }
 
-.segmented-control button.selected {
+.segmented-control :is(button, a).selected {
   color: var(--ink-950);
   background: white;
   box-shadow: 0 1px 4px rgb(24 52 52 / 12%);
@@ -1572,6 +1578,12 @@ span.filter-control {
   justify-content: center;
   gap: 3px;
   padding: 10px;
+}
+
+.period-grid > .period-label {
+  position: sticky;
+  left: 0;
+  z-index: 2;
 }
 
 .period-label span {
@@ -4478,7 +4490,7 @@ body {
     margin-left: 0;
   }
 
-  .segmented-control button {
+  .segmented-control :is(button, a) {
     flex: 1;
   }
 
@@ -4709,95 +4721,6 @@ body {
   align-items: center;
   gap: 5px;
   color: var(--eiu-red);
-}
-
-.period-grid-shifts {
-  --calendar-day-count: 7;
-}
-
-.period-row-fragment {
-  display: contents;
-}
-
-.shift-calendar-stack {
-  display: grid;
-  gap: 16px;
-}
-
-.shift-calendar-stack .period-calendar {
-  overflow-x: auto;
-  background: var(--surface);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
-}
-
-.shift-calendar-stack .period-grid {
-  min-width: 1120px;
-}
-
-.shift-calendar-stack .period-cell {
-  min-height: 108px;
-  padding: 5px;
-}
-
-.calendar-event {
-  width: 100%;
-  display: grid;
-  gap: 2px;
-  padding: 8px;
-  color: var(--eiu-purple);
-  background: #ecebfa;
-  border: 0;
-  border-left: 3px solid var(--eiu-purple);
-  border-radius: 8px;
-  font: inherit;
-  text-align: left;
-}
-
-.calendar-event:not(:disabled) {
-  cursor: pointer;
-}
-
-.calendar-event:not(:disabled):hover {
-  background: #e3e0f6;
-}
-
-.calendar-event:disabled {
-  opacity: 1;
-}
-
-.calendar-event small,
-.calendar-event span {
-  font-size: 12px;
-}
-
-.calendar-event strong {
-  font-size: 14px;
-}
-
-.empty-shift-action {
-  width: 100%;
-  height: 100%;
-  min-height: 94px;
-  display: grid;
-  place-items: center;
-  align-content: center;
-  gap: 5px;
-  color: var(--ink-500);
-  background: transparent;
-  border: 1px dashed transparent;
-  border-radius: 8px;
-  font-size: 12px;
-  cursor: pointer;
-  opacity: 0;
-}
-
-.period-cell:hover .empty-shift-action,
-.empty-shift-action:focus-visible {
-  color: var(--eiu-blue);
-  border-color: var(--eiu-blue);
-  opacity: 1;
 }
 
 .shift-editor-layer {
@@ -5696,7 +5619,7 @@ select {
 .filter-control,
 .date-nav .today-button,
 .layer-toggle,
-.segmented-control button,
+.segmented-control :is(button, a),
 .kpi-card > span,
 .kpi-card small,
 .period-label span,
@@ -6132,8 +6055,8 @@ body,
     white-space: nowrap;
   }
 
-  .date-nav button,
-  .segmented-control button {
+  .date-nav :is(button, a),
+  .segmented-control :is(button, a) {
     min-height: 40px;
   }
 
@@ -6908,8 +6831,8 @@ body,
 
   .workspace-actions .button,
   .workspace-actions .role-switcher,
-  .date-nav button,
-  .segmented-control button,
+  .date-nav :is(button, a),
+  .segmented-control :is(button, a),
   .shift-nav a,
   .catalog-tabs a {
     min-height: 44px;
@@ -9197,6 +9120,219 @@ body,
   .login-subtitle span {
     font-size: 14px;
     white-space: normal;
+  }
+}
+
+/* Staff shifts inherits the shared calendar and form families. */
+.staff-shift-tabs {
+  gap: 4px;
+}
+
+.staff-shift-tabs a {
+  min-height: 44px;
+  padding: 0 16px;
+  color: var(--ink-600);
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.staff-shift-tabs a[aria-current="page"],
+.staff-shift-tabs a:hover {
+  color: var(--eiu-blue, #144069);
+}
+
+.staff-shift-event-actions {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+}
+
+.staff-shift-event-actions button,
+.staff-shift-empty-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  border: 0;
+  border-radius: 7px;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.staff-shift-event-actions button {
+  width: 24px;
+}
+
+.staff-shift-empty-action {
+  width: 100%;
+  gap: 4px;
+  color: var(--ink-500);
+  border: 1px solid transparent;
+  opacity: 0;
+  font-size: 12px;
+  font-weight: 650;
+  transition:
+    color 160ms ease,
+    background 160ms ease,
+    opacity 160ms ease;
+}
+
+.period-cell:hover .staff-shift-empty-action,
+.period-cell:focus-within .staff-shift-empty-action {
+  color: var(--violet-700);
+  background: var(--violet-100);
+  opacity: 1;
+}
+
+.staff-shift-empty-action:focus-visible {
+  opacity: 1;
+}
+
+/* The calendar itself owns horizontal scrolling. Narrow and touch layouts
+   keep Quick Add discoverable without making it a permanent desktop affordance. */
+.staff-shift-period-calendar,
+.staff-shift-month-calendar {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+
+@media (max-width: 640px), (hover: none), (pointer: coarse) {
+  .staff-shift-empty-action {
+    color: var(--violet-700);
+    background: var(--violet-100);
+    opacity: 1;
+  }
+}
+
+.staff-shift-registration-card {
+  padding: 24px;
+  border-radius: 15px;
+}
+
+.staff-shift-registration-row {
+  position: relative;
+  padding: 12px;
+  border-radius: 10px;
+}
+
+.staff-shift-registration-row-grid {
+  display: grid;
+  grid-template-columns:
+    minmax(132px, 1.1fr) minmax(150px, 1fr) minmax(130px, auto)
+    minmax(280px, auto) max-content max-content;
+  align-items: center;
+  gap: 12px;
+}
+
+.staff-shift-registration-fields {
+  display: contents;
+}
+
+.staff-shift-registration-date {
+  min-width: 0;
+}
+
+.staff-shift-assignee {
+  min-width: 0;
+  max-width: 190px;
+}
+
+.staff-shift-assignee .input {
+  width: 100%;
+}
+
+.staff-shift-delete-button {
+  justify-self: start;
+  white-space: nowrap;
+}
+
+.staff-shift-registration-row .input,
+.staff-shift-registration-row select {
+  min-height: 40px;
+  font-size: 13px;
+}
+
+.staff-shift-registration-row select {
+  min-width: 130px;
+}
+
+.staff-shift-time-line {
+  display: grid;
+  grid-template-columns: 36px minmax(82px, 1fr) auto minmax(82px, 1fr);
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-600);
+  font-size: 12px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.staff-shift-time-line.is-single {
+  grid-template-columns: minmax(82px, 1fr) auto minmax(82px, 1fr);
+}
+
+.staff-shift-time-stack {
+  display: grid;
+  gap: 4px;
+}
+
+.staff-shift-time-picker {
+  width: 108px;
+}
+
+.staff-shift-time-picker .time-picker-control,
+.staff-shift-time-picker .time-picker-input {
+  min-height: 36px;
+}
+
+.staff-shift-time-picker .time-picker-input {
+  padding: 0 8px 0 30px;
+  font-size: 13px;
+}
+
+.staff-shift-time-picker .time-picker-icon {
+  left: 8px;
+}
+
+.staff-shift-historical-reason {
+  padding: 16px;
+  border: 1px solid
+    color-mix(in srgb, var(--warning-600, #d88327) 35%, transparent);
+  border-top-width: 1px;
+  color: var(--ink-800);
+}
+
+.staff-shift-historical-reason textarea {
+  display: block;
+  width: 100%;
+  min-height: 76px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+@media (max-width: 1180px) {
+  .staff-shift-registration-row-grid {
+    grid-template-columns:
+      minmax(132px, 1fr) minmax(150px, 1fr) minmax(126px, auto)
+      minmax(280px, auto) max-content max-content;
+  }
+}
+
+@media (max-width: 920px) {
+  .staff-shift-registration-card {
+    padding: 16px;
+  }
+
+  .staff-shift-registration-row-grid {
+    grid-template-columns: 1fr;
+    align-items: stretch;
   }
 }
 

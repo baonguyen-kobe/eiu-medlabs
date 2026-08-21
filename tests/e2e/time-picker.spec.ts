@@ -630,42 +630,114 @@ test.describe("Shared Custom Time Picker E2E Verification", () => {
     await expect(errorMsg).toContainText("sau giờ bắt đầu");
   });
 
-  test("Staff shifts registration form uses TimePicker with exact-one clock icon", async ({
+  test("Staff shifts registration uses constrained slot TimePickers with exact-one clock icon", async ({
     page,
   }) => {
     await loginAsAdmin(page);
     await page.goto("/staff-shifts?tab=register");
     await expect(page.locator("h2")).toContainText("Đăng ký ca trực mới");
 
-    // Mode 2: Tự chọn ngày trực
     await page.getByRole("button", { name: "Tự chọn ngày trực" }).click();
-    const slotSelect = page
-      .locator("select")
-      .filter({ hasText: "Sáng (07:00 – 11:00)" })
+    const registrationRow = page
+      .locator(".staff-shift-registration-row")
       .first();
-    await slotSelect.selectOption("CUSTOM");
+    const slotSelect = registrationRow.locator("select").first();
+    await expect(slotSelect.locator('option[value="CUSTOM"]')).toHaveCount(0);
 
-    const timePickers = page.locator(".time-picker");
-    await expect(timePickers.first()).toBeVisible();
+    const morningTimePickers = registrationRow.locator(
+      ".staff-shift-time-line.is-single .time-picker",
+    );
+    await expect(morningTimePickers).toHaveCount(2);
 
-    const startTimePicker = timePickers.nth(0);
-    const endTimePicker = timePickers.nth(1);
+    const morningStartTimePicker = morningTimePickers.nth(0);
+    const morningEndTimePicker = morningTimePickers.nth(1);
 
-    await expect(startTimePicker.locator(".time-picker-icon")).toHaveCount(1);
-    await expect(endTimePicker.locator(".time-picker-icon")).toHaveCount(1);
-    await expect(page.locator('input[type="time"]')).toHaveCount(0);
+    await expect(
+      morningStartTimePicker.locator(".time-picker-icon"),
+    ).toHaveCount(1);
+    await expect(morningEndTimePicker.locator(".time-picker-icon")).toHaveCount(
+      1,
+    );
+    await expect(registrationRow.locator('input[type="time"]')).toHaveCount(0);
 
-    // Bounding-box geometry assertions: icons are strictly inside control and vertically centered
     await assertTimePickerGeometry(
-      startTimePicker.locator(".time-picker-control"),
-      startTimePicker.locator(".time-picker-icon"),
+      morningStartTimePicker.locator(".time-picker-control"),
+      morningStartTimePicker.locator(".time-picker-icon"),
     );
     await assertTimePickerGeometry(
-      endTimePicker.locator(".time-picker-control"),
-      endTimePicker.locator(".time-picker-icon"),
+      morningEndTimePicker.locator(".time-picker-control"),
+      morningEndTimePicker.locator(".time-picker-icon"),
     );
 
-    // Screenshot 3: Staff shift custom shared picker
+    await morningStartTimePicker.click();
+    const timePickerPopover = page.locator(".time-picker-popover");
+    await expect(timePickerPopover).toBeVisible();
+    await expect(
+      timePickerPopover.getByRole("option", { name: "07" }),
+    ).toBeVisible();
+    await expect(
+      timePickerPopover.getByRole("option", { name: "11" }),
+    ).toBeVisible();
+    await expect(
+      timePickerPopover.getByRole("option", { name: "13" }),
+    ).toHaveCount(0);
+    await timePickerPopover.getByRole("option", { name: "11" }).click();
+    await expect(
+      timePickerPopover.getByRole("option", { name: "00" }),
+    ).toBeVisible();
+    await expect(
+      timePickerPopover.getByRole("option", { name: "30" }),
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
+
+    await slotSelect.selectOption("AFTERNOON");
+    const afternoonTimePickers = registrationRow.locator(
+      ".staff-shift-time-line.is-single .time-picker",
+    );
+    await expect(afternoonTimePickers).toHaveCount(2);
+    await afternoonTimePickers.first().click();
+    await expect(
+      timePickerPopover.getByRole("option", { name: "13" }),
+    ).toBeVisible();
+    await expect(
+      timePickerPopover.getByRole("option", { name: "12" }),
+    ).toBeVisible();
+    await expect(
+      timePickerPopover.getByRole("option", { name: "07" }),
+    ).toHaveCount(0);
+    await timePickerPopover.getByRole("option", { name: "16" }).click();
+    await expect(
+      timePickerPopover.getByRole("option", { name: "00" }),
+    ).toBeVisible();
+    await expect(
+      timePickerPopover.getByRole("option", { name: "30" }),
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
+
+    await slotSelect.selectOption("ALL_DAY");
+    const allDayStack = registrationRow.locator(".staff-shift-time-stack");
+    await expect(allDayStack).toBeVisible();
+    await expect(allDayStack.locator(".staff-shift-time-line")).toHaveCount(2);
+    const allDayTimePickers = allDayStack.locator(".time-picker");
+    await expect(allDayTimePickers).toHaveCount(4);
+    await expect(allDayTimePickers.locator(".time-picker-icon")).toHaveCount(4);
+    await allDayTimePickers.first().click();
+    await expect(
+      timePickerPopover.getByRole("option", { name: "07" }),
+    ).toBeVisible();
+    await expect(
+      timePickerPopover.getByRole("option", { name: "13" }),
+    ).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await allDayTimePickers.nth(2).click();
+    await expect(
+      timePickerPopover.getByRole("option", { name: "13" }),
+    ).toBeVisible();
+    await expect(
+      timePickerPopover.getByRole("option", { name: "07" }),
+    ).toHaveCount(0);
+    await page.keyboard.press("Escape");
+
     await page.screenshot({
       path: resolve(ARTIFACTS_DIR, "time_picker_admin_shift.png"),
       fullPage: false,

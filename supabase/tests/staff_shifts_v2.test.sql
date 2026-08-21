@@ -1,5 +1,5 @@
 begin;
-select plan(50);
+select plan(57);
 
 -- Setup test users
 create or replace function pg_temp.setup_test_data() returns void language plpgsql as $$
@@ -160,7 +160,7 @@ select is(
   'list_operational_shift_assignees includes only Skills-scoped staff/admin and excludes basic-only users'
 );
 
--- 2. Test Morning registration valid time & grid
+-- 2. Test canonical Morning registration valid time & grid
 select lives_ok(
   $$
     select * from public.register_staff_shifts(
@@ -169,8 +169,8 @@ select lives_ok(
           'staff_id', '11111111-1111-1111-1111-111111111111'::uuid,
           'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '2 days')::date,
           'shift_slot', 'MORNING',
-          'start_time', '07:00',
-          'end_time', '11:00',
+          'start_time', '07:30',
+          'end_time', '11:30',
           'note', 'Morning shift test'
         )
       )
@@ -198,26 +198,7 @@ select throws_ok(
   'Duplicate active morning shift is rejected'
 );
 
--- 4. Invalid morning time (< 07:00) throws error
-select throws_ok(
-  $$
-    select * from public.register_staff_shifts(
-      jsonb_build_array(
-        jsonb_build_object(
-          'staff_id', '11111111-1111-1111-1111-111111111111'::uuid,
-          'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '3 days')::date,
-          'shift_slot', 'MORNING',
-          'start_time', '06:30',
-          'end_time', '11:00'
-        )
-      )
-    )
-  $$,
-  'INVALID_MORNING_TIME: Morning shift must be within 07:00-11:00 on 30-minute grid',
-  'Morning shift earlier than 07:00 is rejected'
-);
-
--- 5. Invalid morning time (> 11:00) throws error
+-- 4. Retired Morning start time is rejected for a new write
 select throws_ok(
   $$
     select * from public.register_staff_shifts(
@@ -232,11 +213,11 @@ select throws_ok(
       )
     )
   $$,
-  'INVALID_MORNING_TIME: Morning shift must be within 07:00-11:00 on 30-minute grid',
-  'Morning shift later than 11:00 is rejected'
+  'INVALID_MORNING_TIME: Morning shift must be within 07:30-11:30 on 30-minute grid',
+  'Retired Morning start time is rejected'
 );
 
--- 6. Invalid 30-minute grid (e.g. 07:15) throws error
+-- 5. Morning end time after canonical window is rejected
 select throws_ok(
   $$
     select * from public.register_staff_shifts(
@@ -245,13 +226,32 @@ select throws_ok(
           'staff_id', '11111111-1111-1111-1111-111111111111'::uuid,
           'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '3 days')::date,
           'shift_slot', 'MORNING',
-          'start_time', '07:15',
-          'end_time', '11:00'
+          'start_time', '07:30',
+          'end_time', '12:00'
         )
       )
     )
   $$,
-  'INVALID_MORNING_TIME: Morning shift must be within 07:00-11:00 on 30-minute grid',
+  'INVALID_MORNING_TIME: Morning shift must be within 07:30-11:30 on 30-minute grid',
+  'Morning shift later than 11:30 is rejected'
+);
+
+-- 6. Invalid 30-minute grid is rejected
+select throws_ok(
+  $$
+    select * from public.register_staff_shifts(
+      jsonb_build_array(
+        jsonb_build_object(
+          'staff_id', '11111111-1111-1111-1111-111111111111'::uuid,
+          'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '3 days')::date,
+          'shift_slot', 'MORNING',
+          'start_time', '07:45',
+          'end_time', '11:30'
+        )
+      )
+    )
+  $$,
+  'INVALID_MORNING_TIME: Morning shift must be within 07:30-11:30 on 30-minute grid',
   'Morning shift off 30-minute grid is rejected'
 );
 
@@ -264,8 +264,8 @@ select lives_ok(
           'staff_id', '11111111-1111-1111-1111-111111111111'::uuid,
           'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '2 days')::date,
           'shift_slot', 'AFTERNOON',
-          'start_time', '13:00',
-          'end_time', '16:00'
+          'start_time', '12:30',
+          'end_time', '16:30'
         )
       )
     )
@@ -273,7 +273,26 @@ select lives_ok(
   'Staff can register valid afternoon shift for self on same date as morning'
 );
 
--- 8. Afternoon invalid time (< 13:00) throws error
+-- 8. Afternoon time before canonical window is rejected
+select throws_ok(
+  $$
+    select * from public.register_staff_shifts(
+      jsonb_build_array(
+        jsonb_build_object(
+          'staff_id', '11111111-1111-1111-1111-111111111111'::uuid,
+          'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '3 days')::date,
+          'shift_slot', 'AFTERNOON',
+          'start_time', '12:00',
+          'end_time', '16:30'
+        )
+      )
+    )
+  $$,
+  'INVALID_AFTERNOON_TIME: Afternoon shift must be within 12:30-16:30 on 30-minute grid',
+  'Afternoon shift earlier than 12:30 is rejected'
+);
+
+-- 9. Afternoon time after canonical window is rejected
 select throws_ok(
   $$
     select * from public.register_staff_shifts(
@@ -283,32 +302,13 @@ select throws_ok(
           'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '3 days')::date,
           'shift_slot', 'AFTERNOON',
           'start_time', '12:30',
-          'end_time', '16:00'
+          'end_time', '17:00'
         )
       )
     )
   $$,
-  'INVALID_AFTERNOON_TIME: Afternoon shift must be within 13:00-16:00 on 30-minute grid',
-  'Afternoon shift earlier than 13:00 is rejected'
-);
-
--- 9. Afternoon invalid time (> 16:00) throws error
-select throws_ok(
-  $$
-    select * from public.register_staff_shifts(
-      jsonb_build_array(
-        jsonb_build_object(
-          'staff_id', '11111111-1111-1111-1111-111111111111'::uuid,
-          'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '3 days')::date,
-          'shift_slot', 'AFTERNOON',
-          'start_time', '13:00',
-          'end_time', '16:30'
-        )
-      )
-    )
-  $$,
-  'INVALID_AFTERNOON_TIME: Afternoon shift must be within 13:00-16:00 on 30-minute grid',
-  'Afternoon shift later than 16:00 is rejected'
+  'INVALID_AFTERNOON_TIME: Afternoon shift must be within 12:30-16:30 on 30-minute grid',
+  'Afternoon shift later than 16:30 is rejected'
 );
 
 -- 10. Intra-payload duplicate throws error
@@ -320,8 +320,8 @@ select throws_ok(
           'staff_id', '11111111-1111-1111-1111-111111111111'::uuid,
           'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '4 days')::date,
           'shift_slot', 'MORNING',
-          'start_time', '07:00',
-          'end_time', '11:00'
+          'start_time', '07:30',
+          'end_time', '11:30'
         ),
         jsonb_build_object(
           'staff_id', '11111111-1111-1111-1111-111111111111'::uuid,
@@ -346,8 +346,8 @@ select throws_ok(
           'staff_id', '22222222-2222-2222-2222-222222222222'::uuid,
           'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '5 days')::date,
           'shift_slot', 'MORNING',
-          'start_time', '07:00',
-          'end_time', '11:00'
+          'start_time', '07:30',
+          'end_time', '11:30'
         )
       )
     )
@@ -367,8 +367,8 @@ select lives_ok(
           'staff_id', '11111111-1111-1111-1111-111111111111'::uuid,
           'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '5 days')::date,
           'shift_slot', 'MORNING',
-          'start_time', '07:00',
-          'end_time', '11:00'
+          'start_time', '07:30',
+          'end_time', '11:30'
         )
       )
     )
@@ -398,8 +398,8 @@ select throws_ok(
           'staff_id', '44444444-4444-4444-4444-444444444444'::uuid,
           'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '6 days')::date,
           'shift_slot', 'MORNING',
-          'start_time', '07:00',
-          'end_time', '11:00'
+          'start_time', '07:30',
+          'end_time', '11:30'
         )
       )
     )
@@ -417,8 +417,8 @@ select throws_ok(
           'staff_id', pg_temp.get_root_admin_id(),
           'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '6 days')::date,
           'shift_slot', 'MORNING',
-          'start_time', '07:00',
-          'end_time', '11:00'
+          'start_time', '07:30',
+          'end_time', '11:30'
         )
       )
     )
@@ -494,8 +494,8 @@ select * from public.register_staff_shifts(
       'staff_id', '22222222-2222-2222-2222-222222222222'::uuid,
       'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '8 days')::date,
       'shift_slot', 'MORNING',
-      'start_time', '07:00',
-      'end_time', '11:00'
+      'start_time', '07:30',
+      'end_time', '11:30'
     )
   )
 );
@@ -539,8 +539,8 @@ select throws_ok(
       '10:30'::time
     )
   $$,
-  'INVALID_MORNING_TIME: Morning shift must be within 07:00-11:00 on 30-minute grid',
-  'Editing morning shift earlier than 07:00 is rejected'
+  'INVALID_MORNING_TIME: Morning shift must be within 07:30-11:30 on 30-minute grid',
+  'Editing morning shift earlier than 07:30 is rejected'
 );
 
 -- 21. Normal staff without history capability creating past shift fails
@@ -552,8 +552,8 @@ select throws_ok(
           'staff_id', '11111111-1111-1111-1111-111111111111'::uuid,
           'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date - interval '2 days')::date,
           'shift_slot', 'MORNING',
-          'start_time', '07:00',
-          'end_time', '11:00'
+          'start_time', '07:30',
+          'end_time', '11:30'
         )
       )
     )
@@ -573,8 +573,8 @@ select throws_ok(
           'staff_id', '11111111-1111-1111-1111-111111111111'::uuid,
           'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date - interval '2 days')::date,
           'shift_slot', 'MORNING',
-          'start_time', '07:00',
-          'end_time', '11:00'
+          'start_time', '07:30',
+          'end_time', '11:30'
         )
       )
     )
@@ -594,8 +594,8 @@ select throws_ok(
           'staff_id', '55555555-5555-5555-5555-555555555555'::uuid,
           'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date - interval '2 days')::date,
           'shift_slot', 'MORNING',
-          'start_time', '07:00',
-          'end_time', '11:00'
+          'start_time', '07:30',
+          'end_time', '11:30'
         )
       )
     )
@@ -613,8 +613,8 @@ select lives_ok(
           'staff_id', '55555555-5555-5555-5555-555555555555'::uuid,
           'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date - interval '2 days')::date,
           'shift_slot', 'MORNING',
-          'start_time', '07:00',
-          'end_time', '11:00'
+          'start_time', '07:30',
+          'end_time', '11:30'
         )
       ),
       'Backfilling completed shift from logbook'
@@ -672,8 +672,8 @@ select lives_ok(
           'staff_id', '11111111-1111-1111-1111-111111111111'::uuid,
           'shift_date', (now() at time zone 'Asia/Ho_Chi_Minh')::date,
           'shift_slot', 'MORNING',
-          'start_time', '07:00',
-          'end_time', '11:00',
+          'start_time', '07:30',
+          'end_time', '11:30',
           'note', 'Today shift'
         )
       )
@@ -711,8 +711,8 @@ select lives_ok(
           'staff_id', '11111111-1111-1111-1111-111111111111'::uuid,
           'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date - interval '5 days')::date,
           'shift_slot', 'AFTERNOON',
-          'start_time', '13:00',
-          'end_time', '16:00'
+          'start_time', '12:30',
+          'end_time', '16:30'
         )
       ),
       'Root administrative historical record creation'
@@ -732,22 +732,22 @@ select lives_ok(
           'staff_id', '22222222-2222-2222-2222-222222222222'::uuid,
           'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '10 days')::date,
           'shift_slot', 'MORNING',
-          'start_time', '07:00',
-          'end_time', '11:00'
+          'start_time', '07:30',
+          'end_time', '11:30'
         ),
         jsonb_build_object(
           'staff_id', '11111111-1111-1111-1111-111111111111'::uuid,
           'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '10 days')::date,
           'shift_slot', 'MORNING',
-          'start_time', '07:00',
-          'end_time', '11:00'
+          'start_time', '07:30',
+          'end_time', '11:30'
         ),
         jsonb_build_object(
           'staff_id', '55555555-5555-5555-5555-555555555555'::uuid,
           'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '10 days')::date,
           'shift_slot', 'MORNING',
-          'start_time', '07:00',
-          'end_time', '11:00'
+          'start_time', '07:30',
+          'end_time', '11:30'
         )
       )
     )
@@ -807,8 +807,8 @@ select throws_ok(
           'staff_id', '44444444-4444-4444-4444-444444444444'::uuid,
           'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '2 days')::date,
           'shift_slot', 'MORNING',
-          'start_time', '07:00',
-          'end_time', '11:00'
+          'start_time', '07:30',
+          'end_time', '11:30'
         )
       )
     );
@@ -839,8 +839,8 @@ select throws_ok(
           'staff_id', '11111111-1111-1111-1111-111111111111'::uuid,
           'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '2 days')::date,
           'shift_slot', 'MORNING',
-          'start_time', '07:00',
-          'end_time', '11:00'
+          'start_time', '07:30',
+          'end_time', '11:30'
         )
       )
     );
@@ -876,6 +876,108 @@ select is(
   (select count(*)::integer from pg_proc where proname = 'preserve_staff_shift_history'),
   0,
   'preserve_staff_shift_history is absent from pg_proc'
+);
+
+-- 43-49. Canonical windows preserve existing data but fail closed for writes.
+select pg_temp.set_test_user('11111111-1111-1111-1111-111111111111'::uuid);
+
+select is(
+  (
+    select start_time::text || '-' || end_time::text
+    from public.staff_shifts
+    where id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'::uuid
+  ),
+  '07:00:00-11:00:00',
+  'Existing legacy Morning pair survives the canonical-window migration'
+);
+
+select lives_ok(
+  $$
+    select * from public.register_staff_shifts(
+      jsonb_build_array(
+        jsonb_build_object(
+          'staff_id', '11111111-1111-1111-1111-111111111111'::uuid,
+          'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '30 days')::date,
+          'shift_slot', 'MORNING',
+          'start_time', '07:30',
+          'end_time', '11:30'
+        )
+      )
+    )
+  $$,
+  'Canonical Morning window accepts 07:30 through 11:30'
+);
+
+select throws_ok(
+  $$
+    select * from public.register_staff_shifts(
+      jsonb_build_array(
+        jsonb_build_object(
+          'staff_id', '11111111-1111-1111-1111-111111111111'::uuid,
+          'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '31 days')::date,
+          'shift_slot', 'MORNING',
+          'start_time', '07:00',
+          'end_time', '11:00'
+        )
+      )
+    )
+  $$,
+  'INVALID_MORNING_TIME: Morning shift must be within 07:30-11:30 on 30-minute grid',
+  'New legacy Morning pair is rejected'
+);
+
+select throws_ok(
+  $$
+    select * from public.register_staff_shifts(
+      jsonb_build_array(
+        jsonb_build_object(
+          'staff_id', '11111111-1111-1111-1111-111111111111'::uuid,
+          'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '32 days')::date,
+          'shift_slot', 'AFTERNOON',
+          'start_time', '12:45',
+          'end_time', '16:30'
+        )
+      )
+    )
+  $$,
+  'INVALID_AFTERNOON_TIME: Afternoon shift must be within 12:30-16:30 on 30-minute grid',
+  'Off-30-minute Afternoon value is rejected'
+);
+
+select lives_ok(
+  $$
+    select public.update_staff_shift_time(
+      'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'::uuid,
+      '07:00'::time,
+      '11:00'::time,
+      'Legacy pair retained without time change'
+    )
+  $$,
+  'Unchanged grandfathered Morning pair may persist'
+);
+
+select throws_ok(
+  $$
+    select public.update_staff_shift_time(
+      'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'::uuid,
+      '07:00'::time,
+      '11:30'::time
+    )
+  $$,
+  'INVALID_MORNING_TIME: Morning shift must be within 07:30-11:30 on 30-minute grid',
+  'Changed legacy Morning value is rejected'
+);
+
+select lives_ok(
+  $$
+    select public.update_staff_shift_time(
+      'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'::uuid,
+      '07:30'::time,
+      '11:30'::time,
+      'Canonicalized legacy shift'
+    )
+  $$,
+  'Canonical Morning edit succeeds'
 );
 
 rollback;

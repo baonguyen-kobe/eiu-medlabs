@@ -2,7 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import {
   cancelStaffShiftAction,
   registerStaffShiftsAction,
@@ -54,29 +61,28 @@ export type Assignee = {
 export type ShiftView = "week" | "month";
 export type ShiftTab = "roster" | "register";
 
-type SlotOption = "MORNING" | "AFTERNOON" | "ALL_DAY" | "CUSTOM";
+type SlotOption = "MORNING" | "AFTERNOON" | "ALL_DAY";
 
-export type WeekDayRegistrationRow = {
+type RegistrationTimes = {
+  morningStartTime: string;
+  morningEndTime: string;
+  afternoonStartTime: string;
+  afternoonEndTime: string;
+};
+
+export type WeekDayRegistrationRow = RegistrationTimes & {
   date: string;
   dayLabel: string;
   included: boolean;
   selectedAssigneeIds: string[];
   slotOption: SlotOption;
-  customSlot: ShiftSlot;
-  startTime: string;
-  endTime: string;
-  note: string;
 };
 
-export type FreeformRegistrationRow = {
+export type FreeformRegistrationRow = RegistrationTimes & {
   id: string;
   date: string;
   selectedAssigneeIds: string[];
   slotOption: SlotOption;
-  customSlot: ShiftSlot;
-  startTime: string;
-  endTime: string;
-  note: string;
 };
 
 const weekdayFullNames = [
@@ -89,19 +95,16 @@ const weekdayFullNames = [
   "Thứ Bảy",
 ];
 
+const staffShiftPeriods = [
+  ["MORNING", "S\u00e1ng"],
+  ["AFTERNOON", "Chi\u1ec1u"],
+] as const;
+
 function getDayOfWeekLabel(dateStr: string): string {
   const parts = dateStr.split("-").map(Number);
   if (parts.length !== 3) return "";
   const d = new Date(parts[0], parts[1] - 1, parts[2]);
   return weekdayFullNames[d.getDay()] ?? "";
-}
-
-function defaultStartFor(slot: ShiftSlot): string {
-  return slot === "MORNING" ? "07:00" : "13:00";
-}
-
-function defaultEndFor(slot: ShiftSlot): string {
-  return slot === "MORNING" ? "11:00" : "16:00";
 }
 
 function generateWeekRows(
@@ -129,10 +132,10 @@ function generateWeekRows(
       included: false,
       selectedAssigneeIds: [...defaultAssigneeIds],
       slotOption: "MORNING",
-      customSlot: "MORNING",
-      startTime: "07:00",
-      endTime: "11:00",
-      note: "",
+      morningStartTime: "07:30",
+      morningEndTime: "11:30",
+      afternoonStartTime: "12:30",
+      afternoonEndTime: "16:30",
     });
   }
   return generated;
@@ -185,7 +188,10 @@ function RowAssigneePicker({
   }, [selectedIds, assignees]);
 
   return (
-    <div className="relative inline-block text-left" ref={popoverRef}>
+    <div
+      className="staff-shift-assignee relative inline-block text-left"
+      ref={popoverRef}
+    >
       <button
         type="button"
         onClick={() => setOpen(!open)}
@@ -276,6 +282,73 @@ function RowAssigneePicker({
       )}
     </div>
   );
+}
+
+function RegistrationTimeControls({
+  row,
+  onChange,
+}: {
+  row: RegistrationTimes & { slotOption: SlotOption };
+  onChange: (field: keyof RegistrationTimes, value: string) => void;
+}) {
+  const renderLine = (
+    label: string | null,
+    startField: keyof RegistrationTimes,
+    endField: keyof RegistrationTimes,
+    allowedValues: readonly string[],
+  ) => (
+    <div className={`staff-shift-time-line ${label ? "" : "is-single"}`}>
+      {label ? <span>{label}</span> : null}
+      <TimePicker
+        value={row[startField]}
+        onChange={(value) => onChange(startField, value)}
+        allowedValues={allowedValues}
+        ariaLabel={`Giờ bắt đầu ca ${label?.toLowerCase() ?? "trực"}`}
+        className="staff-shift-time-picker"
+      />
+      <span aria-hidden="true">–</span>
+      <TimePicker
+        value={row[endField]}
+        onChange={(value) => onChange(endField, value)}
+        allowedValues={allowedValues}
+        ariaLabel={`Giờ kết thúc ca ${label?.toLowerCase() ?? "trực"}`}
+        className="staff-shift-time-picker"
+      />
+    </div>
+  );
+
+  if (row.slotOption === "ALL_DAY") {
+    return (
+      <div className="staff-shift-time-stack">
+        {renderLine(
+          "Sáng",
+          "morningStartTime",
+          "morningEndTime",
+          MORNING_SHIFT_ALLOWED_TIMES,
+        )}
+        {renderLine(
+          "Chiều",
+          "afternoonStartTime",
+          "afternoonEndTime",
+          AFTERNOON_SHIFT_ALLOWED_TIMES,
+        )}
+      </div>
+    );
+  }
+
+  return row.slotOption === "MORNING"
+    ? renderLine(
+        null,
+        "morningStartTime",
+        "morningEndTime",
+        MORNING_SHIFT_ALLOWED_TIMES,
+      )
+    : renderLine(
+        null,
+        "afternoonStartTime",
+        "afternoonEndTime",
+        AFTERNOON_SHIFT_ALLOWED_TIMES,
+      );
 }
 
 export function StaffShiftRoster({
@@ -396,10 +469,10 @@ export function StaffShiftRoster({
       date: todayStr,
       selectedAssigneeIds: [...defaultAssigneeIds],
       slotOption: "MORNING",
-      customSlot: "MORNING",
-      startTime: "07:00",
-      endTime: "11:00",
-      note: "",
+      morningStartTime: "07:30",
+      morningEndTime: "11:30",
+      afternoonStartTime: "12:30",
+      afternoonEndTime: "16:30",
     },
   ]);
 
@@ -537,14 +610,12 @@ export function StaffShiftRoster({
     });
   };
 
-  // Helper to convert a single registration row into payload items
+  // The registration tab only offers the two policy-constrained shift windows.
+  // All-day preserves the existing atomic Morning + Afternoon payload behavior.
   const buildRowPayload = (
     date: string,
     slotOption: SlotOption,
-    customSlot: ShiftSlot,
-    startTime: string,
-    endTime: string,
-    note: string,
+    times: RegistrationTimes,
     assigneeIds: string[],
   ): ShiftRegistrationPayloadItem[] => {
     const assigneesToUse = isAdmin ? assigneeIds : [userId];
@@ -556,45 +627,35 @@ export function StaffShiftRoster({
           staff_id: staffId,
           shift_date: date,
           shift_slot: "MORNING",
-          start_time: "07:00",
-          end_time: "11:00",
-          note: note.trim() || null,
+          start_time: times.morningStartTime,
+          end_time: times.morningEndTime,
+          note: null,
         });
       } else if (slotOption === "AFTERNOON") {
         items.push({
           staff_id: staffId,
           shift_date: date,
           shift_slot: "AFTERNOON",
-          start_time: "13:00",
-          end_time: "16:00",
-          note: note.trim() || null,
+          start_time: times.afternoonStartTime,
+          end_time: times.afternoonEndTime,
+          note: null,
         });
       } else if (slotOption === "ALL_DAY") {
         items.push({
           staff_id: staffId,
           shift_date: date,
           shift_slot: "MORNING",
-          start_time: "07:00",
-          end_time: "11:00",
-          note: note.trim() || null,
+          start_time: times.morningStartTime,
+          end_time: times.morningEndTime,
+          note: null,
         });
         items.push({
           staff_id: staffId,
           shift_date: date,
           shift_slot: "AFTERNOON",
-          start_time: "13:00",
-          end_time: "16:00",
-          note: note.trim() || null,
-        });
-      } else {
-        // CUSTOM
-        items.push({
-          staff_id: staffId,
-          shift_date: date,
-          shift_slot: customSlot,
-          start_time: startTime,
-          end_time: endTime,
-          note: note.trim() || null,
+          start_time: times.afternoonStartTime,
+          end_time: times.afternoonEndTime,
+          note: null,
         });
       }
     }
@@ -603,12 +664,7 @@ export function StaffShiftRoster({
 
   // Handle Per-Row Submission ("Đăng ký ca")
   const handleSingleRowSubmit = (
-    date: string,
-    slotOption: SlotOption,
-    customSlot: ShiftSlot,
-    startTime: string,
-    endTime: string,
-    note: string,
+    row: RegistrationTimes & { date: string; slotOption: SlotOption },
     assigneeIds: string[],
     onSuccessCallback?: () => void,
   ) => {
@@ -621,7 +677,7 @@ export function StaffShiftRoster({
       return;
     }
 
-    const isPast = date < todayStr;
+    const isPast = row.date < todayStr;
     if (isPast && !canManageShiftHistory) {
       setActionMessage({
         ok: false,
@@ -639,12 +695,9 @@ export function StaffShiftRoster({
     }
 
     const payload = buildRowPayload(
-      date,
-      slotOption,
-      customSlot,
-      startTime,
-      endTime,
-      note,
+      row.date,
+      row.slotOption,
+      row,
       assigneesToUse,
     );
 
@@ -690,10 +743,7 @@ export function StaffShiftRoster({
         const rowItems = buildRowPayload(
           row.date,
           row.slotOption,
-          row.customSlot,
-          row.startTime,
-          row.endTime,
-          row.note,
+          row,
           assigneesToUse,
         );
         payload.push(...rowItems);
@@ -722,10 +772,7 @@ export function StaffShiftRoster({
         const rowItems = buildRowPayload(
           row.date,
           row.slotOption,
-          row.customSlot,
-          row.startTime,
-          row.endTime,
-          row.note,
+          row,
           assigneesToUse,
         );
         payload.push(...rowItems);
@@ -765,9 +812,7 @@ export function StaffShiftRoster({
       if (res.ok) {
         setRegHistoricalReason("");
         if (regMode === "week") {
-          setWeekRows((prev) =>
-            prev.map((r) => ({ ...r, included: false, note: "" })),
-          );
+          setWeekRows((prev) => prev.map((r) => ({ ...r, included: false })));
         } else {
           setFreeformRows([
             {
@@ -775,10 +820,10 @@ export function StaffShiftRoster({
               date: todayStr,
               selectedAssigneeIds: [...defaultAssigneeIds],
               slotOption: "MORNING",
-              customSlot: "MORNING",
-              startTime: "07:00",
-              endTime: "11:00",
-              note: "",
+              morningStartTime: "07:30",
+              morningEndTime: "11:30",
+              afternoonStartTime: "12:30",
+              afternoonEndTime: "16:30",
             },
           ]);
         }
@@ -799,12 +844,104 @@ export function StaffShiftRoster({
     return map;
   }, [shifts]);
 
+  const monthWeeks = useMemo(
+    () =>
+      Array.from({ length: Math.ceil(days.length / 7) }, (_, index) =>
+        days.slice(index * 7, index * 7 + 7),
+      ),
+    [days],
+  );
+
+  const renderShiftSlot = (date: string, slot: ShiftSlot) => {
+    const activeShifts = shiftsByDateSlot.get(`${date}:${slot}`) ?? [];
+    const isPast = date < todayStr;
+    const isUserInSlot = activeShifts.some(
+      (shift) => shift.staff_id === userId,
+    );
+    const canAdd =
+      (!isPast || canManageShiftHistory) &&
+      (isAdmin || (canSelfRegister && !isUserInSlot));
+
+    return (
+      <div className="slot-events staff-shift-slot-content">
+        {activeShifts.map((shift) => {
+          const isMe = shift.staff_id === userId;
+          return (
+            <article className="slot-event slot-event-shift" key={shift.id}>
+              <div>
+                <time>
+                  {shift.start_time.slice(0, 5)}–{shift.end_time.slice(0, 5)}
+                </time>
+                <strong>{shift.staffName}</strong>
+                <small>{slot === "MORNING" ? "Ca sáng" : "Ca chiều"}</small>
+              </div>
+              {(isAdmin || isMe) && (
+                <div className="staff-shift-event-actions">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setEditShiftModal({
+                        open: true,
+                        shift,
+                        startTime: shift.start_time.slice(0, 5),
+                        endTime: shift.end_time.slice(0, 5),
+                        note: shift.note ?? "",
+                        historicalReason: "",
+                      })
+                    }
+                    aria-label={`Chỉnh sửa giờ trực của ${shift.staffName}`}
+                  >
+                    <Clock3 size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCancelShiftDialog({
+                        open: true,
+                        shift,
+                        historicalReason: "",
+                      })
+                    }
+                    aria-label={`Hủy lịch trực của ${shift.staffName}`}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              )}
+            </article>
+          );
+        })}
+        {canAdd && (
+          <button
+            className="empty-shift-action staff-shift-empty-action"
+            type="button"
+            onClick={() =>
+              setQuickRegisterModal({
+                open: true,
+                date,
+                slot,
+                selectedAssigneeIds: isAdmin ? [] : [userId],
+                startTime: slot === "MORNING" ? "07:30" : "12:30",
+                endTime: slot === "MORNING" ? "11:30" : "16:30",
+                note: "",
+                historicalReason: "",
+              })
+            }
+          >
+            <Plus size={13} /> {isAdmin ? "Thêm" : "Đăng ký"}
+          </button>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6 w-full max-w-full min-w-0">
       {/* Tab Navigation */}
-      <div className="flex border-b border-neutral-200">
+      <div className="staff-shift-tabs flex border-b border-neutral-200">
         <Link
           href={`/staff-shifts?tab=roster&view=${view}&date=${anchorDate}`}
+          aria-current={tab === "roster" ? "page" : undefined}
           className={`px-5 py-3 text-sm font-semibold border-b-2 transition-colors ${
             tab === "roster"
               ? "border-primary-600 text-primary-700 bg-primary-50/40"
@@ -815,6 +952,7 @@ export function StaffShiftRoster({
         </Link>
         <Link
           href={`/staff-shifts?tab=register&view=${view}&date=${anchorDate}`}
+          aria-current={tab === "register" ? "page" : undefined}
           className={`px-5 py-3 text-sm font-semibold border-b-2 transition-colors ${
             tab === "register"
               ? "border-primary-600 text-primary-700 bg-primary-50/40"
@@ -858,397 +996,172 @@ export function StaffShiftRoster({
       {/* TAB 1: LỊCH TRỰC */}
       {tab === "roster" && (
         <div className="space-y-4">
-          {/* Controls Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-neutral-200 shadow-xs">
-            <div className="flex items-center gap-2">
-              <Link
-                href={`/staff-shifts?tab=roster&view=${view}&date=${previousDate}`}
-                className="button button-secondary text-xs px-2.5 py-1.5 flex items-center gap-1"
-                aria-label="Khoảng thời gian trước"
-              >
-                <ChevronLeft size={16} />
-                Trước
-              </Link>
-              <Link
-                href={`/staff-shifts?tab=roster&view=${view}&date=${todayStr}`}
-                className="button button-secondary text-xs px-2.5 py-1.5"
-              >
-                Hôm nay
-              </Link>
-              <Link
-                href={`/staff-shifts?tab=roster&view=${view}&date=${nextDate}`}
-                className="button button-secondary text-xs px-2.5 py-1.5 flex items-center gap-1"
-                aria-label="Khoảng thời gian tiếp"
-              >
-                Tiếp
-                <ChevronRight size={16} />
-              </Link>
-              <span className="font-semibold text-neutral-800 ml-2">
-                {periodLabel}
-              </span>
+          <div className="calendar-card">
+            <div className="calendar-toolbar">
+              <div className="calendar-title">
+                <div className="date-nav">
+                  <Link
+                    href={`/staff-shifts?tab=roster&view=${view}&date=${previousDate}`}
+                    aria-label="Kỳ trước"
+                  >
+                    <ChevronLeft size={17} />
+                  </Link>
+                  <Link
+                    href={`/staff-shifts?tab=roster&view=${view}&date=${todayStr}`}
+                    className="today-button"
+                  >
+                    {view === "month" ? "Tháng này" : "Tuần này"}
+                  </Link>
+                  <Link
+                    href={`/staff-shifts?tab=roster&view=${view}&date=${nextDate}`}
+                    aria-label="Kỳ sau"
+                  >
+                    <ChevronRight size={17} />
+                  </Link>
+                </div>
+                <div>
+                  <h3>{periodLabel}</h3>
+                </div>
+              </div>
+
+              <div className="calendar-options">
+                <div className="segmented-control">
+                  <Link
+                    href={`/staff-shifts?tab=roster&view=week&date=${anchorDate}`}
+                    className={view === "week" ? "selected" : ""}
+                    aria-current={view === "week" ? "page" : undefined}
+                  >
+                    Tuần
+                  </Link>
+                  <Link
+                    href={`/staff-shifts?tab=roster&view=month&date=${anchorDate}`}
+                    className={view === "month" ? "selected" : ""}
+                    aria-current={view === "month" ? "page" : undefined}
+                  >
+                    Tháng
+                  </Link>
+                </div>
+              </div>
             </div>
-
-            <div className="flex items-center gap-1.5 bg-neutral-100 p-1 rounded-lg">
-              <Link
-                href={`/staff-shifts?tab=roster&view=week&date=${anchorDate}`}
-                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                  view === "week"
-                    ? "bg-white text-neutral-900 shadow-xs font-semibold"
-                    : "text-neutral-600 hover:text-neutral-900"
-                }`}
+            {/* Calendar Grid */}
+            {view === "month" ? (
+              <div
+                aria-label="Lịch trực theo tháng; vuốt ngang để xem thêm ngày"
+                className="period-calendar period-calendar-month staff-shift-month-calendar"
+                role="region"
+                tabIndex={0}
               >
-                Tuần
-              </Link>
-              <Link
-                href={`/staff-shifts?tab=roster&view=month&date=${anchorDate}`}
-                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                  view === "month"
-                    ? "bg-white text-neutral-900 shadow-xs font-semibold"
-                    : "text-neutral-600 hover:text-neutral-900"
-                }`}
+                {monthWeeks.map((week, weekIndex) => (
+                  <section className="period-week" key={week[0] ?? weekIndex}>
+                    <div
+                      className="period-grid"
+                      style={
+                        {
+                          "--calendar-day-count": week.length,
+                        } as React.CSSProperties
+                      }
+                    >
+                      <div className="period-corner">BUỔI</div>
+                      {week.map((date) => {
+                        const isToday = date === todayStr;
+                        const isSunday =
+                          getDayOfWeekLabel(date) === weekdayFullNames[0];
+                        const isOutsideMonth =
+                          date.slice(0, 7) !== anchorDate.slice(0, 7);
+                        return (
+                          <header
+                            className={`period-day-heading ${isToday ? "is-today" : ""} ${isSunday ? "is-sunday" : ""} ${isOutsideMonth ? "is-outside-month" : ""}`}
+                            key={date}
+                          >
+                            <span>{getDayOfWeekLabel(date)}</span>
+                            <strong>{date.slice(-2)}</strong>
+                          </header>
+                        );
+                      })}
+                      {staffShiftPeriods.map(([slot, label]) => (
+                        <Fragment key={slot}>
+                          <div className="period-label period-label-shift staff-shift-period-label">
+                            <span>Lịch trực</span>
+                            <strong>{label}</strong>
+                          </div>
+                          {week.map((date) => (
+                            <div
+                              className={`period-cell period-cell-shift ${date === todayStr ? "is-today" : ""} ${getDayOfWeekLabel(date) === weekdayFullNames[0] ? "is-sunday" : ""} ${date.slice(0, 7) !== anchorDate.slice(0, 7) ? "is-outside-month" : ""}`}
+                              key={`${slot}-${date}`}
+                            >
+                              {renderShiftSlot(date, slot)}
+                            </div>
+                          ))}
+                        </Fragment>
+                      ))}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            ) : (
+              <div
+                aria-label="Lịch trực theo tuần; vuốt ngang để xem thêm ngày"
+                className="period-calendar period-calendar-week staff-shift-period-calendar"
+                role="region"
+                tabIndex={0}
               >
-                Tháng
-              </Link>
-            </div>
-          </div>
-
-          {/* Calendar Grid with Accessible role="region" */}
-          <div
-            className="shift-calendar-stack bg-white rounded-xl border border-neutral-200 overflow-x-auto shadow-xs w-full max-w-full min-w-0"
-            role="region"
-            aria-label={
-              view === "month" ? "Lịch trực theo tháng" : "Lịch trực theo tuần"
-            }
-            tabIndex={0}
-          >
-            <table className="w-full text-left border-collapse min-w-[840px]">
-              <thead>
-                <tr className="bg-neutral-50/80 border-b border-neutral-200">
-                  <th className="p-3 w-28 text-xs font-semibold text-neutral-500 uppercase tracking-wider sticky left-0 bg-neutral-50/95 z-10">
-                    Buổi trực
-                  </th>
-                  {days.map((dateStr) => {
-                    const isToday = dateStr === todayStr;
-                    const isPast = dateStr < todayStr;
-                    const dayLabel = getDayOfWeekLabel(dateStr);
-                    const formatted = formatBusinessDate(dateStr);
-
-                    return (
-                      <th
-                        key={dateStr}
-                        className={`p-3 text-center border-l border-neutral-200 min-w-[130px] ${
-                          isToday ? "bg-primary-50/50" : ""
-                        }`}
-                      >
-                        <div className="text-xs font-medium text-neutral-500">
-                          {dayLabel}
-                        </div>
-                        <div
-                          className={`text-sm font-bold mt-0.5 ${
-                            isToday
-                              ? "text-primary-700 font-extrabold"
-                              : isPast
-                                ? "text-neutral-400"
-                                : "text-neutral-800"
-                          }`}
+                <section className="period-week">
+                  <div
+                    className="period-grid"
+                    style={
+                      {
+                        "--calendar-day-count": days.length,
+                      } as React.CSSProperties
+                    }
+                  >
+                    <div className="period-corner">BUỔI</div>
+                    {days.map((date) => {
+                      const isToday = date === todayStr;
+                      const isSunday =
+                        getDayOfWeekLabel(date) === weekdayFullNames[0];
+                      return (
+                        <header
+                          className={`period-day-heading ${isToday ? "is-today" : ""} ${isSunday ? "is-sunday" : ""}`}
+                          key={date}
                         >
-                          {formatted}
+                          <span>{getDayOfWeekLabel(date)}</span>
+                          <strong>{date.slice(-2)}</strong>
+                        </header>
+                      );
+                    })}
+                    {staffShiftPeriods.map(([slot, label]) => (
+                      <Fragment key={slot}>
+                        <div className="period-label period-label-shift staff-shift-period-label">
+                          <span>Lịch trực</span>
+                          <strong>{label}</strong>
                         </div>
-                      </th>
-                    );
-                  })}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-neutral-200">
-                {/* SÁNG (MORNING) ROW */}
-                <tr className="hover:bg-neutral-50/30 transition-colors">
-                  <td className="p-3 text-xs font-bold text-neutral-700 bg-neutral-50/90 align-top sticky left-0 z-10 border-r border-neutral-200">
-                    <div className="text-amber-700 font-bold flex items-center gap-1">
-                      <span>Sáng</span>
-                    </div>
-                    <div className="text-[11px] text-neutral-400 font-normal mt-0.5">
-                      07:00 – 11:00
-                    </div>
-                  </td>
-                  {days.map((dateStr) => {
-                    const activeShifts =
-                      shiftsByDateSlot.get(`${dateStr}:MORNING`) ?? [];
-                    const isPast = dateStr < todayStr;
-                    const isUserInSlot = activeShifts.some(
-                      (s) => s.staff_id === userId,
-                    );
-                    const canAdd =
-                      (!isPast || canManageShiftHistory) &&
-                      (isAdmin || (canSelfRegister && !isUserInSlot));
-
-                    return (
-                      <td
-                        key={`MORNING-${dateStr}`}
-                        className="p-2.5 align-top border-l border-neutral-200"
-                      >
-                        <div className="space-y-1.5 min-h-[68px]">
-                          {/* Active Shifts */}
-                          {activeShifts.map((shift) => {
-                            const isMe = shift.staff_id === userId;
-                            return (
-                              <div
-                                key={shift.id}
-                                className={`p-2 rounded-lg border text-xs transition-shadow ${
-                                  isMe
-                                    ? "bg-primary-50/70 border-primary-200 text-primary-950 shadow-xs"
-                                    : "bg-white border-neutral-200 text-neutral-800 shadow-2xs"
-                                }`}
-                              >
-                                <div className="flex items-start justify-between gap-1">
-                                  <span
-                                    className={`font-semibold ${
-                                      isMe
-                                        ? "text-primary-800"
-                                        : "text-neutral-900"
-                                    }`}
-                                  >
-                                    {shift.staffName}
-                                    {isMe && (
-                                      <span className="ml-1 text-[10px] bg-primary-100 text-primary-700 px-1 py-0.2 rounded font-normal">
-                                        Bạn
-                                      </span>
-                                    )}
-                                  </span>
-                                  {/* Shift Card Actions: Edit for Admin OR Self */}
-                                  <div className="flex items-center gap-0.5 opacity-90 hover:opacity-100">
-                                    {(isAdmin || isMe) && (
-                                      <button
-                                        type="button"
-                                        title="Chỉnh sửa giờ trực"
-                                        onClick={() =>
-                                          setEditShiftModal({
-                                            open: true,
-                                            shift,
-                                            startTime: shift.start_time.slice(
-                                              0,
-                                              5,
-                                            ),
-                                            endTime: shift.end_time.slice(0, 5),
-                                            note: shift.note ?? "",
-                                            historicalReason: "",
-                                          })
-                                        }
-                                        className="p-0.5 text-neutral-400 hover:text-neutral-700 rounded"
-                                        aria-label={`Chỉnh sửa giờ trực của ${shift.staffName}`}
-                                      >
-                                        <Clock3 size={13} />
-                                      </button>
-                                    )}
-                                    {(isAdmin || isMe) && (
-                                      <button
-                                        type="button"
-                                        title="Hủy lịch trực"
-                                        onClick={() =>
-                                          setCancelShiftDialog({
-                                            open: true,
-                                            shift,
-                                            historicalReason: "",
-                                          })
-                                        }
-                                        className="p-0.5 text-neutral-400 hover:text-rose-600 rounded"
-                                        aria-label={`Hủy lịch trực của ${shift.staffName}`}
-                                      >
-                                        <Trash2 size={13} />
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                                <div className="text-[11px] text-neutral-500 mt-0.5">
-                                  {shift.start_time.slice(0, 5)} –{" "}
-                                  {shift.end_time.slice(0, 5)}
-                                </div>
-                                {shift.note && (
-                                  <div className="text-[10px] text-neutral-600 italic mt-0.5 line-clamp-2">
-                                    {shift.note}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-
-                          {/* Quick Add Button */}
-                          {canAdd && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setQuickRegisterModal({
-                                  open: true,
-                                  date: dateStr,
-                                  slot: "MORNING",
-                                  selectedAssigneeIds: isAdmin ? [] : [userId],
-                                  startTime: "07:00",
-                                  endTime: "11:00",
-                                  note: "",
-                                  historicalReason: "",
-                                })
-                              }
-                              className="empty-shift-action w-full py-1 text-[11px] font-medium text-neutral-400 hover:text-primary-700 hover:bg-primary-50/50 rounded border border-dashed border-neutral-200 hover:border-primary-300 flex items-center justify-center gap-1 transition-colors"
-                              aria-label={`Đăng ký trực sáng ngày ${dateStr}`}
+                        {days.map((date) => {
+                          const isToday = date === todayStr;
+                          const isSunday =
+                            getDayOfWeekLabel(date) === weekdayFullNames[0];
+                          return (
+                            <div
+                              className={`period-cell period-cell-shift ${isToday ? "is-today" : ""} ${isSunday ? "is-sunday" : ""}`}
+                              key={`${slot}-${date}`}
                             >
-                              <Plus size={12} />
-                              {isAdmin ? "Thêm" : "Đăng ký"}
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    );
-                  })}
-                </tr>
-
-                {/* CHIỀU (AFTERNOON) ROW */}
-                <tr className="hover:bg-neutral-50/30 transition-colors">
-                  <td className="p-3 text-xs font-bold text-neutral-700 bg-neutral-50/90 align-top sticky left-0 z-10 border-r border-neutral-200">
-                    <div className="text-sky-700 font-bold flex items-center gap-1">
-                      <span>Chiều</span>
-                    </div>
-                    <div className="text-[11px] text-neutral-400 font-normal mt-0.5">
-                      13:00 – 16:00
-                    </div>
-                  </td>
-                  {days.map((dateStr) => {
-                    const activeShifts =
-                      shiftsByDateSlot.get(`${dateStr}:AFTERNOON`) ?? [];
-                    const isPast = dateStr < todayStr;
-                    const isUserInSlot = activeShifts.some(
-                      (s) => s.staff_id === userId,
-                    );
-                    const canAdd =
-                      (!isPast || canManageShiftHistory) &&
-                      (isAdmin || (canSelfRegister && !isUserInSlot));
-
-                    return (
-                      <td
-                        key={`AFTERNOON-${dateStr}`}
-                        className="p-2.5 align-top border-l border-neutral-200"
-                      >
-                        <div className="space-y-1.5 min-h-[68px]">
-                          {/* Active Shifts */}
-                          {activeShifts.map((shift) => {
-                            const isMe = shift.staff_id === userId;
-                            return (
-                              <div
-                                key={shift.id}
-                                className={`p-2 rounded-lg border text-xs transition-shadow ${
-                                  isMe
-                                    ? "bg-primary-50/70 border-primary-200 text-primary-950 shadow-xs"
-                                    : "bg-white border-neutral-200 text-neutral-800 shadow-2xs"
-                                }`}
-                              >
-                                <div className="flex items-start justify-between gap-1">
-                                  <span
-                                    className={`font-semibold ${
-                                      isMe
-                                        ? "text-primary-800"
-                                        : "text-neutral-900"
-                                    }`}
-                                  >
-                                    {shift.staffName}
-                                    {isMe && (
-                                      <span className="ml-1 text-[10px] bg-primary-100 text-primary-700 px-1 py-0.2 rounded font-normal">
-                                        Bạn
-                                      </span>
-                                    )}
-                                  </span>
-                                  {/* Shift Card Actions: Edit for Admin OR Self */}
-                                  <div className="flex items-center gap-0.5 opacity-90 hover:opacity-100">
-                                    {(isAdmin || isMe) && (
-                                      <button
-                                        type="button"
-                                        title="Chỉnh sửa giờ trực"
-                                        onClick={() =>
-                                          setEditShiftModal({
-                                            open: true,
-                                            shift,
-                                            startTime: shift.start_time.slice(
-                                              0,
-                                              5,
-                                            ),
-                                            endTime: shift.end_time.slice(0, 5),
-                                            note: shift.note ?? "",
-                                            historicalReason: "",
-                                          })
-                                        }
-                                        className="p-0.5 text-neutral-400 hover:text-neutral-700 rounded"
-                                        aria-label={`Chỉnh sửa giờ trực của ${shift.staffName}`}
-                                      >
-                                        <Clock3 size={13} />
-                                      </button>
-                                    )}
-                                    {(isAdmin || isMe) && (
-                                      <button
-                                        type="button"
-                                        title="Hủy lịch trực"
-                                        onClick={() =>
-                                          setCancelShiftDialog({
-                                            open: true,
-                                            shift,
-                                            historicalReason: "",
-                                          })
-                                        }
-                                        className="p-0.5 text-neutral-400 hover:text-rose-600 rounded"
-                                        aria-label={`Hủy lịch trực của ${shift.staffName}`}
-                                      >
-                                        <Trash2 size={13} />
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                                <div className="text-[11px] text-neutral-500 mt-0.5">
-                                  {shift.start_time.slice(0, 5)} –{" "}
-                                  {shift.end_time.slice(0, 5)}
-                                </div>
-                                {shift.note && (
-                                  <div className="text-[10px] text-neutral-600 italic mt-0.5 line-clamp-2">
-                                    {shift.note}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-
-                          {/* Quick Add Button */}
-                          {canAdd && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setQuickRegisterModal({
-                                  open: true,
-                                  date: dateStr,
-                                  slot: "AFTERNOON",
-                                  selectedAssigneeIds: isAdmin ? [] : [userId],
-                                  startTime: "13:00",
-                                  endTime: "16:00",
-                                  note: "",
-                                  historicalReason: "",
-                                })
-                              }
-                              className="empty-shift-action w-full py-1 text-[11px] font-medium text-neutral-400 hover:text-primary-700 hover:bg-primary-50/50 rounded border border-dashed border-neutral-200 hover:border-primary-300 flex items-center justify-center gap-1 transition-colors"
-                              aria-label={`Đăng ký trực chiều ngày ${dateStr}`}
-                            >
-                              <Plus size={12} />
-                              {isAdmin ? "Thêm" : "Đăng ký"}
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    );
-                  })}
-                </tr>
-              </tbody>
-            </table>
+                              {renderShiftSlot(date, slot)}
+                            </div>
+                          );
+                        })}
+                      </Fragment>
+                    ))}
+                  </div>
+                </section>
+              </div>
+            )}
           </div>
         </div>
       )}
 
       {/* TAB 2: ĐĂNG KÝ LỊCH TRỰC */}
       {tab === "register" && (
-        <div className="max-w-5xl mx-auto space-y-6">
-          <div className="bg-white p-6 rounded-xl border border-neutral-200 shadow-xs space-y-6">
+        <div className="staff-shift-registration max-w-6xl mx-auto space-y-6">
+          <div className="staff-shift-registration-card bg-white p-6 rounded-xl border border-neutral-200 shadow-xs space-y-6">
             <div>
               <h2 className="text-base font-bold text-neutral-900">
                 Đăng ký ca trực mới
@@ -1332,21 +1245,21 @@ export function StaffShiftRoster({
                   </div>
                 </div>
 
-                <div className="space-y-3">
+                <div className="staff-shift-registration-list space-y-3">
                   {weekRows.map((row, idx) => {
                     const isPast = row.date < todayStr;
                     return (
                       <div
                         key={row.date}
-                        className={`p-3.5 rounded-lg border transition-all ${
+                        className={`staff-shift-registration-row p-3.5 rounded-lg border transition-all ${
                           row.included
                             ? "bg-white border-primary-400 shadow-xs ring-1 ring-primary-400"
                             : "bg-neutral-50/60 border-neutral-200 opacity-80"
                         }`}
                       >
-                        <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="staff-shift-registration-row-grid">
                           {/* Column 1: Ngày checkbox & label */}
-                          <label className="flex items-center gap-2 cursor-pointer select-none min-w-[180px]">
+                          <label className="staff-shift-registration-date flex items-center gap-2 cursor-pointer select-none">
                             <input
                               type="checkbox"
                               checked={row.included}
@@ -1374,7 +1287,7 @@ export function StaffShiftRoster({
                           </label>
 
                           {row.included && (
-                            <div className="flex flex-wrap items-center gap-2.5">
+                            <div className="staff-shift-registration-fields">
                               {/* Column 2: Người trực */}
                               {isAdmin ? (
                                 <RowAssigneePicker
@@ -1396,7 +1309,7 @@ export function StaffShiftRoster({
                                   }}
                                 />
                               ) : (
-                                <div className="text-xs bg-neutral-100 text-neutral-800 px-2.5 py-1 rounded font-medium flex items-center gap-1.5">
+                                <div className="staff-shift-assignee text-xs bg-neutral-100 text-neutral-800 px-2.5 py-1 rounded font-medium flex items-center gap-1.5">
                                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                                   <span>{userFullName}</span>
                                 </div>
@@ -1409,94 +1322,28 @@ export function StaffShiftRoster({
                                   const next = [...weekRows];
                                   const val = e.target.value as SlotOption;
                                   next[idx].slotOption = val;
-                                  if (val === "MORNING") {
-                                    next[idx].customSlot = "MORNING";
-                                    next[idx].startTime = "07:00";
-                                    next[idx].endTime = "11:00";
-                                  } else if (val === "AFTERNOON") {
-                                    next[idx].customSlot = "AFTERNOON";
-                                    next[idx].startTime = "13:00";
-                                    next[idx].endTime = "16:00";
-                                  }
                                   setWeekRows(next);
                                 }}
                                 className="input text-xs py-1 px-2 font-medium"
                               >
                                 <option value="MORNING">
-                                  Sáng (07:00 – 11:00)
+                                  Sáng (07:30 – 11:30)
                                 </option>
                                 <option value="AFTERNOON">
-                                  Chiều (13:00 – 16:00)
+                                  Chiều (12:30 – 16:30)
                                 </option>
                                 <option value="ALL_DAY">
                                   Cả ngày (Sáng + Chiều)
                                 </option>
-                                <option value="CUSTOM">Tùy chỉnh giờ</option>
                               </select>
 
-                              {/* Column 4: Thời gian tùy chỉnh */}
-                              {row.slotOption === "CUSTOM" && (
-                                <div className="flex items-center gap-1.5">
-                                  <select
-                                    value={row.customSlot}
-                                    onChange={(e) => {
-                                      const next = [...weekRows];
-                                      const sl = e.target.value as ShiftSlot;
-                                      next[idx].customSlot = sl;
-                                      next[idx].startTime = defaultStartFor(sl);
-                                      next[idx].endTime = defaultEndFor(sl);
-                                      setWeekRows(next);
-                                    }}
-                                    className="input text-xs py-1 px-2"
-                                  >
-                                    <option value="MORNING">Buổi sáng</option>
-                                    <option value="AFTERNOON">
-                                      Buổi chiều
-                                    </option>
-                                  </select>
-                                  <TimePicker
-                                    value={row.startTime}
-                                    onChange={(val) => {
-                                      const next = [...weekRows];
-                                      next[idx].startTime = val;
-                                      setWeekRows(next);
-                                    }}
-                                    allowedValues={
-                                      row.customSlot === "MORNING"
-                                        ? MORNING_SHIFT_ALLOWED_TIMES
-                                        : AFTERNOON_SHIFT_ALLOWED_TIMES
-                                    }
-                                  />
-                                  <span className="text-xs text-neutral-400">
-                                    –
-                                  </span>
-                                  <TimePicker
-                                    value={row.endTime}
-                                    onChange={(val) => {
-                                      const next = [...weekRows];
-                                      next[idx].endTime = val;
-                                      setWeekRows(next);
-                                    }}
-                                    allowedValues={
-                                      row.customSlot === "MORNING"
-                                        ? MORNING_SHIFT_ALLOWED_TIMES
-                                        : AFTERNOON_SHIFT_ALLOWED_TIMES
-                                    }
-                                  />
-                                </div>
-                              )}
-
-                              {/* Column 5: Ghi chú */}
-                              <input
-                                type="text"
-                                placeholder="Ghi chú..."
-                                value={row.note}
-                                onChange={(e) => {
+                              <RegistrationTimeControls
+                                row={row}
+                                onChange={(field, value) => {
                                   const next = [...weekRows];
-                                  next[idx].note = e.target.value;
+                                  next[idx][field] = value;
                                   setWeekRows(next);
                                 }}
-                                className="input text-xs py-1 px-2.5 max-w-[150px]"
                               />
 
                               {/* Column 6: Thao tác đăng ký từng dòng */}
@@ -1504,12 +1351,7 @@ export function StaffShiftRoster({
                                 type="button"
                                 onClick={() =>
                                   handleSingleRowSubmit(
-                                    row.date,
-                                    row.slotOption,
-                                    row.customSlot,
-                                    row.startTime,
-                                    row.endTime,
-                                    row.note,
+                                    row,
                                     row.selectedAssigneeIds,
                                     () => {
                                       const next = [...weekRows];
@@ -1550,10 +1392,10 @@ export function StaffShiftRoster({
                           date: todayStr,
                           selectedAssigneeIds: [...defaultAssigneeIds],
                           slotOption: "MORNING",
-                          customSlot: "MORNING",
-                          startTime: "07:00",
-                          endTime: "11:00",
-                          note: "",
+                          morningStartTime: "07:30",
+                          morningEndTime: "11:30",
+                          afternoonStartTime: "12:30",
+                          afternoonEndTime: "16:30",
                         },
                       ])
                     }
@@ -1563,17 +1405,17 @@ export function StaffShiftRoster({
                   </button>
                 </div>
 
-                <div className="space-y-3">
+                <div className="staff-shift-registration-list space-y-3">
                   {freeformRows.map((row, idx) => {
                     const isPast = row.date < todayStr;
                     return (
                       <div
                         key={row.id}
-                        className="p-3.5 bg-white rounded-lg border border-neutral-200 shadow-2xs space-y-2.5"
+                        className="staff-shift-registration-row p-3.5 bg-white rounded-lg border border-neutral-200 shadow-2xs space-y-2.5"
                       >
-                        <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="staff-shift-registration-row-grid">
                           {/* Column 1: Ngày trực */}
-                          <div className="flex items-center gap-2 min-w-[160px]">
+                          <div className="staff-shift-registration-date flex items-center gap-2">
                             <input
                               type="date"
                               value={row.date}
@@ -1591,7 +1433,7 @@ export function StaffShiftRoster({
                             )}
                           </div>
 
-                          <div className="flex flex-wrap items-center gap-2.5">
+                          <div className="staff-shift-registration-fields">
                             {/* Column 2: Người trực */}
                             {isAdmin ? (
                               <RowAssigneePicker
@@ -1613,7 +1455,7 @@ export function StaffShiftRoster({
                                 }}
                               />
                             ) : (
-                              <div className="text-xs bg-neutral-100 text-neutral-800 px-2.5 py-1 rounded font-medium flex items-center gap-1.5">
+                              <div className="staff-shift-assignee text-xs bg-neutral-100 text-neutral-800 px-2.5 py-1 rounded font-medium flex items-center gap-1.5">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                                 <span>{userFullName}</span>
                               </div>
@@ -1626,105 +1468,36 @@ export function StaffShiftRoster({
                                 const next = [...freeformRows];
                                 const val = e.target.value as SlotOption;
                                 next[idx].slotOption = val;
-                                if (val === "MORNING") {
-                                  next[idx].customSlot = "MORNING";
-                                  next[idx].startTime = "07:00";
-                                  next[idx].endTime = "11:00";
-                                } else if (val === "AFTERNOON") {
-                                  next[idx].customSlot = "AFTERNOON";
-                                  next[idx].startTime = "13:00";
-                                  next[idx].endTime = "16:00";
-                                }
                                 setFreeformRows(next);
                               }}
                               className="input text-xs py-1 px-2 font-medium"
                             >
                               <option value="MORNING">
-                                Sáng (07:00 – 11:00)
+                                Sáng (07:30 – 11:30)
                               </option>
                               <option value="AFTERNOON">
-                                Chiều (13:00 – 16:00)
+                                Chiều (12:30 – 16:30)
                               </option>
                               <option value="ALL_DAY">
                                 Cả ngày (Sáng + Chiều)
                               </option>
-                              <option value="CUSTOM">Tùy chỉnh giờ</option>
                             </select>
 
-                            {/* Column 4: Thời gian tùy chỉnh */}
-                            {row.slotOption === "CUSTOM" && (
-                              <div className="flex items-center gap-1.5">
-                                <select
-                                  value={row.customSlot}
-                                  onChange={(e) => {
-                                    const next = [...freeformRows];
-                                    const sl = e.target.value as ShiftSlot;
-                                    next[idx].customSlot = sl;
-                                    next[idx].startTime = defaultStartFor(sl);
-                                    next[idx].endTime = defaultEndFor(sl);
-                                    setFreeformRows(next);
-                                  }}
-                                  className="input text-xs py-1 px-2"
-                                >
-                                  <option value="MORNING">Buổi sáng</option>
-                                  <option value="AFTERNOON">Buổi chiều</option>
-                                </select>
-                                <TimePicker
-                                  value={row.startTime}
-                                  onChange={(val) => {
-                                    const next = [...freeformRows];
-                                    next[idx].startTime = val;
-                                    setFreeformRows(next);
-                                  }}
-                                  allowedValues={
-                                    row.customSlot === "MORNING"
-                                      ? MORNING_SHIFT_ALLOWED_TIMES
-                                      : AFTERNOON_SHIFT_ALLOWED_TIMES
-                                  }
-                                />
-                                <span className="text-xs text-neutral-400">
-                                  –
-                                </span>
-                                <TimePicker
-                                  value={row.endTime}
-                                  onChange={(val) => {
-                                    const next = [...freeformRows];
-                                    next[idx].endTime = val;
-                                    setFreeformRows(next);
-                                  }}
-                                  allowedValues={
-                                    row.customSlot === "MORNING"
-                                      ? MORNING_SHIFT_ALLOWED_TIMES
-                                      : AFTERNOON_SHIFT_ALLOWED_TIMES
-                                  }
-                                />
-                              </div>
-                            )}
-
-                            {/* Column 5: Ghi chú */}
-                            <input
-                              type="text"
-                              placeholder="Ghi chú..."
-                              value={row.note}
-                              onChange={(e) => {
+                            <RegistrationTimeControls
+                              row={row}
+                              onChange={(field, value) => {
                                 const next = [...freeformRows];
-                                next[idx].note = e.target.value;
+                                next[idx][field] = value;
                                 setFreeformRows(next);
                               }}
-                              className="input text-xs py-1 px-2.5 max-w-[150px]"
                             />
 
-                            {/* Column 6: Đăng ký từng dòng */}
+                            {/* Column 5: Đăng ký từng dòng */}
                             <button
                               type="button"
                               onClick={() =>
                                 handleSingleRowSubmit(
-                                  row.date,
-                                  row.slotOption,
-                                  row.customSlot,
-                                  row.startTime,
-                                  row.endTime,
-                                  row.note,
+                                  row,
                                   row.selectedAssigneeIds,
                                   () => {
                                     if (freeformRows.length > 1) {
@@ -1741,7 +1514,7 @@ export function StaffShiftRoster({
                               <Plus size={13} /> Đăng ký ca
                             </button>
 
-                            {/* Remove Row Button */}
+                            {/* Column 6: Xóa dòng tự chọn */}
                             {freeformRows.length > 1 && (
                               <button
                                 type="button"
@@ -1750,10 +1523,10 @@ export function StaffShiftRoster({
                                     prev.filter((r) => r.id !== row.id),
                                   )
                                 }
-                                className="p-1.5 text-neutral-400 hover:text-rose-600 rounded transition-colors"
+                                className="button button-danger staff-shift-delete-button text-xs px-2.5 py-1 flex items-center gap-1"
                                 aria-label="Xóa dòng ngày trực này"
                               >
-                                <Trash2 size={15} />
+                                <Trash2 size={14} /> Xóa
                               </button>
                             )}
                           </div>
@@ -1770,7 +1543,7 @@ export function StaffShiftRoster({
               weekRows.some((r) => r.included && r.date < todayStr)) ||
               (regMode === "freeform" &&
                 freeformRows.some((r) => r.date < todayStr))) && (
-              <div className="border-t border-amber-200 bg-amber-50/60 p-4 rounded-xl space-y-2">
+              <div className="staff-shift-historical-reason border-t border-amber-200 bg-amber-50/60 p-4 rounded-xl space-y-2">
                 <div className="flex items-center gap-2 text-amber-800 text-xs font-semibold">
                   <LockKeyhole size={14} />
                   <span>
@@ -2063,8 +1836,8 @@ export function StaffShiftRoster({
                 <label className="block text-xs font-semibold text-neutral-700">
                   Giờ trực (trong khung giờ buổi{" "}
                   {editShiftModal.shift.shift_slot === "MORNING"
-                    ? "07:00–11:00"
-                    : "13:00–16:00"}
+                    ? "07:30–11:30"
+                    : "12:30–16:30"}
                   ):
                 </label>
                 <div className="flex items-center gap-2">
