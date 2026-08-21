@@ -110,8 +110,8 @@ test("Staff Shift V2 — Self registration, duplicate conflict, and soft cancell
         staff_id: staff.user.id,
         shift_date: targetDate,
         shift_slot: "MORNING",
-        start_time: "07:00",
-        end_time: "11:00",
+        start_time: "07:30",
+        end_time: "11:30",
         note: "Unit test morning shift",
       },
     ],
@@ -145,8 +145,8 @@ test("Staff Shift V2 — Self registration, duplicate conflict, and soft cancell
           staff_id: staff.user.id,
           shift_date: targetDate,
           shift_slot: "AFTERNOON",
-          start_time: "13:00",
-          end_time: "16:00",
+          start_time: "12:30",
+          end_time: "16:30",
         },
       ],
     });
@@ -181,8 +181,8 @@ test("Staff Shift V2 — Staff own-time edit and security denial on others' shif
         staff_id: otherUser.user.id,
         shift_date: targetDate,
         shift_slot: "MORNING",
-        start_time: "07:00",
-        end_time: "11:00",
+        start_time: "07:30",
+        end_time: "11:30",
       },
     ],
   });
@@ -196,8 +196,8 @@ test("Staff Shift V2 — Staff own-time edit and security denial on others' shif
         staff_id: staff.user.id,
         shift_date: targetDate,
         shift_slot: "MORNING",
-        start_time: "07:00",
-        end_time: "11:00",
+        start_time: "07:30",
+        end_time: "11:30",
       },
     ],
   });
@@ -256,7 +256,7 @@ test("Staff Shift V2 — All Day atomic registration and time boundary enforceme
   const targetDate = "2035-05-16";
   const groupId = crypto.randomUUID();
 
-  // Invalid morning time (< 07:00)
+  // Invalid morning time (< 07:30)
   const invalidTimeRes = await staff.supabase.rpc("register_staff_shifts", {
     shifts_payload: [
       {
@@ -278,16 +278,16 @@ test("Staff Shift V2 — All Day atomic registration and time boundary enforceme
         staff_id: staff.user.id,
         shift_date: targetDate,
         shift_slot: "MORNING",
-        start_time: "07:00",
-        end_time: "11:00",
+        start_time: "07:30",
+        end_time: "11:30",
         creation_group_id: groupId,
       },
       {
         staff_id: staff.user.id,
         shift_date: targetDate,
         shift_slot: "AFTERNOON",
-        start_time: "13:00",
-        end_time: "16:00",
+        start_time: "12:30",
+        end_time: "16:30",
         creation_group_id: groupId,
       },
     ],
@@ -321,8 +321,8 @@ test("Staff Shift V2 — Historical date mutation requires capability & mandator
         staff_id: staff.user.id,
         shift_date: pastDate,
         shift_slot: "MORNING",
-        start_time: "07:00",
-        end_time: "11:00",
+        start_time: "07:30",
+        end_time: "11:30",
       },
     ],
     adjustment_reason: "Trying to register in past",
