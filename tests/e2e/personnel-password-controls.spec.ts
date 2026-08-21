@@ -5,6 +5,8 @@ import { clickUntilState } from "./helpers/interaction-readiness";
 
 nextEnv.loadEnvConfig(process.cwd());
 
+const localMailpitUrl = process.env.LOCAL_SMTP_URL ?? "http://127.0.0.1:54324";
+
 const serviceDb = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SECRET_KEY!,
@@ -26,7 +28,7 @@ async function login(
 
 async function waitForRecoveryLink(email: string) {
   for (let attempt = 0; attempt < 20; attempt += 1) {
-    const listResponse = await fetch("http://127.0.0.1:54324/api/v1/messages");
+    const listResponse = await fetch(`${localMailpitUrl}/api/v1/messages`);
     const list = (await listResponse.json()) as {
       messages?: Array<{ ID?: string; To?: Array<{ Address?: string }> }>;
     };
@@ -37,7 +39,7 @@ async function waitForRecoveryLink(email: string) {
     );
     if (message?.ID) {
       const detailResponse = await fetch(
-        `http://127.0.0.1:54324/api/v1/message/${message.ID}`,
+        `${localMailpitUrl}/api/v1/message/${message.ID}`,
       );
       const detail = (await detailResponse.json()) as {
         Text?: string;

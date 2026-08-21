@@ -41,30 +41,42 @@ jobs:
       - name: Audit dependencies
         run: npm audit
 
-      - name: Start local Supabase
-        run: npx supabase start
+      - name: Prepare isolated CI Supabase workdir
+        shell: bash
+        run: |
+          CI_SUPABASE_WORKDIR="$(mktemp -d "$RUNNER_TEMP/lich-truc-app-ci.XXXXXX")"
+          node scripts/prepare-ci-supabase-workdir.mjs "$CI_SUPABASE_WORKDIR"
+          {
+            echo "CI_SUPABASE_WORKDIR=$CI_SUPABASE_WORKDIR"
+            echo "SUPABASE_LOCAL_PROJECT_ID=lich-truc-app-ci"
+            echo "Y05_DB_CONTAINER=supabase_db_lich-truc-app-ci"
+          } >> "$GITHUB_ENV"
+
+      - name: Start isolated CI Supabase
+        run: npx --no-install supabase start --workdir "$CI_SUPABASE_WORKDIR"
 
       - name: Reset schema from migrations
-        run: npx supabase db reset
+        run: npx --no-install supabase db reset --workdir "$CI_SUPABASE_WORKDIR"
 
       - name: Create local test environment
         shell: bash
         run: |
-          eval "$(npx supabase status -o env)"
+          eval "$(npx --no-install supabase status --workdir "$CI_SUPABASE_WORKDIR" -o env)"
           {
             echo "NEXT_PUBLIC_SUPABASE_URL=$API_URL"
             echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$PUBLISHABLE_KEY"
             echo "SUPABASE_SECRET_KEY=$SECRET_KEY"
+            echo "LOCAL_SMTP_URL=$INBUCKET_URL"
             echo "NEXT_PUBLIC_APP_URL=http://127.0.0.1:3000"
             echo "EMAIL_DELIVERY_MODE=off"
           } > .env.local
 
       - name: Seed isolated test users and fixtures
         shell: pwsh
-        run: ./scripts/seed-local-users.ps1
+        run: ./scripts/seed-local-users.ps1 -SupabaseWorkdir "$env:CI_SUPABASE_WORKDIR"
 
       - name: Lint database
-        run: npx supabase db lint --local --level error
+        run: npx --no-install supabase db lint --workdir "$CI_SUPABASE_WORKDIR" --local --level error
 
       - name: Lint application
         run: npm run lint
@@ -76,11 +88,11 @@ jobs:
         run: npm test
 
       - name: Run database history tests
-        run: npm run test:db
+        run: npx --no-install supabase test db --workdir "$CI_SUPABASE_WORKDIR"
 
       - name: Restore E2E fixtures after database tests
         shell: pwsh
-        run: ./scripts/seed-local-users.ps1
+        run: ./scripts/seed-local-users.ps1 -SupabaseWorkdir "$env:CI_SUPABASE_WORKDIR"
 
       - name: Install browser for accessibility smoke tests
         run: npx playwright install chromium
