@@ -10,6 +10,7 @@
 /node_modules/
 
 # Tool indexes and reusable instruction bundles are not application knowledge.
+/.agents/skills/
 /.gitnexus/
 /.claude/skills/gitnexus/
 /.codex/skills/

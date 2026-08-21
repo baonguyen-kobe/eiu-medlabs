@@ -2,14 +2,22 @@
 
 ## Codebase navigation: Graphify first
 
-The project knowledge graph lives in `graphify-out/`. Run Graphify commands from this directory.
+The project knowledge graph lives in the ignored `graphify-out/` directory.
 
-- For codebase questions, run `graphify query "<question>"` first when `graphify-out/graph.json` exists.
-- Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts.
+- Run Graphify commands from the repository root so its output stays at `graphify-out/`; do not run `graphify update .` from inside `graphify-out/`.
+- In a fresh worktree, run `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap-graphify-worktree.ps1` to verify repository instructions and skills, build the ignored local graph, and run a scoped query.
+- For codebase questions, run `graphify query "<question>" --graph graphify-out/graph.json` first when `graphify-out/graph.json` exists.
+- Use `graphify path "<A>" "<B>" --graph graphify-out/graph.json` for relationships and `graphify explain "<concept>" --graph graphify-out/graph.json` for focused concepts.
 - Use `graphify-out/wiki/index.md` for broad navigation when available.
 - Dirty graph files are expected and are not a reason to skip Graphify.
 - Keep generated, temporary, backup, and tool-index files out of the graph via `.graphifyignore`.
 - After modifying code or project instructions, run `graphify update .`.
+
+## Repository skill discovery
+
+Before planning implementation work, inspect `.agents/skills`, `.codex/skills`, and `.claude/skills` when they exist. Read each candidate `SKILL.md` front matter first, classify its relevance, then read and apply the full instructions only for relevant skills.
+
+The repository-owned baseline skills live in `.agents/skills` and are tracked with the source. `.codex/` and `.claude/` remain available as optional tool-specific local integrations; do not copy generated local skills into a worktree or commit them as a provisioning substitute.
 
 GitNexus is optional and is not currently configured in this checkout. Use it only when it is available and a large or high-risk refactor benefits from a second impact-analysis view. Do not require it for routine work, and do not let generated GitNexus instructions override this guide.
 
@@ -25,7 +33,7 @@ npx.cmd @next/codemod agents-md --output NEXTJS_AGENTS.md
 
 ## Coding guardrails
 
-Apply `.codex/skills/karpathy-coding-heuristics/SKILL.md` for implementation, bug fixes, refactors, and reviews:
+Apply `.agents/skills/karpathy-coding-heuristics/SKILL.md` for implementation, bug fixes, refactors, and reviews:
 
 - Think before coding and make material assumptions explicit.
 - Prefer the simplest solution that fully meets the request.
