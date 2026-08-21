@@ -55,6 +55,12 @@ Last confirmed applied PR59 production migration set:
   - Production: NOT APPLIED
   - Reviewed blob: `0c20d83348500c1460eba3906e5cf4540e70e5d2`
 
+- [ ] `20260820180000_staff_shifts_v2_redesign.sql`
+  - Source: Staff Shift V2
+  - State: IN DEVELOPMENT (FEATURE BRANCH)
+  - Production: NOT APPLIED
+  - Reviewed blob: `d2196188057c80d15c4240c99d18d6edded46d38`
+
 IMPORTANT:
 
 These are the pending migrations known as of 2026-08-20.
@@ -81,6 +87,8 @@ Known merged work not yet represented by the production app includes:
 - PR #64 — cancellation authorization / claim lock / lecturer display hardening
 - PR #65 — self-hosted forgot-password E2E stabilization
 - PR #66 — guarded PR62/PR64 production migration rail
+- PR #67 — production pending ledger documentation
+- Feature `feature/staff-shift-v2-20260820` — Staff Shift V2 redesign (in development)
 
 NOTE:
 

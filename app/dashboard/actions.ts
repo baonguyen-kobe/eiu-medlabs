@@ -83,32 +83,32 @@ function friendlyDatabaseError(message: string): string {
   if (message.includes("NOT_CLASS_OWNER")) {
     return "Bạn chỉ có thể rút lớp do chính mình đăng ký.";
   }
-  if (message.includes("STAFF_SHIFT_CONFLICT")) {
-    return "Ca trực này trùng với một ca bạn đã đăng ký.";
+  if (message.includes("ACTIVE_SHIFT_EXISTS")) {
+    return "Nhân sự đã có ca trực đang hoạt động trong khung giờ này.";
   }
-  if (message.includes("SHIFT_REGISTRATION_CLOSED")) {
-    return "Chỉ có thể đăng ký ca trực chưa bắt đầu.";
+  if (message.includes("INVALID_MORNING_TIME")) {
+    return "Ca sáng phải nằm trong khoảng 07:00–11:00 và theo bước 30 phút.";
   }
-  if (message.includes("STAFF_ROLE_REQUIRED")) {
-    return "Tài khoản cần có vai trò Staff để tự đăng ký ca.";
+  if (message.includes("INVALID_AFTERNOON_TIME")) {
+    return "Ca chiều phải nằm trong khoảng 13:00–16:00 và theo bước 30 phút.";
   }
-  if (message.includes("SHIFT_CANCELLATION_CLOSED")) {
-    return "Không thể hủy ca đã bắt đầu hoặc đã kết thúc.";
+  if (message.includes("ASSIGNEE_NOT_ELIGIBLE")) {
+    return "Nhân sự được chọn không thuộc danh sách trực Skills Lab.";
   }
-  if (message.includes("NOT_SHIFT_OWNER")) {
-    return "Bạn chỉ có thể hủy ca trực của chính mình.";
+  if (message.includes("HISTORICAL_MUTATION_FORBIDDEN")) {
+    return "Không thể tạo hoặc điều chỉnh lịch trực trong quá khứ khi chưa có quyền quản lý lịch sử.";
   }
-  if (message.includes("STAFF_SHIFT_PATTERN_CONFLICT")) {
-    return "Lịch cố định này bị trùng với một ca đã đăng ký trong cùng thứ.";
+  if (message.includes("HISTORICAL_REASON_REQUIRED")) {
+    return "Vui lòng nhập lý do khi tạo hoặc điều chỉnh lịch trực trong quá khứ.";
   }
-  if (
-    message.includes("INVALID_SHIFT_WEEKDAY") ||
-    message.includes("INVALID_SHIFT_TYPE")
-  ) {
-    return "Thứ hoặc loại ca không hợp lệ.";
+  if (message.includes("SHIFT_NOT_FOUND")) {
+    return "Không tìm thấy ca trực hoặc ca trực đã bị hủy.";
   }
-  if (message.includes("NOT_SHIFT_PATTERN_OWNER")) {
-    return "Bạn chỉ có thể xóa lịch cố định của chính mình.";
+  if (message.includes("DUPLICATE_PAYLOAD_SLOT")) {
+    return "Trùng ca trực của cùng nhân sự trong cùng ngày và buổi trong yêu cầu gửi lên.";
+  }
+  if (message.includes("PERMISSION_DENIED")) {
+    return "Bạn không có quyền thực hiện thao tác này.";
   }
   return "Không thể hoàn tất thao tác. Vui lòng kiểm tra dữ liệu và thử lại.";
 }
@@ -134,8 +134,19 @@ export async function claimClass(scheduleId: string): Promise<ActionResult> {
   return { ok: true, message: "Đăng ký lớp thành công." };
 }
 
-export async function registerOwnShift(
-  formData: FormData,
+export type ShiftRegistrationPayloadItem = {
+  staff_id: string;
+  shift_date: string;
+  shift_slot: "MORNING" | "AFTERNOON";
+  start_time: string;
+  end_time: string;
+  note?: string | null;
+  creation_group_id?: string | null;
+};
+
+export async function registerStaffShiftsAction(
+  payload: ShiftRegistrationPayloadItem[],
+  adjustmentReason?: string,
 ): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: claimsData } = await supabase.auth.getClaims();
@@ -143,32 +154,88 @@ export async function registerOwnShift(
     return { ok: false, message: "Phiên đăng nhập đã hết hạn." };
   }
 
-  const date = String(formData.get("shift_date") ?? "");
-  const start = String(formData.get("start_time") ?? "");
-  const end = String(formData.get("end_time") ?? "");
-  const shiftType = String(formData.get("shift_type") ?? "").trim();
-  const templateId = String(formData.get("shift_template_id") ?? "").trim();
-  const note = String(formData.get("note") ?? "").trim();
-
-  if (!date || !start || !end || !shiftType) {
-    return { ok: false, message: "Vui lòng điền đủ ngày, giờ và loại ca." };
+  if (!Array.isArray(payload) || payload.length === 0) {
+    return {
+      ok: false,
+      message: "Vui lòng chọn ít nhất một ca trực để đăng ký.",
+    };
   }
 
-  const { error } = await supabase.rpc("register_own_shift", {
-    target_date: date,
-    target_start: start,
-    target_end: end,
-    target_shift_type: shiftType,
-    target_template_id: templateId || null,
-    target_note: note || null,
+  const { data, error } = await supabase.rpc("register_staff_shifts", {
+    shifts_payload: payload,
+    adjustment_reason: adjustmentReason?.trim() || null,
   });
+
   if (error) {
     return { ok: false, message: friendlyDatabaseError(error.message) };
   }
 
   revalidatePath("/dashboard");
   revalidatePath("/staff-shifts");
-  return { ok: true, message: "Đã đăng ký ca trực của bạn." };
+  const count = Array.isArray(data) ? data.length : payload.length;
+  return { ok: true, message: `Đã đăng ký thành công ${count} ca trực.` };
+}
+
+export async function cancelStaffShiftAction(
+  shiftId: string,
+  reason?: string,
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { data: claimsData } = await supabase.auth.getClaims();
+  if (!claimsData?.claims?.sub) {
+    return { ok: false, message: "Phiên đăng nhập đã hết hạn." };
+  }
+
+  if (!shiftId) {
+    return { ok: false, message: "Mã ca trực không hợp lệ." };
+  }
+
+  const { error } = await supabase.rpc("cancel_staff_shift", {
+    target_shift_id: shiftId,
+    reason: reason?.trim() || null,
+  });
+
+  if (error) {
+    return { ok: false, message: friendlyDatabaseError(error.message) };
+  }
+
+  revalidatePath("/dashboard");
+  revalidatePath("/staff-shifts");
+  return { ok: true, message: "Đã hủy ca trực thành công." };
+}
+
+export async function updateStaffShiftTimeAction(
+  shiftId: string,
+  startTime: string,
+  endTime: string,
+  note?: string | null,
+  reason?: string,
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { data: claimsData } = await supabase.auth.getClaims();
+  if (!claimsData?.claims?.sub) {
+    return { ok: false, message: "Phiên đăng nhập đã hết hạn." };
+  }
+
+  if (!shiftId || !startTime || !endTime) {
+    return { ok: false, message: "Vui lòng nhập đầy đủ thông tin thời gian." };
+  }
+
+  const { error } = await supabase.rpc("update_staff_shift_time", {
+    target_shift_id: shiftId,
+    target_start_time: startTime,
+    target_end_time: endTime,
+    target_note: note?.trim() || null,
+    reason: reason?.trim() || null,
+  });
+
+  if (error) {
+    return { ok: false, message: friendlyDatabaseError(error.message) };
+  }
+
+  revalidatePath("/dashboard");
+  revalidatePath("/staff-shifts");
+  return { ok: true, message: "Đã cập nhật giờ ca trực thành công." };
 }
 
 export async function withdrawClass(scheduleId: string): Promise<ActionResult> {
@@ -215,77 +282,6 @@ export async function deleteClassSchedule(
   revalidateScheduleViews();
   after(processPendingScheduleEmails);
   return { ok: true, message: "Đã xóa lớp khỏi hệ thống." };
-}
-
-export async function cancelOwnShift(shiftId: string): Promise<ActionResult> {
-  const supabase = await createClient();
-  const { error } = await supabase.rpc("cancel_own_shift", {
-    target_shift_id: shiftId,
-  });
-  if (error) {
-    return { ok: false, message: friendlyDatabaseError(error.message) };
-  }
-
-  revalidatePath("/dashboard");
-  revalidatePath("/staff-shifts");
-  return { ok: true, message: "Đã hủy ca trực của bạn." };
-}
-
-export async function registerOwnShiftPattern(
-  formData: FormData,
-): Promise<ActionResult> {
-  const supabase = await createClient();
-  const weekday = Number(formData.get("weekday"));
-  const shiftType = String(formData.get("shift_type") ?? "").trim();
-  const effectiveFrom = String(formData.get("effective_from") ?? "").trim();
-  const effectiveTo = String(formData.get("effective_to") ?? "").trim();
-  const note = String(formData.get("note") ?? "").trim();
-
-  if (
-    !Number.isInteger(weekday) ||
-    weekday < 1 ||
-    weekday > 7 ||
-    !shiftType ||
-    !/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom)
-  ) {
-    return {
-      ok: false,
-      message: "Vui lòng chọn thứ, loại ca và ngày hiệu lực bắt đầu.",
-    };
-  }
-  if (effectiveTo && effectiveTo < effectiveFrom) {
-    return {
-      ok: false,
-      message: "Ngày kết thúc phải bằng hoặc sau ngày bắt đầu.",
-    };
-  }
-
-  const { error } = await supabase.rpc("register_own_shift_pattern", {
-    target_weekday: weekday,
-    target_shift_type: shiftType,
-    target_effective_from: effectiveFrom,
-    target_effective_to: effectiveTo || null,
-    target_note: note || null,
-  });
-  if (error)
-    return { ok: false, message: friendlyDatabaseError(error.message) };
-
-  revalidatePath("/staff-shifts");
-  return { ok: true, message: "Đã đăng ký lịch trực cố định." };
-}
-
-export async function deleteShiftPattern(
-  patternId: string,
-): Promise<ActionResult> {
-  const supabase = await createClient();
-  const { error } = await supabase.rpc("cancel_own_shift_pattern", {
-    target_pattern_id: patternId,
-  });
-  if (error)
-    return { ok: false, message: friendlyDatabaseError(error.message) };
-
-  revalidatePath("/staff-shifts");
-  return { ok: true, message: "Đã xóa lịch trực cố định." };
 }
 
 async function requireAdminAction() {
@@ -557,88 +553,4 @@ export async function adminInvalidateBasicMedicalSessionConfirmation(
     ok: true,
     message: "Đã vô hiệu hóa xác nhận; bằng chứng gốc được giữ nguyên.",
   };
-}
-
-export async function adminReassignShift(
-  shiftId: string,
-  staffId: string,
-): Promise<ActionResult> {
-  const context = await requireAdminAction();
-  if (!context) return { ok: false, message: "Chỉ Admin được đổi lịch trực." };
-  const { data: operationalAssignees, error: assigneeError } =
-    await context.supabase.rpc("list_operational_shift_assignees");
-  if (
-    assigneeError ||
-    !(operationalAssignees ?? []).some(
-      (candidate: { id: string }) => candidate.id === staffId,
-    )
-  )
-    return { ok: false, message: "Người được chọn phải là Staff hoặc Admin." };
-
-  const { data, error } = await context.supabase
-    .from("staff_shifts")
-    .update({ staff_id: staffId, registration_source: "admin_assigned" })
-    .eq("id", shiftId)
-    .select("id")
-    .maybeSingle();
-  if (error || !data) {
-    return {
-      ok: false,
-      message:
-        error?.code === "23P01"
-          ? "Nhân sự bị trùng ca trực."
-          : "Không thể đổi người trực.",
-    };
-  }
-  revalidateScheduleViews();
-  return { ok: true, message: "Đã đổi người trực." };
-}
-
-export async function adminCreateShift(
-  shiftDate: string,
-  shiftType: "MORNING" | "AFTERNOON",
-  staffId: string,
-): Promise<ActionResult> {
-  const context = await requireAdminAction();
-  if (!context) return { ok: false, message: "Chỉ Admin được tạo lịch trực." };
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(shiftDate)) {
-    return { ok: false, message: "Ngày trực không hợp lệ." };
-  }
-
-  const { data: operationalAssignees, error: assigneeError } =
-    await context.supabase.rpc("list_operational_shift_assignees");
-  if (
-    assigneeError ||
-    !(operationalAssignees ?? []).some(
-      (candidate: { id: string }) => candidate.id === staffId,
-    )
-  )
-    return { ok: false, message: "Người được chọn phải là Staff hoặc Admin." };
-
-  const startTime = shiftType === "MORNING" ? "08:30" : "13:30";
-  const endTime = shiftType === "MORNING" ? "11:30" : "16:30";
-  const { error } = await context.supabase.from("staff_shifts").insert({
-    staff_id: staffId,
-    shift_date: shiftDate,
-    start_time: startTime,
-    end_time: endTime,
-    shift_type: shiftType,
-    shift_template_id: null,
-    note: null,
-    status: "scheduled",
-    registration_source: "admin_assigned",
-    created_by: context.userId,
-  });
-  if (error) {
-    return {
-      ok: false,
-      message:
-        error.code === "23P01"
-          ? "Nhân sự bị trùng ca trực."
-          : "Không thể tạo lịch trực.",
-    };
-  }
-
-  revalidateScheduleViews();
-  return { ok: true, message: "Đã tạo lịch trực mới." };
 }

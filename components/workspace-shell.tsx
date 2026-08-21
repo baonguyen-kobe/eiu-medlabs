@@ -330,7 +330,6 @@ function buildNavigation(
           "/admin/catalogs",
           "/admin/courses",
           "/admin/rooms",
-          "/admin/shift-templates",
           "/admin/audit",
         ],
       },

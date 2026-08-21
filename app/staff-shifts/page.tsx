@@ -18,7 +18,7 @@ import { getViewer } from "@/lib/viewer";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 type ShiftView = "week" | "month";
-type ShiftTab = "patterns" | "manage";
+type ShiftTab = "roster" | "register";
 
 export default async function StaffShiftsPage({
   searchParams,
@@ -41,7 +41,7 @@ export default async function StaffShiftsPage({
   const parsedDate = query.date ? parseISO(query.date) : businessToday();
   const baseDate = isValid(parsedDate) ? parsedDate : businessToday();
   const view: ShiftView = query.view === "month" ? "month" : "week";
-  const tab: ShiftTab = query.tab === "manage" ? "manage" : "patterns";
+  const tab: ShiftTab = query.tab === "register" ? "register" : "roster";
   const periodStart =
     view === "month"
       ? startOfWeek(startOfMonth(baseDate), { weekStartsOn: 1 })
@@ -65,39 +65,36 @@ export default async function StaffShiftsPage({
       ? `Tháng ${format(baseDate, "MM/yyyy")}`
       : `${format(periodStart, "dd/MM")} – ${format(periodEnd, "dd/MM/yyyy")}`;
 
-  const [{ data: shifts }, { data: patterns }, { data: people }] =
+  const [{ data: shifts }, { data: people }, { data: currentProfile }] =
     await Promise.all([
       supabase
         .from("staff_shifts")
         .select(
-          "id, staff_id, shift_date, start_time, end_time, shift_type, status",
+          "id, staff_id, shift_date, shift_slot, start_time, end_time, note, status, registration_source, creation_group_id",
         )
         .gte("shift_date", periodStartText)
         .lte("shift_date", periodEndText)
+        .neq("status", "cancelled")
         .order("shift_date")
         .order("start_time"),
-      supabase
-        .from("staff_shift_patterns")
-        .select(
-          "id, staff_id, weekday, start_time, end_time, shift_type, effective_from, effective_to",
-        )
-        .eq("is_active", true)
-        .lte("effective_from", periodEndText)
-        .or(`effective_to.is.null,effective_to.gte.${periodStartText}`)
-        .order("weekday")
-        .order("start_time"),
       supabase.rpc("list_operational_shift_assignees"),
+      supabase
+        .from("profiles")
+        .select("can_manage_shift_history")
+        .eq("id", userId)
+        .maybeSingle(),
     ]);
+
+  const canManageShiftHistory = Boolean(
+    isRootAdministrator || currentProfile?.can_manage_shift_history,
+  );
 
   const operationalShiftAssignees = (people ?? []) as Array<{
     id: string;
     full_name: string;
     title: string | null;
   }>;
-  const referencedStaffIds = [
-    ...(shifts ?? []).map((shift) => shift.staff_id),
-    ...(patterns ?? []).map((pattern) => pattern.staff_id),
-  ];
+  const referencedStaffIds = [...(shifts ?? []).map((shift) => shift.staff_id)];
   const { data: historicalPeople } = referencedStaffIds.length
     ? await createAdminClient()
         .from("profiles")
@@ -124,19 +121,17 @@ export default async function StaffShiftsPage({
       canManagePersonnel={canManagePersonnel}
       canManageEmailNotifications={canManageEmailNotifications}
       title="Lịch trực"
-      description="Đăng ký lịch cố định hoặc quản lý người trực theo tuần và tháng."
+      description="Xem và quản lý lịch trực phòng thực hành Kỹ năng Điều dưỡng."
     >
       <StaffShiftRoster
         shifts={(shifts ?? []).map((shift) => ({
           ...shift,
+          shift_slot: shift.shift_slot as "MORNING" | "AFTERNOON",
           staffName: peopleById.get(shift.staff_id) ?? "Nhân sự",
-        }))}
-        patterns={(patterns ?? []).map((pattern) => ({
-          ...pattern,
-          staffName: peopleById.get(pattern.staff_id) ?? "Nhân sự",
         }))}
         assignees={assignees}
         userId={userId}
+        userFullName={fullName}
         days={days}
         anchorDate={format(baseDate, "yyyy-MM-dd")}
         previousDate={format(previousDate, "yyyy-MM-dd")}
@@ -144,11 +139,12 @@ export default async function StaffShiftsPage({
         periodLabel={periodLabel}
         view={view}
         tab={tab}
+        isAdmin={roles.includes("admin")}
         canSelfRegister={
           !isRootAdministrator &&
           (roles.includes("staff") || roles.includes("admin"))
         }
-        canManage={roles.includes("admin")}
+        canManageShiftHistory={canManageShiftHistory}
       />
     </WorkspaceShell>
   );

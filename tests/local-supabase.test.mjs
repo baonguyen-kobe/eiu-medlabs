@@ -1279,7 +1279,7 @@ test("chuyển email Off chỉ suppress pending, không đổi row đang process
   } finally {
     await service.from("email_notifications").delete().eq("id", id);
     await admin.supabase.rpc("set_email_delivery_mode", {
-      target_mode: "live",
+      target_mode: "test",
     });
   }
 });
@@ -1348,7 +1348,7 @@ test("Người xem chỉ đọc lịch và nhận email theo loại phòng đã 
     const { data: createdSchedule, error: scheduleError } =
       await admin.supabase.rpc("create_manual_class_schedule", {
         target_course_id: "10000000-0000-0000-0000-000000000001",
-        target_room_id: "20000000-0000-0000-0000-000000000002",
+        target_room_id: "20000000-0000-0000-0000-000000000001",
         target_lecturer_id: null,
         target_lecturer_2_id: null,
         target_schedule_date: "2039-08-20",
@@ -1535,83 +1535,40 @@ test("giảng viên có quyền import vẫn chỉ tạo lịch manual khi tự 
     .eq("id", assignedScheduleId);
 });
 
-test("staff không thể đăng ký hai ca chồng lấn", async () => {
+test("staff không thể đăng ký hai ca cùng slot", async () => {
   const staff = await signIn("staff@campus.local", "LocalStaff123!");
 
-  const first = await staff.supabase.rpc("register_own_shift", {
-    target_date: "2030-08-23",
-    target_start: "08:30",
-    target_end: "11:30",
-    target_shift_type: "MORNING",
-    target_template_id: "30000000-0000-0000-0000-000000000001",
-    target_note: "Ca kiểm thử",
+  const first = await staff.supabase.rpc("register_staff_shifts", {
+    shifts_payload: [
+      {
+        staff_id: staff.user.id,
+        shift_date: "2030-08-23",
+        shift_slot: "MORNING",
+        start_time: "07:00",
+        end_time: "11:00",
+        note: "Ca kiểm thử",
+      },
+    ],
   });
   assert.ifError(first.error);
 
-  const overlap = await staff.supabase.rpc("register_own_shift", {
-    target_date: "2030-08-23",
-    target_start: "10:00",
-    target_end: "12:00",
-    target_shift_type: "CUSTOM",
-    target_template_id: null,
-    target_note: null,
+  const overlap = await staff.supabase.rpc("register_staff_shifts", {
+    shifts_payload: [
+      {
+        staff_id: staff.user.id,
+        shift_date: "2030-08-23",
+        shift_slot: "MORNING",
+        start_time: "07:30",
+        end_time: "10:30",
+      },
+    ],
   });
   assert.ok(overlap.error);
 
-  const cancelled = await staff.supabase.rpc("cancel_own_shift", {
-    target_shift_id: first.data.id,
+  const cancelled = await staff.supabase.rpc("cancel_staff_shift", {
+    target_shift_id: first.data[0].id,
   });
   assert.ifError(cancelled.error);
-});
-
-test("materialize lịch trực cố định không xóa ca thủ công đang chồng lấn", async () => {
-  const staff = await signIn("staff@campus.local", "LocalStaff123!");
-  const targetDate = "2046-08-06";
-  const weekday =
-    ((new Date(`${targetDate}T00:00:00Z`).getUTCDay() + 6) % 7) + 1;
-
-  const manual = await staff.supabase.rpc("register_own_shift", {
-    target_date: targetDate,
-    target_start: "08:30",
-    target_end: "11:30",
-    target_shift_type: "MORNING",
-    target_template_id: "30000000-0000-0000-0000-000000000001",
-    target_note: "Ca thủ công phải được giữ",
-  });
-  assert.ifError(manual.error);
-
-  try {
-    const pattern = await staff.supabase.rpc("register_own_shift_pattern", {
-      target_weekday: weekday,
-      target_shift_type: "MORNING",
-      target_effective_from: targetDate,
-      target_effective_to: targetDate,
-      target_note: "Pattern xung đột ca thủ công",
-    });
-    assert.ifError(pattern.error);
-
-    const { data: preserved, error } = await staff.supabase
-      .from("staff_shifts")
-      .select("id,registration_source,status")
-      .eq("id", manual.data.id)
-      .single();
-    assert.ifError(error);
-    assert.equal(preserved.registration_source, "self_registered");
-    assert.equal(preserved.status, "scheduled");
-    for (const createdPattern of pattern.data ?? []) {
-      const cancelledPattern = await staff.supabase.rpc(
-        "cancel_own_shift_pattern",
-        {
-          target_pattern_id: createdPattern.id,
-        },
-      );
-      assert.ifError(cancelledPattern.error);
-    }
-  } finally {
-    await staff.supabase.rpc("cancel_own_shift", {
-      target_shift_id: manual.data.id,
-    });
-  }
 });
 
 test("hai batch import đồng thời không tạo cùng normalized hash", async () => {
@@ -1694,90 +1651,6 @@ test("hai batch import đồng thời không tạo cùng normalized hash", async
   }
 });
 
-test("staff chỉ đăng ký và xóa lịch trực cố định của chính mình", async () => {
-  const staff = await signIn("staff@campus.local", "LocalStaff123!");
-  const coordinator = await signIn(
-    "dieuphoi@eiu.edu.vn",
-    "LocalCoordinator123!",
-  );
-
-  const { data: leftovers } = await staff.supabase
-    .from("staff_shift_patterns")
-    .select("id")
-    .eq("staff_id", staff.user.id)
-    .eq("note", "Ca kiểm thử")
-    .eq("is_active", true);
-  for (const pattern of leftovers ?? []) {
-    await staff.supabase.rpc("cancel_own_shift_pattern", {
-      target_pattern_id: pattern.id,
-    });
-  }
-
-  const created = await staff.supabase.rpc("register_own_shift_pattern", {
-    target_weekday: 7,
-    target_shift_type: "ALL_DAY",
-    target_effective_from: "2026-09-01",
-    target_effective_to: null,
-    target_note: "Ca kiểm thử",
-  });
-  assert.ifError(created.error);
-  assert.equal(created.data.length, 2);
-  assert.deepEqual(created.data.map(({ shift_type }) => shift_type).sort(), [
-    "AFTERNOON",
-    "MORNING",
-  ]);
-  assert.ok(created.data.every(({ staff_id }) => staff_id === staff.user.id));
-  assert.ok(
-    created.data.every(({ effective_to }) => effective_to === "2026-11-30"),
-  );
-
-  const patternIds = created.data.map(({ id }) => id);
-  const { data: generated, error: generatedError } = await staff.supabase
-    .from("staff_shifts")
-    .select("id, shift_pattern_id, shift_type, shift_date")
-    .in("shift_pattern_id", patternIds);
-  assert.ifError(generatedError);
-  assert.ok(generated.length >= 8);
-  assert.deepEqual(
-    [...new Set(generated.map(({ shift_type }) => shift_type))].sort(),
-    ["AFTERNOON", "MORNING"],
-  );
-  assert.ok(generated.every(({ shift_date }) => shift_date <= "2026-11-30"));
-
-  const forbidden = await coordinator.supabase.rpc("cancel_own_shift_pattern", {
-    target_pattern_id: patternIds[0],
-  });
-  assert.ok(forbidden.error);
-
-  const cancelled = await staff.supabase.rpc("cancel_own_shift_pattern", {
-    target_pattern_id: patternIds[0],
-  });
-  assert.ifError(cancelled.error);
-  assert.equal(cancelled.data.is_active, false);
-
-  const { data: afterFirstDelete } = await staff.supabase
-    .from("staff_shifts")
-    .select("shift_pattern_id")
-    .in("shift_pattern_id", patternIds);
-  assert.equal(
-    afterFirstDelete.some(
-      ({ shift_pattern_id }) => shift_pattern_id === patternIds[0],
-    ),
-    false,
-  );
-  assert.equal(
-    afterFirstDelete.some(
-      ({ shift_pattern_id }) => shift_pattern_id === patternIds[1],
-    ),
-    true,
-  );
-
-  const secondCancelled = await staff.supabase.rpc("cancel_own_shift_pattern", {
-    target_pattern_id: patternIds[1],
-  });
-  assert.ifError(secondCancelled.error);
-});
-
 test("tạo lịch thủ công xếp đúng một email cho mỗi Staff hoặc Admin", async () => {
   const admin = await signIn("admin@campus.local", "LocalAdmin123!");
   const { data: createdSchedule, error: insertError } =
@@ -1786,7 +1659,7 @@ test("tạo lịch thủ công xếp đúng một email cho mỗi Staff hoặc A
       target_room_id: "20000000-0000-0000-0000-000000000002",
       target_lecturer_id: null,
       target_lecturer_2_id: null,
-      target_schedule_date: "2033-08-20",
+      target_schedule_date: "2049-08-20",
       target_start_time: "07:30",
       target_end_time: "11:30",
       target_note: null,
@@ -1796,30 +1669,34 @@ test("tạo lịch thủ công xếp đúng một email cho mỗi Staff hoặc A
   assert.ifError(insertError);
   const scheduleId = createdSchedule.id;
 
-  await serviceClient().rpc("process_email_outbox_events", { batch_size: 50 });
-  const { data: queued, error: queueError } = await serviceClient()
-    .from("email_notifications")
-    .select("recipient_id, dedupe_key, payload")
-    .eq("notification_type", "class_schedule_created")
-    .contains("payload", { schedule_id: scheduleId });
-  assert.ifError(queueError);
-  const scheduleEmails = (queued ?? []).filter(({ payload }) => {
-    const p = typeof payload === "string" ? JSON.parse(payload) : payload;
-    return p?.schedule_id === scheduleId;
-  });
-  assert.ok(scheduleEmails.length >= 1, "Must generate email notifications");
-  assert.equal(
-    new Set(scheduleEmails.map(({ recipient_id }) => recipient_id)).size,
-    scheduleEmails.length,
-    "Recipients must be unique",
-  );
-  assert.equal(
-    new Set(scheduleEmails.map(({ dedupe_key }) => dedupe_key)).size,
-    scheduleEmails.length,
-    "Dedupe keys must be unique",
-  );
-
-  await serviceClient().from("class_schedules").delete().eq("id", scheduleId);
+  try {
+    await serviceClient().rpc("process_email_outbox_events", {
+      batch_size: 50,
+    });
+    const { data: queued, error: queueError } = await serviceClient()
+      .from("email_notifications")
+      .select("recipient_id, dedupe_key, payload")
+      .eq("notification_type", "class_schedule_created")
+      .contains("payload", { schedule_id: scheduleId });
+    assert.ifError(queueError);
+    const scheduleEmails = (queued ?? []).filter(({ payload }) => {
+      const p = typeof payload === "string" ? JSON.parse(payload) : payload;
+      return p?.schedule_id === scheduleId;
+    });
+    assert.ok(scheduleEmails.length >= 1, "Must generate email notifications");
+    assert.equal(
+      new Set(scheduleEmails.map(({ recipient_id }) => recipient_id)).size,
+      scheduleEmails.length,
+      "Recipients must be unique",
+    );
+    assert.equal(
+      new Set(scheduleEmails.map(({ dedupe_key }) => dedupe_key)).size,
+      scheduleEmails.length,
+      "Dedupe keys must be unique",
+    );
+  } finally {
+    await serviceClient().from("class_schedules").delete().eq("id", scheduleId);
+  }
 });
 
 test("các thay đổi nghiệp vụ quan trọng được ghi audit", async () => {
@@ -3049,8 +2926,6 @@ test("Admin xóa được danh mục khi chỉ còn lịch hoặc ca đã hủy"
   const courseRoomId = crypto.randomUUID();
   const activeScheduleId = crypto.randomUUID();
   const cancelledCourseScheduleId = crypto.randomUUID();
-  const shiftTemplateId = crypto.randomUUID();
-  const shiftId = crypto.randomUUID();
   const suffix = crypto.randomUUID().slice(0, 8).toUpperCase();
   const cancelledAt = new Date().toISOString();
 
@@ -3166,59 +3041,6 @@ test("Admin xóa được danh mục khi chỉ còn lịch hoặc ca đã hủy"
       ).error,
     );
 
-    assert.ifError(
-      (
-        await admin.supabase.from("shift_templates").insert({
-          id: shiftTemplateId,
-          shift_code: `DEL-${suffix}`,
-          shift_name: "Ca kiểm thử xóa danh mục",
-          start_time: "07:30",
-          end_time: "11:30",
-        })
-      ).error,
-    );
-    assert.ifError(
-      (
-        await admin.supabase.from("staff_shifts").insert({
-          id: shiftId,
-          staff_id: operationalStaff.id,
-          shift_date: "2042-08-22",
-          start_time: "07:30",
-          end_time: "11:30",
-          shift_type: "MORNING",
-          shift_template_id: shiftTemplateId,
-          status: "scheduled",
-          registration_source: "admin_assigned",
-          created_by: admin.user.id,
-        })
-      ).error,
-    );
-
-    const blockedTemplate = await admin.supabase.rpc(
-      "delete_catalog_shift_template",
-      { target_shift_template_id: shiftTemplateId },
-    );
-    assert.ok(blockedTemplate.error);
-    assert.match(blockedTemplate.error.message, /CATALOG_HAS_ACTIVE_SHIFTS/);
-
-    assert.ifError(
-      (
-        await admin.supabase
-          .from("staff_shifts")
-          .update({
-            status: "cancelled",
-            cancelled_by: admin.user.id,
-            cancelled_at: cancelledAt,
-          })
-          .eq("id", shiftId)
-      ).error,
-    );
-    const historyProtectedTemplate = await admin.supabase.rpc(
-      "delete_catalog_shift_template",
-      { target_shift_template_id: shiftTemplateId },
-    );
-    assert.ok(historyProtectedTemplate.error);
-
     for (const [table, id] of [
       ["rooms", roomId],
       ["courses", courseId],
@@ -3232,14 +3054,6 @@ test("Admin xóa được danh mục khi chỉ còn lịch hoặc ca đã hủy"
       assert.equal(data, null);
     }
   } finally {
-    await admin.supabase
-      .from("staff_shifts")
-      .update({ shift_template_id: null })
-      .eq("id", shiftId);
-    await admin.supabase
-      .from("shift_templates")
-      .delete()
-      .eq("id", shiftTemplateId);
     await serviceClient()
       .from("class_schedules")
       .delete()

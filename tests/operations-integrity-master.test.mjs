@@ -165,7 +165,7 @@ test("review correction UI coverage keeps capability, calendar, Root, and reconc
   assert.match(staffShifts, /createAdminClient/);
   assert.match(classSchedules, /list_operational_shift_assignees/);
   assert.doesNotMatch(classSchedules, /directoryRoles/);
-  assert.match(dashboard, /shiftAssignees\.map/);
+  assert.match(dashboard, /shiftAssignees/);
   assert.match(adminActions, /auth_update_outcome_unknown/);
   assert.match(adminActions, /let updateThrew = false/);
   assert.match(
