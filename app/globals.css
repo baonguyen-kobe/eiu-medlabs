@@ -885,16 +885,18 @@ span.filter-control {
   gap: 4px;
 }
 
-.date-nav button {
+.date-nav :is(button, a) {
   height: 31px;
   min-width: 31px;
   display: grid;
   place-items: center;
   padding: 0 8px;
+  color: var(--ink-700);
   background: white;
   border: 1px solid var(--line);
   border-radius: 8px;
   cursor: pointer;
+  text-decoration: none;
 }
 
 .date-nav .today-button {
@@ -961,8 +963,11 @@ span.filter-control {
   border-radius: 9px;
 }
 
-.segmented-control button {
+.segmented-control :is(button, a) {
   height: 27px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 0 9px;
   color: var(--ink-500);
   background: transparent;
@@ -970,9 +975,10 @@ span.filter-control {
   border-radius: 6px;
   cursor: pointer;
   font-size: 9px;
+  text-decoration: none;
 }
 
-.segmented-control button.selected {
+.segmented-control :is(button, a).selected {
   color: var(--ink-950);
   background: white;
   box-shadow: 0 1px 4px rgb(24 52 52 / 12%);
@@ -4478,7 +4484,7 @@ body {
     margin-left: 0;
   }
 
-  .segmented-control button {
+  .segmented-control :is(button, a) {
     flex: 1;
   }
 
@@ -5696,7 +5702,7 @@ select {
 .filter-control,
 .date-nav .today-button,
 .layer-toggle,
-.segmented-control button,
+.segmented-control :is(button, a),
 .kpi-card > span,
 .kpi-card small,
 .period-label span,
@@ -6132,8 +6138,8 @@ body,
     white-space: nowrap;
   }
 
-  .date-nav button,
-  .segmented-control button {
+  .date-nav :is(button, a),
+  .segmented-control :is(button, a) {
     min-height: 40px;
   }
 
@@ -6908,8 +6914,8 @@ body,
 
   .workspace-actions .button,
   .workspace-actions .role-switcher,
-  .date-nav button,
-  .segmented-control button,
+  .date-nav :is(button, a),
+  .segmented-control :is(button, a),
   .shift-nav a,
   .catalog-tabs a {
     min-height: 44px;
@@ -9219,38 +9225,6 @@ body,
   color: var(--eiu-blue, #144069);
 }
 
-.staff-shift-calendar-card {
-  border-radius: 15px;
-}
-
-.staff-shift-calendar-toolbar {
-  gap: 16px;
-  padding: 14px 16px;
-}
-
-.staff-shift-calendar-title {
-  min-width: 0;
-}
-
-.staff-shift-calendar-title > span {
-  color: var(--ink-950);
-  font-size: 15px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.staff-shift-view-switcher a {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 32px;
-  padding: 0 12px;
-  border-radius: 7px;
-  font-size: 13px;
-  font-weight: 650;
-  text-decoration: none;
-}
-
 .shift-calendar-stack {
   border: 0;
   border-radius: 0;
@@ -9401,6 +9375,7 @@ body,
 }
 
 .staff-shift-registration-row {
+  position: relative;
   padding: 12px;
   border-radius: 10px;
 }
@@ -9416,6 +9391,12 @@ body,
 
 .staff-shift-registration-fields {
   display: contents;
+}
+
+.staff-shift-remove-row {
+  position: absolute;
+  top: 4px;
+  right: 4px;
 }
 
 .staff-shift-registration-row .input,
@@ -9483,30 +9464,12 @@ body,
 @media (max-width: 1180px) {
   .staff-shift-registration-row-grid {
     grid-template-columns:
-      minmax(190px, 1fr) minmax(150px, 1fr) minmax(220px, auto)
-      max-content;
-  }
-
-  .staff-shift-registration-row-grid > select {
-    grid-column: 3;
-  }
-
-  .staff-shift-registration-row-grid > .staff-shift-time-line,
-  .staff-shift-registration-row-grid > .staff-shift-time-stack {
-    grid-column: 3;
+      minmax(160px, 1.2fr) minmax(140px, 1fr) minmax(130px, 0.9fr)
+      minmax(190px, 1.15fr) max-content;
   }
 }
 
-@media (max-width: 760px) {
-  .staff-shift-calendar-toolbar {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .staff-shift-view-switcher {
-    align-self: flex-end;
-  }
-
+@media (max-width: 920px) {
   .staff-shift-registration-card {
     padding: 16px;
   }
@@ -9514,12 +9477,6 @@ body,
   .staff-shift-registration-row-grid {
     grid-template-columns: 1fr;
     align-items: stretch;
-  }
-
-  .staff-shift-registration-row-grid > select,
-  .staff-shift-registration-row-grid > .staff-shift-time-line,
-  .staff-shift-registration-row-grid > .staff-shift-time-stack {
-    grid-column: auto;
   }
 }
 

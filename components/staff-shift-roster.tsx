@@ -990,58 +990,51 @@ export function StaffShiftRoster({
       {/* TAB 1: LỊCH TRỰC */}
       {tab === "roster" && (
         <div className="space-y-4">
-          {/* Controls Bar */}
-          <div className="calendar-card staff-shift-calendar-card">
-            <div className="calendar-toolbar staff-shift-calendar-toolbar">
-              <div className="calendar-title staff-shift-calendar-title">
-                <Link
-                  href={`/staff-shifts?tab=roster&view=${view}&date=${previousDate}`}
-                  className="button button-secondary text-xs px-2.5 py-1.5 flex items-center gap-1"
-                  aria-label="Khoảng thời gian trước"
-                >
-                  <ChevronLeft size={16} />
-                  Trước
-                </Link>
-                <Link
-                  href={`/staff-shifts?tab=roster&view=${view}&date=${todayStr}`}
-                  className="button button-secondary text-xs px-2.5 py-1.5"
-                >
-                  Hôm nay
-                </Link>
-                <Link
-                  href={`/staff-shifts?tab=roster&view=${view}&date=${nextDate}`}
-                  className="button button-secondary text-xs px-2.5 py-1.5 flex items-center gap-1"
-                  aria-label="Khoảng thời gian tiếp"
-                >
-                  Tiếp
-                  <ChevronRight size={16} />
-                </Link>
-                <span className="font-semibold text-neutral-800 ml-2">
-                  {periodLabel}
-                </span>
+          <div className="calendar-card">
+            <div className="calendar-toolbar">
+              <div className="calendar-title">
+                <div className="date-nav">
+                  <Link
+                    href={`/staff-shifts?tab=roster&view=${view}&date=${previousDate}`}
+                    aria-label="Kỳ trước"
+                  >
+                    <ChevronLeft size={17} />
+                  </Link>
+                  <Link
+                    href={`/staff-shifts?tab=roster&view=${view}&date=${todayStr}`}
+                    className="today-button"
+                  >
+                    {view === "month" ? "Tháng này" : "Tuần này"}
+                  </Link>
+                  <Link
+                    href={`/staff-shifts?tab=roster&view=${view}&date=${nextDate}`}
+                    aria-label="Kỳ sau"
+                  >
+                    <ChevronRight size={17} />
+                  </Link>
+                </div>
+                <div>
+                  <h3>{periodLabel}</h3>
+                </div>
               </div>
 
-              <div className="segmented-control staff-shift-view-switcher">
-                <Link
-                  href={`/staff-shifts?tab=roster&view=week&date=${anchorDate}`}
-                  className={`transition-colors ${
-                    view === "week"
-                      ? "bg-white text-neutral-900 shadow-xs font-semibold"
-                      : "text-neutral-600 hover:text-neutral-900"
-                  }`}
-                >
-                  Tuần
-                </Link>
-                <Link
-                  href={`/staff-shifts?tab=roster&view=month&date=${anchorDate}`}
-                  className={`transition-colors ${
-                    view === "month"
-                      ? "bg-white text-neutral-900 shadow-xs font-semibold"
-                      : "text-neutral-600 hover:text-neutral-900"
-                  }`}
-                >
-                  Tháng
-                </Link>
+              <div className="calendar-options">
+                <div className="segmented-control">
+                  <Link
+                    href={`/staff-shifts?tab=roster&view=week&date=${anchorDate}`}
+                    className={view === "week" ? "selected" : ""}
+                    aria-current={view === "week" ? "page" : undefined}
+                  >
+                    Tuần
+                  </Link>
+                  <Link
+                    href={`/staff-shifts?tab=roster&view=month&date=${anchorDate}`}
+                    className={view === "month" ? "selected" : ""}
+                    aria-current={view === "month" ? "page" : undefined}
+                  >
+                    Tháng
+                  </Link>
+                </div>
               </div>
             </div>
           </div>
@@ -1809,7 +1802,7 @@ export function StaffShiftRoster({
                                     prev.filter((r) => r.id !== row.id),
                                   )
                                 }
-                                className="p-1.5 text-neutral-400 hover:text-rose-600 rounded transition-colors"
+                                className="staff-shift-remove-row p-1.5 text-neutral-400 hover:text-rose-600 rounded transition-colors"
                                 aria-label="Xóa dòng ngày trực này"
                               >
                                 <Trash2 size={15} />
