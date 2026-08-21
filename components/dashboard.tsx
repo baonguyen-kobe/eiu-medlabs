@@ -326,7 +326,6 @@ export function Dashboard({
   todayDate: string;
   lecturers: PersonOption[];
   rooms?: RoomOption[];
-  shiftAssignees?: PersonOption[];
   calendarKind?: "combined" | "basic_medical";
   roomTypeCodes?: string[];
   allowBasicMedicalAccess?: boolean;

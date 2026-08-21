@@ -59,7 +59,7 @@ Last confirmed applied PR59 production migration set:
   - Source: Staff Shift V2
   - State: IN DEVELOPMENT (FEATURE BRANCH)
   - Production: NOT APPLIED
-  - Reviewed blob: `d2196188057c80d15c4240c99d18d6edded46d38`
+  - Reviewed blob: `a2d1ed0c3fca25c35f04190cc637b9515042ecc9`
 
 IMPORTANT:
 

@@ -1641,10 +1641,6 @@ grant execute on function private.can_create_schedule_entries() to authenticated
 
 revoke execute on function public.claim_class(uuid) from public, anon;
 revoke execute on function public.withdraw_class(uuid) from public, anon;
-revoke execute on function public.register_own_shift(date, time, time, text, uuid, text) from public, anon;
-revoke execute on function public.cancel_own_shift(uuid) from public, anon;
-revoke execute on function public.register_own_shift_pattern(smallint, text, date, date, text) from public, anon;
-revoke execute on function public.cancel_own_shift_pattern(uuid) from public, anon;
 revoke execute on function public.claim_email_notifications(integer) from public, anon, authenticated;
 
 create or replace function public.list_active_people()
@@ -1673,14 +1669,8 @@ grant execute on function public.list_active_people() to authenticated;
 
 grant execute on function public.claim_class(uuid) to authenticated;
 grant execute on function public.withdraw_class(uuid) to authenticated;
-grant execute on function public.register_own_shift(date, time, time, text, uuid, text) to authenticated;
-grant execute on function public.cancel_own_shift(uuid) to authenticated;
-grant execute on function public.register_own_shift_pattern(smallint, text, date, date, text) to authenticated;
-grant execute on function public.cancel_own_shift_pattern(uuid) to authenticated;
 grant execute on function public.claim_email_notifications(integer) to service_role;
 revoke all on function private.snapshot_email_delivery_mode() from public, anon, authenticated;
-revoke all on function private.preserve_staff_shift_history() from public, anon, authenticated;
-revoke all on function private.materialize_shift_pattern(uuid, date) from public, anon, authenticated;
 revoke execute on function public.create_import_schedule_row(
   uuid, integer, text, jsonb, jsonb, public.import_row_status, jsonb, jsonb,
   uuid, text, text, uuid, uuid, date, time, time, text
@@ -1697,8 +1687,6 @@ alter table public.rooms enable row level security;
 alter table public.import_batches enable row level security;
 alter table public.import_rows enable row level security;
 alter table public.class_schedules enable row level security;
-alter table public.shift_templates enable row level security;
-alter table public.staff_shift_patterns enable row level security;
 alter table public.staff_shifts enable row level security;
 alter table public.audit_logs enable row level security;
 alter table public.email_notifications enable row level security;
@@ -1836,7 +1824,7 @@ with check (
 
 create policy staff_shifts_select on public.staff_shifts
 for select to authenticated
-using ((select private.is_active_user()));
+using ((select private.can_operate_skills_shifts((select auth.uid()))));
 
 create policy audit_logs_admin_select on public.audit_logs
 for select to authenticated
@@ -1850,7 +1838,8 @@ grant select on public.profiles, public.user_roles, public.courses, public.rooms
   public.class_schedules, public.staff_shifts to authenticated;
 grant select, insert, update on public.import_batches, public.import_rows to authenticated;
 grant insert, update on public.class_schedules to authenticated;
-grant select on public.staff_shifts to authenticated, anon;
+revoke select on public.staff_shifts from anon, public;
+grant select on public.staff_shifts to authenticated;
 revoke insert, update, delete, truncate on public.staff_shifts from authenticated, anon, public;
 grant all on public.staff_shifts to service_role;
 grant all on public.profiles, public.user_roles, public.courses, public.rooms,

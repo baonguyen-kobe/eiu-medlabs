@@ -796,13 +796,11 @@ drop policy if exists staff_shifts_deny_direct_mutation on public.staff_shifts;
 create policy staff_shifts_select on public.staff_shifts
 for select to authenticated
 using (
-  exists (
-    select 1 from public.profiles p
-    where p.id = (select auth.uid()) and p.is_active = true
-  )
+  (select private.can_operate_skills_shifts((select auth.uid())))
 );
 
 -- Deny direct table mutations for authenticated. Mutations must go through security-definer RPCs.
 revoke insert, update, delete, truncate on public.staff_shifts from authenticated, anon, public;
-grant select on public.staff_shifts to authenticated, anon;
+revoke select on public.staff_shifts from anon, public;
+grant select on public.staff_shifts to authenticated;
 grant all on public.staff_shifts to service_role;

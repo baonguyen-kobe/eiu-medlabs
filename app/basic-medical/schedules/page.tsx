@@ -296,7 +296,6 @@ export default async function BasicMedicalSchedulesPage({
         label: `${room.room_code} · ${room.building_code}`,
         roomTypeId: room.room_type_id,
       }))}
-      shiftAssignees={[]}
       calendarKind="basic_medical"
     />
   );

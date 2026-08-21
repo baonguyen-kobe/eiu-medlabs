@@ -1,5 +1,5 @@
 begin;
-select plan(41);
+select plan(50);
 
 -- Setup test users
 create or replace function pg_temp.setup_test_data() returns void language plpgsql as $$
@@ -8,9 +8,15 @@ declare
   basic_type_id uuid;
   staff_user_id uuid := '11111111-1111-1111-1111-111111111111'::uuid;
   admin_user_id uuid := '22222222-2222-2222-2222-222222222222'::uuid;
+  root_user_id uuid := '33333333-3333-3333-3333-333333333333'::uuid;
   basic_only_id uuid := '44444444-4444-4444-4444-444444444444'::uuid;
   history_mgr_id uuid := '55555555-5555-5555-5555-555555555555'::uuid;
   admin_no_skills_id uuid := '66666666-6666-6666-6666-666666666666'::uuid;
+  lecturer_user_id uuid := '77777777-7777-7777-7777-777777777777'::uuid;
+  teaching_assistant_id uuid := '88888888-8888-8888-8888-888888888888'::uuid;
+  viewer_user_id uuid := '99999999-9999-9999-9999-999999999999'::uuid;
+  staff_no_skills_id uuid := 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid;
+  fixture_shift_id uuid := 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'::uuid;
 begin
   select id into skills_type_id from public.room_types where code = 'nursing_skills';
   select id into basic_type_id from public.room_types where code = 'basic_medical';
@@ -20,9 +26,14 @@ begin
   values
     (staff_user_id, 'staff.skills@eiu.edu.vn'),
     (admin_user_id, 'admin.skills@eiu.edu.vn'),
+    (root_user_id, 'root.staff-shifts@eiu.edu.vn'),
     (basic_only_id, 'basic.staff@eiu.edu.vn'),
     (history_mgr_id, 'history.manager@eiu.edu.vn'),
-    (admin_no_skills_id, 'admin.noskills@eiu.edu.vn')
+    (admin_no_skills_id, 'admin.noskills@eiu.edu.vn'),
+    (lecturer_user_id, 'lecturer.staff-shifts@eiu.edu.vn'),
+    (teaching_assistant_id, 'ta.staff-shifts@eiu.edu.vn'),
+    (viewer_user_id, 'viewer.staff-shifts@eiu.edu.vn'),
+    (staff_no_skills_id, 'staff.noskills@eiu.edu.vn')
   on conflict (id) do nothing;
 
   -- Profiles
@@ -30,26 +41,37 @@ begin
   values
     (staff_user_id, 'staff.skills@eiu.edu.vn', 'Staff Skills User', true, false),
     (admin_user_id, 'admin.skills@eiu.edu.vn', 'Admin Skills User', true, false),
+    (root_user_id, 'root.staff-shifts@eiu.edu.vn', 'Root Staff Shift User', true, false),
     (basic_only_id, 'basic.staff@eiu.edu.vn', 'Basic Medical Staff', true, false),
     (history_mgr_id, 'history.manager@eiu.edu.vn', 'History Manager User', true, true),
-    (admin_no_skills_id, 'admin.noskills@eiu.edu.vn', 'Admin No Skills User', true, false)
+    (admin_no_skills_id, 'admin.noskills@eiu.edu.vn', 'Admin No Skills User', true, false),
+    (lecturer_user_id, 'lecturer.staff-shifts@eiu.edu.vn', 'Lecturer User', true, false),
+    (teaching_assistant_id, 'ta.staff-shifts@eiu.edu.vn', 'Teaching Assistant User', true, false),
+    (viewer_user_id, 'viewer.staff-shifts@eiu.edu.vn', 'Viewer User', true, false),
+    (staff_no_skills_id, 'staff.noskills@eiu.edu.vn', 'Staff No Skills User', true, false)
   on conflict (id) do update set
     email = excluded.email,
     full_name = excluded.full_name,
-    can_manage_shift_history = excluded.can_manage_shift_history;
+    can_manage_shift_history = excluded.can_manage_shift_history,
+    is_active = excluded.is_active;
 
   -- Roles
   insert into public.user_roles (user_id, role, created_by)
   values
     (staff_user_id, 'staff', staff_user_id),
     (admin_user_id, 'admin', admin_user_id),
+    (root_user_id, 'admin', root_user_id),
     (basic_only_id, 'staff', basic_only_id),
     (history_mgr_id, 'admin', history_mgr_id),
-    (admin_no_skills_id, 'admin', admin_no_skills_id)
+    (admin_no_skills_id, 'admin', admin_no_skills_id),
+    (lecturer_user_id, 'lecturer', lecturer_user_id),
+    (teaching_assistant_id, 'teaching_assistant', teaching_assistant_id),
+    (viewer_user_id, 'viewer', viewer_user_id),
+    (staff_no_skills_id, 'staff', staff_no_skills_id)
   on conflict do nothing;
 
   -- Room types
-  delete from public.profile_room_types where profile_id in (staff_user_id, admin_user_id, basic_only_id, history_mgr_id, admin_no_skills_id);
+  delete from public.profile_room_types where profile_id in (staff_user_id, admin_user_id, root_user_id, basic_only_id, history_mgr_id, admin_no_skills_id, lecturer_user_id, teaching_assistant_id, viewer_user_id, staff_no_skills_id);
 
   insert into public.profile_room_types (profile_id, room_type_id, receive_schedule_emails, created_by)
   values
@@ -58,6 +80,21 @@ begin
     (basic_only_id, basic_type_id, false, basic_only_id),
     (history_mgr_id, skills_type_id, false, history_mgr_id),
     (admin_no_skills_id, basic_type_id, false, admin_no_skills_id);
+
+  insert into public.system_security_principals (singleton, root_admin_id, personnel_manager_id, configured_by)
+  values (true, root_user_id, history_mgr_id, root_user_id)
+  on conflict (singleton) do update set
+    root_admin_id = excluded.root_admin_id,
+    personnel_manager_id = excluded.personnel_manager_id,
+    configured_by = excluded.configured_by;
+
+  insert into public.staff_shifts (
+    id, staff_id, shift_date, shift_slot, start_time, end_time,
+    status, registration_source, created_by
+  ) values (
+    fixture_shift_id, staff_user_id, '2099-01-02', 'MORNING', '07:00', '11:00',
+    'scheduled', 'admin_assigned', admin_user_id
+  ) on conflict (id) do nothing;
 end;
 $$;
 
@@ -77,7 +114,35 @@ create or replace function pg_temp.get_root_admin_id() returns uuid language sql
   select root_admin_id from public.system_security_principals where singleton;
 $$;
 
--- 1. Test list_operational_shift_assignees directory
+-- 1-9. Staff Shift SELECT authority follows the canonical operational helper
+select pg_temp.set_test_user('11111111-1111-1111-1111-111111111111'::uuid);
+select ok((select count(*) from public.staff_shifts) > 0, 'Staff with Skills scope can read staff_shifts');
+
+select pg_temp.set_test_user('22222222-2222-2222-2222-222222222222'::uuid);
+select ok((select count(*) from public.staff_shifts) > 0, 'Admin with Skills scope can read staff_shifts');
+
+select pg_temp.set_test_user('33333333-3333-3333-3333-333333333333'::uuid);
+select ok((select count(*) from public.staff_shifts) > 0, 'Root Administrator can read staff_shifts');
+
+select pg_temp.set_test_user('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid);
+select is((select count(*)::integer from public.staff_shifts), 0, 'Staff without Skills scope cannot read staff_shifts');
+
+select pg_temp.set_test_user('66666666-6666-6666-6666-666666666666'::uuid);
+select is((select count(*)::integer from public.staff_shifts), 0, 'Admin without Skills scope cannot read staff_shifts');
+
+select pg_temp.set_test_user('77777777-7777-7777-7777-777777777777'::uuid);
+select is((select count(*)::integer from public.staff_shifts), 0, 'Lecturer cannot read staff_shifts');
+
+select pg_temp.set_test_user('88888888-8888-8888-8888-888888888888'::uuid);
+select is((select count(*)::integer from public.staff_shifts), 0, 'Teaching Assistant cannot read staff_shifts');
+
+select pg_temp.set_test_user('99999999-9999-9999-9999-999999999999'::uuid);
+select is((select count(*)::integer from public.staff_shifts), 0, 'Viewer cannot read staff_shifts');
+
+select pg_temp.set_test_user('44444444-4444-4444-4444-444444444444'::uuid);
+select is((select count(*)::integer from public.staff_shifts), 0, 'Basic-Medical-only user cannot read staff_shifts');
+
+-- 10. Test list_operational_shift_assignees directory
 select pg_temp.set_test_user('11111111-1111-1111-1111-111111111111'::uuid);
 
 select is(
