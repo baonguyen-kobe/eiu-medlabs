@@ -60,3 +60,30 @@ test("CI directs each local Supabase operation to the disposable workdir", () =>
     /seed-local-users\.ps1 -SupabaseWorkdir "\$env:CI_SUPABASE_WORKDIR"/,
   );
 });
+
+test("CI retires only its stale Supabase runtime and always cleans it up", () => {
+  const workflow = readFileSync(
+    new URL("../.github/workflows/ci.yml", import.meta.url),
+    "utf8",
+  );
+  const ciStopCommand =
+    "npx --no-install supabase stop --project-id lich-truc-app-ci --no-backup";
+
+  assert.equal(
+    workflow.split(ciStopCommand).length - 1,
+    2,
+    "CI must stop the CI-only runtime before start and at job end",
+  );
+  assert.match(
+    workflow,
+    /- name: Clean up isolated CI Supabase runtime\n        if: always\(\)/,
+  );
+  assert.match(
+    workflow,
+    /case "\$CI_SUPABASE_WORKDIR" in\n              "\$RUNNER_TEMP"\/lich-truc-app-ci\.\*\)/,
+  );
+  assert.match(workflow, /rm -rf -- "\$CI_SUPABASE_WORKDIR"/);
+  assert.doesNotMatch(workflow, /supabase stop --all/);
+  assert.doesNotMatch(workflow, /supabase stop --project-id lich-truc-app(?:\s|$)/);
+  assert.doesNotMatch(workflow, /\bdocker\s+(?:system\s+prune|container\s+(?:prune|rm)|rm)\b/);
+});
