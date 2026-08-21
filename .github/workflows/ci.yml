@@ -6,8 +6,8 @@ on:
     branches: [main]
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-supabase-runtime
+  cancel-in-progress: false
 
 permissions:
   contents: read

@@ -59,6 +59,36 @@ test("CI directs each local Supabase operation to the disposable workdir", () =>
     workflow,
     /seed-local-users\.ps1 -SupabaseWorkdir "\$env:CI_SUPABASE_WORKDIR"/,
   );
+  assert.equal(
+    workflow.split("seed-local-users.ps1 -SupabaseWorkdir").length - 1,
+    2,
+    "both fixture seed steps must receive the CI workdir",
+  );
+});
+
+test("CI serializes the shared runtime and seed only observes its workdir", () => {
+  const workflow = readFileSync(
+    new URL("../.github/workflows/ci.yml", import.meta.url),
+    "utf8",
+  );
+  const seedScript = readFileSync(
+    new URL("../scripts/seed-local-users.ps1", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    workflow,
+    /concurrency:\n  group: ci-supabase-runtime\n  cancel-in-progress: false/,
+  );
+  assert.match(
+    seedScript,
+    /\[string\]\$SupabaseWorkdir = \$env:CI_SUPABASE_WORKDIR/,
+  );
+  assert.match(
+    seedScript,
+    /supabase status --workdir \$SupabaseWorkdir -o env/,
+  );
+  assert.doesNotMatch(seedScript, /supabase stop/);
 });
 
 test("CI retires only its stale Supabase runtime and always cleans it up", () => {
