@@ -807,8 +807,8 @@ select throws_ok(
           'staff_id', '44444444-4444-4444-4444-444444444444'::uuid,
           'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '2 days')::date,
           'shift_slot', 'MORNING',
-          'start_time', '07:00',
-          'end_time', '11:00'
+          'start_time', '07:30',
+          'end_time', '11:30'
         )
       )
     );
@@ -839,8 +839,8 @@ select throws_ok(
           'staff_id', '11111111-1111-1111-1111-111111111111'::uuid,
           'shift_date', ((now() at time zone 'Asia/Ho_Chi_Minh')::date + interval '2 days')::date,
           'shift_slot', 'MORNING',
-          'start_time', '07:00',
-          'end_time', '11:00'
+          'start_time', '07:30',
+          'end_time', '11:30'
         )
       )
     );
