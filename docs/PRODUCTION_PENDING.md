@@ -1,6 +1,6 @@
 # Production Pending Ledger
 
-Last updated: 2026-08-20
+Last updated: 2026-08-21
 
 > This document is an informational production-debt ledger only.
 >
@@ -56,8 +56,8 @@ Last confirmed applied PR59 production migration set:
   - Reviewed blob: `0c20d83348500c1460eba3906e5cf4540e70e5d2`
 
 - [ ] `20260820180000_staff_shifts_v2_redesign.sql`
-  - Source: Staff Shift V2
-  - State: IN DEVELOPMENT (FEATURE BRANCH)
+  - Source: PR #68
+  - State: MERGED TO MAIN
   - Production: NOT APPLIED
   - Reviewed blob: `a2d1ed0c3fca25c35f04190cc637b9515042ecc9`
 
@@ -88,7 +88,7 @@ Known merged work not yet represented by the production app includes:
 - PR #65 — self-hosted forgot-password E2E stabilization
 - PR #66 — guarded PR62/PR64 production migration rail
 - PR #67 — production pending ledger documentation
-- Feature `feature/staff-shift-v2-20260820` — Staff Shift V2 redesign (in development)
+- PR #68 — Staff Shift V2 redesign
 
 NOTE:
 
