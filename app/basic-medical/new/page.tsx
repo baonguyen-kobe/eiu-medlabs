@@ -54,6 +54,7 @@ type SourceRegistration = {
   note: string | null;
   registrant: { full_name: string; email: string } | null;
   sessions: Array<{
+    id: string;
     session_number: number;
     lesson_title: string;
     teaching_lecturer_id: string;
@@ -66,7 +67,7 @@ type SourceRegistration = {
 };
 
 const sourceRegistrationSelect =
-  "id,registration_code,created_at,created_by,registrant_id,responsible_lecturer_id,academic_year,semester,start_date,end_date,course_id,room_id,student_count,note,registrant:profiles!basic_medical_registrations_registrant_id_fkey(full_name,email),sessions:basic_medical_registration_sessions(session_number,lesson_title,teaching_lecturer_id,schedule:class_schedules(schedule_date,start_time,end_time))";
+  "id,registration_code,created_at,created_by,registrant_id,responsible_lecturer_id,academic_year,semester,start_date,end_date,course_id,room_id,student_count,note,registrant:profiles!basic_medical_registrations_registrant_id_fkey(full_name,email),sessions:basic_medical_registration_sessions(id,session_number,lesson_title,teaching_lecturer_id,schedule:class_schedules(schedule_date,start_time,end_time))";
 
 function registrationOptionLabel(option: RegistrationOption) {
   const dateRange = `${option.start_date.split("-").reverse().join("/")}–${option.end_date.split("-").reverse().join("/")}`;
@@ -192,6 +193,7 @@ function buildInitialData(
   const sessions = [...source.sessions]
     .sort((a, b) => a.session_number - b.session_number)
     .map((session) => ({
+      sessionId: mode === "edit" ? session.id : undefined,
       date: mode === "copy" ? "" : (session.schedule?.schedule_date ?? ""),
       startTime: session.schedule?.start_time.slice(0, 5) ?? "",
       endTime: session.schedule?.end_time.slice(0, 5) ?? "",
