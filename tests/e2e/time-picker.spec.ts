@@ -676,8 +676,18 @@ test.describe("Shared Custom Time Picker E2E Verification", () => {
       timePickerPopover.getByRole("option", { name: "07" }),
     ).toBeVisible();
     await expect(
+      timePickerPopover.getByRole("option", { name: "11" }),
+    ).toBeVisible();
+    await expect(
       timePickerPopover.getByRole("option", { name: "13" }),
     ).toHaveCount(0);
+    await timePickerPopover.getByRole("option", { name: "11" }).click();
+    await expect(
+      timePickerPopover.getByRole("option", { name: "00" }),
+    ).toBeVisible();
+    await expect(
+      timePickerPopover.getByRole("option", { name: "30" }),
+    ).toBeVisible();
     await page.keyboard.press("Escape");
 
     await slotSelect.selectOption("AFTERNOON");
@@ -690,8 +700,18 @@ test.describe("Shared Custom Time Picker E2E Verification", () => {
       timePickerPopover.getByRole("option", { name: "13" }),
     ).toBeVisible();
     await expect(
+      timePickerPopover.getByRole("option", { name: "12" }),
+    ).toBeVisible();
+    await expect(
       timePickerPopover.getByRole("option", { name: "07" }),
     ).toHaveCount(0);
+    await timePickerPopover.getByRole("option", { name: "16" }).click();
+    await expect(
+      timePickerPopover.getByRole("option", { name: "00" }),
+    ).toBeVisible();
+    await expect(
+      timePickerPopover.getByRole("option", { name: "30" }),
+    ).toBeVisible();
     await page.keyboard.press("Escape");
 
     await slotSelect.selectOption("ALL_DAY");

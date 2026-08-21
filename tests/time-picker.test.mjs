@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   DEFAULT_TIME_PICKER_ALLOWED_VALUES,
+  AFTERNOON_SHIFT_ALLOWED_TIMES,
+  MORNING_SHIFT_ALLOWED_TIMES,
   TIME_PICKER_HOURS,
   TIME_PICKER_MINUTES,
   getDefaultInvalidMessage,
@@ -41,6 +43,41 @@ test("DEFAULT_TIME_PICKER_ALLOWED_VALUES contains 26 slots from 07:00 to 19:30",
   assert.equal(DEFAULT_TIME_PICKER_ALLOWED_VALUES.length, 26);
   assert.equal(DEFAULT_TIME_PICKER_ALLOWED_VALUES[0], "07:00");
   assert.equal(DEFAULT_TIME_PICKER_ALLOWED_VALUES[25], "19:30");
+});
+
+test("staff shifts use explicit canonical new-write windows", () => {
+  assert.deepEqual(MORNING_SHIFT_ALLOWED_TIMES, [
+    "07:30",
+    "08:00",
+    "08:30",
+    "09:00",
+    "09:30",
+    "10:00",
+    "10:30",
+    "11:00",
+    "11:30",
+  ]);
+  assert.deepEqual(AFTERNOON_SHIFT_ALLOWED_TIMES, [
+    "12:30",
+    "13:00",
+    "13:30",
+    "14:00",
+    "14:30",
+    "15:00",
+    "15:30",
+    "16:00",
+    "16:30",
+  ]);
+  assert.equal(isValidTime("07:00", MORNING_SHIFT_ALLOWED_TIMES), false);
+  assert.equal(isValidTime("12:30", AFTERNOON_SHIFT_ALLOWED_TIMES), true);
+  assert.deepEqual(getMinutesForHour("11", MORNING_SHIFT_ALLOWED_TIMES), [
+    "00",
+    "30",
+  ]);
+  assert.deepEqual(getMinutesForHour("16", AFTERNOON_SHIFT_ALLOWED_TIMES), [
+    "00",
+    "30",
+  ]);
 });
 
 test("isValidTime accepts all canonical valid time strings (07:00 to 19:30 in 30min steps)", () => {

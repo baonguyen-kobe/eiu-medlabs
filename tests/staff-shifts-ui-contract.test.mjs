@@ -10,6 +10,21 @@ const styles = readFileSync(
   new URL("../app/globals.css", import.meta.url),
   "utf8",
 );
+const timeUtils = readFileSync(
+  new URL("../lib/time-picker-utils.ts", import.meta.url),
+  "utf8",
+);
+const staffShiftSchema = readFileSync(
+  new URL("../supabase/schemas/01_app.sql", import.meta.url),
+  "utf8",
+);
+const staffShiftMigration = readFileSync(
+  new URL(
+    "../supabase/migrations/20260821100000_staff_shift_canonical_write_windows.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 const registrationSource = source.slice(
   source.indexOf("{/* TAB 2: ĐĂNG KÝ LỊCH TRỰC */}"),
   source.indexOf("{/* DIALOG 1:"),
@@ -31,9 +46,7 @@ test("staff shifts uses the shared seven-column month calendar structure", () =>
 
 test("staff shifts week roster uses the shared period calendar structure", () => {
   const weekCalendarSource = source.slice(
-    source.indexOf(
-      'className="period-calendar period-calendar-week staff-shift-period-calendar"',
-    ),
+    source.indexOf('aria-label="Lịch trực theo tuần'),
     source.indexOf("{/* TAB 2:"),
   );
 
@@ -43,10 +56,15 @@ test("staff shifts week roster uses the shared period calendar structure", () =>
     weekCalendarSource,
     /className="period-calendar period-calendar-week staff-shift-period-calendar"/,
   );
+  assert.match(
+    weekCalendarSource,
+    /aria-label="Lịch trực theo tuần[^\n]*"[\s\S]*className="period-calendar period-calendar-week staff-shift-period-calendar"[\s\S]*role="region"/,
+  );
   assert.match(weekCalendarSource, /className="period-grid"/);
   assert.match(weekCalendarSource, /className={`period-day-heading/);
   assert.match(weekCalendarSource, /period-label period-label-shift/);
   assert.match(weekCalendarSource, /period-cell period-cell-shift/);
+  assert.match(weekCalendarSource, /period-corner">BUỔI/);
   const periodDefinition = source.slice(
     source.indexOf("const staffShiftPeriods = ["),
     source.indexOf("function getDayOfWeekLabel"),
@@ -56,6 +74,13 @@ test("staff shifts week roster uses the shared period calendar structure", () =>
     ["MORNING", "AFTERNOON"],
   );
   assert.doesNotMatch(weekCalendarSource, /L\u1ecbch h\u1ecdc/);
+  assert.doesNotMatch(weekCalendarSource, /<small>\{range\}<\/small>/);
+  assert.match(source, /className="slot-events staff-shift-slot-content"/);
+  assert.match(source, /className="slot-event slot-event-shift"/);
+  assert.match(
+    source,
+    /<div className="calendar-card">[\s\S]*calendar-toolbar[\s\S]*period-calendar/,
+  );
 });
 
 test("staff shift registration exposes only constrained shift slots and times", () => {
@@ -65,6 +90,9 @@ test("staff shift registration exposes only constrained shift slots and times", 
   assert.match(source, /MORNING_SHIFT_ALLOWED_TIMES/);
   assert.match(source, /AFTERNOON_SHIFT_ALLOWED_TIMES/);
   assert.match(source, /staff-shift-time-stack/);
+  assert.match(timeUtils, /"07:30"[\s\S]*"11:30"/);
+  assert.match(timeUtils, /"12:30"[\s\S]*"16:30"/);
+  assert.doesNotMatch(timeUtils, /MORNING_SHIFT_ALLOWED_TIMES[\s\S]*"07:00"/);
 });
 
 test("staff shifts roster uses the shared date navigation pattern", () => {
@@ -131,4 +159,61 @@ test("all-day registration stacks only the time column and keeps delete in-row",
   );
   assert.doesNotMatch(source, /staff-shift-remove-row/);
   assert.doesNotMatch(registrationStyles, /position:\s*absolute/);
+});
+
+test("staff shift quick-add actions stay subtle and keyboard reachable", () => {
+  assert.match(
+    source,
+    /className="empty-shift-action staff-shift-empty-action"/,
+  );
+  assert.match(styles, /\.staff-shift-empty-action\s*\{[\s\S]*opacity:\s*0/);
+  assert.match(styles, /\.period-cell:focus-within \.staff-shift-empty-action/);
+  assert.doesNotMatch(
+    styles,
+    /\.staff-shift-empty-action\s*\{[\s\S]*border:\s*1px dashed/,
+  );
+  assert.match(
+    styles,
+    /@media \(max-width: 640px\), \(hover: none\), \(pointer: coarse\)[\s\S]*\.staff-shift-empty-action\s*\{[\s\S]*opacity:\s*1/,
+  );
+});
+
+test("staff shift week region is its own mobile scroll viewport", () => {
+  assert.match(
+    styles,
+    /\.staff-shift-period-calendar,[\s\S]*\.staff-shift-month-calendar\s*\{[\s\S]*width:\s*100%[\s\S]*max-width:\s*100%[\s\S]*overflow-x:\s*auto/,
+  );
+  assert.match(styles, /\.period-week\s*\{[\s\S]*min-width:\s*1120px/);
+  assert.match(
+    styles,
+    /\.period-grid > \.period-label\s*\{[\s\S]*position:\s*sticky[\s\S]*left:\s*0/,
+  );
+});
+
+test("staff shift writes use canonical windows with unchanged legacy protection", () => {
+  assert.match(
+    staffShiftSchema,
+    /start_time >= '07:00'::time[\s\S]*end_time <= '11:30'::time/,
+  );
+  assert.match(
+    staffShiftSchema,
+    /start_time >= '12:30'::time[\s\S]*end_time <= '16:30'::time/,
+  );
+  assert.match(
+    staffShiftSchema,
+    /target_start < '07:30'::time or target_end > '11:30'::time/,
+  );
+  assert.match(
+    staffShiftSchema,
+    /target_start < '12:30'::time or target_end > '16:30'::time/,
+  );
+  assert.match(
+    staffShiftSchema,
+    /target_start_time <> target_shift\.start_time or target_end_time <> target_shift\.end_time/,
+  );
+  assert.match(staffShiftMigration, /STAFF_SHIFT_RPC_DRIFT/);
+  assert.doesNotMatch(
+    staffShiftMigration,
+    /20260820180000_staff_shifts_v2_redesign\.sql/,
+  );
 });

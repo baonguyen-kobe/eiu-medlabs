@@ -96,8 +96,8 @@ const weekdayFullNames = [
 ];
 
 const staffShiftPeriods = [
-  ["MORNING", "S\u00e1ng", "07:00\u201311:00"],
-  ["AFTERNOON", "Chi\u1ec1u", "13:00\u201316:00"],
+  ["MORNING", "S\u00e1ng"],
+  ["AFTERNOON", "Chi\u1ec1u"],
 ] as const;
 
 function getDayOfWeekLabel(dateStr: string): string {
@@ -132,10 +132,10 @@ function generateWeekRows(
       included: false,
       selectedAssigneeIds: [...defaultAssigneeIds],
       slotOption: "MORNING",
-      morningStartTime: "07:00",
-      morningEndTime: "11:00",
-      afternoonStartTime: "13:00",
-      afternoonEndTime: "16:00",
+      morningStartTime: "07:30",
+      morningEndTime: "11:30",
+      afternoonStartTime: "12:30",
+      afternoonEndTime: "16:30",
     });
   }
   return generated;
@@ -469,10 +469,10 @@ export function StaffShiftRoster({
       date: todayStr,
       selectedAssigneeIds: [...defaultAssigneeIds],
       slotOption: "MORNING",
-      morningStartTime: "07:00",
-      morningEndTime: "11:00",
-      afternoonStartTime: "13:00",
-      afternoonEndTime: "16:00",
+      morningStartTime: "07:30",
+      morningEndTime: "11:30",
+      afternoonStartTime: "12:30",
+      afternoonEndTime: "16:30",
     },
   ]);
 
@@ -820,10 +820,10 @@ export function StaffShiftRoster({
               date: todayStr,
               selectedAssigneeIds: [...defaultAssigneeIds],
               slotOption: "MORNING",
-              morningStartTime: "07:00",
-              morningEndTime: "11:00",
-              afternoonStartTime: "13:00",
-              afternoonEndTime: "16:00",
+              morningStartTime: "07:30",
+              morningEndTime: "11:30",
+              afternoonStartTime: "12:30",
+              afternoonEndTime: "16:30",
             },
           ]);
         }
@@ -863,14 +863,11 @@ export function StaffShiftRoster({
       (isAdmin || (canSelfRegister && !isUserInSlot));
 
     return (
-      <div className="staff-shift-slot-content">
+      <div className="slot-events staff-shift-slot-content">
         {activeShifts.map((shift) => {
           const isMe = shift.staff_id === userId;
           return (
-            <article
-              className={`staff-shift-event ${isMe ? "is-me" : ""}`}
-              key={shift.id}
-            >
+            <article className="slot-event slot-event-shift" key={shift.id}>
               <div>
                 <strong>{shift.staffName}</strong>
                 <time>
@@ -915,7 +912,7 @@ export function StaffShiftRoster({
         })}
         {canAdd && (
           <button
-            className="staff-shift-empty-action"
+            className="empty-shift-action staff-shift-empty-action"
             type="button"
             onClick={() =>
               setQuickRegisterModal({
@@ -923,8 +920,8 @@ export function StaffShiftRoster({
                 date,
                 slot,
                 selectedAssigneeIds: isAdmin ? [] : [userId],
-                startTime: slot === "MORNING" ? "07:00" : "13:00",
-                endTime: slot === "MORNING" ? "11:00" : "16:00",
+                startTime: slot === "MORNING" ? "07:30" : "12:30",
+                endTime: slot === "MORNING" ? "11:30" : "16:30",
                 note: "",
                 historicalReason: "",
               })
@@ -1045,19 +1042,14 @@ export function StaffShiftRoster({
                 </div>
               </div>
             </div>
-          </div>
-
-          {/* Calendar Grid with Accessible role="region" */}
-          <div
-            className="shift-calendar-stack bg-white rounded-xl border border-neutral-200 overflow-x-auto shadow-xs w-full max-w-full min-w-0"
-            role="region"
-            aria-label={
-              view === "month" ? "Lịch trực theo tháng" : "Lịch trực theo tuần"
-            }
-            tabIndex={0}
-          >
+            {/* Calendar Grid */}
             {view === "month" ? (
-              <div className="period-calendar period-calendar-month staff-shift-month-calendar">
+              <div
+                aria-label="Lịch trực theo tháng; vuốt ngang để xem thêm ngày"
+                className="period-calendar period-calendar-month staff-shift-month-calendar"
+                role="region"
+                tabIndex={0}
+              >
                 {monthWeeks.map((week, weekIndex) => (
                   <section className="period-week" key={week[0] ?? weekIndex}>
                     <div
@@ -1068,14 +1060,16 @@ export function StaffShiftRoster({
                         } as React.CSSProperties
                       }
                     >
-                      <div className="period-corner">Ca trực</div>
+                      <div className="period-corner">BUỔI</div>
                       {week.map((date) => {
                         const isToday = date === todayStr;
+                        const isSunday =
+                          getDayOfWeekLabel(date) === weekdayFullNames[0];
                         const isOutsideMonth =
                           date.slice(0, 7) !== anchorDate.slice(0, 7);
                         return (
                           <header
-                            className={`period-day-heading ${isToday ? "is-today" : ""} ${isOutsideMonth ? "is-outside-month" : ""}`}
+                            className={`period-day-heading ${isToday ? "is-today" : ""} ${isSunday ? "is-sunday" : ""} ${isOutsideMonth ? "is-outside-month" : ""}`}
                             key={date}
                           >
                             <span>{getDayOfWeekLabel(date)}</span>
@@ -1083,16 +1077,15 @@ export function StaffShiftRoster({
                           </header>
                         );
                       })}
-                      {staffShiftPeriods.map(([slot, label, range]) => (
+                      {staffShiftPeriods.map(([slot, label]) => (
                         <Fragment key={slot}>
                           <div className="period-label period-label-shift staff-shift-period-label">
-                            <span>Ca trực</span>
+                            <span>Lịch trực</span>
                             <strong>{label}</strong>
-                            <small>{range}</small>
                           </div>
                           {week.map((date) => (
                             <div
-                              className={`period-cell period-cell-shift ${date === todayStr ? "is-today" : ""} ${date.slice(0, 7) !== anchorDate.slice(0, 7) ? "is-outside-month" : ""}`}
+                              className={`period-cell period-cell-shift ${date === todayStr ? "is-today" : ""} ${getDayOfWeekLabel(date) === weekdayFullNames[0] ? "is-sunday" : ""} ${date.slice(0, 7) !== anchorDate.slice(0, 7) ? "is-outside-month" : ""}`}
                               key={`${slot}-${date}`}
                             >
                               {renderShiftSlot(date, slot)}
@@ -1105,7 +1098,12 @@ export function StaffShiftRoster({
                 ))}
               </div>
             ) : (
-              <div className="period-calendar period-calendar-week staff-shift-period-calendar">
+              <div
+                aria-label="Lịch trực theo tuần; vuốt ngang để xem thêm ngày"
+                className="period-calendar period-calendar-week staff-shift-period-calendar"
+                role="region"
+                tabIndex={0}
+              >
                 <section className="period-week">
                   <div
                     className="period-grid"
@@ -1115,7 +1113,7 @@ export function StaffShiftRoster({
                       } as React.CSSProperties
                     }
                   >
-                    <div className="period-corner">Ca trực</div>
+                    <div className="period-corner">BUỔI</div>
                     {days.map((date) => {
                       const isToday = date === todayStr;
                       const isSunday =
@@ -1130,12 +1128,11 @@ export function StaffShiftRoster({
                         </header>
                       );
                     })}
-                    {staffShiftPeriods.map(([slot, label, range]) => (
+                    {staffShiftPeriods.map(([slot, label]) => (
                       <Fragment key={slot}>
                         <div className="period-label period-label-shift staff-shift-period-label">
                           <span>Lịch trực</span>
                           <strong>{label}</strong>
-                          <small>{range}</small>
                         </div>
                         {days.map((date) => {
                           const isToday = date === todayStr;
@@ -1329,10 +1326,10 @@ export function StaffShiftRoster({
                                 className="input text-xs py-1 px-2 font-medium"
                               >
                                 <option value="MORNING">
-                                  Sáng (07:00 – 11:00)
+                                  Sáng (07:30 – 11:30)
                                 </option>
                                 <option value="AFTERNOON">
-                                  Chiều (13:00 – 16:00)
+                                  Chiều (12:30 – 16:30)
                                 </option>
                                 <option value="ALL_DAY">
                                   Cả ngày (Sáng + Chiều)
@@ -1394,10 +1391,10 @@ export function StaffShiftRoster({
                           date: todayStr,
                           selectedAssigneeIds: [...defaultAssigneeIds],
                           slotOption: "MORNING",
-                          morningStartTime: "07:00",
-                          morningEndTime: "11:00",
-                          afternoonStartTime: "13:00",
-                          afternoonEndTime: "16:00",
+                          morningStartTime: "07:30",
+                          morningEndTime: "11:30",
+                          afternoonStartTime: "12:30",
+                          afternoonEndTime: "16:30",
                         },
                       ])
                     }
@@ -1475,10 +1472,10 @@ export function StaffShiftRoster({
                               className="input text-xs py-1 px-2 font-medium"
                             >
                               <option value="MORNING">
-                                Sáng (07:00 – 11:00)
+                                Sáng (07:30 – 11:30)
                               </option>
                               <option value="AFTERNOON">
-                                Chiều (13:00 – 16:00)
+                                Chiều (12:30 – 16:30)
                               </option>
                               <option value="ALL_DAY">
                                 Cả ngày (Sáng + Chiều)
@@ -1838,8 +1835,8 @@ export function StaffShiftRoster({
                 <label className="block text-xs font-semibold text-neutral-700">
                   Giờ trực (trong khung giờ buổi{" "}
                   {editShiftModal.shift.shift_slot === "MORNING"
-                    ? "07:00–11:00"
-                    : "13:00–16:00"}
+                    ? "07:30–11:30"
+                    : "12:30–16:30"}
                   ):
                 </label>
                 <div className="flex items-center gap-2">

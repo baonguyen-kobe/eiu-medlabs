@@ -17,7 +17,6 @@ export const TIME_PICKER_HOURS = [
 export const TIME_PICKER_MINUTES = ["00", "30"] as const;
 
 export const MORNING_SHIFT_ALLOWED_TIMES: readonly string[] = [
-  "07:00",
   "07:30",
   "08:00",
   "08:30",
@@ -26,9 +25,11 @@ export const MORNING_SHIFT_ALLOWED_TIMES: readonly string[] = [
   "10:00",
   "10:30",
   "11:00",
+  "11:30",
 ];
 
 export const AFTERNOON_SHIFT_ALLOWED_TIMES: readonly string[] = [
+  "12:30",
   "13:00",
   "13:30",
   "14:00",
@@ -36,6 +37,7 @@ export const AFTERNOON_SHIFT_ALLOWED_TIMES: readonly string[] = [
   "15:00",
   "15:30",
   "16:00",
+  "16:30",
 ];
 
 /**

@@ -253,7 +253,7 @@ create table public.staff_shifts (
     shift_slot <> 'MORNING' or (
       start_time >= '07:00'::time
       and start_time < end_time
-      and end_time <= '11:00'::time
+      and end_time <= '11:30'::time
       and extract(minute from start_time)::integer in (0, 30)
       and extract(second from start_time)::integer = 0
       and extract(minute from end_time)::integer in (0, 30)
@@ -262,9 +262,9 @@ create table public.staff_shifts (
   ),
   constraint staff_shifts_afternoon_time_check check (
     shift_slot <> 'AFTERNOON' or (
-      start_time >= '13:00'::time
+      start_time >= '12:30'::time
       and start_time < end_time
-      and end_time <= '16:00'::time
+      and end_time <= '16:30'::time
       and extract(minute from start_time)::integer in (0, 30)
       and extract(second from start_time)::integer = 0
       and extract(minute from end_time)::integer in (0, 30)
@@ -1174,16 +1174,16 @@ begin
 
     -- Slot-specific time rules
     if target_slot = 'MORNING' then
-      if target_start < '07:00'::time or target_end > '11:00'::time or
+      if target_start < '07:30'::time or target_end > '11:30'::time or
          extract(minute from target_start)::integer not in (0, 30) or extract(second from target_start)::integer <> 0 or
          extract(minute from target_end)::integer not in (0, 30) or extract(second from target_end)::integer <> 0 then
-        raise exception 'INVALID_MORNING_TIME: Morning shift must be within 07:00-11:00 on 30-minute grid' using errcode = '22023';
+        raise exception 'INVALID_MORNING_TIME: Morning shift must be within 07:30-11:30 on 30-minute grid' using errcode = '22023';
       end if;
     elsif target_slot = 'AFTERNOON' then
-      if target_start < '13:00'::time or target_end > '16:00'::time or
+      if target_start < '12:30'::time or target_end > '16:30'::time or
          extract(minute from target_start)::integer not in (0, 30) or extract(second from target_start)::integer <> 0 or
          extract(minute from target_end)::integer not in (0, 30) or extract(second from target_end)::integer <> 0 then
-        raise exception 'INVALID_AFTERNOON_TIME: Afternoon shift must be within 13:00-16:00 on 30-minute grid' using errcode = '22023';
+        raise exception 'INVALID_AFTERNOON_TIME: Afternoon shift must be within 12:30-16:30 on 30-minute grid' using errcode = '22023';
       end if;
     end if;
 
@@ -1461,16 +1461,20 @@ begin
 
   -- Slot rule enforcement
   if target_shift.shift_slot = 'MORNING' then
-    if target_start_time < '07:00'::time or target_end_time > '11:00'::time or
+    if (target_start_time <> target_shift.start_time or target_end_time <> target_shift.end_time) and (
+       target_start_time < '07:30'::time or target_end_time > '11:30'::time or
        extract(minute from target_start_time)::integer not in (0, 30) or extract(second from target_start_time)::integer <> 0 or
-       extract(minute from target_end_time)::integer not in (0, 30) or extract(second from target_end_time)::integer <> 0 then
-      raise exception 'INVALID_MORNING_TIME: Morning shift must be within 07:00-11:00 on 30-minute grid' using errcode = '22023';
+       extract(minute from target_end_time)::integer not in (0, 30) or extract(second from target_end_time)::integer <> 0
+    ) then
+      raise exception 'INVALID_MORNING_TIME: Morning shift must be within 07:30-11:30 on 30-minute grid' using errcode = '22023';
     end if;
   elsif target_shift.shift_slot = 'AFTERNOON' then
-    if target_start_time < '13:00'::time or target_end_time > '16:00'::time or
+    if (target_start_time <> target_shift.start_time or target_end_time <> target_shift.end_time) and (
+       target_start_time < '12:30'::time or target_end_time > '16:30'::time or
        extract(minute from target_start_time)::integer not in (0, 30) or extract(second from target_start_time)::integer <> 0 or
-       extract(minute from target_end_time)::integer not in (0, 30) or extract(second from target_end_time)::integer <> 0 then
-      raise exception 'INVALID_AFTERNOON_TIME: Afternoon shift must be within 13:00-16:00 on 30-minute grid' using errcode = '22023';
+       extract(minute from target_end_time)::integer not in (0, 30) or extract(second from target_end_time)::integer <> 0
+    ) then
+      raise exception 'INVALID_AFTERNOON_TIME: Afternoon shift must be within 12:30-16:30 on 30-minute grid' using errcode = '22023';
     end if;
   end if;
 

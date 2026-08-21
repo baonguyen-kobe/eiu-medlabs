@@ -1580,6 +1580,12 @@ span.filter-control {
   padding: 10px;
 }
 
+.period-grid > .period-label {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+}
+
 .period-label span {
   color: var(--ink-500);
   font-size: 10px;
@@ -4715,95 +4721,6 @@ body {
   align-items: center;
   gap: 5px;
   color: var(--eiu-red);
-}
-
-.period-grid-shifts {
-  --calendar-day-count: 7;
-}
-
-.period-row-fragment {
-  display: contents;
-}
-
-.shift-calendar-stack {
-  display: grid;
-  gap: 16px;
-}
-
-.shift-calendar-stack .period-calendar {
-  overflow-x: auto;
-  background: var(--surface);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
-}
-
-.shift-calendar-stack .period-grid {
-  min-width: 1120px;
-}
-
-.shift-calendar-stack .period-cell {
-  min-height: 108px;
-  padding: 5px;
-}
-
-.calendar-event {
-  width: 100%;
-  display: grid;
-  gap: 2px;
-  padding: 8px;
-  color: var(--eiu-purple);
-  background: #ecebfa;
-  border: 0;
-  border-left: 3px solid var(--eiu-purple);
-  border-radius: 8px;
-  font: inherit;
-  text-align: left;
-}
-
-.calendar-event:not(:disabled) {
-  cursor: pointer;
-}
-
-.calendar-event:not(:disabled):hover {
-  background: #e3e0f6;
-}
-
-.calendar-event:disabled {
-  opacity: 1;
-}
-
-.calendar-event small,
-.calendar-event span {
-  font-size: 12px;
-}
-
-.calendar-event strong {
-  font-size: 14px;
-}
-
-.empty-shift-action {
-  width: 100%;
-  height: 100%;
-  min-height: 94px;
-  display: grid;
-  place-items: center;
-  align-content: center;
-  gap: 5px;
-  color: var(--ink-500);
-  background: transparent;
-  border: 1px dashed transparent;
-  border-radius: 8px;
-  font-size: 12px;
-  cursor: pointer;
-  opacity: 0;
-}
-
-.period-cell:hover .empty-shift-action,
-.empty-shift-action:focus-visible {
-  color: var(--eiu-blue);
-  border-color: var(--eiu-blue);
-  opacity: 1;
 }
 
 .shift-editor-layer {
@@ -9225,57 +9142,6 @@ body,
   color: var(--eiu-blue, #144069);
 }
 
-.shift-calendar-stack {
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-}
-
-.staff-shift-period-label small {
-  color: var(--ink-500);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-
-.staff-shift-slot-content {
-  display: grid;
-  gap: 4px;
-  min-height: 56px;
-  padding: 6px;
-}
-
-.staff-shift-event {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 4px;
-  padding: 6px 8px;
-  color: var(--violet-700);
-  background: var(--violet-100);
-  border: 1px solid color-mix(in srgb, var(--violet-700) 18%, transparent);
-  border-radius: 8px;
-  font-size: 12px;
-  line-height: 1.35;
-}
-
-.staff-shift-event.is-me {
-  color: var(--teal-700);
-  background: var(--teal-100);
-  border-color: color-mix(in srgb, var(--teal-700) 18%, transparent);
-}
-
-.staff-shift-event strong,
-.staff-shift-event time {
-  display: block;
-}
-
-.staff-shift-event time {
-  margin-top: 2px;
-  color: var(--ink-600);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-
 .staff-shift-event-actions {
   display: inline-flex;
   flex: none;
@@ -9303,14 +9169,44 @@ body,
   width: 100%;
   gap: 4px;
   color: var(--ink-500);
-  border: 1px dashed var(--line-strong);
+  border: 1px solid transparent;
+  opacity: 0;
   font-size: 12px;
   font-weight: 650;
+  transition:
+    color 160ms ease,
+    background 160ms ease,
+    opacity 160ms ease;
 }
 
-.staff-shift-empty-action:hover {
-  color: var(--teal-700);
-  background: var(--teal-100);
+.period-cell:hover .staff-shift-empty-action,
+.period-cell:focus-within .staff-shift-empty-action {
+  color: var(--violet-700);
+  background: var(--violet-100);
+  opacity: 1;
+}
+
+.staff-shift-empty-action:focus-visible {
+  opacity: 1;
+}
+
+/* The calendar itself owns horizontal scrolling. Narrow and touch layouts
+   keep Quick Add discoverable without making it a permanent desktop affordance. */
+.staff-shift-period-calendar,
+.staff-shift-month-calendar {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+
+@media (max-width: 640px), (hover: none), (pointer: coarse) {
+  .staff-shift-empty-action {
+    color: var(--violet-700);
+    background: var(--violet-100);
+    opacity: 1;
+  }
 }
 
 .staff-shift-registration-card {

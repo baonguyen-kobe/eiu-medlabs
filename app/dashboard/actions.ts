@@ -87,10 +87,10 @@ function friendlyDatabaseError(message: string): string {
     return "Nhân sự đã có ca trực đang hoạt động trong khung giờ này.";
   }
   if (message.includes("INVALID_MORNING_TIME")) {
-    return "Ca sáng phải nằm trong khoảng 07:00–11:00 và theo bước 30 phút.";
+    return "Ca sáng phải nằm trong khoảng 07:30–11:30 và theo bước 30 phút.";
   }
   if (message.includes("INVALID_AFTERNOON_TIME")) {
-    return "Ca chiều phải nằm trong khoảng 13:00–16:00 và theo bước 30 phút.";
+    return "Ca chiều phải nằm trong khoảng 12:30–16:30 và theo bước 30 phút.";
   }
   if (message.includes("ASSIGNEE_NOT_ELIGIBLE")) {
     return "Nhân sự được chọn không thuộc danh sách trực Skills Lab.";
