@@ -869,10 +869,11 @@ export function StaffShiftRoster({
           return (
             <article className="slot-event slot-event-shift" key={shift.id}>
               <div>
-                <strong>{shift.staffName}</strong>
                 <time>
                   {shift.start_time.slice(0, 5)}–{shift.end_time.slice(0, 5)}
                 </time>
+                <strong>{shift.staffName}</strong>
+                <small>{slot === "MORNING" ? "Ca sáng" : "Ca chiều"}</small>
               </div>
               {(isAdmin || isMe) && (
                 <div className="staff-shift-event-actions">

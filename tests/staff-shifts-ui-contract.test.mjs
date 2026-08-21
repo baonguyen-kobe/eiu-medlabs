@@ -77,6 +77,15 @@ test("staff shifts week roster uses the shared period calendar structure", () =>
   assert.doesNotMatch(weekCalendarSource, /<small>\{range\}<\/small>/);
   assert.match(source, /className="slot-events staff-shift-slot-content"/);
   assert.match(source, /className="slot-event slot-event-shift"/);
+  const shiftEventSource = source.slice(
+    source.indexOf('className="slot-event slot-event-shift"'),
+    source.indexOf("{canAdd && ("),
+  );
+  assert.match(
+    shiftEventSource,
+    /<time>[\s\S]*<\/time>[\s\S]*<strong>\{shift\.staffName\}<\/strong>[\s\S]*<small>\{slot === "MORNING" \? "Ca sáng" : "Ca chiều"\}<\/small>/,
+  );
+  assert.match(shiftEventSource, /staff-shift-event-actions/);
   assert.match(
     source,
     /<div className="calendar-card">[\s\S]*calendar-toolbar[\s\S]*period-calendar/,
