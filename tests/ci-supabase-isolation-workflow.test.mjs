@@ -84,6 +84,12 @@ test("CI retires only its stale Supabase runtime and always cleans it up", () =>
   );
   assert.match(workflow, /rm -rf -- "\$CI_SUPABASE_WORKDIR"/);
   assert.doesNotMatch(workflow, /supabase stop --all/);
-  assert.doesNotMatch(workflow, /supabase stop --project-id lich-truc-app(?:\s|$)/);
-  assert.doesNotMatch(workflow, /\bdocker\s+(?:system\s+prune|container\s+(?:prune|rm)|rm)\b/);
+  assert.doesNotMatch(
+    workflow,
+    /supabase stop --project-id lich-truc-app(?:\s|$)/,
+  );
+  assert.doesNotMatch(
+    workflow,
+    /\bdocker\s+(?:system\s+prune|container\s+(?:prune|rm)|rm)\b/,
+  );
 });
