@@ -95,6 +95,11 @@ const weekdayFullNames = [
   "Thứ Bảy",
 ];
 
+const staffShiftPeriods = [
+  ["MORNING", "S\u00e1ng", "07:00\u201311:00"],
+  ["AFTERNOON", "Chi\u1ec1u", "13:00\u201316:00"],
+] as const;
+
 function getDayOfWeekLabel(dateStr: string): string {
   const parts = dateStr.split("-").map(Number);
   if (parts.length !== 3) return "";
@@ -183,7 +188,10 @@ function RowAssigneePicker({
   }, [selectedIds, assignees]);
 
   return (
-    <div className="relative inline-block text-left" ref={popoverRef}>
+    <div
+      className="staff-shift-assignee relative inline-block text-left"
+      ref={popoverRef}
+    >
       <button
         type="button"
         onClick={() => setOpen(!open)}
@@ -844,7 +852,7 @@ export function StaffShiftRoster({
     [days],
   );
 
-  const renderMonthSlot = (date: string, slot: ShiftSlot) => {
+  const renderShiftSlot = (date: string, slot: ShiftSlot) => {
     const activeShifts = shiftsByDateSlot.get(`${date}:${slot}`) ?? [];
     const isPast = date < todayStr;
     const isUserInSlot = activeShifts.some(
@@ -1075,12 +1083,7 @@ export function StaffShiftRoster({
                           </header>
                         );
                       })}
-                      {(
-                        [
-                          ["MORNING", "Sáng", "07:00–11:00"],
-                          ["AFTERNOON", "Chiều", "13:00–16:00"],
-                        ] as const
-                      ).map(([slot, label, range]) => (
+                      {staffShiftPeriods.map(([slot, label, range]) => (
                         <Fragment key={slot}>
                           <div className="period-label period-label-shift staff-shift-period-label">
                             <span>Ca trực</span>
@@ -1092,7 +1095,7 @@ export function StaffShiftRoster({
                               className={`period-cell period-cell-shift ${date === todayStr ? "is-today" : ""} ${date.slice(0, 7) !== anchorDate.slice(0, 7) ? "is-outside-month" : ""}`}
                               key={`${slot}-${date}`}
                             >
-                              {renderMonthSlot(date, slot)}
+                              {renderShiftSlot(date, slot)}
                             </div>
                           ))}
                         </Fragment>
@@ -1102,336 +1105,56 @@ export function StaffShiftRoster({
                 ))}
               </div>
             ) : (
-              <table className="staff-shift-week-calendar w-full text-left border-collapse min-w-[840px]">
-                <thead>
-                  <tr className="bg-neutral-50/80 border-b border-neutral-200">
-                    <th className="p-3 w-28 text-xs font-semibold text-neutral-500 uppercase tracking-wider sticky left-0 bg-neutral-50/95 z-10">
-                      Buổi trực
-                    </th>
-                    {days.map((dateStr) => {
-                      const isToday = dateStr === todayStr;
-                      const isPast = dateStr < todayStr;
-                      const dayLabel = getDayOfWeekLabel(dateStr);
-                      const formatted = formatBusinessDate(dateStr);
-
+              <div className="period-calendar period-calendar-week staff-shift-period-calendar">
+                <section className="period-week">
+                  <div
+                    className="period-grid"
+                    style={
+                      {
+                        "--calendar-day-count": days.length,
+                      } as React.CSSProperties
+                    }
+                  >
+                    <div className="period-corner">Ca trực</div>
+                    {days.map((date) => {
+                      const isToday = date === todayStr;
+                      const isSunday =
+                        getDayOfWeekLabel(date) === weekdayFullNames[0];
                       return (
-                        <th
-                          key={dateStr}
-                          className={`p-3 text-center border-l border-neutral-200 min-w-[130px] ${
-                            isToday ? "bg-primary-50/50" : ""
-                          }`}
+                        <header
+                          className={`period-day-heading ${isToday ? "is-today" : ""} ${isSunday ? "is-sunday" : ""}`}
+                          key={date}
                         >
-                          <div className="text-xs font-medium text-neutral-500">
-                            {dayLabel}
-                          </div>
-                          <div
-                            className={`text-sm font-bold mt-0.5 ${
-                              isToday
-                                ? "text-primary-700 font-extrabold"
-                                : isPast
-                                  ? "text-neutral-400"
-                                  : "text-neutral-800"
-                            }`}
-                          >
-                            {formatted}
-                          </div>
-                        </th>
+                          <span>{getDayOfWeekLabel(date)}</span>
+                          <strong>{date.slice(-2)}</strong>
+                        </header>
                       );
                     })}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-neutral-200">
-                  {/* SÁNG (MORNING) ROW */}
-                  <tr className="hover:bg-neutral-50/30 transition-colors">
-                    <td className="p-3 text-xs font-bold text-neutral-700 bg-neutral-50/90 align-top sticky left-0 z-10 border-r border-neutral-200">
-                      <div className="text-amber-700 font-bold flex items-center gap-1">
-                        <span>Sáng</span>
-                      </div>
-                      <div className="text-[11px] text-neutral-400 font-normal mt-0.5">
-                        07:00 – 11:00
-                      </div>
-                    </td>
-                    {days.map((dateStr) => {
-                      const activeShifts =
-                        shiftsByDateSlot.get(`${dateStr}:MORNING`) ?? [];
-                      const isPast = dateStr < todayStr;
-                      const isUserInSlot = activeShifts.some(
-                        (s) => s.staff_id === userId,
-                      );
-                      const canAdd =
-                        (!isPast || canManageShiftHistory) &&
-                        (isAdmin || (canSelfRegister && !isUserInSlot));
-
-                      return (
-                        <td
-                          key={`MORNING-${dateStr}`}
-                          className="p-2.5 align-top border-l border-neutral-200"
-                        >
-                          <div className="space-y-1.5 min-h-[68px]">
-                            {/* Active Shifts */}
-                            {activeShifts.map((shift) => {
-                              const isMe = shift.staff_id === userId;
-                              return (
-                                <div
-                                  key={shift.id}
-                                  className={`p-2 rounded-lg border text-xs transition-shadow ${
-                                    isMe
-                                      ? "bg-primary-50/70 border-primary-200 text-primary-950 shadow-xs"
-                                      : "bg-white border-neutral-200 text-neutral-800 shadow-2xs"
-                                  }`}
-                                >
-                                  <div className="flex items-start justify-between gap-1">
-                                    <span
-                                      className={`font-semibold ${
-                                        isMe
-                                          ? "text-primary-800"
-                                          : "text-neutral-900"
-                                      }`}
-                                    >
-                                      {shift.staffName}
-                                      {isMe && (
-                                        <span className="ml-1 text-[10px] bg-primary-100 text-primary-700 px-1 py-0.2 rounded font-normal">
-                                          Bạn
-                                        </span>
-                                      )}
-                                    </span>
-                                    {/* Shift Card Actions: Edit for Admin OR Self */}
-                                    <div className="flex items-center gap-0.5 opacity-90 hover:opacity-100">
-                                      {(isAdmin || isMe) && (
-                                        <button
-                                          type="button"
-                                          title="Chỉnh sửa giờ trực"
-                                          onClick={() =>
-                                            setEditShiftModal({
-                                              open: true,
-                                              shift,
-                                              startTime: shift.start_time.slice(
-                                                0,
-                                                5,
-                                              ),
-                                              endTime: shift.end_time.slice(
-                                                0,
-                                                5,
-                                              ),
-                                              note: shift.note ?? "",
-                                              historicalReason: "",
-                                            })
-                                          }
-                                          className="p-0.5 text-neutral-400 hover:text-neutral-700 rounded"
-                                          aria-label={`Chỉnh sửa giờ trực của ${shift.staffName}`}
-                                        >
-                                          <Clock3 size={13} />
-                                        </button>
-                                      )}
-                                      {(isAdmin || isMe) && (
-                                        <button
-                                          type="button"
-                                          title="Hủy lịch trực"
-                                          onClick={() =>
-                                            setCancelShiftDialog({
-                                              open: true,
-                                              shift,
-                                              historicalReason: "",
-                                            })
-                                          }
-                                          className="p-0.5 text-neutral-400 hover:text-rose-600 rounded"
-                                          aria-label={`Hủy lịch trực của ${shift.staffName}`}
-                                        >
-                                          <Trash2 size={13} />
-                                        </button>
-                                      )}
-                                    </div>
-                                  </div>
-                                  <div className="text-[11px] text-neutral-500 mt-0.5">
-                                    {shift.start_time.slice(0, 5)} –{" "}
-                                    {shift.end_time.slice(0, 5)}
-                                  </div>
-                                  {shift.note && (
-                                    <div className="text-[10px] text-neutral-600 italic mt-0.5 line-clamp-2">
-                                      {shift.note}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
-
-                            {/* Quick Add Button */}
-                            {canAdd && (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setQuickRegisterModal({
-                                    open: true,
-                                    date: dateStr,
-                                    slot: "MORNING",
-                                    selectedAssigneeIds: isAdmin
-                                      ? []
-                                      : [userId],
-                                    startTime: "07:00",
-                                    endTime: "11:00",
-                                    note: "",
-                                    historicalReason: "",
-                                  })
-                                }
-                                className="empty-shift-action w-full py-1 text-[11px] font-medium text-neutral-400 hover:text-primary-700 hover:bg-primary-50/50 rounded border border-dashed border-neutral-200 hover:border-primary-300 flex items-center justify-center gap-1 transition-colors"
-                                aria-label={`Đăng ký trực sáng ngày ${dateStr}`}
-                              >
-                                <Plus size={12} />
-                                {isAdmin ? "Thêm" : "Đăng ký"}
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      );
-                    })}
-                  </tr>
-
-                  {/* CHIỀU (AFTERNOON) ROW */}
-                  <tr className="hover:bg-neutral-50/30 transition-colors">
-                    <td className="p-3 text-xs font-bold text-neutral-700 bg-neutral-50/90 align-top sticky left-0 z-10 border-r border-neutral-200">
-                      <div className="text-sky-700 font-bold flex items-center gap-1">
-                        <span>Chiều</span>
-                      </div>
-                      <div className="text-[11px] text-neutral-400 font-normal mt-0.5">
-                        13:00 – 16:00
-                      </div>
-                    </td>
-                    {days.map((dateStr) => {
-                      const activeShifts =
-                        shiftsByDateSlot.get(`${dateStr}:AFTERNOON`) ?? [];
-                      const isPast = dateStr < todayStr;
-                      const isUserInSlot = activeShifts.some(
-                        (s) => s.staff_id === userId,
-                      );
-                      const canAdd =
-                        (!isPast || canManageShiftHistory) &&
-                        (isAdmin || (canSelfRegister && !isUserInSlot));
-
-                      return (
-                        <td
-                          key={`AFTERNOON-${dateStr}`}
-                          className="p-2.5 align-top border-l border-neutral-200"
-                        >
-                          <div className="space-y-1.5 min-h-[68px]">
-                            {/* Active Shifts */}
-                            {activeShifts.map((shift) => {
-                              const isMe = shift.staff_id === userId;
-                              return (
-                                <div
-                                  key={shift.id}
-                                  className={`p-2 rounded-lg border text-xs transition-shadow ${
-                                    isMe
-                                      ? "bg-primary-50/70 border-primary-200 text-primary-950 shadow-xs"
-                                      : "bg-white border-neutral-200 text-neutral-800 shadow-2xs"
-                                  }`}
-                                >
-                                  <div className="flex items-start justify-between gap-1">
-                                    <span
-                                      className={`font-semibold ${
-                                        isMe
-                                          ? "text-primary-800"
-                                          : "text-neutral-900"
-                                      }`}
-                                    >
-                                      {shift.staffName}
-                                      {isMe && (
-                                        <span className="ml-1 text-[10px] bg-primary-100 text-primary-700 px-1 py-0.2 rounded font-normal">
-                                          Bạn
-                                        </span>
-                                      )}
-                                    </span>
-                                    {/* Shift Card Actions: Edit for Admin OR Self */}
-                                    <div className="flex items-center gap-0.5 opacity-90 hover:opacity-100">
-                                      {(isAdmin || isMe) && (
-                                        <button
-                                          type="button"
-                                          title="Chỉnh sửa giờ trực"
-                                          onClick={() =>
-                                            setEditShiftModal({
-                                              open: true,
-                                              shift,
-                                              startTime: shift.start_time.slice(
-                                                0,
-                                                5,
-                                              ),
-                                              endTime: shift.end_time.slice(
-                                                0,
-                                                5,
-                                              ),
-                                              note: shift.note ?? "",
-                                              historicalReason: "",
-                                            })
-                                          }
-                                          className="p-0.5 text-neutral-400 hover:text-neutral-700 rounded"
-                                          aria-label={`Chỉnh sửa giờ trực của ${shift.staffName}`}
-                                        >
-                                          <Clock3 size={13} />
-                                        </button>
-                                      )}
-                                      {(isAdmin || isMe) && (
-                                        <button
-                                          type="button"
-                                          title="Hủy lịch trực"
-                                          onClick={() =>
-                                            setCancelShiftDialog({
-                                              open: true,
-                                              shift,
-                                              historicalReason: "",
-                                            })
-                                          }
-                                          className="p-0.5 text-neutral-400 hover:text-rose-600 rounded"
-                                          aria-label={`Hủy lịch trực của ${shift.staffName}`}
-                                        >
-                                          <Trash2 size={13} />
-                                        </button>
-                                      )}
-                                    </div>
-                                  </div>
-                                  <div className="text-[11px] text-neutral-500 mt-0.5">
-                                    {shift.start_time.slice(0, 5)} –{" "}
-                                    {shift.end_time.slice(0, 5)}
-                                  </div>
-                                  {shift.note && (
-                                    <div className="text-[10px] text-neutral-600 italic mt-0.5 line-clamp-2">
-                                      {shift.note}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
-
-                            {/* Quick Add Button */}
-                            {canAdd && (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setQuickRegisterModal({
-                                    open: true,
-                                    date: dateStr,
-                                    slot: "AFTERNOON",
-                                    selectedAssigneeIds: isAdmin
-                                      ? []
-                                      : [userId],
-                                    startTime: "13:00",
-                                    endTime: "16:00",
-                                    note: "",
-                                    historicalReason: "",
-                                  })
-                                }
-                                className="empty-shift-action w-full py-1 text-[11px] font-medium text-neutral-400 hover:text-primary-700 hover:bg-primary-50/50 rounded border border-dashed border-neutral-200 hover:border-primary-300 flex items-center justify-center gap-1 transition-colors"
-                                aria-label={`Đăng ký trực chiều ngày ${dateStr}`}
-                              >
-                                <Plus size={12} />
-                                {isAdmin ? "Thêm" : "Đăng ký"}
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                </tbody>
-              </table>
+                    {staffShiftPeriods.map(([slot, label, range]) => (
+                      <Fragment key={slot}>
+                        <div className="period-label period-label-shift staff-shift-period-label">
+                          <span>Lịch trực</span>
+                          <strong>{label}</strong>
+                          <small>{range}</small>
+                        </div>
+                        {days.map((date) => {
+                          const isToday = date === todayStr;
+                          const isSunday =
+                            getDayOfWeekLabel(date) === weekdayFullNames[0];
+                          return (
+                            <div
+                              className={`period-cell period-cell-shift ${isToday ? "is-today" : ""} ${isSunday ? "is-sunday" : ""}`}
+                              key={`${slot}-${date}`}
+                            >
+                              {renderShiftSlot(date, slot)}
+                            </div>
+                          );
+                        })}
+                      </Fragment>
+                    ))}
+                  </div>
+                </section>
+              </div>
             )}
           </div>
         </div>
@@ -1536,9 +1259,9 @@ export function StaffShiftRoster({
                             : "bg-neutral-50/60 border-neutral-200 opacity-80"
                         }`}
                       >
-                        <div className="staff-shift-registration-row-grid flex flex-wrap items-center justify-between gap-3">
+                        <div className="staff-shift-registration-row-grid">
                           {/* Column 1: Ngày checkbox & label */}
-                          <label className="flex items-center gap-2 cursor-pointer select-none min-w-[180px]">
+                          <label className="staff-shift-registration-date flex items-center gap-2 cursor-pointer select-none">
                             <input
                               type="checkbox"
                               checked={row.included}
@@ -1566,7 +1289,7 @@ export function StaffShiftRoster({
                           </label>
 
                           {row.included && (
-                            <div className="staff-shift-registration-fields flex flex-wrap items-center gap-2.5">
+                            <div className="staff-shift-registration-fields">
                               {/* Column 2: Người trực */}
                               {isAdmin ? (
                                 <RowAssigneePicker
@@ -1588,7 +1311,7 @@ export function StaffShiftRoster({
                                   }}
                                 />
                               ) : (
-                                <div className="text-xs bg-neutral-100 text-neutral-800 px-2.5 py-1 rounded font-medium flex items-center gap-1.5">
+                                <div className="staff-shift-assignee text-xs bg-neutral-100 text-neutral-800 px-2.5 py-1 rounded font-medium flex items-center gap-1.5">
                                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                                   <span>{userFullName}</span>
                                 </div>
@@ -1692,9 +1415,9 @@ export function StaffShiftRoster({
                         key={row.id}
                         className="staff-shift-registration-row p-3.5 bg-white rounded-lg border border-neutral-200 shadow-2xs space-y-2.5"
                       >
-                        <div className="staff-shift-registration-row-grid flex flex-wrap items-center justify-between gap-3">
+                        <div className="staff-shift-registration-row-grid">
                           {/* Column 1: Ngày trực */}
-                          <div className="flex items-center gap-2 min-w-[160px]">
+                          <div className="staff-shift-registration-date flex items-center gap-2">
                             <input
                               type="date"
                               value={row.date}
@@ -1712,7 +1435,7 @@ export function StaffShiftRoster({
                             )}
                           </div>
 
-                          <div className="staff-shift-registration-fields flex flex-wrap items-center gap-2.5">
+                          <div className="staff-shift-registration-fields">
                             {/* Column 2: Người trực */}
                             {isAdmin ? (
                               <RowAssigneePicker
@@ -1734,7 +1457,7 @@ export function StaffShiftRoster({
                                 }}
                               />
                             ) : (
-                              <div className="text-xs bg-neutral-100 text-neutral-800 px-2.5 py-1 rounded font-medium flex items-center gap-1.5">
+                              <div className="staff-shift-assignee text-xs bg-neutral-100 text-neutral-800 px-2.5 py-1 rounded font-medium flex items-center gap-1.5">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                                 <span>{userFullName}</span>
                               </div>
@@ -1771,7 +1494,7 @@ export function StaffShiftRoster({
                               }}
                             />
 
-                            {/* Column 6: Đăng ký từng dòng */}
+                            {/* Column 5: Đăng ký từng dòng */}
                             <button
                               type="button"
                               onClick={() =>
@@ -1793,7 +1516,7 @@ export function StaffShiftRoster({
                               <Plus size={13} /> Đăng ký ca
                             </button>
 
-                            {/* Remove Row Button */}
+                            {/* Column 6: Xóa dòng tự chọn */}
                             {freeformRows.length > 1 && (
                               <button
                                 type="button"
@@ -1802,10 +1525,10 @@ export function StaffShiftRoster({
                                     prev.filter((r) => r.id !== row.id),
                                   )
                                 }
-                                className="staff-shift-remove-row p-1.5 text-neutral-400 hover:text-rose-600 rounded transition-colors"
+                                className="button button-danger staff-shift-delete-button text-xs px-2.5 py-1 flex items-center gap-1"
                                 aria-label="Xóa dòng ngày trực này"
                               >
-                                <Trash2 size={15} />
+                                <Trash2 size={14} /> Xóa
                               </button>
                             )}
                           </div>

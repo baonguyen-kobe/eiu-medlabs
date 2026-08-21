@@ -9231,62 +9231,6 @@ body,
   box-shadow: none;
 }
 
-.staff-shift-month-calendar {
-  border-top: 1px solid var(--line);
-}
-
-.staff-shift-month-calendar .period-week {
-  min-width: 1080px;
-}
-
-.staff-shift-week-calendar {
-  color: var(--ink-800);
-  font-size: 14px;
-}
-
-.staff-shift-week-calendar thead th {
-  padding: 12px;
-  color: var(--ink-600);
-  background: var(--surface-soft);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.staff-shift-week-calendar thead th > div:last-child {
-  margin-top: 4px;
-  color: var(--ink-950);
-  font-size: 14px;
-  font-variant-numeric: tabular-nums;
-}
-
-.staff-shift-week-calendar tbody td {
-  padding: 12px;
-  background: var(--surface);
-}
-
-.staff-shift-week-calendar tbody td:first-child {
-  padding: 14px 12px;
-  background: var(--surface-soft);
-  font-size: 13px;
-}
-
-.staff-shift-week-calendar tbody td > div {
-  min-height: 84px;
-}
-
-.staff-shift-week-calendar tbody td > div > div {
-  padding: 8px;
-  border-radius: 8px;
-  font-size: 13px;
-  line-height: 1.4;
-}
-
-.staff-shift-week-calendar .empty-shift-action {
-  min-height: 32px;
-  color: var(--ink-500);
-  font-size: 12px;
-}
-
 .staff-shift-period-label small {
   color: var(--ink-500);
   font-size: 12px;
@@ -9383,8 +9327,8 @@ body,
 .staff-shift-registration-row-grid {
   display: grid;
   grid-template-columns:
-    minmax(190px, 1.3fr) minmax(150px, 1fr) minmax(145px, auto)
-    minmax(220px, auto) max-content;
+    minmax(132px, 1.1fr) minmax(150px, 1fr) minmax(130px, auto)
+    minmax(280px, auto) max-content max-content;
   align-items: center;
   gap: 12px;
 }
@@ -9393,16 +9337,32 @@ body,
   display: contents;
 }
 
-.staff-shift-remove-row {
-  position: absolute;
-  top: 4px;
-  right: 4px;
+.staff-shift-registration-date {
+  min-width: 0;
+}
+
+.staff-shift-assignee {
+  min-width: 0;
+  max-width: 190px;
+}
+
+.staff-shift-assignee .input {
+  width: 100%;
+}
+
+.staff-shift-delete-button {
+  justify-self: start;
+  white-space: nowrap;
 }
 
 .staff-shift-registration-row .input,
 .staff-shift-registration-row select {
   min-height: 40px;
   font-size: 13px;
+}
+
+.staff-shift-registration-row select {
+  min-width: 130px;
 }
 
 .staff-shift-time-line {
@@ -9426,7 +9386,7 @@ body,
 }
 
 .staff-shift-time-picker {
-  width: 86px;
+  width: 108px;
 }
 
 .staff-shift-time-picker .time-picker-control,
@@ -9435,7 +9395,7 @@ body,
 }
 
 .staff-shift-time-picker .time-picker-input {
-  padding: 0 6px 0 30px;
+  padding: 0 8px 0 30px;
   font-size: 13px;
 }
 
@@ -9464,8 +9424,8 @@ body,
 @media (max-width: 1180px) {
   .staff-shift-registration-row-grid {
     grid-template-columns:
-      minmax(160px, 1.2fr) minmax(140px, 1fr) minmax(130px, 0.9fr)
-      minmax(190px, 1.15fr) max-content;
+      minmax(132px, 1fr) minmax(150px, 1fr) minmax(126px, auto)
+      minmax(280px, auto) max-content max-content;
   }
 }
 

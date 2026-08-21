@@ -29,6 +29,35 @@ test("staff shifts uses the shared seven-column month calendar structure", () =>
   assert.match(source, /"--calendar-day-count": week\.length/);
 });
 
+test("staff shifts week roster uses the shared period calendar structure", () => {
+  const weekCalendarSource = source.slice(
+    source.indexOf(
+      'className="period-calendar period-calendar-week staff-shift-period-calendar"',
+    ),
+    source.indexOf("{/* TAB 2:"),
+  );
+
+  assert.doesNotMatch(weekCalendarSource, /<table/);
+  assert.doesNotMatch(source, /staff-shift-week-calendar/);
+  assert.match(
+    weekCalendarSource,
+    /className="period-calendar period-calendar-week staff-shift-period-calendar"/,
+  );
+  assert.match(weekCalendarSource, /className="period-grid"/);
+  assert.match(weekCalendarSource, /className={`period-day-heading/);
+  assert.match(weekCalendarSource, /period-label period-label-shift/);
+  assert.match(weekCalendarSource, /period-cell period-cell-shift/);
+  const periodDefinition = source.slice(
+    source.indexOf("const staffShiftPeriods = ["),
+    source.indexOf("function getDayOfWeekLabel"),
+  );
+  assert.deepEqual(
+    [...periodDefinition.matchAll(/\["([A-Z_]+)",/g)].map((match) => match[1]),
+    ["MORNING", "AFTERNOON"],
+  );
+  assert.doesNotMatch(weekCalendarSource, /L\u1ecbch h\u1ecdc/);
+});
+
 test("staff shift registration exposes only constrained shift slots and times", () => {
   assert.doesNotMatch(registrationSource, /value="CUSTOM"/);
   assert.doesNotMatch(registrationSource, /Ghi chú/);
@@ -54,10 +83,10 @@ test("staff shifts roster uses the shared date navigation pattern", () => {
   assert.doesNotMatch(toolbarSource, /Hôm nay/);
 });
 
-test("staff shift registration keeps five columns until the narrow breakpoint", () => {
+test("staff shift registration keeps its desktop columns until the narrow breakpoint", () => {
   assert.match(
     registrationStyles,
-    /grid-template-columns:\s*minmax\(190px, 1\.3fr\) minmax\(150px, 1fr\) minmax\(145px, auto\)\s*minmax\(220px, auto\) max-content/,
+    /grid-template-columns:\s*minmax\(132px, 1\.1fr\) minmax\(150px, 1fr\) minmax\(130px, auto\)\s*minmax\(280px, auto\) max-content max-content/,
   );
   const tabletStyles = registrationStyles.slice(
     registrationStyles.indexOf("@media (max-width: 1180px)"),
@@ -65,17 +94,41 @@ test("staff shift registration keeps five columns until the narrow breakpoint", 
   );
   assert.match(
     tabletStyles,
-    /grid-template-columns:\s*minmax\(160px, 1\.2fr\) minmax\(140px, 1fr\) minmax\(130px, 0\.9fr\)\s*minmax\(190px, 1\.15fr\) max-content/,
+    /grid-template-columns:\s*minmax\(132px, 1fr\) minmax\(150px, 1fr\) minmax\(126px, auto\)\s*minmax\(280px, auto\) max-content max-content/,
   );
   assert.doesNotMatch(tabletStyles, /grid-column|>/);
   assert.match(source, /staff-shift-registration-fields/);
+  assert.match(
+    registrationStyles,
+    /\.staff-shift-assignee\s*\{[\s\S]*max-width: 190px/,
+  );
 });
 
-test("all-day registration stacks only the time column", () => {
+test("registration time controls stay compact without clipping clock values", () => {
+  assert.match(
+    registrationStyles,
+    /\.staff-shift-time-picker\s*\{\s*width: 108px/,
+  );
+  assert.doesNotMatch(
+    registrationStyles,
+    /\.staff-shift-time-picker\s*\{\s*width: 86px/,
+  );
+  assert.match(
+    registrationStyles,
+    /\.staff-shift-time-picker \.time-picker-input\s*\{[\s\S]*padding: 0 8px 0 30px/,
+  );
+});
+
+test("all-day registration stacks only the time column and keeps delete in-row", () => {
   assert.match(
     source,
     /row\.slotOption === "ALL_DAY"[\s\S]*className="staff-shift-time-stack"/,
   );
   assert.match(styles, /\.staff-shift-time-stack\s*\{\s*display: grid/);
-  assert.match(source, /className="staff-shift-remove-row/);
+  assert.match(
+    registrationSource,
+    /freeformRows\.length > 1[\s\S]*staff-shift-delete-button[\s\S]*Trash2[\s\S]*X\u00f3a/,
+  );
+  assert.doesNotMatch(source, /staff-shift-remove-row/);
+  assert.doesNotMatch(registrationStyles, /position:\s*absolute/);
 });
