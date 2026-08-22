@@ -9732,10 +9732,6 @@ body,
   gap: 8px;
 }
 
-.basic-medical-equipment-request-modal {
-  width: min(1180px, calc(100vw - 32px));
-}
-
 .basic-medical-equipment-detail {
   display: grid;
   gap: 20px;

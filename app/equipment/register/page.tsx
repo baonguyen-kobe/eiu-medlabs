@@ -3,6 +3,8 @@ import {
   EquipmentRequestForm,
   type EquipmentRequestInitialData,
 } from "@/components/equipment-request-form";
+import { BasicMedicalEquipmentRegistrationPage } from "@/components/basic-medical-equipment-registration-page";
+import { EquipmentRegistrationDomainSwitch } from "@/components/equipment-registration-domain-switch";
 import { WorkspaceShell } from "@/components/workspace-shell";
 import { businessTodayString } from "@/lib/business-time";
 import {
@@ -14,11 +16,20 @@ import { getViewer } from "@/lib/viewer";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { EquipmentLateApprovalStatus } from "@/lib/equipment-requests";
 import {
+  canUseBasicMedicalEquipmentRegistration,
   canUseSkillsWorkspace,
   defaultWorkspacePath,
 } from "@/lib/workspace-access";
 
 type RequestMode = "copy" | "edit";
+
+type RegisterSearchParams = {
+  schedule?: string;
+  mode?: string;
+  request?: string;
+  domain?: string;
+  session?: string;
+};
 
 type RequestOption = {
   id: string;
@@ -242,7 +253,7 @@ function buildInitialData(
 export default async function EquipmentRegisterPage({
   searchParams,
 }: {
-  searchParams: Promise<{ schedule?: string; mode?: string; request?: string }>;
+  searchParams: Promise<RegisterSearchParams>;
 }) {
   const [viewer, query] = await Promise.all([getViewer(), searchParams]);
   const {
@@ -258,8 +269,28 @@ export default async function EquipmentRegisterPage({
     isRootAdministrator,
   } = viewer;
   const roomTypeCodes = roomTypes.map(({ code }) => code);
-  if (!canUseSkillsWorkspace(roles, roomTypeCodes)) {
+  const canUseSkills = canUseSkillsWorkspace(roles, roomTypeCodes);
+  const canUseBasicMedical = canUseBasicMedicalEquipmentRegistration(
+    roles,
+    roomTypeCodes,
+  );
+  if (!canUseSkills && !canUseBasicMedical) {
     redirect(defaultWorkspacePath(roles, roomTypeCodes));
+  }
+  const activeDomain =
+    query.domain === "basic_medical" && canUseBasicMedical
+      ? "basic_medical"
+      : canUseSkills
+        ? "nursing_skills"
+        : "basic_medical";
+  if (activeDomain === "basic_medical") {
+    return (
+      <BasicMedicalEquipmentRegistrationPage
+        viewer={viewer}
+        sessionId={query.session}
+        canUseSkills={canUseSkills}
+      />
+    );
   }
   if (
     !roles.some((role) =>
@@ -460,6 +491,11 @@ export default async function EquipmentRegisterPage({
       title="Đăng ký thiết bị"
       description="Phiếu trang thiết bị thực hành cho lớp Skills lab."
     >
+      <EquipmentRegistrationDomainSwitch
+        activeDomain="nursing_skills"
+        canUseSkills={canUseSkills}
+        canUseBasicMedical={canUseBasicMedical}
+      />
       <RequestModePicker
         mode={mode}
         activeRequestId={rawRequestId}

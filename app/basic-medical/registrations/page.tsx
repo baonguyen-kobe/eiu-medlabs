@@ -3,11 +3,9 @@ import { Search } from "@/components/icons";
 import { PaginationLinks } from "@/components/pagination-links";
 import { WorkspaceShell } from "@/components/workspace-shell";
 import type {
-  BasicMedicalEquipmentCatalogItem,
   BasicMedicalRegistrationListItem,
   BasicMedicalRoomInventoryItem,
 } from "@/lib/basic-medical-equipment";
-import { businessTodayString } from "@/lib/business-time";
 import {
   equipmentRequestSelect,
   type EquipmentRequestListItem,
@@ -40,7 +38,6 @@ export default async function BasicMedicalRegistrationsPage({
   const {
     supabase,
     userId,
-    email,
     fullName,
     roles,
     roomTypes,
@@ -100,14 +97,9 @@ export default async function BasicMedicalRegistrationsPage({
           .in("id", registrationIds)
       : { data: [], error: null };
 
-  const [
-    { data: instructorRows },
-    { data: peopleRows },
-    { data: viewerProfile },
-  ] = await Promise.all([
+  const [{ data: instructorRows }, { data: peopleRows }] = await Promise.all([
     supabase.rpc("list_basic_medical_instructors"),
     supabase.rpc("list_active_people"),
-    supabase.from("profiles").select("phone").eq("id", userId).maybeSingle(),
   ]);
   const instructors = (instructorRows ?? []) as Array<{
     id: string;
@@ -134,7 +126,7 @@ export default async function BasicMedicalRegistrationsPage({
   const sessionIds = registrations.flatMap((registration) =>
     registration.basic_medical_registration_sessions.map(({ id }) => id),
   );
-  const [inventoryResult, requestResult, catalogResult] = await Promise.all([
+  const [inventoryResult, requestResult] = await Promise.all([
     roomIds.length
       ? supabase
           .from("basic_medical_room_inventory")
@@ -153,13 +145,6 @@ export default async function BasicMedicalRegistrationsPage({
           .eq("request_domain", "basic_medical")
           .in("source_identity_id", sessionIds)
       : Promise.resolve({ data: [], error: null }),
-    supabase
-      .from("basic_medical_equipment_catalog")
-      .select(
-        "id,item_name,commercial_name,item_type,country_of_origin,manufacturer,model,unit,is_active",
-      )
-      .eq("is_active", true)
-      .order("item_name"),
   ]);
   const inventoryRows = inventoryResult.data;
   const inventoryError = inventoryResult.error;
@@ -170,11 +155,7 @@ export default async function BasicMedicalRegistrationsPage({
   );
 
   const loadError =
-    listError ??
-    registrationError ??
-    inventoryError ??
-    requestResult.error ??
-    catalogResult.error;
+    listError ?? registrationError ?? inventoryError ?? requestResult.error;
 
   return (
     <WorkspaceShell
@@ -262,16 +243,6 @@ export default async function BasicMedicalRegistrationsPage({
         evidenceEnabled={isBasicMedicalConfirmationEvidenceEnabled()}
         canManageBasicMedical={canManageBasicMedical}
         equipmentRequestsBySession={equipmentRequestsBySession}
-        equipmentCatalog={
-          (catalogResult.data ?? []) as BasicMedicalEquipmentCatalogItem[]
-        }
-        today={businessTodayString()}
-        equipmentRegistrant={{
-          id: userId,
-          fullName,
-          email,
-          phone: viewerProfile?.phone ?? "",
-        }}
       />
       <PaginationLinks
         currentPage={currentPage}

@@ -18,31 +18,56 @@ test("Wave 2 creates Basic Medical requests through the shared guarded RPC", asy
   assert.doesNotMatch(actions, /processPendingEmailOutbox/);
 });
 
-test("Wave 2 registrations map requests by active session identity", async () => {
-  const [page, list, modal] = await Promise.all([
-    source("app/basic-medical/registrations/page.tsx"),
-    source("components/basic-medical-registration-list.tsx"),
-    source("components/basic-medical-equipment-request-modal.tsx"),
-  ]);
+test("Wave 2 uses a page-based Basic Medical registration form", async () => {
+  const [registerPage, registrationPage, list, form, basicMedicalPage] =
+    await Promise.all([
+      source("app/equipment/register/page.tsx"),
+      source("app/basic-medical/registrations/page.tsx"),
+      source("components/basic-medical-registration-list.tsx"),
+      source("components/basic-medical-equipment-request-form.tsx"),
+      source("components/basic-medical-equipment-registration-page.tsx"),
+    ]);
 
-  assert.match(page, /\.eq\("request_domain", "basic_medical"\)/);
-  assert.match(page, /\.in\("source_identity_id", sessionIds\)/);
-  assert.match(page, /equipmentRequestsBySession/);
+  assert.match(registrationPage, /\.eq\("request_domain", "basic_medical"\)/);
+  assert.match(registrationPage, /\.in\("source_identity_id", sessionIds\)/);
+  assert.match(registrationPage, /equipmentRequestsBySession/);
   assert.match(list, /Phiếu thiết bị đã hủy/);
   assert.match(list, /Xem phiếu thiết bị/);
   assert.match(list, /Đăng ký thiết bị/);
-  assert.match(page, /equipmentRegistrant/);
-  assert.doesNotMatch(page, /registrant:[^\n]*full_name,email,phone/);
-  assert.match(modal, /SearchableCombobox/);
-  assert.match(modal, /schedule-form equipment-request-form/);
-  assert.match(modal, /form-section-number/);
-  assert.match(modal, /equipment-items-table/);
-  assert.match(modal, /value=\{session\.lesson_title\} readOnly/);
-  assert.match(modal, /equipmentRegistrant\.fullName/);
-  assert.match(modal, /formatDate\(scheduleDate\)/);
-  assert.match(modal, /className="equipment-late-warning" role="alert"/);
-  assert.match(modal, /<\/table>\s*<\/div>\s*<button[\s\S]*?\+ Thêm dòng/);
-  assert.doesNotMatch(modal, /registration\.registrant\?\.email/);
+  assert.match(registerPage, /BasicMedicalEquipmentRegistrationPage/);
+  assert.match(basicMedicalPage, /\.in\("source_identity_id", sourceIds\)/);
+  assert.match(basicMedicalPage, /requestsBySession/);
+  assert.match(form, /SearchableCombobox/);
+  assert.match(form, /schedule-form equipment-request-form/);
+  assert.match(form, /form-section-number/);
+  assert.match(form, /equipment-items-table/);
+  assert.match(form, /value=\{session\.lesson_title\} readOnly/);
+  assert.match(form, /equipmentRegistrant\.fullName/);
+  assert.match(form, /formatDate\(scheduleDate\)/);
+  assert.match(form, /className="equipment-late-warning" role="alert"/);
+  assert.match(form, /<\/table>\s*<\/div>\s*<button[\s\S]*?\+ Thêm dòng/);
+  assert.doesNotMatch(form, /createPortal/);
+  assert.match(
+    list,
+    /<Link[\s\S]*?href=\{`\/equipment\/register\?domain=basic_medical&session=\$\{session\.id\}`\}/,
+  );
+  assert.doesNotMatch(list, /activeEquipmentRequest/);
+});
+
+test("equipment registration route preserves Skills default and adds Basic Medical access", async () => {
+  const [page, shell, access] = await Promise.all([
+    source("app/equipment/register/page.tsx"),
+    source("components/workspace-shell.tsx"),
+    source("lib/workspace-access.ts"),
+  ]);
+
+  assert.match(page, /query\.domain === "basic_medical"/);
+  assert.match(page, /: canUseSkills\s*\?\s*"nursing_skills"/);
+  assert.match(page, /BasicMedicalEquipmentRegistrationPage/);
+  assert.match(access, /canUseBasicMedicalEquipmentRegistration/);
+  assert.match(shell, /canUseBasicMedicalEquipmentRegistration/);
+  assert.match(shell, /canUseSkillsEquipment \|\| canUseBasicMedicalEquipment/);
+  assert.equal((shell.match(/label: "Đăng ký thiết bị"/g) ?? []).length, 1);
 });
 
 test("shared request list renders the catalog that belongs to its domain", async () => {

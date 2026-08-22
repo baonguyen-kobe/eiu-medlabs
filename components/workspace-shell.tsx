@@ -39,6 +39,7 @@ import {
   canCreateBasicMedicalSchedules,
   canImportBasicMedicalSchedules,
   canManageBasicMedicalWorkspace,
+  canUseBasicMedicalEquipmentRegistration,
   canUseSkillsWorkspace,
   canViewBasicMedicalRegistrations,
   canViewBasicMedicalSchedules,
@@ -87,6 +88,10 @@ function buildNavigation(
   const isStaff = roles.includes("staff") && !isAdmin;
   const hasSkillsScope = roomTypeCodes.includes("nursing_skills");
   const hasSkillsWorkspace = canUseSkillsWorkspace(roles, roomTypeCodes);
+  const canUseBasicMedicalEquipment = canUseBasicMedicalEquipmentRegistration(
+    roles,
+    roomTypeCodes,
+  );
   const canImport =
     isAdmin ||
     (canImportSchedules &&
@@ -100,6 +105,7 @@ function buildNavigation(
     (hasSkillsScope &&
       roles.some((role) => ["lecturer", "teaching_assistant"].includes(role)));
   const isViewer = roles.includes("viewer");
+  const canUseSkillsEquipment = hasSkillsWorkspace && !isViewer;
   const canShowBasicMedical = canViewBasicMedicalSchedules(
     roles,
     roomTypeCodes,
@@ -137,10 +143,12 @@ function buildNavigation(
       activeIcon: PlusSolid,
     });
   }
-  if (hasSkillsWorkspace && !isViewer) {
+  if (canUseSkillsEquipment || canUseBasicMedicalEquipment) {
     taoPhieuItems.push({
       label: "Đăng ký thiết bị",
-      href: "/equipment/register",
+      href: canUseSkillsEquipment
+        ? "/equipment/register"
+        : "/equipment/register?domain=basic_medical",
       icon: ClipboardList,
       activeIcon: ClipboardListSolid,
     });

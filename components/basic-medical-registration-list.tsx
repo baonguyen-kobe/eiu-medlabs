@@ -20,7 +20,6 @@ import {
 } from "@/app/basic-medical/registrations/actions";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
-import { BasicMedicalEquipmentRequestModal } from "@/components/basic-medical-equipment-request-modal";
 import { Trash2 } from "@/components/icons";
 import { formatBasicMedicalRegistrationCode } from "@/lib/basic-medical-registration-code";
 import {
@@ -33,7 +32,6 @@ import {
   type BasicMedicalRoomInventoryItem,
   type BasicMedicalInstructorOption,
 } from "@/lib/basic-medical-equipment";
-import type { BasicMedicalEquipmentCatalogItem } from "@/lib/basic-medical-equipment";
 import {
   equipmentStatusMeta,
   type EquipmentRequestListItem,
@@ -765,9 +763,6 @@ export function BasicMedicalRegistrationList({
   evidenceEnabled,
   canManageBasicMedical,
   equipmentRequestsBySession,
-  equipmentCatalog,
-  today,
-  equipmentRegistrant,
 }: {
   registrations: BasicMedicalRegistrationListItem[];
   inventories: BasicMedicalRoomInventoryItem[];
@@ -779,14 +774,6 @@ export function BasicMedicalRegistrationList({
   evidenceEnabled: boolean;
   canManageBasicMedical: boolean;
   equipmentRequestsBySession: Record<string, EquipmentRequestListItem>;
-  equipmentCatalog: BasicMedicalEquipmentCatalogItem[];
-  today: string;
-  equipmentRegistrant: {
-    id: string;
-    fullName: string;
-    email: string;
-    phone: string;
-  };
 }) {
   const router = useRouter();
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
@@ -807,12 +794,6 @@ export function BasicMedicalRegistrationList({
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [selectedLecturerId, setSelectedLecturerId] = useState<string>("");
   const [isSavingLecturer, startSavingTransition] = useTransition();
-  const [activeEquipmentRequest, setActiveEquipmentRequest] = useState<{
-    registration: BasicMedicalRegistrationListItem;
-    session: BasicMedicalRegistrationSessionItem;
-    request?: EquipmentRequestListItem;
-  } | null>(null);
-
   const peopleById = useMemo(() => {
     const map = new Map<string, string>();
     for (const person of activePeople) {
@@ -1275,19 +1256,12 @@ export function BasicMedicalRegistrationList({
                                                 <span className="request-status request-status-red">
                                                   Phiếu thiết bị đã hủy
                                                 </span>
-                                                <button
-                                                  type="button"
+                                                <Link
                                                   className="button button-secondary"
-                                                  onClick={() =>
-                                                    setActiveEquipmentRequest({
-                                                      registration,
-                                                      session,
-                                                      request: equipmentRequest,
-                                                    })
-                                                  }
+                                                  href={`/equipment/register?domain=basic_medical&session=${session.id}`}
                                                 >
                                                   Xem phiếu thiết bị
-                                                </button>
+                                                </Link>
                                               </div>
                                             ) : (
                                               <div className="basic-medical-equipment-request-actions">
@@ -1300,34 +1274,21 @@ export function BasicMedicalRegistrationList({
                                                     ).label
                                                   }
                                                 </span>
-                                                <button
-                                                  type="button"
+                                                <Link
                                                   className="button button-secondary"
-                                                  onClick={() =>
-                                                    setActiveEquipmentRequest({
-                                                      registration,
-                                                      session,
-                                                      request: equipmentRequest,
-                                                    })
-                                                  }
+                                                  href={`/equipment/register?domain=basic_medical&session=${session.id}`}
                                                 >
                                                   Xem phiếu thiết bị
-                                                </button>
+                                                </Link>
                                               </div>
                                             )
                                           ) : canCreateEquipmentRequest ? (
-                                            <button
-                                              type="button"
+                                            <Link
                                               className="button button-primary"
-                                              onClick={() =>
-                                                setActiveEquipmentRequest({
-                                                  registration,
-                                                  session,
-                                                })
-                                              }
+                                              href={`/equipment/register?domain=basic_medical&session=${session.id}`}
                                             >
                                               Đăng ký thiết bị
-                                            </button>
+                                            </Link>
                                           ) : null}
                                         </div>
                                       </td>
@@ -1369,21 +1330,6 @@ export function BasicMedicalRegistrationList({
                 invalidated_reason: null,
               }),
             );
-            router.refresh();
-          }}
-        />
-      ) : null}
-      {activeEquipmentRequest ? (
-        <BasicMedicalEquipmentRequestModal
-          registration={activeEquipmentRequest.registration}
-          session={activeEquipmentRequest.session}
-          request={activeEquipmentRequest.request}
-          catalog={equipmentCatalog}
-          today={today}
-          equipmentRegistrant={equipmentRegistrant}
-          onClose={() => setActiveEquipmentRequest(null)}
-          onCreated={() => {
-            setActiveEquipmentRequest(null);
             router.refresh();
           }}
         />
