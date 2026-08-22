@@ -14,6 +14,7 @@ export type BasicRegistrationState = {
 };
 
 type SessionDraft = {
+  sessionId?: string;
   date: string;
   startTime: string;
   endTime: string;
@@ -107,7 +108,17 @@ function parseRegistrationDraft(formData: FormData) {
       return {
         error: `Buổi ${number}: Vui lòng chọn Giảng viên giảng dạy/hướng dẫn.`,
       } as const;
+    if (
+      session.sessionId !== undefined &&
+      !/^[0-9a-f-]{36}$/i.test(session.sessionId)
+    )
+      return { error: `Buổi ${number}: mã định danh không hợp lệ.` } as const;
   }
+  const existingSessionIds = draft.sessions
+    .map((session) => session.sessionId)
+    .filter((sessionId): sessionId is string => Boolean(sessionId));
+  if (new Set(existingSessionIds).size !== existingSessionIds.length)
+    return { error: "Không được lặp mã định danh buổi học." } as const;
   return { draft } as const;
 }
 
@@ -182,6 +193,7 @@ async function saveBasicMedicalRegistration(
       target_responsible_lecturer_id: draft.responsibleId,
       target_note: draft.note,
       target_sessions: draft.sessions.map((session) => ({
+        session_id: session.sessionId ?? null,
         schedule_date: session.date,
         start_time: session.startTime,
         end_time: session.endTime,

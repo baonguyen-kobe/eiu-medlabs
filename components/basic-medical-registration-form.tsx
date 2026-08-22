@@ -21,6 +21,7 @@ import {
 type Option = { id: string; label: string };
 type Session = {
   key: number;
+  sessionId?: string;
   date: string;
   startTime: string;
   endTime: string;
@@ -208,6 +209,7 @@ export function BasicMedicalRegistrationForm({
         name="sessions"
         value={JSON.stringify(
           sessions.map((s) => ({
+            sessionId: s.sessionId,
             date: s.date,
             startTime: s.startTime,
             endTime: s.endTime,

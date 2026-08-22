@@ -169,11 +169,22 @@ export async function deleteEquipmentRequest(
     return { ok: false, message: "Phiếu thiết bị không hợp lệ." };
   }
 
+  const { data: request, error: requestError } = await supabase
+    .from("equipment_requests")
+    .select("request_domain")
+    .eq("id", requestId)
+    .maybeSingle();
+  if (requestError || !request) {
+    return { ok: false, message: "Equipment request was not found." };
+  }
+
   let actionMessage = "";
-  const { data: isHardDeleted, error: hardDeleteErr } = await supabase.rpc(
-    "hard_delete_equipment_request",
-    { target_request_id: requestId },
-  );
+  const { data: isHardDeleted, error: hardDeleteErr } =
+    request.request_domain === "nursing_skills"
+      ? await supabase.rpc("hard_delete_equipment_request", {
+          target_request_id: requestId,
+        })
+      : { data: false, error: null };
 
   if (!hardDeleteErr && isHardDeleted) {
     actionMessage = "Đã xóa vĩnh viễn phiếu thiết bị.";

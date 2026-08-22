@@ -386,8 +386,8 @@ test("[2B UPDATE-B] update RPC uses schedule semester HK3, ignores caller HK1", 
   }
 });
 
-// UPDATE-C: switch to different schedule with NULL semester -> error 22023
-test("[2B UPDATE-C] update RPC fails closed when switching to new schedule with NULL semester", async () => {
+// UPDATE-C: immutable source rejects a destination before semester validation.
+test("[2B UPDATE-C] update RPC rejects moving an immutable source to a NULL-semester schedule", async () => {
   const service = serviceClient();
   const lecturer = await signIn("giangvien@campus.local", "LocalLecturer123!");
   const scheduleIdA = crypto.randomUUID();
@@ -457,6 +457,10 @@ test("[2B UPDATE-C] update RPC fails closed when switching to new schedule with 
       "22023",
       `UPDATE-C: expected 22023, got ${updateErr.code}: ${updateErr.message}`,
     );
+    assert.match(
+      updateErr.message,
+      /EQUIPMENT_REQUEST_DOMAIN_OR_SOURCE_IMMUTABLE/,
+    );
   } finally {
     if (requestId)
       await service.from("equipment_requests").delete().eq("id", requestId);
@@ -466,8 +470,8 @@ test("[2B UPDATE-C] update RPC fails closed when switching to new schedule with 
   }
 });
 
-// UPDATE-D: switch to new schedule HK4, caller HK1 -> stored HK4
-test("[2B UPDATE-D] update RPC uses new schedule semester HK4, ignores caller HK1", async () => {
+// UPDATE-D: a canonical destination does not make reassignment legal.
+test("[2B UPDATE-D] update RPC rejects moving an immutable source to another canonical schedule", async () => {
   const service = serviceClient();
   const lecturer = await signIn("giangvien@campus.local", "LocalLecturer123!");
   const scheduleIdA = crypto.randomUUID();
@@ -531,21 +535,11 @@ test("[2B UPDATE-D] update RPC uses new schedule semester HK4, ignores caller HK
         target_items: itemsFor(catalogId),
       },
     );
-    assert.ifError(
-      updateErr,
-      `UPDATE-D unexpected error: ${updateErr?.message}`,
-    );
-    assert.ok(updData);
-    const { data: row, error: rowErr } = await service
-      .from("equipment_requests")
-      .select("semester")
-      .eq("id", requestId)
-      .single();
-    assert.ifError(rowErr);
-    assert.equal(
-      row.semester,
-      "HK4",
-      `UPDATE-D: semester must be HK4, got ${row.semester}`,
+    assert.equal(updData, null);
+    assert.equal(updateErr?.code, "22023");
+    assert.match(
+      updateErr?.message ?? "",
+      /EQUIPMENT_REQUEST_DOMAIN_OR_SOURCE_IMMUTABLE/,
     );
   } finally {
     if (requestId)
