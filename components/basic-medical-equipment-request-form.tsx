@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { SearchableCombobox } from "@/components/searchable-combobox";
 import {
   createBasicMedicalEquipmentRequest,
+  updateBasicMedicalEquipmentRequest,
   type BasicMedicalEquipmentRequestActionState,
 } from "@/app/basic-medical/registrations/actions";
 import {
@@ -34,6 +35,19 @@ type DraftItem = {
   note: string;
 };
 
+export type BasicMedicalEquipmentRequestInitialData = {
+  mode: "edit" | "copy";
+  sourceRequestId: string;
+  sourceRequestCode: string;
+  receiveDate: string;
+  receiveTime: string;
+  returnDate: string;
+  returnTime: string;
+  note: string;
+  lateRegistrationReason: string;
+  items: Array<Omit<DraftItem, "key">>;
+};
+
 const initialState: BasicMedicalEquipmentRequestActionState = {
   ok: false,
   message: "",
@@ -53,32 +67,51 @@ export function BasicMedicalEquipmentRequestForm({
   catalog,
   today,
   equipmentRegistrant,
+  initialData,
 }: {
   registration: BasicMedicalRegistrationListItem;
   session: BasicMedicalRegistrationSessionItem;
   catalog: BasicMedicalEquipmentCatalogItem[];
   today: string;
   equipmentRegistrant: BasicMedicalEquipmentRegistrant;
+  initialData?: BasicMedicalEquipmentRequestInitialData;
 }) {
   const router = useRouter();
+  const isEditMode = initialData?.mode === "edit";
   const [state, formAction, pending] = useActionState(
-    createBasicMedicalEquipmentRequest,
+    isEditMode
+      ? updateBasicMedicalEquipmentRequest
+      : createBasicMedicalEquipmentRequest,
     initialState,
   );
-  const nextKey = useRef(2);
-  const [items, setItems] = useState<DraftItem[]>([
-    { key: 1, itemName: "", catalogItemId: "", quantity: 1, note: "" },
-  ]);
-  const [receiveDate, setReceiveDate] = useState(today);
-  const [receiveTime, setReceiveTime] =
-    useState<(typeof equipmentHandoffTimes)[number]>("09:00");
-  const [returnDate, setReturnDate] = useState(
-    session.class_schedules?.schedule_date ?? today,
+  const nextKey = useRef((initialData?.items.length ?? 1) + 1);
+  const [items, setItems] = useState<DraftItem[]>(
+    initialData?.items.length
+      ? initialData.items.map((item, index) => ({ ...item, key: index + 1 }))
+      : [{ key: 1, itemName: "", catalogItemId: "", quantity: 1, note: "" }],
   );
-  const [returnTime, setReturnTime] =
-    useState<(typeof equipmentHandoffTimes)[number]>("16:00");
+  const [receiveDate, setReceiveDate] = useState(
+    initialData?.receiveDate || today,
+  );
+  const [receiveTime, setReceiveTime] = useState<
+    (typeof equipmentHandoffTimes)[number]
+  >(
+    (initialData?.receiveTime as (typeof equipmentHandoffTimes)[number]) ||
+      "09:00",
+  );
+  const [returnDate, setReturnDate] = useState(
+    initialData?.returnDate || session.class_schedules?.schedule_date || today,
+  );
+  const [returnTime, setReturnTime] = useState<
+    (typeof equipmentHandoffTimes)[number]
+  >(
+    (initialData?.returnTime as (typeof equipmentHandoffTimes)[number]) ||
+      "16:00",
+  );
   const [clientError, setClientError] = useState("");
-  const [lateRegistrationReason, setLateRegistrationReason] = useState("");
+  const [lateRegistrationReason, setLateRegistrationReason] = useState(
+    initialData?.lateRegistrationReason ?? "",
+  );
   const [nowMs, setNowMs] = useState<number | null>(null);
   const scheduleDate = session.class_schedules?.schedule_date ?? today;
   const receiveAt = useMemo(
@@ -197,6 +230,13 @@ export function BasicMedicalEquipmentRequestForm({
       onSubmit={submitCheck}
     >
       <input type="hidden" name="session_id" value={session.id} />
+      {isEditMode ? (
+        <input
+          type="hidden"
+          name="request_id"
+          value={initialData.sourceRequestId}
+        />
+      ) : null}
       <input
         type="hidden"
         name="items"
@@ -208,6 +248,18 @@ export function BasicMedicalEquipmentRequestForm({
           })),
         )}
       />
+      {initialData ? (
+        <div
+          className={`equipment-form-mode-banner equipment-form-mode-${initialData.mode}`}
+        >
+          <strong>
+            {initialData.mode === "copy"
+              ? "Đang sao chép phiếu"
+              : "Đang điều chỉnh phiếu"}{" "}
+            #{initialData.sourceRequestCode}
+          </strong>
+        </div>
+      ) : null}
       <section>
         <div className="form-section-title">
           <div className="form-section-title-line">
@@ -540,7 +592,7 @@ export function BasicMedicalEquipmentRequestForm({
       <section>
         <label>
           Ghi chú chung
-          <textarea name="note" rows={3} />
+          <textarea name="note" rows={3} defaultValue={initialData?.note} />
         </label>
       </section>
       {clientError ? (
@@ -556,7 +608,7 @@ export function BasicMedicalEquipmentRequestForm({
       <footer>
         <a
           className="button button-secondary"
-          href="/equipment/register?domain=basic_medical"
+          href="/basic-medical/equipment-requests"
         >
           Hủy
         </a>
@@ -569,7 +621,11 @@ export function BasicMedicalEquipmentRequestForm({
             ? "Đang lưu…"
             : leadTime?.requiresLateApproval
               ? "Gửi yêu cầu duyệt đăng ký trễ"
-              : "Gửi đăng ký"}
+              : isEditMode
+                ? "Lưu điều chỉnh"
+                : initialData?.mode === "copy"
+                  ? "Tạo phiếu sao chép"
+                  : "Gửi đăng ký"}
         </button>
       </footer>
     </form>

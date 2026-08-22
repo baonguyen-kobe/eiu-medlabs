@@ -173,6 +173,10 @@ test("Sidebar Navigation: Admin with all permissions gets all 6 groups in exact 
       { label: "Lịch Y cơ sở", href: "/basic-medical/schedules" },
       { label: "Tạo lịch Y cơ sở", href: "/basic-medical/new" },
       { label: "Phiếu Y cơ sở", href: "/basic-medical/registrations" },
+      {
+        label: "Đăng ký thiết bị",
+        href: "/basic-medical/equipment-requests",
+      },
       { label: "Import lịch Y cơ sở", href: "/basic-medical/import" },
     ],
   );
@@ -260,7 +264,7 @@ test("Sidebar Navigation: Viewer (Basic Medical only) sees conditional 'Thiết 
   );
 });
 
-test("Sidebar Navigation: Basic Medical-only lecturer enters the single equipment registration workspace", () => {
+test("Sidebar Navigation: Basic Medical-only lecturer enters the Basic Medical equipment registration workspace", () => {
   const nav = buildNavigation(
     ["lecturer"],
     ["basic_medical"],
@@ -277,7 +281,7 @@ test("Sidebar Navigation: Basic Medical-only lecturer enters the single equipmen
   assert.deepEqual(equipmentEntries, [
     {
       label: "Đăng ký thiết bị",
-      href: "/equipment/register?domain=basic_medical",
+      href: "/basic-medical/equipment-requests",
       icon: "ClipboardList",
       activeIcon: "ClipboardListSolid",
     },

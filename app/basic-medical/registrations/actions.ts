@@ -223,7 +223,7 @@ export async function createBasicMedicalEquipmentRequest(
   }
 
   revalidatePath("/basic-medical/registrations");
-  revalidatePath("/equipment/register");
+  revalidatePath("/basic-medical/equipment-requests");
   revalidatePath("/equipment/requests");
   return {
     ok: true,
@@ -231,6 +231,126 @@ export async function createBasicMedicalEquipmentRequest(
       ? "Đã gửi yêu cầu duyệt đăng ký trễ."
       : "Đã tạo phiếu đăng ký thiết bị Y cơ sở.",
     requestId: requestId as string,
+  };
+}
+
+export async function updateBasicMedicalEquipmentRequest(
+  _state: BasicMedicalEquipmentRequestActionState,
+  formData: FormData,
+): Promise<BasicMedicalEquipmentRequestActionState> {
+  const requestId = String(formData.get("request_id") ?? "");
+  const receiveDate = String(formData.get("receive_date") ?? "");
+  const receiveTime = String(formData.get("receive_time") ?? "");
+  const returnDate = String(formData.get("return_date") ?? "");
+  const returnTime = String(formData.get("return_time") ?? "");
+  const note = String(formData.get("note") ?? "").trim();
+  const lateRegistrationReason = String(
+    formData.get("late_registration_reason") ?? "",
+  ).trim();
+  let items: Array<{ catalogItemId: string; quantity: number; note?: string }>;
+  try {
+    items = JSON.parse(String(formData.get("items") ?? "[]"));
+  } catch {
+    return { ok: false, message: "Danh sách thiết bị không hợp lệ." };
+  }
+  if (
+    !uuidPattern.test(requestId) ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(receiveDate) ||
+    !/^\d{2}:\d{2}$/.test(receiveTime) ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(returnDate) ||
+    !/^\d{2}:\d{2}$/.test(returnTime) ||
+    !Array.isArray(items) ||
+    !items.length ||
+    items.some(
+      (item) =>
+        !item ||
+        !uuidPattern.test(item.catalogItemId) ||
+        !Number.isInteger(item.quantity) ||
+        item.quantity < 1,
+    )
+  ) {
+    return {
+      ok: false,
+      message: "Vui lòng kiểm tra thời gian và danh sách thiết bị.",
+    };
+  }
+
+  const receiveAt = equipmentReceiveAt(receiveDate, receiveTime);
+  const returnAt = new Date(`${returnDate}T${returnTime}:00+07:00`);
+  if (
+    !receiveAt ||
+    Number.isNaN(returnAt.getTime()) ||
+    !equipmentHandoffTimes.includes(
+      receiveTime as (typeof equipmentHandoffTimes)[number],
+    ) ||
+    !equipmentHandoffTimes.includes(
+      returnTime as (typeof equipmentHandoffTimes)[number],
+    ) ||
+    returnAt < receiveAt ||
+    receiveDate < businessTodayString()
+  ) {
+    return { ok: false, message: "Giờ nhận và giờ trả không hợp lệ." };
+  }
+  const leadTime = equipmentLeadTime(receiveAt);
+  if (leadTime.isExpired) {
+    return {
+      ok: false,
+      message: "Thời gian nhận thiết bị phải sau thời điểm đăng ký.",
+    };
+  }
+  if (leadTime.requiresLateApproval && !lateRegistrationReason) {
+    return { ok: false, message: "Vui lòng nhập Lý do đăng ký trễ." };
+  }
+
+  const supabase = await createClient();
+  const { data: claims } = await supabase.auth.getClaims();
+  if (!claims?.claims?.sub) {
+    return { ok: false, message: "Phiên đăng nhập đã hết hạn." };
+  }
+  const { data: updatedId, error } = await supabase.rpc(
+    "update_basic_medical_equipment_request_content",
+    {
+      target_request_id: requestId,
+      target_receive_at: receiveAt.toISOString(),
+      target_return_at: returnAt.toISOString(),
+      target_note: note || null,
+      target_late_registration_reason: lateRegistrationReason || null,
+      target_items: items.map((item) => ({
+        catalog_item_id: item.catalogItemId,
+        quantity: item.quantity,
+        note: item.note?.trim() || null,
+      })),
+    },
+  );
+  if (error || !updatedId) {
+    const source = error?.message ?? "";
+    return {
+      ok: false,
+      message: source.includes("BASIC_MEDICAL_EQUIPMENT_EDIT_STATUS")
+        ? "Chỉ có thể điều chỉnh phiếu trạng thái Mới hoặc Đã soạn."
+        : source.includes("BASIC_MEDICAL_EQUIPMENT_EDIT_FORBIDDEN") ||
+            error?.code === "42501"
+          ? "Bạn không có quyền điều chỉnh phiếu Y cơ sở này."
+          : source.includes("BASIC_MEDICAL_SESSION_CANCELLED") ||
+              source.includes("REGISTRATION_CANCELLED")
+            ? "Buổi học Y cơ sở đã hủy hoặc không còn hợp lệ."
+            : source.includes(
+                  "EQUIPMENT_REQUEST_BASIC_MEDICAL_CATALOG_REQUIRED",
+                )
+              ? "Thiết bị đã chọn không còn hoạt động trong Danh mục Y cơ sở."
+              : "Không thể lưu nội dung điều chỉnh phiếu Y cơ sở.",
+    };
+  }
+
+  revalidatePath("/basic-medical/equipment-requests");
+  revalidatePath("/basic-medical/registrations");
+  revalidatePath("/equipment/requests");
+  return {
+    ok: true,
+    message: leadTime.requiresLateApproval
+      ? "Đã gửi yêu cầu duyệt đăng ký trễ. ID và trạng thái phiếu được giữ nguyên."
+      : "Đã lưu điều chỉnh. ID và trạng thái phiếu được giữ nguyên.",
+    requestId: updatedId as string,
   };
 }
 

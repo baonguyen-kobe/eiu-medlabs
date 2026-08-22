@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import assert from "node:assert/strict";
 import { expect, test, type Page } from "@playwright/test";
 import { assertLocalPlaywrightTarget } from "../helpers/local-test-safety.mjs";
 
@@ -8,13 +9,26 @@ const fixture = {
   registration: crypto.randomUUID(),
   schedule: crypto.randomUUID(),
   session: crypto.randomUUID(),
+  registrationB: crypto.randomUUID(),
+  scheduleB: crypto.randomUUID(),
+  sessionB: crypto.randomUUID(),
   catalog: crypto.randomUUID(),
   suffix: crypto.randomUUID().slice(0, 8),
 };
 const courseCode = `BM-EQUIP-PAGE-${fixture.suffix}`;
 const lessonTitle = `Basic Medical equipment page ${fixture.suffix}`;
+const lessonTitleB = `Basic Medical equipment copy target ${fixture.suffix}`;
 const catalogName = `Máy đo huyết áp E2E ${fixture.suffix}`;
-
+const fixtureStart = new Date(
+  Date.UTC(2099, 0, 1 + (Number.parseInt(fixture.suffix, 16) % 300)),
+);
+const sourceDate = fixtureStart.toISOString().slice(0, 10);
+const targetDate = new Date(fixtureStart.getTime() + 86_400_000)
+  .toISOString()
+  .slice(0, 10);
+const sourceDateLabel = fixtureStart.toLocaleDateString("en-GB", {
+  timeZone: "UTC",
+});
 function localSql(sql: string) {
   const listed = spawnSync(
     "docker",
@@ -75,6 +89,7 @@ test.beforeAll(() => {
   );
   localSql(`
     begin;
+    set local session_replication_role = replica;
     select set_config('app.basic_medical_registration_mutation', 'true', true);
     insert into public.courses (id, course_code, course_name, room_type_id, is_active)
     select '${fixture.course}', '${courseCode}', 'Basic Medical equipment page test', id, true
@@ -85,18 +100,33 @@ test.beforeAll(() => {
     insert into public.basic_medical_registrations
       (id, academic_year, semester, start_date, end_date, course_id, room_id, student_count,
        registrant_id, responsible_lecturer_id, created_by)
-    values ('${fixture.registration}', '2099-2100', 'HK1', '2099-11-22', '2099-11-22',
+    values ('${fixture.registration}', '2099-2100', 'HK1', '${sourceDate}', '${sourceDate}',
+      '${fixture.course}', '${fixture.room}', 20, '${adminId}', '${lecturerId}', '${adminId}');
+    insert into public.basic_medical_registrations
+      (id, academic_year, semester, start_date, end_date, course_id, room_id, student_count,
+       registrant_id, responsible_lecturer_id, created_by)
+    values ('${fixture.registrationB}', '2099-2100', 'HK1', '${targetDate}', '${targetDate}',
       '${fixture.course}', '${fixture.room}', 20, '${adminId}', '${lecturerId}', '${adminId}');
     insert into public.class_schedules
       (id, course_id, course_code_snapshot, course_name_snapshot, room_id, lecturer_id, schedule_date,
        start_time, end_time, source, schedule_status, student_count, basic_medical_registration_id,
        created_by, published_by, published_at)
     values ('${fixture.schedule}', '${fixture.course}', '${courseCode}', 'Basic Medical equipment page test',
-      '${fixture.room}', '${lecturerId}', '2099-11-22', '09:00', '11:00', 'manual', 'published', 20,
+      '${fixture.room}', '${lecturerId}', '${sourceDate}', '09:00', '11:00', 'manual', 'published', 20,
       '${fixture.registration}', '${adminId}', '${adminId}', clock_timestamp());
+    insert into public.class_schedules
+      (id, course_id, course_code_snapshot, course_name_snapshot, room_id, lecturer_id, schedule_date,
+       start_time, end_time, source, schedule_status, student_count, basic_medical_registration_id,
+       created_by, published_by, published_at)
+    values ('${fixture.scheduleB}', '${fixture.course}', '${courseCode}', 'Basic Medical equipment copy target',
+      '${fixture.room}', '${lecturerId}', '${targetDate}', '09:00', '11:00', 'manual', 'published', 20,
+      '${fixture.registrationB}', '${adminId}', '${adminId}', clock_timestamp());
     insert into public.basic_medical_registration_sessions
       (id, registration_id, class_schedule_id, lesson_title, teaching_lecturer_id, session_number)
     values ('${fixture.session}', '${fixture.registration}', '${fixture.schedule}', '${lessonTitle}', '${lecturerId}', 1);
+    insert into public.basic_medical_registration_sessions
+      (id, registration_id, class_schedule_id, lesson_title, teaching_lecturer_id, session_number)
+    values ('${fixture.sessionB}', '${fixture.registrationB}', '${fixture.scheduleB}', '${lessonTitleB}', '${lecturerId}', 1);
     insert into public.basic_medical_equipment_catalog
       (id, item_name, commercial_name, item_type, country_of_origin, manufacturer, model, unit, is_active)
     values ('${fixture.catalog}', '${catalogName}', 'E2E commercial ${fixture.suffix}', 'Thiết bị',
@@ -114,14 +144,17 @@ test.afterAll(() => {
       select id
       from public.equipment_requests
       where request_domain = 'basic_medical'
-        and source_identity_id = '${fixture.session}'
+        and source_identity_id in ('${fixture.session}', '${fixture.sessionB}')
     );
     delete from public.equipment_requests
-    where request_domain = 'basic_medical'
-      and source_identity_id = '${fixture.session}';
+      where request_domain = 'basic_medical'
+      and source_identity_id in ('${fixture.session}', '${fixture.sessionB}');
     delete from public.basic_medical_registration_sessions where id = '${fixture.session}';
+    delete from public.basic_medical_registration_sessions where id = '${fixture.sessionB}';
     delete from public.class_schedules where id = '${fixture.schedule}';
+    delete from public.class_schedules where id = '${fixture.scheduleB}';
     delete from public.basic_medical_registrations where id = '${fixture.registration}';
+    delete from public.basic_medical_registrations where id = '${fixture.registrationB}';
     delete from public.basic_medical_equipment_catalog where id = '${fixture.catalog}';
     delete from public.rooms where id = '${fixture.room}';
     delete from public.courses where id = '${fixture.course}';
@@ -132,31 +165,35 @@ test.afterAll(() => {
 test("Basic Medical equipment registration stays on a stable page flow", async ({
   page,
 }) => {
+  test.setTimeout(60_000);
   await loginAsAdmin(page);
 
-  const equipmentRegisterLink = page.getByRole("link", {
-    name: "Đăng ký thiết bị",
-    exact: true,
-  });
+  const equipmentRegisterLink = page.locator(
+    'a[href="/basic-medical/equipment-requests"]',
+  );
   await expect(equipmentRegisterLink).toHaveCount(1);
   await equipmentRegisterLink.click();
-  await expect(page).toHaveURL(/\/equipment\/register$/);
-  await page.getByRole("link", { name: "Y cơ sở", exact: true }).click();
-  await expect(page).toHaveURL(/domain=basic_medical/);
+  await expect(page).toHaveURL(/\/basic-medical\/equipment-requests$/);
+  await expect(page.locator('a[href*="domain="]')).toHaveCount(0);
 
   const sessionPicker = page.getByRole("combobox", {
     name: "Buổi học Y cơ sở",
   });
   await sessionPicker.click();
-  await page.getByRole("option", { name: new RegExp(courseCode) }).click();
+  await page
+    .getByRole("option", {
+      name: new RegExp(`${sourceDateLabel}.*${courseCode}`),
+    })
+    .click();
   await expect(page).toHaveURL(
-    new RegExp(`domain=basic_medical&session=${fixture.session}`),
+    new RegExp(`equipment-requests\\?session=${fixture.session}`),
   );
 
   await page.goto("/basic-medical/registrations?status=all");
   const registrationRow = page
     .locator("tr.equipment-request-table-row")
     .filter({ hasText: courseCode })
+    .filter({ hasText: sourceDateLabel })
     .first();
   await expect(registrationRow).toBeVisible({ timeout: 15_000 });
   await registrationRow.click();
@@ -167,7 +204,7 @@ test("Basic Medical equipment registration stays on a stable page flow", async (
     .getByRole("link", { name: "Đăng ký thiết bị", exact: true })
     .click();
   await expect(page).toHaveURL(
-    new RegExp(`domain=basic_medical&session=${fixture.session}`),
+    new RegExp(`equipment-requests\\?session=${fixture.session}`),
   );
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
@@ -186,7 +223,7 @@ test("Basic Medical equipment registration stays on a stable page flow", async (
   );
   await page.waitForTimeout(3_000);
   await expect(page).toHaveURL(
-    new RegExp(`domain=basic_medical&session=${fixture.session}`),
+    new RegExp(`equipment-requests\\?session=${fixture.session}`),
   );
   await expect(
     page.getByRole("heading", { name: "Thông tin môn học" }),
@@ -210,30 +247,35 @@ test("Basic Medical equipment registration stays on a stable page flow", async (
   ).toBeVisible();
   await page.getByRole("button", { name: "Xóa", exact: true }).last().click();
 
-  await page.locator('input[name="receive_date"]').fill("2099-11-22");
+  await page.locator('input[name="receive_date"]').fill(sourceDate);
   await page.getByRole("button", { name: "Gửi đăng ký", exact: true }).click();
   await expect(page).toHaveURL(
-    new RegExp(`domain=basic_medical&session=${fixture.session}`),
+    new RegExp(`equipment-requests\\?session=${fixture.session}`),
   );
   await expect(
     page.getByRole("button", { name: "Gửi đăng ký", exact: true }),
   ).toHaveCount(0);
-  await expect(page.getByText(courseCode)).toBeVisible();
-  await expect(page.getByText(lessonTitle)).toBeVisible();
   const detailTable = page.locator(".equipment-detail-table");
+  await expect(page.locator(".basic-medical-equipment-detail")).toContainText(
+    courseCode,
+  );
+  await expect(page.locator(".basic-medical-equipment-detail")).toContainText(
+    lessonTitle,
+  );
   await expect(detailTable).toContainText(catalogName);
   await expect(detailTable).toContainText(`E2E commercial ${fixture.suffix}`);
   await expect(detailTable.locator("tbody tr").first()).toContainText("1");
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.waitForTimeout(3_000);
   await expect(page).toHaveURL(
-    new RegExp(`domain=basic_medical&session=${fixture.session}`),
+    new RegExp(`equipment-requests\\?session=${fixture.session}`),
   );
 
   await page.goto("/basic-medical/registrations?status=all");
   const persistedRegistrationRow = page
     .locator("tr.equipment-request-table-row")
     .filter({ hasText: courseCode })
+    .filter({ hasText: sourceDateLabel })
     .first();
   await expect(persistedRegistrationRow).toBeVisible({ timeout: 15_000 });
   await persistedRegistrationRow.click();
@@ -256,9 +298,89 @@ test("Basic Medical equipment registration stays on a stable page flow", async (
     .getByRole("link", { name: "Xem phiếu thiết bị", exact: true })
     .click();
   await expect(page).toHaveURL(
-    new RegExp(`domain=basic_medical&session=${fixture.session}`),
+    new RegExp(`equipment-requests\\?session=${fixture.session}`),
   );
   await expect(page.locator(".equipment-detail-table")).toContainText(
     catalogName,
   );
+
+  await page.goto("/basic-medical/equipment-requests?mode=edit");
+  const editSelect = page.locator('select[name="request"]');
+  const editOption = editSelect.locator("option").filter({
+    hasText: courseCode,
+  });
+  await expect(editOption).toHaveCount(1);
+  const requestAId = await editOption.getAttribute("value");
+  assert.ok(requestAId, "fixture request A should be available for edit");
+  await editSelect.selectOption(requestAId);
+  await page
+    .getByRole("button", { name: "Tải phiếu để điều chỉnh", exact: true })
+    .click();
+  await expect(page).toHaveURL(/mode=edit/);
+  await page
+    .getByRole("spinbutton", { name: "Số lượng thiết bị dòng 1" })
+    .fill("2");
+  await page
+    .getByRole("textbox", { name: "Ghi chú thiết bị dòng 1" })
+    .fill("đã điều chỉnh E2E");
+  await page
+    .getByRole("button", { name: "Lưu điều chỉnh", exact: true })
+    .click();
+  await expect(page.getByRole("status")).toContainText("Đã lưu điều chỉnh");
+  await page.goto(
+    `/basic-medical/equipment-requests?session=${fixture.session}`,
+  );
+  await expect(
+    page.locator(".equipment-detail-table tbody tr").first(),
+  ).toContainText("2");
+  await expect(page.locator(".equipment-detail-table")).toContainText(
+    "đã điều chỉnh E2E",
+  );
+
+  const requestCode = await page
+    .locator(".basic-medical-equipment-detail-summary > div")
+    .first()
+    .locator("strong")
+    .textContent();
+  assert.match(requestCode ?? "", /^\d{12}$/);
+  await page.goto("/basic-medical/equipment-requests?mode=copy");
+  await page.locator('input[name="request"]').fill(requestCode ?? "");
+  await page
+    .getByRole("button", { name: "Tải dữ liệu để sao chép", exact: true })
+    .click();
+  const copySessionPicker = page.getByRole("combobox", {
+    name: "Buổi học Y cơ sở",
+  });
+  await copySessionPicker.click();
+  await copySessionPicker.fill(lessonTitleB);
+  await expect(copySessionPicker).toHaveAttribute("aria-expanded", "true");
+  await page.getByRole("option", { name: new RegExp(lessonTitleB) }).click();
+  await expect(page).toHaveURL(
+    new RegExp(`session=${fixture.sessionB}.*mode=copy`),
+  );
+  await expect(
+    page.getByRole("textbox", { name: "Tên bài TN-TH" }),
+  ).toHaveAttribute("readonly", "");
+  await page.locator('input[name="receive_date"]').fill(targetDate);
+  await expect(
+    page.getByRole("spinbutton", { name: "Số lượng thiết bị dòng 1" }),
+  ).toHaveValue("2");
+  await page
+    .getByRole("button", { name: "Tạo phiếu sao chép", exact: true })
+    .click();
+  await expect(page.locator(".equipment-detail-table")).toContainText(
+    catalogName,
+  );
+  await expect(page.getByText(lessonTitleB)).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.waitForTimeout(3_000);
+  const createdRequests = localSql(`
+    select id || '|' || source_identity_id
+    from public.equipment_requests
+    where request_domain = 'basic_medical'
+      and source_identity_id in ('${fixture.session}', '${fixture.sessionB}')
+    order by source_identity_id;
+  `).split(/\r?\n/);
+  assert.equal(createdRequests.length, 2, "A and B should both persist");
+  assert.notEqual(createdRequests[0], createdRequests[1]);
 });

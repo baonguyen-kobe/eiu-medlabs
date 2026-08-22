@@ -11,8 +11,12 @@ export type BasicMedicalEquipmentSessionOption = {
 
 export function BasicMedicalEquipmentSessionSelector({
   sessions,
+  mode,
+  requestKey,
 }: {
   sessions: BasicMedicalEquipmentSessionOption[];
+  mode?: "copy";
+  requestKey?: string;
 }) {
   const router = useRouter();
   return (
@@ -24,9 +28,10 @@ export function BasicMedicalEquipmentSessionSelector({
           options={sessions}
           onChange={(sessionId) => {
             if (!sessionId) return;
-            router.push(
-              `/equipment/register?domain=basic_medical&session=${sessionId}`,
-            );
+            const query = new URLSearchParams({ session: sessionId });
+            if (mode) query.set("mode", mode);
+            if (requestKey) query.set("request", requestKey);
+            router.push(`/basic-medical/equipment-requests?${query}`);
           }}
           required
           ariaLabel="Buổi học Y cơ sở"

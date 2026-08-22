@@ -143,12 +143,10 @@ function buildNavigation(
       activeIcon: PlusSolid,
     });
   }
-  if (canUseSkillsEquipment || canUseBasicMedicalEquipment) {
+  if (canUseSkillsEquipment) {
     taoPhieuItems.push({
       label: "Đăng ký thiết bị",
-      href: canUseSkillsEquipment
-        ? "/equipment/register"
-        : "/equipment/register?domain=basic_medical",
+      href: "/equipment/register",
       icon: ClipboardList,
       activeIcon: ClipboardListSolid,
     });
@@ -281,6 +279,14 @@ function buildNavigation(
       yItems.push({
         label: "Phiếu Y cơ sở",
         href: "/basic-medical/registrations",
+        icon: ClipboardList,
+        activeIcon: ClipboardListSolid,
+      });
+    }
+    if (canUseBasicMedicalEquipment) {
+      yItems.push({
+        label: "Đăng ký thiết bị",
+        href: "/basic-medical/equipment-requests",
         icon: ClipboardList,
         activeIcon: ClipboardListSolid,
       });

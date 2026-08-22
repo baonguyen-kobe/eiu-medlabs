@@ -18,15 +18,22 @@ test("Wave 2 creates Basic Medical requests through the shared guarded RPC", asy
   assert.doesNotMatch(actions, /processPendingEmailOutbox/);
 });
 
-test("Wave 2 uses a page-based Basic Medical registration form", async () => {
-  const [registerPage, registrationPage, list, form, basicMedicalPage] =
-    await Promise.all([
-      source("app/equipment/register/page.tsx"),
-      source("app/basic-medical/registrations/page.tsx"),
-      source("components/basic-medical-registration-list.tsx"),
-      source("components/basic-medical-equipment-request-form.tsx"),
-      source("components/basic-medical-equipment-registration-page.tsx"),
-    ]);
+test("Wave 2 uses a separate page-based Basic Medical registration form", async () => {
+  const [
+    registerPage,
+    workspacePage,
+    registrationPage,
+    list,
+    form,
+    basicMedicalPage,
+  ] = await Promise.all([
+    source("app/equipment/register/page.tsx"),
+    source("app/basic-medical/equipment-requests/page.tsx"),
+    source("app/basic-medical/registrations/page.tsx"),
+    source("components/basic-medical-registration-list.tsx"),
+    source("components/basic-medical-equipment-request-form.tsx"),
+    source("components/basic-medical-equipment-registration-page.tsx"),
+  ]);
 
   assert.match(registrationPage, /\.eq\("request_domain", "basic_medical"\)/);
   assert.match(registrationPage, /\.in\("source_identity_id", sessionIds\)/);
@@ -34,7 +41,11 @@ test("Wave 2 uses a page-based Basic Medical registration form", async () => {
   assert.match(list, /Phiếu thiết bị đã hủy/);
   assert.match(list, /Xem phiếu thiết bị/);
   assert.match(list, /Đăng ký thiết bị/);
-  assert.match(registerPage, /BasicMedicalEquipmentRegistrationPage/);
+  assert.doesNotMatch(registerPage, /BasicMedicalEquipmentRegistrationPage/);
+  assert.doesNotMatch(registerPage, /query\.domain/);
+  assert.doesNotMatch(registerPage, /EquipmentRegistrationDomainSwitch/);
+  assert.match(workspacePage, /BasicMedicalEquipmentRegistrationPage/);
+  assert.match(workspacePage, /canUseBasicMedicalEquipmentRegistration/);
   assert.match(basicMedicalPage, /\.in\("source_identity_id", sourceIds\)/);
   assert.match(basicMedicalPage, /requestsBySession/);
   assert.match(basicMedicalPage, /function sessionCanCreateEquipmentRequest/);
@@ -46,7 +57,9 @@ test("Wave 2 uses a page-based Basic Medical registration form", async () => {
     basicMedicalPage,
     /sessionCanCreateEquipmentRequest\([\s\S]*?today/,
   );
-  assert.match(basicMedicalPage, /selectedRequest \? \(/);
+  assert.match(basicMedicalPage, /canEditSelected && initialData/);
+  assert.match(basicMedicalPage, /BasicMedicalRequestModePicker/);
+  assert.match(basicMedicalPage, /request_domain", "basic_medical"/);
   assert.match(form, /SearchableCombobox/);
   assert.match(form, /schedule-form equipment-request-form/);
   assert.match(form, /form-section-number/);
@@ -59,7 +72,7 @@ test("Wave 2 uses a page-based Basic Medical registration form", async () => {
   assert.doesNotMatch(form, /createPortal/);
   assert.match(
     list,
-    /<Link[\s\S]*?href=\{`\/equipment\/register\?domain=basic_medical&session=\$\{session\.id\}`\}/,
+    /<Link[\s\S]*?href=\{`\/basic-medical\/equipment-requests\?session=\$\{session\.id\}`\}/,
   );
   assert.doesNotMatch(list, /activeEquipmentRequest/);
   assert.match(list, /session\.class_schedules\.schedule_date >=\s*today/);
@@ -72,13 +85,13 @@ test("equipment registration route preserves Skills default and adds Basic Medic
     source("lib/workspace-access.ts"),
   ]);
 
-  assert.match(page, /query\.domain === "basic_medical"/);
-  assert.match(page, /: canUseSkills\s*\?\s*"nursing_skills"/);
-  assert.match(page, /BasicMedicalEquipmentRegistrationPage/);
+  assert.doesNotMatch(page, /query\.domain/);
+  assert.doesNotMatch(page, /basic_medical/);
+  assert.doesNotMatch(page, /BasicMedicalEquipmentRegistrationPage/);
   assert.match(access, /canUseBasicMedicalEquipmentRegistration/);
   assert.match(shell, /canUseBasicMedicalEquipmentRegistration/);
-  assert.match(shell, /canUseSkillsEquipment \|\| canUseBasicMedicalEquipment/);
-  assert.equal((shell.match(/label: "Đăng ký thiết bị"/g) ?? []).length, 1);
+  assert.match(shell, /href: "\/basic-medical\/equipment-requests"/);
+  assert.equal((shell.match(/label: "Đăng ký thiết bị"/g) ?? []).length, 2);
 });
 
 test("Basic Medical create refreshes the selected page after the guarded action", async () => {
@@ -87,9 +100,40 @@ test("Basic Medical create refreshes the selected page after the guarded action"
     source("components/basic-medical-equipment-request-form.tsx"),
   ]);
 
-  assert.match(actions, /revalidatePath\("\/equipment\/register"\)/);
+  assert.match(
+    actions,
+    /revalidatePath\("\/basic-medical\/equipment-requests"\)/,
+  );
   assert.match(form, /router\.refresh\(\)/);
   assert.doesNotMatch(form, /router\.replace/);
+});
+
+test("Basic Medical edit and copy remain domain-local and immutable", async () => {
+  const [page, form, actions, migration, schema] = await Promise.all([
+    source("components/basic-medical-equipment-registration-page.tsx"),
+    source("components/basic-medical-equipment-request-form.tsx"),
+    source("app/basic-medical/registrations/actions.ts"),
+    source(
+      "supabase/migrations/20260823110000_basic_medical_equipment_request_edit.sql",
+    ),
+    source("supabase/schemas/03_registration_workflows.sql"),
+  ]);
+
+  assert.match(page, /BasicMedicalRequestModePicker/);
+  assert.match(page, /request_domain", "basic_medical"/);
+  assert.match(page, /equipmentRequestCodeBounds/);
+  assert.match(form, /mode: "edit" \| "copy"/);
+  assert.match(form, /updateBasicMedicalEquipmentRequest/);
+  assert.match(actions, /update_basic_medical_equipment_request_content/);
+  assert.doesNotMatch(actions, /processPendingEmailOutbox/);
+  for (const sql of [migration, schema]) {
+    assert.match(sql, /update_basic_medical_equipment_request_content/);
+    assert.match(sql, /request_domain = 'basic_medical'/);
+    assert.match(sql, /basic_medical_equipment_catalog/);
+    assert.match(sql, /basic_medical_catalog_item_id/);
+    assert.match(sql, /source_row\.lesson_title/);
+  }
+  assert.doesNotMatch(migration, /enqueue_equipment_request_outbox_event/);
 });
 
 test("shared request list renders the catalog that belongs to its domain", async () => {

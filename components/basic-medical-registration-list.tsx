@@ -1266,7 +1266,7 @@ export function BasicMedicalRegistrationList({
                                                 </span>
                                                 <Link
                                                   className="button button-secondary"
-                                                  href={`/equipment/register?domain=basic_medical&session=${session.id}`}
+                                                  href={`/basic-medical/equipment-requests?session=${session.id}`}
                                                 >
                                                   Xem phiếu thiết bị
                                                 </Link>
@@ -1284,7 +1284,7 @@ export function BasicMedicalRegistrationList({
                                                 </span>
                                                 <Link
                                                   className="button button-secondary"
-                                                  href={`/equipment/register?domain=basic_medical&session=${session.id}`}
+                                                  href={`/basic-medical/equipment-requests?session=${session.id}`}
                                                 >
                                                   Xem phiếu thiết bị
                                                 </Link>
@@ -1293,7 +1293,7 @@ export function BasicMedicalRegistrationList({
                                           ) : canCreateEquipmentRequest ? (
                                             <Link
                                               className="button button-primary"
-                                              href={`/equipment/register?domain=basic_medical&session=${session.id}`}
+                                              href={`/basic-medical/equipment-requests?session=${session.id}`}
                                             >
                                               Đăng ký thiết bị
                                             </Link>
