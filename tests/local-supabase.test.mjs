@@ -2062,8 +2062,8 @@ test("người đăng ký được điều chỉnh nội dung nhưng không đư
     "update_equipment_request_content",
     {
       target_request_id: requestId,
-      target_class_schedule_id: secondScheduleId,
-      target_semester: "HK2",
+      target_class_schedule_id: firstScheduleId,
+      target_semester: "HK1",
       target_responsible_lecturer_id: lecturer.user.id,
       target_receive_at: "2035-09-10T02:00:00.000Z",
       target_return_at: "2035-09-10T04:00:00.000Z",
@@ -2090,8 +2090,8 @@ test("người đăng ký được điều chỉnh nội dung nhưng không đư
     .single();
   assert.ifError(readError);
   assert.equal(updatedRequest.id, requestId);
-  assert.equal(updatedRequest.class_schedule_id, secondScheduleId);
-  assert.equal(updatedRequest.semester, "HK2");
+  assert.equal(updatedRequest.class_schedule_id, firstScheduleId);
+  assert.equal(updatedRequest.semester, "HK1");
   assert.equal(updatedRequest.status, "new");
   assert.equal(updatedRequest.note, "Nội dung đã điều chỉnh");
   assert.deepEqual(updatedRequest.equipment_request_items, [
@@ -2124,8 +2124,8 @@ test("người đăng ký được điều chỉnh nội dung nhưng không đư
     "update_equipment_request_content",
     {
       target_request_id: requestId,
-      target_class_schedule_id: secondScheduleId,
-      target_semester: "HK2",
+      target_class_schedule_id: firstScheduleId,
+      target_semester: "HK1",
       target_responsible_lecturer_id: lecturer.user.id,
       target_receive_at: "2035-09-10T02:00:00.000Z",
       target_return_at: "2035-09-10T04:00:00.000Z",

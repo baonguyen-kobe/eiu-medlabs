@@ -346,7 +346,7 @@ test("D4: Historical request on NULL schedule -> same-schedule edit preserves HK
   }
 });
 
-test("D5: Change class_schedule_id to schedule with NULL semester -> FAIL CLOSED", async () => {
+test("D5: immutable source rejects a NULL-semester destination before semester validation", async () => {
   const service = serviceClient();
   const lecturer = await signIn("giangvien@campus.local", "LocalLecturer123!");
   const scheduleIdA = crypto.randomUUID();
@@ -415,7 +415,7 @@ test("D5: Change class_schedule_id to schedule with NULL semester -> FAIL CLOSED
     );
     assert.match(
       updateErr.message,
-      /Lịch học mới chưa có thông tin Học kỳ hợp lệ/i,
+      /EQUIPMENT_REQUEST_DOMAIN_OR_SOURCE_IMMUTABLE/i,
     );
   } finally {
     if (requestId) {
@@ -426,7 +426,7 @@ test("D5: Change class_schedule_id to schedule with NULL semester -> FAIL CLOSED
   }
 });
 
-test("D6: Change class_schedule_id to canonical destination -> target schedule HK3 wins", async () => {
+test("D6: immutable source rejects a canonical destination", async () => {
   const service = serviceClient();
   const lecturer = await signIn("giangvien@campus.local", "LocalLecturer123!");
   const scheduleIdA = crypto.randomUUID();
@@ -492,11 +492,11 @@ test("D6: Change class_schedule_id to canonical destination -> target schedule H
       .select()
       .single();
 
-    assert.ok(!updateErr, `Update failed: ${updateErr?.message}`);
-    assert.equal(
-      updated.semester,
-      "HK3",
-      "Destination schedule HK3 must overwrite caller HK1",
+    assert.equal(updated, null);
+    assert.equal(updateErr?.code, "22023");
+    assert.match(
+      updateErr?.message ?? "",
+      /EQUIPMENT_REQUEST_DOMAIN_OR_SOURCE_IMMUTABLE/i,
     );
   } finally {
     if (requestId) {

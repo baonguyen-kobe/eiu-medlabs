@@ -11,6 +11,10 @@ const blockerMigrationPath =
   "supabase/migrations/20260822130000_basic_medical_equipment_request_blockers.sql";
 const blockerSchemaPath =
   "supabase/schemas/26_basic_medical_equipment_request_blockers.sql";
+const skillsCompatibilityMigrationPath =
+  "supabase/migrations/20260822140000_equipment_request_skills_compatibility.sql";
+const skillsCompatibilitySchemaPath =
+  "supabase/schemas/27_equipment_request_skills_compatibility.sql";
 
 async function source(path) {
   return readFile(new URL(path, root), "utf8");
@@ -83,4 +87,17 @@ test("Wave 1 blocker correction stays declarative and preserves domain contracts
   assert.match(migration, /session_number = session_number \+ 1000000/);
   assert.match(migration, /enqueue_equipment_request_outbox_event/);
   assert.match(migration, /equipment_request\.hard_deleted/);
+});
+
+test("Wave 1 Skills compatibility correction stays declarative", async () => {
+  const [migration, schema] = await Promise.all([
+    source(skillsCompatibilityMigrationPath),
+    source(skillsCompatibilitySchemaPath),
+  ]);
+
+  assert.equal(migration, schema);
+  assert.match(migration, /private\.has_role\('teaching_assistant'\)/);
+  assert.match(migration, /private\.has_room_type\(skills_room_type_id\)/);
+  assert.match(migration, /EQUIPMENT_REQUEST_DOMAIN_OR_SOURCE_IMMUTABLE/);
+  assert.match(migration, /Ngày trả phải bằng hoặc sau ngày học/);
 });
