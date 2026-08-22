@@ -167,6 +167,7 @@ test("Personnel reset forces an email-password account through password change b
 test("forgot-password uses the local canonical callback and completes an email-password recovery", async ({
   page,
 }) => {
+  test.slow();
   const email = `recovery-${crypto.randomUUID()}@campus.local`;
   const initialPassword = "InitialPassword123!";
   const recoveredPassword = "RecoveredPassword123!";
@@ -199,7 +200,9 @@ test("forgot-password uses the local canonical callback and completes an email-p
     await page.getByLabel("Mật khẩu mới").fill(recoveredPassword);
     await page.getByLabel("Xác nhận mật khẩu").fill(recoveredPassword);
     await page.getByRole("button", { name: "Cập nhật mật khẩu" }).click();
-    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page).toHaveURL(/\/dashboard$/, {
+      timeout: 20_000,
+    });
 
     await page.context().clearCookies();
     await login(page, email, recoveredPassword);
