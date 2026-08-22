@@ -767,6 +767,7 @@ export function BasicMedicalRegistrationList({
   equipmentRequestsBySession,
   equipmentCatalog,
   today,
+  equipmentRegistrant,
 }: {
   registrations: BasicMedicalRegistrationListItem[];
   inventories: BasicMedicalRoomInventoryItem[];
@@ -780,6 +781,12 @@ export function BasicMedicalRegistrationList({
   equipmentRequestsBySession: Record<string, EquipmentRequestListItem>;
   equipmentCatalog: BasicMedicalEquipmentCatalogItem[];
   today: string;
+  equipmentRegistrant: {
+    id: string;
+    fullName: string;
+    email: string;
+    phone: string;
+  };
 }) {
   const router = useRouter();
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
@@ -1264,9 +1271,24 @@ export function BasicMedicalRegistrationList({
                                           {equipmentRequest ? (
                                             equipmentRequest.status ===
                                             "cancelled" ? (
-                                              <span className="request-status request-status-red">
-                                                Phiếu thiết bị đã hủy
-                                              </span>
+                                              <div className="basic-medical-equipment-request-actions">
+                                                <span className="request-status request-status-red">
+                                                  Phiếu thiết bị đã hủy
+                                                </span>
+                                                <button
+                                                  type="button"
+                                                  className="button button-secondary"
+                                                  onClick={() =>
+                                                    setActiveEquipmentRequest({
+                                                      registration,
+                                                      session,
+                                                      request: equipmentRequest,
+                                                    })
+                                                  }
+                                                >
+                                                  Xem phiếu thiết bị
+                                                </button>
+                                              </div>
                                             ) : (
                                               <div className="basic-medical-equipment-request-actions">
                                                 <span
@@ -1358,6 +1380,7 @@ export function BasicMedicalRegistrationList({
           request={activeEquipmentRequest.request}
           catalog={equipmentCatalog}
           today={today}
+          equipmentRegistrant={equipmentRegistrant}
           onClose={() => setActiveEquipmentRequest(null)}
           onCreated={() => {
             setActiveEquipmentRequest(null);

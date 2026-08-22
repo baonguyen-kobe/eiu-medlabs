@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { SearchableCombobox } from "@/components/searchable-combobox";
 import {
   createBasicMedicalEquipmentRequest,
   type BasicMedicalEquipmentRequestActionState,
@@ -26,6 +27,7 @@ import type {
 
 type DraftItem = {
   key: number;
+  itemName: string;
   catalogItemId: string;
   quantity: number;
   note: string;
@@ -109,14 +111,6 @@ function SourceDetails({
         <dt>Người đăng ký</dt>
         <dd>{registration.registrant?.full_name ?? "—"}</dd>
       </div>
-      <div>
-        <dt>Email</dt>
-        <dd>{registration.registrant?.email ?? "—"}</dd>
-      </div>
-      <div>
-        <dt>Số điện thoại</dt>
-        <dd>{registration.registrant?.phone ?? "—"}</dd>
-      </div>
     </dl>
   );
 }
@@ -157,6 +151,14 @@ function RequestDetail({
           </strong>
         </div>
         <div>
+          <span>Email</span>
+          <strong>{request.email_snapshot || "—"}</strong>
+        </div>
+        <div>
+          <span>Số điện thoại</span>
+          <strong>{request.phone_snapshot || "—"}</strong>
+        </div>
+        <div>
           <span>Giảng viên phụ trách</span>
           <strong>
             {request.responsible?.full_name ??
@@ -194,6 +196,10 @@ function RequestDetail({
                 <th>STT</th>
                 <th>Tên thiết bị và vật tư</th>
                 <th>Tên thương mại</th>
+                <th>Loại</th>
+                <th>Nước SX</th>
+                <th>Hãng</th>
+                <th>Model</th>
                 <th>ĐVT</th>
                 <th>Số lượng</th>
                 <th>Ghi chú</th>
@@ -212,6 +218,10 @@ function RequestDetail({
                       </strong>
                     </td>
                     <td>{catalog?.commercial_name || "—"}</td>
+                    <td>{catalog?.item_type || "—"}</td>
+                    <td>{catalog?.country_of_origin || "—"}</td>
+                    <td>{catalog?.manufacturer || "—"}</td>
+                    <td>{catalog?.model || "—"}</td>
                     <td>{catalog?.unit || "—"}</td>
                     <td>{item.quantity}</td>
                     <td>{item.note || "—"}</td>
@@ -234,6 +244,7 @@ export function BasicMedicalEquipmentRequestModal({
   request,
   onClose,
   onCreated,
+  equipmentRegistrant,
 }: {
   registration: BasicMedicalRegistrationListItem;
   session: BasicMedicalRegistrationSessionItem;
@@ -242,6 +253,12 @@ export function BasicMedicalEquipmentRequestModal({
   request?: EquipmentRequestListItem;
   onClose: () => void;
   onCreated?: () => void;
+  equipmentRegistrant: {
+    id: string;
+    fullName: string;
+    email: string;
+    phone: string;
+  };
 }) {
   const [state, formAction, pending] = useActionState(
     createBasicMedicalEquipmentRequest,
@@ -249,7 +266,7 @@ export function BasicMedicalEquipmentRequestModal({
   );
   const nextKey = useRef(2);
   const [items, setItems] = useState<DraftItem[]>([
-    { key: 1, catalogItemId: "", quantity: 1, note: "" },
+    { key: 1, itemName: "", catalogItemId: "", quantity: 1, note: "" },
   ]);
   const [receiveDate, setReceiveDate] = useState(today);
   const [receiveTime, setReceiveTime] =
@@ -260,12 +277,51 @@ export function BasicMedicalEquipmentRequestModal({
   const [returnTime, setReturnTime] =
     useState<(typeof equipmentHandoffTimes)[number]>("16:00");
   const [clientError, setClientError] = useState("");
+  const [lateRegistrationReason, setLateRegistrationReason] = useState("");
+  const [nowMs, setNowMs] = useState<number | null>(null);
   const scheduleDate = session.class_schedules?.schedule_date ?? today;
   const receiveAt = useMemo(
     () => equipmentReceiveAt(receiveDate, receiveTime),
     [receiveDate, receiveTime],
   );
-  const leadTime = receiveAt ? equipmentLeadTime(receiveAt) : null;
+  const leadTime =
+    receiveAt && nowMs !== null
+      ? equipmentLeadTime(receiveAt, new Date(nowMs))
+      : null;
+  const phoneIsValid = /^\d{10}$/.test(equipmentRegistrant.phone);
+  const catalogIndex = useMemo(() => {
+    const byId = new Map(catalog.map((item) => [item.id, item]));
+    const itemsByName = new Map<string, BasicMedicalEquipmentCatalogItem[]>();
+    for (const item of catalog)
+      itemsByName.set(item.item_name, [
+        ...(itemsByName.get(item.item_name) ?? []),
+        item,
+      ]);
+    const options = (items: BasicMedicalEquipmentCatalogItem[]) =>
+      items.map((item) => ({
+        value: item.id,
+        label: item.commercial_name || item.item_name,
+        keywords: [item.item_name, item.model, item.manufacturer]
+          .filter(Boolean)
+          .join(" "),
+      }));
+    return {
+      byId,
+      itemsByName,
+      itemNameOptions: [...itemsByName.entries()].map(([value, items]) => ({
+        value,
+        label: value,
+        keywords: items.map((item) => item.commercial_name ?? "").join(" "),
+      })),
+      allCommercialOptions: options(catalog),
+      commercialOptionsByItemName: new Map(
+        [...itemsByName.entries()].map(([name, items]) => [
+          name,
+          options(items),
+        ]),
+      ),
+    };
+  }, [catalog]);
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -281,6 +337,15 @@ export function BasicMedicalEquipmentRequestModal({
   }, [onClose, pending]);
 
   useEffect(() => {
+    const initialTimer = window.setTimeout(() => setNowMs(Date.now()), 0);
+    const timer = window.setInterval(() => setNowMs(Date.now()), 60_000);
+    return () => {
+      window.clearTimeout(initialTimer);
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  useEffect(() => {
     if (state.ok) onCreated?.();
   }, [onCreated, state.ok]);
 
@@ -290,10 +355,28 @@ export function BasicMedicalEquipmentRequestModal({
     );
   }
 
+  function selectItemName(item: DraftItem, itemName: string) {
+    const matches = catalogIndex.itemsByName.get(itemName) ?? [];
+    updateItem(item.key, {
+      itemName,
+      catalogItemId: matches.length === 1 ? matches[0].id : "",
+    });
+  }
+
+  function selectCommercialItem(item: DraftItem, catalogItemId: string) {
+    updateItem(item.key, {
+      catalogItemId,
+      itemName: catalogIndex.byId.get(catalogItemId)?.item_name ?? "",
+    });
+  }
+
   function submitCheck(event: React.FormEvent<HTMLFormElement>) {
     if (
       !items.length ||
-      items.some((item) => !item.catalogItemId || item.quantity < 1) ||
+      !phoneIsValid ||
+      items.some(
+        (item) => !item.itemName || !item.catalogItemId || item.quantity < 1,
+      ) ||
       receiveDate < today ||
       receiveDate > scheduleDate ||
       returnDate < scheduleDate ||
@@ -306,12 +389,7 @@ export function BasicMedicalEquipmentRequestModal({
       );
       return;
     }
-    if (
-      leadTime?.requiresLateApproval &&
-      !String(
-        new FormData(event.currentTarget).get("late_registration_reason") ?? "",
-      ).trim()
-    ) {
+    if (leadTime?.requiresLateApproval && !lateRegistrationReason.trim()) {
       event.preventDefault();
       setClientError("Vui lòng nhập Lý do đăng ký trễ.");
       return;
@@ -365,7 +443,7 @@ export function BasicMedicalEquipmentRequestModal({
             />
           ) : (
             <form
-              className="basic-medical-equipment-request-form"
+              className="schedule-form equipment-request-form"
               action={formAction}
               onSubmit={submitCheck}
             >
@@ -382,12 +460,117 @@ export function BasicMedicalEquipmentRequestModal({
                 )}
               />
               <section>
-                <h3>Nguồn buổi học (chỉ xem)</h3>
-                <SourceDetails registration={registration} session={session} />
+                <div className="form-section-title">
+                  <div className="form-section-title-line">
+                    <span className="form-section-number">01</span>
+                    <h2>Thông tin môn học</h2>
+                  </div>
+                </div>
+                <div className="form-grid four">
+                  <label>
+                    Ngày học
+                    <input value={scheduleDate} readOnly />
+                  </label>
+                  <label>
+                    Giờ học
+                    <input
+                      value={`${formatTime(session.class_schedules?.start_time)}–${formatTime(session.class_schedules?.end_time)}`}
+                      readOnly
+                    />
+                  </label>
+                  <label>
+                    Học kỳ
+                    <input value={registration.semester} readOnly />
+                  </label>
+                  <label>
+                    Mã môn học
+                    <input
+                      value={registration.courses?.course_code ?? ""}
+                      readOnly
+                    />
+                  </label>
+                  <label>
+                    Tên môn học
+                    <input
+                      value={registration.courses?.course_name ?? ""}
+                      readOnly
+                    />
+                  </label>
+                  <label>
+                    Số lượng sinh viên
+                    <input value={registration.student_count} readOnly />
+                  </label>
+                  <label>
+                    Loại lab
+                    <input value="Y cơ sở" readOnly />
+                  </label>
+                  <label>
+                    Phòng/Lab
+                    <input
+                      value={`${registration.rooms?.room_code ?? ""}.${registration.rooms?.building_code ?? ""}`}
+                      readOnly
+                    />
+                  </label>
+                  <label>
+                    Buổi học
+                    <input value={`Buổi ${session.session_number}`} readOnly />
+                  </label>
+                  <label>
+                    Tên bài TN-TH
+                    <input value={session.lesson_title} readOnly />
+                  </label>
+                </div>
               </section>
               <section>
-                <h3>Thời gian nhận / trả</h3>
-                <div className="basic-medical-equipment-request-time-grid">
+                <div className="form-section-title">
+                  <div className="form-section-title-line">
+                    <span className="form-section-number">02</span>
+                    <h2>Thông tin người đăng ký</h2>
+                  </div>
+                </div>
+                <div className="form-grid three">
+                  <label>
+                    Người đăng ký
+                    <input value={equipmentRegistrant.fullName} readOnly />
+                  </label>
+                  <label>
+                    Email
+                    <input value={equipmentRegistrant.email} readOnly />
+                  </label>
+                  <label>
+                    Số điện thoại *
+                    <input value={equipmentRegistrant.phone} readOnly />
+                  </label>
+                </div>
+                {!phoneIsValid ? (
+                  <p className="form-error" role="alert">
+                    Hồ sơ Nhân sự chưa có số điện thoại 10 chữ số. Vui lòng bổ
+                    sung trước khi đăng ký.
+                  </p>
+                ) : null}
+              </section>
+              <section>
+                <div className="form-section-title">
+                  <div className="form-section-title-line">
+                    <span className="form-section-number">03</span>
+                    <h2>Thông tin giảng viên phụ trách</h2>
+                  </div>
+                </div>
+                <div className="form-grid">
+                  <label>
+                    Giảng viên phụ trách
+                    <input value={session.teaching?.full_name ?? ""} readOnly />
+                  </label>
+                </div>
+              </section>
+              <section>
+                <div className="form-section-title">
+                  <div className="form-section-title-line">
+                    <span className="form-section-number">04</span>
+                    <h2>Thông tin nhận thiết bị</h2>
+                  </div>
+                </div>
+                <div className="form-grid four">
                   <label>
                     Ngày nhận
                     <input
@@ -445,131 +628,171 @@ export function BasicMedicalEquipmentRequestModal({
                   </label>
                 </div>
                 {leadTime?.requiresLateApproval ? (
-                  <label className="basic-medical-equipment-late-reason">
+                  <label className="equipment-late-warning">
                     Lý do đăng ký trễ
-                    <textarea name="late_registration_reason" required />
+                    <textarea
+                      name="late_registration_reason"
+                      rows={3}
+                      required
+                      value={lateRegistrationReason}
+                      onChange={(event) =>
+                        setLateRegistrationReason(event.target.value)
+                      }
+                    />
                   </label>
                 ) : null}
                 {leadTime?.requiresLateApproval ? (
-                  <p className="request-late-approval request-late-approval-pending">
-                    {lateEquipmentWarning(leadTime.remainingMs)}
-                  </p>
-                ) : null}
+                  <strong>{lateEquipmentWarning(leadTime.remainingMs)}</strong>
+                ) : (
+                  <input
+                    type="hidden"
+                    name="late_registration_reason"
+                    value=""
+                  />
+                )}
               </section>
               <section>
-                <div className="basic-medical-equipment-request-section-heading">
-                  <h3>Thiết bị Y cơ sở</h3>
-                  <button
-                    type="button"
-                    className="button button-secondary"
-                    disabled={pending}
-                    onClick={() =>
-                      setItems((current) => [
-                        ...current,
-                        {
-                          key: nextKey.current++,
-                          catalogItemId: "",
-                          quantity: 1,
-                          note: "",
-                        },
-                      ])
-                    }
-                  >
-                    + Thêm dòng
-                  </button>
+                <div className="form-section-title">
+                  <div className="form-section-title-line">
+                    <span className="form-section-number">05</span>
+                    <h2>Thiết bị theo bài TN-TH</h2>
+                  </div>
                 </div>
-                <div className="responsive-table">
-                  <table className="data-table basic-medical-equipment-request-items">
-                    <thead>
-                      <tr>
-                        <th>STT</th>
-                        <th>Thiết bị từ Danh mục Y cơ sở</th>
-                        <th>Số lượng</th>
-                        <th>Ghi chú</th>
-                        <th>
-                          <span className="sr-only">Xóa</span>
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {items.map((item, index) => (
-                        <tr key={item.key}>
-                          <td>{index + 1}</td>
-                          <td>
-                            <select
-                              value={item.catalogItemId}
-                              onChange={(event) =>
-                                updateItem(item.key, {
-                                  catalogItemId: event.target.value,
-                                })
-                              }
-                              required
-                            >
-                              <option value="">Chọn thiết bị…</option>
-                              {catalog.map((catalogItem) => (
-                                <option
-                                  key={catalogItem.id}
-                                  value={catalogItem.id}
-                                >
-                                  {catalogItem.item_name}
-                                  {catalogItem.commercial_name
-                                    ? ` — ${catalogItem.commercial_name}`
-                                    : ""}{" "}
-                                  · {catalogItem.unit}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-                          <td>
-                            <input
-                              aria-label={`Số lượng thiết bị dòng ${index + 1}`}
-                              type="number"
-                              min="1"
-                              value={item.quantity}
-                              onChange={(event) =>
-                                updateItem(item.key, {
-                                  quantity: Number(event.target.value),
-                                })
-                              }
-                              required
-                            />
-                          </td>
-                          <td>
-                            <input
-                              aria-label={`Ghi chú thiết bị dòng ${index + 1}`}
-                              value={item.note}
-                              onChange={(event) =>
-                                updateItem(item.key, {
-                                  note: event.target.value,
-                                })
-                              }
-                            />
-                          </td>
-                          <td>
-                            <button
-                              type="button"
-                              className="button button-danger"
-                              disabled={pending || items.length === 1}
-                              onClick={() =>
-                                setItems((current) =>
-                                  current.filter(
-                                    (candidate) => candidate.key !== item.key,
-                                  ),
-                                )
-                              }
-                            >
-                              Xóa
-                            </button>
-                          </td>
+                <article className="equipment-skill-card">
+                  <label>
+                    Tên kỹ năng/Bài thực hành *
+                    <input value={session.lesson_title} readOnly />
+                  </label>
+                  <div className="basic-medical-equipment-request-section-heading">
+                    <button
+                      type="button"
+                      className="button button-secondary"
+                      disabled={pending}
+                      onClick={() =>
+                        setItems((current) => [
+                          ...current,
+                          {
+                            key: nextKey.current++,
+                            itemName: "",
+                            catalogItemId: "",
+                            quantity: 1,
+                            note: "",
+                          },
+                        ])
+                      }
+                    >
+                      + Thêm dòng
+                    </button>
+                  </div>
+                  <div className="responsive-table">
+                    <table className="data-table equipment-items-table">
+                      <thead>
+                        <tr>
+                          <th>STT</th>
+                          <th>Tên thiết bị và vật tư *</th>
+                          <th>Tên thương mại *</th>
+                          <th>ĐVT</th>
+                          <th>Số lượng</th>
+                          <th>Ghi chú</th>
+                          <th>
+                            <span className="sr-only">Xóa</span>
+                          </th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody>
+                        {items.map((item, index) => (
+                          <tr key={item.key}>
+                            <td>{index + 1}</td>
+                            <td>
+                              <SearchableCombobox
+                                value={item.itemName}
+                                options={catalogIndex.itemNameOptions}
+                                onChange={(value) =>
+                                  selectItemName(item, value)
+                                }
+                                required
+                                ariaLabel={`Tên thiết bị dòng ${index + 1}`}
+                                placeholder="Gõ hoặc chọn tên thiết bị…"
+                              />
+                            </td>
+                            <td>
+                              <SearchableCombobox
+                                value={item.catalogItemId}
+                                options={
+                                  item.itemName && !item.catalogItemId
+                                    ? (catalogIndex.commercialOptionsByItemName.get(
+                                        item.itemName,
+                                      ) ?? [])
+                                    : catalogIndex.allCommercialOptions
+                                }
+                                onChange={(value) =>
+                                  selectCommercialItem(item, value)
+                                }
+                                required
+                                ariaLabel={`Tên thương mại dòng ${index + 1}`}
+                                placeholder="Gõ hoặc chọn tên thương mại…"
+                              />
+                            </td>
+                            <td>
+                              <input
+                                value={
+                                  catalogIndex.byId.get(item.catalogItemId)
+                                    ?.unit ?? ""
+                                }
+                                readOnly
+                              />
+                            </td>
+                            <td>
+                              <input
+                                aria-label={`Số lượng thiết bị dòng ${index + 1}`}
+                                type="number"
+                                min="1"
+                                value={item.quantity}
+                                onChange={(event) =>
+                                  updateItem(item.key, {
+                                    quantity: Number(event.target.value),
+                                  })
+                                }
+                                required
+                              />
+                            </td>
+                            <td>
+                              <input
+                                aria-label={`Ghi chú thiết bị dòng ${index + 1}`}
+                                value={item.note}
+                                onChange={(event) =>
+                                  updateItem(item.key, {
+                                    note: event.target.value,
+                                  })
+                                }
+                              />
+                            </td>
+                            <td>
+                              <button
+                                type="button"
+                                className="button button-danger"
+                                disabled={pending || items.length === 1}
+                                onClick={() =>
+                                  setItems((current) =>
+                                    current.filter(
+                                      (candidate) => candidate.key !== item.key,
+                                    ),
+                                  )
+                                }
+                              >
+                                Xóa
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </article>
               </section>
               <label>
-                Ghi chú phiếu
-                <textarea name="note" />
+                Ghi chú chung
+                <textarea name="note" rows={3} />
               </label>
               {clientError ? (
                 <p className="form-error" role="alert">
@@ -596,9 +819,13 @@ export function BasicMedicalEquipmentRequestModal({
                 <button
                   type="submit"
                   className="button button-primary"
-                  disabled={pending || !catalog.length}
+                  disabled={pending || !catalog.length || !phoneIsValid}
                 >
-                  {pending ? "Đang tạo…" : "Tạo phiếu thiết bị"}
+                  {pending
+                    ? "Đang lưu…"
+                    : leadTime?.requiresLateApproval
+                      ? "Gửi yêu cầu duyệt đăng ký trễ"
+                      : "Gửi đăng ký"}
                 </button>
               </div>
             </form>

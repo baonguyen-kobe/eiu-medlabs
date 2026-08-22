@@ -194,11 +194,7 @@ export type BasicMedicalRegistrationListItem = {
     building_code: string;
     room_name: string | null;
   } | null;
-  registrant: {
-    full_name: string;
-    email: string | null;
-    phone: string | null;
-  } | null;
+  registrant: { full_name: string } | null;
   responsible: { full_name: string } | null;
   basic_medical_registration_sessions: BasicMedicalRegistrationSessionItem[];
 };

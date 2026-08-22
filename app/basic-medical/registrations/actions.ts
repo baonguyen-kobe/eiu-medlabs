@@ -33,10 +33,12 @@ type BasicMedicalEquipmentSource = {
   schedule: { schedule_date: string; schedule_status: string } | null;
 };
 
-function basicMedicalEquipmentRequestError(error?: {
-  code?: string;
-  message?: string;
-}) {
+function basicMedicalEquipmentRequestError(
+  error?: {
+    code?: string;
+    message?: string;
+  } | null,
+) {
   if (error?.code === "23505") {
     return "Buổi học này đã có phiếu đăng ký thiết bị.";
   }

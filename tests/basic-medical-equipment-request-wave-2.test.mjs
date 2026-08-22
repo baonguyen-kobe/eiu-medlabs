@@ -31,8 +31,15 @@ test("Wave 2 registrations map requests by active session identity", async () =>
   assert.match(list, /Phiếu thiết bị đã hủy/);
   assert.match(list, /Xem phiếu thiết bị/);
   assert.match(list, /Đăng ký thiết bị/);
-  assert.match(modal, /Nguồn buổi học \(chỉ xem\)/);
-  assert.match(modal, /BasicMedicalEquipmentCatalogItem/);
+  assert.match(page, /equipmentRegistrant/);
+  assert.doesNotMatch(page, /registrant:[^\n]*full_name,email,phone/);
+  assert.match(modal, /SearchableCombobox/);
+  assert.match(modal, /schedule-form equipment-request-form/);
+  assert.match(modal, /form-section-number/);
+  assert.match(modal, /equipment-items-table/);
+  assert.match(modal, /value=\{session\.lesson_title\} readOnly/);
+  assert.match(modal, /equipmentRegistrant\.fullName/);
+  assert.doesNotMatch(modal, /registration\.registrant\?\.email/);
 });
 
 test("shared request list renders the catalog that belongs to its domain", async () => {
@@ -43,4 +50,22 @@ test("shared request list renders the catalog that belongs to its domain", async
   assert.match(list, /canAddItemsForRequest/);
   assert.match(list, /request\.request_domain === "nursing_skills"/);
   assert.match(list, /function domainLabel/);
+  assert.match(list, /equipmentRequestWorkflowStatuses\.map/);
+  assert.match(list, /Kỹ năng Điều dưỡng/);
+});
+
+test("display, manager, and import statuses remain separate", async () => {
+  const [requests, actions, values] = await Promise.all([
+    source("lib/equipment-requests.ts"),
+    source("app/equipment/actions.ts"),
+    source("lib/equipment-import-values.ts"),
+  ]);
+  assert.match(requests, /equipmentRequestWorkflowStatuses/);
+  assert.match(requests, /value: "cancelled"/);
+  assert.match(actions, /equipmentRequestWorkflowStatuses\.map/);
+  assert.match(
+    values,
+    /type EquipmentImportStatus = Exclude<EquipmentRequestStatus, "cancelled">/,
+  );
+  assert.doesNotMatch(values, /\["cancelled", "cancelled"\]/);
 });

@@ -40,6 +40,7 @@ export default async function BasicMedicalRegistrationsPage({
   const {
     supabase,
     userId,
+    email,
     fullName,
     roles,
     roomTypes,
@@ -94,14 +95,19 @@ export default async function BasicMedicalRegistrationsPage({
       ? await supabase
           .from("basic_medical_registrations")
           .select(
-            "id,registration_code,created_at,created_by,registrant_id,academic_year,semester,start_date,end_date,student_count,note,cancelled_at,cancelled_by,cancel_reason,courses(course_code,course_name),rooms(id,room_code,building_code,room_name),registrant:profiles!basic_medical_registrations_registrant_id_fkey(full_name,email,phone),responsible:profiles!basic_medical_registrations_responsible_lecturer_id_fkey(full_name),basic_medical_registration_sessions(id,session_number,lesson_title,teaching_lecturer_id,cancelled_at,cancelled_by,cancellation_reason,teaching:profiles!basic_medical_registration_sessions_teaching_lecturer_id_fkey(full_name),class_schedules(id,schedule_date,start_time,end_time,schedule_status),confirmations:basic_medical_session_confirmations(id,signer_id,signed_at,invalidated_at,invalidated_reason))",
+            "id,registration_code,created_at,created_by,registrant_id,academic_year,semester,start_date,end_date,student_count,note,cancelled_at,cancelled_by,cancel_reason,courses(course_code,course_name),rooms(id,room_code,building_code,room_name),registrant:profiles!basic_medical_registrations_registrant_id_fkey(full_name),responsible:profiles!basic_medical_registrations_responsible_lecturer_id_fkey(full_name),basic_medical_registration_sessions(id,session_number,lesson_title,teaching_lecturer_id,cancelled_at,cancelled_by,cancellation_reason,teaching:profiles!basic_medical_registration_sessions_teaching_lecturer_id_fkey(full_name),class_schedules(id,schedule_date,start_time,end_time,schedule_status),confirmations:basic_medical_session_confirmations(id,signer_id,signed_at,invalidated_at,invalidated_reason))",
           )
           .in("id", registrationIds)
       : { data: [], error: null };
 
-  const [{ data: instructorRows }, { data: peopleRows }] = await Promise.all([
+  const [
+    { data: instructorRows },
+    { data: peopleRows },
+    { data: viewerProfile },
+  ] = await Promise.all([
     supabase.rpc("list_basic_medical_instructors"),
     supabase.rpc("list_active_people"),
+    supabase.from("profiles").select("phone").eq("id", userId).maybeSingle(),
   ]);
   const instructors = (instructorRows ?? []) as Array<{
     id: string;
@@ -260,6 +266,12 @@ export default async function BasicMedicalRegistrationsPage({
           (catalogResult.data ?? []) as BasicMedicalEquipmentCatalogItem[]
         }
         today={businessTodayString()}
+        equipmentRegistrant={{
+          id: userId,
+          fullName,
+          email,
+          phone: viewerProfile?.phone ?? "",
+        }}
       />
       <PaginationLinks
         currentPage={currentPage}

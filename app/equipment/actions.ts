@@ -10,7 +10,7 @@ import {
   equipmentHandoffTimes,
 } from "@/lib/equipment-lead-time";
 import {
-  equipmentRequestStatuses,
+  equipmentRequestWorkflowStatuses,
   type EquipmentConfirmationState,
   type EquipmentRequestListItem,
   type EquipmentRequestStatus,
@@ -222,7 +222,7 @@ export async function updateEquipmentRequestStatus(
   if (!userId) return { ok: false, message: "Phiên đăng nhập đã hết hạn." };
 
   const allowedStatuses = new Set(
-    equipmentRequestStatuses.map((item) => item.value),
+    equipmentRequestWorkflowStatuses.map((item) => item.value),
   );
   if (!/^[0-9a-f-]{36}$/i.test(requestId) || !allowedStatuses.has(status)) {
     return { ok: false, message: "Phiếu hoặc trạng thái không hợp lệ." };

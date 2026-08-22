@@ -24,6 +24,7 @@ import { formatEquipmentRequestCode } from "@/lib/equipment-request-code";
 import {
   canAddEquipmentRequestItems,
   equipmentRequestStatuses,
+  equipmentRequestWorkflowStatuses,
   equipmentStatusMeta,
   type EquipmentCatalogListItem,
   type EquipmentConfirmationState,
@@ -68,7 +69,9 @@ function catalogForRequest(
 }
 
 function domainLabel(request: EquipmentRequestListItem) {
-  return request.request_domain === "basic_medical" ? "Y cơ sở" : "Skills lab";
+  return request.request_domain === "basic_medical"
+    ? "Y cơ sở"
+    : "Kỹ năng Điều dưỡng";
 }
 
 function StatusBadge({ status }: { status: EquipmentRequestStatus }) {
@@ -1370,37 +1373,39 @@ export function EquipmentRequestList({
                                     isPending && updatingId === request.id
                                   }
                                 >
-                                  {equipmentRequestStatuses.map((option) => (
-                                    <button
-                                      type="button"
-                                      key={option.value}
-                                      className={`request-status-button request-status-${option.color}${warehouseStatus === option.value ? " active" : ""}`}
-                                      disabled={
-                                        (isPending &&
-                                          updatingId === request.id) ||
-                                        (option.value === "handed_over" &&
-                                          status === "new" &&
-                                          !canConfirmHandoverEarly) ||
-                                        (option.value === "completed" &&
-                                          status !== "completed") ||
-                                        (
-                                          [
-                                            "pending",
-                                            "rejected",
-                                          ] as EquipmentLateApprovalStatus[]
-                                        ).includes(lateApprovalStatus)
-                                      }
-                                      onClick={() =>
-                                        changeStatus(request.id, option.value)
-                                      }
-                                    >
-                                      {option.value === "handed_over"
-                                        ? "Đã giao"
-                                        : option.value === "returned"
-                                          ? "Đã trả"
-                                          : option.label}
-                                    </button>
-                                  ))}
+                                  {equipmentRequestWorkflowStatuses.map(
+                                    (option) => (
+                                      <button
+                                        type="button"
+                                        key={option.value}
+                                        className={`request-status-button request-status-${option.color}${warehouseStatus === option.value ? " active" : ""}`}
+                                        disabled={
+                                          (isPending &&
+                                            updatingId === request.id) ||
+                                          (option.value === "handed_over" &&
+                                            status === "new" &&
+                                            !canConfirmHandoverEarly) ||
+                                          (option.value === "completed" &&
+                                            status !== "completed") ||
+                                          (
+                                            [
+                                              "pending",
+                                              "rejected",
+                                            ] as EquipmentLateApprovalStatus[]
+                                          ).includes(lateApprovalStatus)
+                                        }
+                                        onClick={() =>
+                                          changeStatus(request.id, option.value)
+                                        }
+                                      >
+                                        {option.value === "handed_over"
+                                          ? "Đã giao"
+                                          : option.value === "returned"
+                                            ? "Đã trả"
+                                            : option.label}
+                                      </button>
+                                    ),
+                                  )}
                                 </div>
                                 <a
                                   className="button button-secondary equipment-handover-export"

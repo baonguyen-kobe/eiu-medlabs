@@ -1,9 +1,13 @@
-export const equipmentRequestStatuses = [
+export const equipmentRequestWorkflowStatuses = [
   { value: "new", label: "Mới", color: "red" },
   { value: "preparing", label: "Đã soạn", color: "orange" },
   { value: "handed_over", label: "Đã giao", color: "blue" },
   { value: "returned", label: "Đã trả", color: "purple" },
   { value: "completed", label: "Hoàn Thành", color: "green" },
+] as const;
+
+export const equipmentRequestStatuses = [
+  ...equipmentRequestWorkflowStatuses,
   { value: "cancelled", label: "Đã hủy", color: "red" },
 ] as const;
 
