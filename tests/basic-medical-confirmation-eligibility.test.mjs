@@ -246,7 +246,7 @@ test("confirmation becomes available at the next local cutoff without a refresh"
 test("cancelled schedules are displayed as cancelled and never offer Confirm", () => {
   assert.match(
     registrationsPage,
-    /class_schedules\(schedule_date,start_time,end_time,schedule_status\)/,
+    /class_schedules\(id,schedule_date,start_time,end_time,schedule_status\)/,
   );
   assert.match(
     registrationList,
