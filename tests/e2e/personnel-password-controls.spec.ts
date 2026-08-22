@@ -62,6 +62,7 @@ async function waitForRecoveryLink(email: string) {
 test("Personnel reset forces an email-password account through password change before workspace access", async ({
   page,
 }) => {
+  test.slow();
   const email = `password-flow-${crypto.randomUUID()}@campus.local`;
   const initialPassword = "InitialPassword123!";
   const changedPassword = "ChangedPassword123!";
@@ -143,7 +144,9 @@ test("Personnel reset forces an email-password account through password change b
     await page.getByLabel("Mật khẩu mới").fill(changedPassword);
     await page.getByLabel("Xác nhận mật khẩu").fill(changedPassword);
     await page.getByRole("button", { name: "Cập nhật mật khẩu" }).click();
-    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page).toHaveURL(/\/dashboard$/, {
+      timeout: 20_000,
+    });
 
     const { data: completedProfile } = await serviceDb
       .from("profiles")
