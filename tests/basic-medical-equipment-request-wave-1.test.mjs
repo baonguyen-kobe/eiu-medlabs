@@ -15,6 +15,10 @@ const skillsCompatibilityMigrationPath =
   "supabase/migrations/20260822140000_equipment_request_skills_compatibility.sql";
 const skillsCompatibilitySchemaPath =
   "supabase/schemas/27_equipment_request_skills_compatibility.sql";
+const outboxCompatibilityMigrationPath =
+  "supabase/migrations/20260822150000_equipment_request_create_outbox_compatibility.sql";
+const outboxCompatibilitySchemaPath =
+  "supabase/schemas/28_equipment_request_create_outbox_compatibility.sql";
 
 async function source(path) {
   return readFile(new URL(path, root), "utf8");
@@ -38,6 +42,23 @@ test("Wave 1 shared equipment lifecycle keeps migration/schema parity", async ()
   );
   assert.match(migration, /EQUIPMENT_REQUEST_DOMAIN_OR_SOURCE_IMMUTABLE/);
   assert.match(migration, /EQUIPMENT_REQUEST_LIVE_SOURCE_IMMUTABLE/);
+});
+
+test("Wave 1 create correction preserves Skills-only transactional outbox", async () => {
+  const [migration, schema] = await Promise.all([
+    source(outboxCompatibilityMigrationPath),
+    source(outboxCompatibilitySchemaPath),
+  ]);
+
+  assert.equal(migration, schema);
+  assert.match(migration, /private\.enqueue_equipment_request_outbox_event/);
+  assert.match(migration, /late_approval_requested/);
+  assert.match(migration, /'created'/);
+  assert.match(migration, /if source_row\.session_id is null then/);
+  assert.doesNotMatch(
+    migration,
+    /if source_row\.session_id is not null then\s+perform private\.enqueue_equipment_request_outbox_event/,
+  );
 });
 
 test("Wave 1 catalog and tombstone guards are domain-specific", async () => {

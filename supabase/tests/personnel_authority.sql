@@ -86,10 +86,16 @@ select ok(
 );
 
 select ok(
-  position('schedule_status = ''published''' in pg_get_functiondef(
+  position('existing_session.cancelled_at is not null' in lower(pg_get_functiondef(
     'public.save_basic_medical_registration(uuid,text,text,date,date,uuid,uuid,integer,uuid,text,jsonb)'::regprocedure
-  )) > 0,
-  'cancelled Basic Medical schedules are never reused during edit'
+  ))) > 0
+  and position('schedule_status=''cancelled''' in regexp_replace(lower(pg_get_functiondef(
+    'public.save_basic_medical_registration(uuid,text,text,date,date,uuid,uuid,integer,uuid,text,jsonb)'::regprocedure
+  )), '\s+', '', 'g')) > 0
+  and position('basic_medical_session_cancelled' in lower(pg_get_functiondef(
+    'public.save_basic_medical_registration(uuid,text,text,date,date,uuid,uuid,integer,uuid,text,jsonb)'::regprocedure
+  ))) > 0,
+  'cancelled Basic Medical sessions and schedules are explicitly rejected during edit'
 );
 
 select ok(

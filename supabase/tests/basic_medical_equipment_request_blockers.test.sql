@@ -103,7 +103,7 @@ select lives_ok($$
   )
 $$, 'BM-scoped Staff can choose a valid Basic Medical lecturer override');
 select lives_ok($$select public.soft_cancel_equipment_request((select request_c_id from bm_equipment_blocker_ctx))$$, 'A Basic Medical request can be cancelled without deleting its source');
-select throws_ok($$select public.create_equipment_request_with_items((select schedule_c_id from bm_equipment_blocker_ctx),'HK1',null,((current_date+14)::text || '09:00 Asia/Ho_Chi_Minh')::timestamptz,((current_date+14)::text || '11:00 Asia/Ho_Chi_Minh')::timestamptz,'duplicate',null,jsonb_build_array(jsonb_build_object('skill_name','C','catalog_item_id',(select bm_catalog_id from bm_equipment_blocker_ctx),'quantity',1)))$$, '23505', null, 'Cancelled request still reserves its immutable domain source');
+select throws_ok($$select public.create_equipment_request_with_items((select schedule_c_id from bm_equipment_blocker_ctx),'HK1',null,((current_date+14)::text || ' 09:00 Asia/Ho_Chi_Minh')::timestamptz,((current_date+14)::text || ' 11:00 Asia/Ho_Chi_Minh')::timestamptz,'duplicate',null,jsonb_build_array(jsonb_build_object('skill_name','C','catalog_item_id',(select bm_catalog_id from bm_equipment_blocker_ctx),'quantity',1)))$$, '23505', null, 'Cancelled request still reserves its immutable domain source');
 
 select set_config('request.jwt.claims', json_build_object('sub', (select skills_staff_id from bm_equipment_blocker_ctx), 'role', 'authenticated')::text, true);
 select throws_ok($$select public.manager_confirm_equipment_status((select request_a_id from bm_equipment_blocker_ctx), 'preparing')$$, '42501', 'EQUIPMENT_REQUEST_SCOPE_REQUIRED', 'Skills-scoped Staff cannot manage Basic Medical request');
