@@ -1,4 +1,10 @@
 export const EQUIPMENT_MIN_LEAD_TIME_MS = 24 * 60 * 60 * 1000;
+export const equipmentHandoffTimes = [
+  "09:00",
+  "11:00",
+  "14:00",
+  "16:00",
+] as const;
 
 export type EquipmentLeadTime = {
   remainingMs: number;

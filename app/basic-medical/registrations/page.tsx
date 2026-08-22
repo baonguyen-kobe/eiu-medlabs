@@ -3,9 +3,15 @@ import { Search } from "@/components/icons";
 import { PaginationLinks } from "@/components/pagination-links";
 import { WorkspaceShell } from "@/components/workspace-shell";
 import type {
+  BasicMedicalEquipmentCatalogItem,
   BasicMedicalRegistrationListItem,
   BasicMedicalRoomInventoryItem,
 } from "@/lib/basic-medical-equipment";
+import { businessTodayString } from "@/lib/business-time";
+import {
+  equipmentRequestSelect,
+  type EquipmentRequestListItem,
+} from "@/lib/equipment-requests";
 import { isBasicMedicalConfirmationEvidenceEnabled } from "@/lib/basic-medical-confirmation-evidence";
 import { normalizePage, paginationRange } from "@/lib/pagination";
 import { getViewer } from "@/lib/viewer";
@@ -88,7 +94,7 @@ export default async function BasicMedicalRegistrationsPage({
       ? await supabase
           .from("basic_medical_registrations")
           .select(
-            "id,registration_code,created_at,created_by,academic_year,semester,start_date,end_date,student_count,note,cancelled_at,cancelled_by,cancel_reason,courses(course_code,course_name),rooms(id,room_code,building_code,room_name),registrant:profiles!basic_medical_registrations_registrant_id_fkey(full_name),responsible:profiles!basic_medical_registrations_responsible_lecturer_id_fkey(full_name),basic_medical_registration_sessions(id,session_number,lesson_title,teaching_lecturer_id,cancelled_at,cancelled_by,cancellation_reason,teaching:profiles!basic_medical_registration_sessions_teaching_lecturer_id_fkey(full_name),class_schedules(schedule_date,start_time,end_time,schedule_status),confirmations:basic_medical_session_confirmations(id,signer_id,signed_at,invalidated_at,invalidated_reason))",
+            "id,registration_code,created_at,created_by,registrant_id,academic_year,semester,start_date,end_date,student_count,note,cancelled_at,cancelled_by,cancel_reason,courses(course_code,course_name),rooms(id,room_code,building_code,room_name),registrant:profiles!basic_medical_registrations_registrant_id_fkey(full_name,email,phone),responsible:profiles!basic_medical_registrations_responsible_lecturer_id_fkey(full_name),basic_medical_registration_sessions(id,session_number,lesson_title,teaching_lecturer_id,cancelled_at,cancelled_by,cancellation_reason,teaching:profiles!basic_medical_registration_sessions_teaching_lecturer_id_fkey(full_name),class_schedules(id,schedule_date,start_time,end_time,schedule_status),confirmations:basic_medical_session_confirmations(id,signer_id,signed_at,invalidated_at,invalidated_reason))",
           )
           .in("id", registrationIds)
       : { data: [], error: null };
@@ -119,19 +125,50 @@ export default async function BasicMedicalRegistrationsPage({
       registrations.flatMap((item) => (item.rooms?.id ? [item.rooms.id] : [])),
     ),
   ];
-  const { data: inventoryRows, error: inventoryError } = roomIds.length
-    ? await supabase
-        .from("basic_medical_room_inventory")
-        .select(
-          "id,room_id,catalog_item_id,total_quantity,good_quantity,damaged_quantity,is_active,last_damage_reported_at,room:rooms(id,room_code,building_code,room_name),catalog:basic_medical_equipment_catalog!inner(id,item_name,commercial_name,item_type,country_of_origin,manufacturer,model,unit,is_active),last_damage_reporter:profiles!basic_medical_room_inventory_last_damage_reporter_id_fkey(full_name)",
-        )
-        .in("room_id", roomIds)
-        .eq("is_active", true)
-        .eq("catalog.is_active", true)
-        .order("created_at")
-    : { data: [], error: null };
+  const sessionIds = registrations.flatMap((registration) =>
+    registration.basic_medical_registration_sessions.map(({ id }) => id),
+  );
+  const [inventoryResult, requestResult, catalogResult] = await Promise.all([
+    roomIds.length
+      ? supabase
+          .from("basic_medical_room_inventory")
+          .select(
+            "id,room_id,catalog_item_id,total_quantity,good_quantity,damaged_quantity,is_active,last_damage_reported_at,room:rooms(id,room_code,building_code,room_name),catalog:basic_medical_equipment_catalog!inner(id,item_name,commercial_name,item_type,country_of_origin,manufacturer,model,unit,is_active),last_damage_reporter:profiles!basic_medical_room_inventory_last_damage_reporter_id_fkey(full_name)",
+          )
+          .in("room_id", roomIds)
+          .eq("is_active", true)
+          .eq("catalog.is_active", true)
+          .order("created_at")
+      : Promise.resolve({ data: [], error: null }),
+    sessionIds.length
+      ? supabase
+          .from("equipment_requests")
+          .select(equipmentRequestSelect)
+          .eq("request_domain", "basic_medical")
+          .in("source_identity_id", sessionIds)
+      : Promise.resolve({ data: [], error: null }),
+    supabase
+      .from("basic_medical_equipment_catalog")
+      .select(
+        "id,item_name,commercial_name,item_type,country_of_origin,manufacturer,model,unit,is_active",
+      )
+      .eq("is_active", true)
+      .order("item_name"),
+  ]);
+  const inventoryRows = inventoryResult.data;
+  const inventoryError = inventoryResult.error;
+  const requestRows = (requestResult.data ??
+    []) as unknown as EquipmentRequestListItem[];
+  const equipmentRequestsBySession = Object.fromEntries(
+    requestRows.map((request) => [request.source_identity_id, request]),
+  );
 
-  const loadError = listError ?? registrationError ?? inventoryError;
+  const loadError =
+    listError ??
+    registrationError ??
+    inventoryError ??
+    requestResult.error ??
+    catalogResult.error;
 
   return (
     <WorkspaceShell
@@ -217,6 +254,12 @@ export default async function BasicMedicalRegistrationsPage({
         isAdmin={roles.includes("admin")}
         canDelete={canDelete && roles.includes("admin")}
         evidenceEnabled={isBasicMedicalConfirmationEvidenceEnabled()}
+        canManageBasicMedical={canManageBasicMedical}
+        equipmentRequestsBySession={equipmentRequestsBySession}
+        equipmentCatalog={
+          (catalogResult.data ?? []) as BasicMedicalEquipmentCatalogItem[]
+        }
+        today={businessTodayString()}
       />
       <PaginationLinks
         currentPage={currentPage}

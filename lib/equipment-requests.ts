@@ -4,6 +4,7 @@ export const equipmentRequestStatuses = [
   { value: "handed_over", label: "Đã giao", color: "blue" },
   { value: "returned", label: "Đã trả", color: "purple" },
   { value: "completed", label: "Hoàn Thành", color: "green" },
+  { value: "cancelled", label: "Đã hủy", color: "red" },
 ] as const;
 
 export type EquipmentRequestStatus =

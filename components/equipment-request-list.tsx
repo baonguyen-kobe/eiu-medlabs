@@ -58,6 +58,19 @@ function formatDateTime(value: string) {
   return dateTimeFormatter.format(new Date(value));
 }
 
+function catalogForRequest(
+  request: EquipmentRequestListItem,
+  item: EquipmentRequestListItem["equipment_request_items"][number],
+) {
+  return request.request_domain === "basic_medical"
+    ? item.basic_medical_equipment_catalog
+    : item.equipment_catalog;
+}
+
+function domainLabel(request: EquipmentRequestListItem) {
+  return request.request_domain === "basic_medical" ? "Y cơ sở" : "Skills lab";
+}
+
 function StatusBadge({ status }: { status: EquipmentRequestStatus }) {
   const meta = equipmentStatusMeta(status);
   return (
@@ -107,6 +120,8 @@ function EquipmentItemsModal({
   onClose: () => void;
 }) {
   const [localItems, setLocalItems] = useState(request.equipment_request_items);
+  const canAddItemsForRequest =
+    canAddItems && request.request_domain === "nursing_skills";
   const nextDraftKey = useRef(1);
   const [draftsBySkill, setDraftsBySkill] = useState<
     Record<string, EquipmentItemDraft[]>
@@ -370,23 +385,37 @@ function EquipmentItemsModal({
                         <tr key={item.id}>
                           <td>{index + 1}</td>
                           <td>
-                            <strong>{item.equipment_catalog?.item_name}</strong>
+                            <strong>
+                              {catalogForRequest(request, item)?.item_name ||
+                                "Danh mục thiết bị không còn khả dụng"}
+                            </strong>
                           </td>
                           <td>
-                            {item.equipment_catalog?.commercial_name || "—"}
+                            {catalogForRequest(request, item)
+                              ?.commercial_name || "—"}
                           </td>
-                          <td>{item.equipment_catalog?.item_type || "—"}</td>
                           <td>
-                            {item.equipment_catalog?.country_of_origin || "—"}
+                            {catalogForRequest(request, item)?.item_type || "—"}
                           </td>
-                          <td>{item.equipment_catalog?.manufacturer || "—"}</td>
-                          <td>{item.equipment_catalog?.model || "—"}</td>
-                          <td>{item.equipment_catalog?.unit || "—"}</td>
+                          <td>
+                            {catalogForRequest(request, item)
+                              ?.country_of_origin || "—"}
+                          </td>
+                          <td>
+                            {catalogForRequest(request, item)?.manufacturer ||
+                              "—"}
+                          </td>
+                          <td>
+                            {catalogForRequest(request, item)?.model || "—"}
+                          </td>
+                          <td>
+                            {catalogForRequest(request, item)?.unit || "—"}
+                          </td>
                           <td>{item.quantity}</td>
                           <td>{item.note || "—"}</td>
                         </tr>
                       ))}
-                      {canAddItems
+                      {canAddItemsForRequest
                         ? drafts.map((draft, draftIndex) => {
                             const selectedDraftCatalog = catalogById.get(
                               draft.catalogId,
@@ -475,7 +504,7 @@ function EquipmentItemsModal({
                     </tbody>
                   </table>
                 </div>
-                {canAddItems ? (
+                {canAddItemsForRequest ? (
                   <div className="equipment-modal-add-actions equipment-modal-add-actions-persistent">
                     <button
                       type="button"
@@ -1143,6 +1172,9 @@ export function EquipmentRequestList({
                         }}
                       >
                         <strong>{schedule?.course_code_snapshot}</strong>
+                        <span className="equipment-request-domain">
+                          {domainLabel(request)}
+                        </span>
                         <span>{schedule?.course_name_snapshot}</span>
                       </button>
                     </td>

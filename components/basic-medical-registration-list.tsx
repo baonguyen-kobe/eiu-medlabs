@@ -20,6 +20,7 @@ import {
 } from "@/app/basic-medical/registrations/actions";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
+import { BasicMedicalEquipmentRequestModal } from "@/components/basic-medical-equipment-request-modal";
 import { Trash2 } from "@/components/icons";
 import { formatBasicMedicalRegistrationCode } from "@/lib/basic-medical-registration-code";
 import {
@@ -32,6 +33,11 @@ import {
   type BasicMedicalRoomInventoryItem,
   type BasicMedicalInstructorOption,
 } from "@/lib/basic-medical-equipment";
+import type { BasicMedicalEquipmentCatalogItem } from "@/lib/basic-medical-equipment";
+import {
+  equipmentStatusMeta,
+  type EquipmentRequestListItem,
+} from "@/lib/equipment-requests";
 
 const dateTimeFormatter = new Intl.DateTimeFormat("vi-VN", {
   timeZone: "Asia/Ho_Chi_Minh",
@@ -757,6 +763,10 @@ export function BasicMedicalRegistrationList({
   isAdmin = false,
   canDelete,
   evidenceEnabled,
+  canManageBasicMedical,
+  equipmentRequestsBySession,
+  equipmentCatalog,
+  today,
 }: {
   registrations: BasicMedicalRegistrationListItem[];
   inventories: BasicMedicalRoomInventoryItem[];
@@ -766,6 +776,10 @@ export function BasicMedicalRegistrationList({
   isAdmin?: boolean;
   canDelete: boolean;
   evidenceEnabled: boolean;
+  canManageBasicMedical: boolean;
+  equipmentRequestsBySession: Record<string, EquipmentRequestListItem>;
+  equipmentCatalog: BasicMedicalEquipmentCatalogItem[];
+  today: string;
 }) {
   const router = useRouter();
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
@@ -786,6 +800,11 @@ export function BasicMedicalRegistrationList({
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [selectedLecturerId, setSelectedLecturerId] = useState<string>("");
   const [isSavingLecturer, startSavingTransition] = useTransition();
+  const [activeEquipmentRequest, setActiveEquipmentRequest] = useState<{
+    registration: BasicMedicalRegistrationListItem;
+    session: BasicMedicalRegistrationSessionItem;
+    request?: EquipmentRequestListItem;
+  } | null>(null);
 
   const peopleById = useMemo(() => {
     const map = new Map<string, string>();
@@ -1105,13 +1124,25 @@ export function BasicMedicalRegistrationList({
                                     editingSessionId === session.id;
                                   const isSessionCancelled =
                                     session.class_schedules?.schedule_status ===
-                                    "cancelled";
+                                      "cancelled" ||
+                                    Boolean(session.cancelled_at);
                                   const canEditLecturer =
                                     !isCancelled &&
                                     !isSessionCancelled &&
                                     (isAdmin ||
                                       registration.created_by === viewerId) &&
                                     instructors.length > 0;
+                                  const equipmentRequest =
+                                    equipmentRequestsBySession[session.id];
+                                  const canCreateEquipmentRequest =
+                                    !isCancelled &&
+                                    !isSessionCancelled &&
+                                    !equipmentRequest &&
+                                    (canManageBasicMedical ||
+                                      registration.created_by === viewerId ||
+                                      registration.registrant_id === viewerId ||
+                                      session.teaching_lecturer_id ===
+                                        viewerId);
 
                                   return (
                                     <tr key={session.id}>
@@ -1230,6 +1261,52 @@ export function BasicMedicalRegistrationList({
                                             viewerId={viewerId}
                                             isAdmin={isAdmin}
                                           />
+                                          {equipmentRequest ? (
+                                            equipmentRequest.status ===
+                                            "cancelled" ? (
+                                              <span className="request-status request-status-red">
+                                                Phiếu thiết bị đã hủy
+                                              </span>
+                                            ) : (
+                                              <div className="basic-medical-equipment-request-actions">
+                                                <span
+                                                  className={`request-status request-status-${equipmentStatusMeta(equipmentRequest.status).color}`}
+                                                >
+                                                  {
+                                                    equipmentStatusMeta(
+                                                      equipmentRequest.status,
+                                                    ).label
+                                                  }
+                                                </span>
+                                                <button
+                                                  type="button"
+                                                  className="button button-secondary"
+                                                  onClick={() =>
+                                                    setActiveEquipmentRequest({
+                                                      registration,
+                                                      session,
+                                                      request: equipmentRequest,
+                                                    })
+                                                  }
+                                                >
+                                                  Xem phiếu thiết bị
+                                                </button>
+                                              </div>
+                                            )
+                                          ) : canCreateEquipmentRequest ? (
+                                            <button
+                                              type="button"
+                                              className="button button-primary"
+                                              onClick={() =>
+                                                setActiveEquipmentRequest({
+                                                  registration,
+                                                  session,
+                                                })
+                                              }
+                                            >
+                                              Đăng ký thiết bị
+                                            </button>
+                                          ) : null}
                                         </div>
                                       </td>
                                     </tr>
@@ -1270,6 +1347,20 @@ export function BasicMedicalRegistrationList({
                 invalidated_reason: null,
               }),
             );
+            router.refresh();
+          }}
+        />
+      ) : null}
+      {activeEquipmentRequest ? (
+        <BasicMedicalEquipmentRequestModal
+          registration={activeEquipmentRequest.registration}
+          session={activeEquipmentRequest.session}
+          request={activeEquipmentRequest.request}
+          catalog={equipmentCatalog}
+          today={today}
+          onClose={() => setActiveEquipmentRequest(null)}
+          onCreated={() => {
+            setActiveEquipmentRequest(null);
             router.refresh();
           }}
         />

@@ -5,9 +5,230 @@ import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { processPendingScheduleEmails } from "@/lib/email-notifications";
+import { businessTodayString } from "@/lib/business-time";
+import {
+  equipmentHandoffTimes,
+  equipmentLeadTime,
+  equipmentReceiveAt,
+} from "@/lib/equipment-lead-time";
 
 function registrationsUrl(kind: "notice" | "error", message: string) {
   return `/basic-medical/registrations?${kind}=${encodeURIComponent(message)}`;
+}
+
+export type BasicMedicalEquipmentRequestActionState = {
+  ok: boolean;
+  message: string;
+  requestId?: string;
+};
+
+const uuidPattern = /^[0-9a-f-]{36}$/i;
+
+type BasicMedicalEquipmentSource = {
+  id: string;
+  class_schedule_id: string;
+  lesson_title: string;
+  cancelled_at: string | null;
+  registration: { semester: string; cancelled_at: string | null } | null;
+  schedule: { schedule_date: string; schedule_status: string } | null;
+};
+
+function basicMedicalEquipmentRequestError(error?: {
+  code?: string;
+  message?: string;
+}) {
+  if (error?.code === "23505") {
+    return "Buổi học này đã có phiếu đăng ký thiết bị.";
+  }
+  const source = error?.message ?? "";
+  if (
+    source.includes("EQUIPMENT_REQUEST_SOURCE_NOT_AVAILABLE") ||
+    source.includes("BASIC_MEDICAL_SESSION_CANCELLED") ||
+    source.includes("REGISTRATION_CANCELLED")
+  ) {
+    return "Buổi học Y cơ sở đã hủy hoặc không còn hợp lệ để đăng ký thiết bị.";
+  }
+  if (
+    error?.code === "42501" ||
+    source.includes("EQUIPMENT_REQUEST_BASIC_MEDICAL_SCOPE_REQUIRED") ||
+    source.includes("EQUIPMENT_REQUEST_SCOPE_REQUIRED")
+  ) {
+    return "Bạn không có quyền đăng ký thiết bị cho buổi học Y cơ sở này.";
+  }
+  if (source.includes("EQUIPMENT_REQUEST_PHONE_REQUIRED")) {
+    return "Hồ sơ Nhân sự chưa có số điện thoại 10 chữ số.";
+  }
+  if (source.includes("EQUIPMENT_REQUEST_BASIC_MEDICAL_CATALOG_REQUIRED")) {
+    return "Thiết bị đã chọn không còn hoạt động trong Danh mục Y cơ sở.";
+  }
+  return "Không thể tạo phiếu đăng ký thiết bị Y cơ sở.";
+}
+
+export async function createBasicMedicalEquipmentRequest(
+  _state: BasicMedicalEquipmentRequestActionState,
+  formData: FormData,
+): Promise<BasicMedicalEquipmentRequestActionState> {
+  const sessionId = String(formData.get("session_id") ?? "");
+  const receiveDate = String(formData.get("receive_date") ?? "");
+  const receiveTime = String(formData.get("receive_time") ?? "");
+  const returnDate = String(formData.get("return_date") ?? "");
+  const returnTime = String(formData.get("return_time") ?? "");
+  const note = String(formData.get("note") ?? "").trim();
+  const lateRegistrationReason = String(
+    formData.get("late_registration_reason") ?? "",
+  ).trim();
+  const supabase = await createClient();
+  const { data: claims } = await supabase.auth.getClaims();
+  const userId = claims?.claims?.sub;
+  if (!userId) return { ok: false, message: "Phiên đăng nhập đã hết hạn." };
+  let items: Array<{ catalogItemId: string; quantity: number; note?: string }>;
+
+  try {
+    items = JSON.parse(String(formData.get("items") ?? "[]"));
+  } catch {
+    return { ok: false, message: "Danh sách thiết bị không hợp lệ." };
+  }
+
+  if (
+    !uuidPattern.test(sessionId) ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(receiveDate) ||
+    !/^\d{2}:\d{2}$/.test(receiveTime) ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(returnDate) ||
+    !/^\d{2}:\d{2}$/.test(returnTime) ||
+    !Array.isArray(items) ||
+    !items.length ||
+    items.some(
+      (item) =>
+        !item ||
+        !uuidPattern.test(item.catalogItemId) ||
+        !Number.isInteger(item.quantity) ||
+        item.quantity < 1,
+    )
+  ) {
+    return {
+      ok: false,
+      message: "Vui lòng kiểm tra buổi học, thời gian và danh sách thiết bị.",
+    };
+  }
+
+  const [{ data: profile }, { data: sourceRow, error: sourceError }] =
+    await Promise.all([
+      supabase
+        .from("profiles")
+        .select("phone,is_active")
+        .eq("id", userId)
+        .maybeSingle(),
+      supabase
+        .from("basic_medical_registration_sessions")
+        .select(
+          "id,class_schedule_id,lesson_title,cancelled_at,registration:basic_medical_registrations!inner(semester,cancelled_at),schedule:class_schedules!inner(schedule_date,schedule_status)",
+        )
+        .eq("id", sessionId)
+        .maybeSingle(),
+    ]);
+  const source = sourceRow as unknown as BasicMedicalEquipmentSource | null;
+  if (
+    sourceError ||
+    !source ||
+    !source.registration ||
+    !source.schedule ||
+    source.cancelled_at ||
+    source.registration?.cancelled_at ||
+    source.schedule?.schedule_status === "cancelled"
+  ) {
+    return {
+      ok: false,
+      message:
+        "Buổi học Y cơ sở đã hủy hoặc không còn hợp lệ để đăng ký thiết bị.",
+    };
+  }
+  if (!profile?.is_active || !/^\d{10}$/.test(profile.phone ?? "")) {
+    return {
+      ok: false,
+      message: "Hồ sơ Nhân sự chưa có số điện thoại 10 chữ số.",
+    };
+  }
+
+  const receiveAt = equipmentReceiveAt(receiveDate, receiveTime);
+  const returnAt = new Date(`${returnDate}T${returnTime}:00+07:00`);
+  if (
+    !receiveAt ||
+    Number.isNaN(returnAt.getTime()) ||
+    !equipmentHandoffTimes.includes(
+      receiveTime as (typeof equipmentHandoffTimes)[number],
+    ) ||
+    !equipmentHandoffTimes.includes(
+      returnTime as (typeof equipmentHandoffTimes)[number],
+    ) ||
+    returnAt < receiveAt
+  ) {
+    return { ok: false, message: "Giờ nhận và giờ trả không hợp lệ." };
+  }
+  if (
+    receiveDate < businessTodayString() ||
+    receiveDate > source.schedule!.schedule_date ||
+    returnDate < source.schedule!.schedule_date
+  ) {
+    return {
+      ok: false,
+      message: "Ngày nhận/trả phải tuân theo ngày học Y cơ sở.",
+    };
+  }
+  const leadTime = equipmentLeadTime(receiveAt);
+  if (leadTime.isExpired) {
+    return {
+      ok: false,
+      message: "Thời gian nhận thiết bị phải sau thời điểm đăng ký.",
+    };
+  }
+  if (leadTime.requiresLateApproval && !lateRegistrationReason) {
+    return { ok: false, message: "Vui lòng nhập Lý do đăng ký trễ." };
+  }
+
+  const catalogIds = [...new Set(items.map((item) => item.catalogItemId))];
+  const { data: catalogRows } = await supabase
+    .from("basic_medical_equipment_catalog")
+    .select("id")
+    .in("id", catalogIds)
+    .eq("is_active", true);
+  if ((catalogRows ?? []).length !== catalogIds.length) {
+    return {
+      ok: false,
+      message: "Thiết bị đã chọn không còn hoạt động trong Danh mục Y cơ sở.",
+    };
+  }
+
+  const { data: requestId, error } = await supabase.rpc(
+    "create_equipment_request_with_items",
+    {
+      target_class_schedule_id: source.class_schedule_id,
+      target_semester: source.registration!.semester,
+      target_responsible_lecturer_id: null,
+      target_receive_at: receiveAt.toISOString(),
+      target_return_at: returnAt.toISOString(),
+      target_note: note || null,
+      target_late_registration_reason: lateRegistrationReason || null,
+      target_items: items.map((item) => ({
+        skill_name: source.lesson_title,
+        catalog_item_id: item.catalogItemId,
+        quantity: item.quantity,
+        note: item.note?.trim() || null,
+      })),
+    },
+  );
+  if (error || !requestId) {
+    return { ok: false, message: basicMedicalEquipmentRequestError(error) };
+  }
+
+  revalidatePath("/basic-medical/registrations");
+  revalidatePath("/equipment/requests");
+  return {
+    ok: true,
+    message: leadTime.requiresLateApproval
+      ? "Đã gửi yêu cầu duyệt đăng ký trễ."
+      : "Đã tạo phiếu đăng ký thiết bị Y cơ sở.",
+    requestId: requestId as string,
+  };
 }
 
 export async function cancelBasicMedicalSession(formData: FormData) {
