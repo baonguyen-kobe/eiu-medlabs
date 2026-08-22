@@ -409,6 +409,7 @@ test("Basic Medical-only Teaching Assistant lands in Basic Medical and cannot en
   page,
 }) => {
   test.slow();
+
   const config = await loadLocalServiceConfig();
   const service = serviceClient(config);
   let fixture: FixtureUser | undefined;
