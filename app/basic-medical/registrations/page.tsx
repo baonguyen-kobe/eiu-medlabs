@@ -6,6 +6,7 @@ import type {
   BasicMedicalRegistrationListItem,
   BasicMedicalRoomInventoryItem,
 } from "@/lib/basic-medical-equipment";
+import { businessTodayString } from "@/lib/business-time";
 import {
   equipmentRequestSelect,
   type EquipmentRequestListItem,
@@ -243,6 +244,7 @@ export default async function BasicMedicalRegistrationsPage({
         evidenceEnabled={isBasicMedicalConfirmationEvidenceEnabled()}
         canManageBasicMedical={canManageBasicMedical}
         equipmentRequestsBySession={equipmentRequestsBySession}
+        today={businessTodayString()}
       />
       <PaginationLinks
         currentPage={currentPage}

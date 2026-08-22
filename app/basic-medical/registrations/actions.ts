@@ -223,6 +223,7 @@ export async function createBasicMedicalEquipmentRequest(
   }
 
   revalidatePath("/basic-medical/registrations");
+  revalidatePath("/equipment/register");
   revalidatePath("/equipment/requests");
   return {
     ok: true,

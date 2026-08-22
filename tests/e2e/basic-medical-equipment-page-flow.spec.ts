@@ -109,6 +109,16 @@ test.afterAll(() => {
   localSql(`
     begin;
     set local session_replication_role = replica;
+    delete from public.equipment_request_items
+    where request_id in (
+      select id
+      from public.equipment_requests
+      where request_domain = 'basic_medical'
+        and source_identity_id = '${fixture.session}'
+    );
+    delete from public.equipment_requests
+    where request_domain = 'basic_medical'
+      and source_identity_id = '${fixture.session}';
     delete from public.basic_medical_registration_sessions where id = '${fixture.session}';
     delete from public.class_schedules where id = '${fixture.schedule}';
     delete from public.basic_medical_registrations where id = '${fixture.registration}';
@@ -198,4 +208,57 @@ test("Basic Medical equipment registration stays on a stable page flow", async (
   await expect(
     page.getByRole("combobox", { name: "Tên thiết bị dòng 2" }),
   ).toBeVisible();
+  await page.getByRole("button", { name: "Xóa", exact: true }).last().click();
+
+  await page.locator('input[name="receive_date"]').fill("2099-11-22");
+  await page.getByRole("button", { name: "Gửi đăng ký", exact: true }).click();
+  await expect(page).toHaveURL(
+    new RegExp(`domain=basic_medical&session=${fixture.session}`),
+  );
+  await expect(
+    page.getByRole("button", { name: "Gửi đăng ký", exact: true }),
+  ).toHaveCount(0);
+  await expect(page.getByText(courseCode)).toBeVisible();
+  await expect(page.getByText(lessonTitle)).toBeVisible();
+  const detailTable = page.locator(".equipment-detail-table");
+  await expect(detailTable).toContainText(catalogName);
+  await expect(detailTable).toContainText(`E2E commercial ${fixture.suffix}`);
+  await expect(detailTable.locator("tbody tr").first()).toContainText("1");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.waitForTimeout(3_000);
+  await expect(page).toHaveURL(
+    new RegExp(`domain=basic_medical&session=${fixture.session}`),
+  );
+
+  await page.goto("/basic-medical/registrations?status=all");
+  const persistedRegistrationRow = page
+    .locator("tr.equipment-request-table-row")
+    .filter({ hasText: courseCode })
+    .first();
+  await expect(persistedRegistrationRow).toBeVisible({ timeout: 15_000 });
+  await persistedRegistrationRow.click();
+  const persistedSessionRow = page
+    .locator(".basic-medical-session-table tbody tr")
+    .filter({ hasText: lessonTitle });
+  await expect(
+    persistedSessionRow.getByRole("link", {
+      name: "Đăng ký thiết bị",
+      exact: true,
+    }),
+  ).toHaveCount(0);
+  await expect(
+    persistedSessionRow.getByRole("link", {
+      name: "Xem phiếu thiết bị",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await persistedSessionRow
+    .getByRole("link", { name: "Xem phiếu thiết bị", exact: true })
+    .click();
+  await expect(page).toHaveURL(
+    new RegExp(`domain=basic_medical&session=${fixture.session}`),
+  );
+  await expect(page.locator(".equipment-detail-table")).toContainText(
+    catalogName,
+  );
 });

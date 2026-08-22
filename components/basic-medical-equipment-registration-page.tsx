@@ -84,6 +84,18 @@ function sessionIsActive(
   );
 }
 
+function sessionCanCreateEquipmentRequest(
+  registration: BasicMedicalRegistrationListItem,
+  session: BasicMedicalRegistrationSessionItem,
+  today: string,
+) {
+  return Boolean(
+    sessionIsActive(registration, session) &&
+    session.class_schedules?.schedule_date &&
+    session.class_schedules.schedule_date >= today,
+  );
+}
+
 export async function BasicMedicalEquipmentRegistrationPage({
   viewer,
   sessionId,
@@ -107,6 +119,7 @@ export async function BasicMedicalEquipmentRegistrationPage({
     canManageBasicMedical,
   } = viewer;
   const roomTypeCodes = roomTypes.map(({ code }) => code);
+  const today = businessTodayString();
   const { data: rawSessions, error: sessionError } = await supabase
     .from("basic_medical_registration_sessions")
     .select(
@@ -160,7 +173,11 @@ export async function BasicMedicalEquipmentRegistrationPage({
     : undefined;
   const canCreateSelected = Boolean(
     selected &&
-    sessionIsActive(selected.registration, selected.session) &&
+    sessionCanCreateEquipmentRequest(
+      selected.registration,
+      selected.session,
+      today,
+    ) &&
     !selectedRequest,
   );
   const [catalogResult, profileResult] = await Promise.all([
@@ -181,7 +198,7 @@ export async function BasicMedicalEquipmentRegistrationPage({
     visibleSources
       .filter(
         ({ registration, session }) =>
-          sessionIsActive(registration, session) &&
+          sessionCanCreateEquipmentRequest(registration, session, today) &&
           !requestsBySession.has(session.id),
       )
       .map(({ registration, session }) => {
@@ -252,7 +269,7 @@ export async function BasicMedicalEquipmentRegistrationPage({
           catalog={
             (catalogResult.data ?? []) as BasicMedicalEquipmentCatalogItem[]
           }
-          today={businessTodayString()}
+          today={today}
           equipmentRegistrant={equipmentRegistrant}
         />
       ) : (

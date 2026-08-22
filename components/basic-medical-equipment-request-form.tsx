@@ -137,11 +137,9 @@ export function BasicMedicalEquipmentRequestForm({
 
   useEffect(() => {
     if (state.ok) {
-      router.replace(
-        `/equipment/register?domain=basic_medical&session=${session.id}`,
-      );
+      router.refresh();
     }
-  }, [router, session.id, state.ok]);
+  }, [router, state.ok]);
 
   function updateItem(key: number, patch: Partial<DraftItem>) {
     setItems((current) =>

@@ -763,6 +763,7 @@ export function BasicMedicalRegistrationList({
   evidenceEnabled,
   canManageBasicMedical,
   equipmentRequestsBySession,
+  today,
 }: {
   registrations: BasicMedicalRegistrationListItem[];
   inventories: BasicMedicalRoomInventoryItem[];
@@ -774,6 +775,7 @@ export function BasicMedicalRegistrationList({
   evidenceEnabled: boolean;
   canManageBasicMedical: boolean;
   equipmentRequestsBySession: Record<string, EquipmentRequestListItem>;
+  today: string;
 }) {
   const router = useRouter();
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
@@ -1122,9 +1124,15 @@ export function BasicMedicalRegistrationList({
                                     instructors.length > 0;
                                   const equipmentRequest =
                                     equipmentRequestsBySession[session.id];
+                                  const sessionCanCreateEquipment = Boolean(
+                                    session.class_schedules?.schedule_date &&
+                                    session.class_schedules.schedule_date >=
+                                      today,
+                                  );
                                   const canCreateEquipmentRequest =
                                     !isCancelled &&
                                     !isSessionCancelled &&
+                                    sessionCanCreateEquipment &&
                                     !equipmentRequest &&
                                     (canManageBasicMedical ||
                                       registration.created_by === viewerId ||

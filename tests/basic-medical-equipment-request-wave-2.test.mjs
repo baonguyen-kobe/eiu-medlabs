@@ -37,6 +37,16 @@ test("Wave 2 uses a page-based Basic Medical registration form", async () => {
   assert.match(registerPage, /BasicMedicalEquipmentRegistrationPage/);
   assert.match(basicMedicalPage, /\.in\("source_identity_id", sourceIds\)/);
   assert.match(basicMedicalPage, /requestsBySession/);
+  assert.match(basicMedicalPage, /function sessionCanCreateEquipmentRequest/);
+  assert.match(
+    basicMedicalPage,
+    /session\.class_schedules\.schedule_date >= today/,
+  );
+  assert.match(
+    basicMedicalPage,
+    /sessionCanCreateEquipmentRequest\([\s\S]*?today/,
+  );
+  assert.match(basicMedicalPage, /selectedRequest \? \(/);
   assert.match(form, /SearchableCombobox/);
   assert.match(form, /schedule-form equipment-request-form/);
   assert.match(form, /form-section-number/);
@@ -52,6 +62,7 @@ test("Wave 2 uses a page-based Basic Medical registration form", async () => {
     /<Link[\s\S]*?href=\{`\/equipment\/register\?domain=basic_medical&session=\$\{session\.id\}`\}/,
   );
   assert.doesNotMatch(list, /activeEquipmentRequest/);
+  assert.match(list, /session\.class_schedules\.schedule_date >=\s*today/);
 });
 
 test("equipment registration route preserves Skills default and adds Basic Medical access", async () => {
@@ -68,6 +79,17 @@ test("equipment registration route preserves Skills default and adds Basic Medic
   assert.match(shell, /canUseBasicMedicalEquipmentRegistration/);
   assert.match(shell, /canUseSkillsEquipment \|\| canUseBasicMedicalEquipment/);
   assert.equal((shell.match(/label: "Đăng ký thiết bị"/g) ?? []).length, 1);
+});
+
+test("Basic Medical create refreshes the selected page after the guarded action", async () => {
+  const [actions, form] = await Promise.all([
+    source("app/basic-medical/registrations/actions.ts"),
+    source("components/basic-medical-equipment-request-form.tsx"),
+  ]);
+
+  assert.match(actions, /revalidatePath\("\/equipment\/register"\)/);
+  assert.match(form, /router\.refresh\(\)/);
+  assert.doesNotMatch(form, /router\.replace/);
 });
 
 test("shared request list renders the catalog that belongs to its domain", async () => {
