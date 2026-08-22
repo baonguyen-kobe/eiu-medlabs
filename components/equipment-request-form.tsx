@@ -178,10 +178,10 @@ export function EquipmentRequestForm({
   today: string;
   initialData?: EquipmentRequestInitialData;
 }) {
-  const submitAction =
-    initialData?.mode === "edit"
-      ? updateEquipmentRequest
-      : createEquipmentRequest;
+  const isEditMode = initialData?.mode === "edit";
+  const submitAction = isEditMode
+    ? updateEquipmentRequest
+    : createEquipmentRequest;
   const [state, action, pending] = useActionState(submitAction, {
     ok: false,
     message: "",
@@ -486,6 +486,13 @@ export function EquipmentRequestForm({
           value={initialData.sourceRequestId}
         />
       ) : null}
+      {isEditMode ? (
+        <input
+          type="hidden"
+          name="class_schedule_id"
+          value={initialData.classId}
+        />
+      ) : null}
       {initialData ? (
         <div
           className={`equipment-form-mode-banner equipment-form-mode-${initialData.mode}`}
@@ -524,9 +531,10 @@ export function EquipmentRequestForm({
           <label>
             Lớp Skills lab *
             <select
-              name="class_schedule_id"
-              required
-              value={classId}
+              name={isEditMode ? undefined : "class_schedule_id"}
+              required={!isEditMode}
+              disabled={isEditMode}
+              value={isEditMode ? initialData.classId : classId}
               onChange={(event) => {
                 const nextClassId = event.target.value;
                 const nextClass = classes.find(
@@ -550,12 +558,14 @@ export function EquipmentRequestForm({
               ))}
             </select>
           </label>
-          <Link
-            className="button button-secondary create-class-button"
-            href={`/schedule-entry/new?returnTo=${encodeURIComponent(registerReturnTo)}`}
-          >
-            + Tạo lớp mới
-          </Link>
+          {isEditMode ? null : (
+            <Link
+              className="button button-secondary create-class-button"
+              href={`/schedule-entry/new?returnTo=${encodeURIComponent(registerReturnTo)}`}
+            >
+              + Tạo lớp mới
+            </Link>
+          )}
         </div>
         <div className="form-grid three">
           <label>

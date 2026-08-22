@@ -61,6 +61,25 @@ test("Wave 1 create correction preserves Skills-only transactional outbox", asyn
   );
 });
 
+test("Wave 1 Skills edit form locks its immutable class source", async () => {
+  const form = await source("components/equipment-request-form.tsx");
+
+  assert.match(form, /const isEditMode = initialData\?\.mode === "edit"/);
+  assert.match(
+    form,
+    /type="hidden"\s+name="class_schedule_id"\s+value=\{initialData\.classId\}/,
+  );
+  assert.match(
+    form,
+    /name=\{isEditMode \? undefined : "class_schedule_id"\}\s+required=\{!isEditMode\}\s+disabled=\{isEditMode\}/,
+  );
+  assert.match(form, /value=\{isEditMode \? initialData\.classId : classId\}/);
+  assert.match(
+    form,
+    /\{isEditMode \? null : \(\s*<Link\s+className="button button-secondary create-class-button"/,
+  );
+});
+
 test("Wave 1 catalog and tombstone guards are domain-specific", async () => {
   const migration = await source(migrationPath);
 
