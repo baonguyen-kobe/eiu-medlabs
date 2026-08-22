@@ -36,6 +36,14 @@ test("CI creates an isolated Supabase workdir without mutating local preview con
     }
     assert.match(previewConfig, /project_id = "lich-truc-app"/);
     assert.match(previewConfig, /port = 54321/);
+    assert.match(
+      previewConfig,
+      /\[auth\.rate_limit\][\s\S]*sign_in_sign_ups = 30/,
+    );
+    assert.match(
+      ciConfig,
+      /\[auth\.rate_limit\][\s\S]*sign_in_sign_ups = 1000/,
+    );
     assert.equal(readFileSync(previewConfigPath, "utf8"), previewConfig);
   } finally {
     rmSync(target, { recursive: true, force: true });
