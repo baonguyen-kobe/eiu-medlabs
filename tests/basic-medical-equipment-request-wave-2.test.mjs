@@ -39,6 +39,9 @@ test("Wave 2 registrations map requests by active session identity", async () =>
   assert.match(modal, /equipment-items-table/);
   assert.match(modal, /value=\{session\.lesson_title\} readOnly/);
   assert.match(modal, /equipmentRegistrant\.fullName/);
+  assert.match(modal, /formatDate\(scheduleDate\)/);
+  assert.match(modal, /className="equipment-late-warning" role="alert"/);
+  assert.match(modal, /<\/table>\s*<\/div>\s*<button[\s\S]*?\+ Thêm dòng/);
   assert.doesNotMatch(modal, /registration\.registrant\?\.email/);
 });
 
@@ -61,8 +64,12 @@ test("display, manager, and import statuses remain separate", async () => {
     source("lib/equipment-import-values.ts"),
   ]);
   assert.match(requests, /equipmentRequestWorkflowStatuses/);
+  assert.match(requests, /type EquipmentRequestWorkflowStatus/);
   assert.match(requests, /value: "cancelled"/);
   assert.match(actions, /equipmentRequestWorkflowStatuses\.map/);
+  assert.match(actions, /status: EquipmentRequestWorkflowStatus/);
+  const list = await source("components/equipment-request-list.tsx");
+  assert.match(list, /status: EquipmentRequestWorkflowStatus/);
   assert.match(
     values,
     /type EquipmentImportStatus = Exclude<EquipmentRequestStatus, "cancelled">/,

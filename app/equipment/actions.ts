@@ -14,6 +14,7 @@ import {
   type EquipmentConfirmationState,
   type EquipmentRequestListItem,
   type EquipmentRequestStatus,
+  type EquipmentRequestWorkflowStatus,
 } from "@/lib/equipment-requests";
 import { NURSING_SKILLS_ROOM_TYPE_ID } from "@/lib/room-types";
 import { isCanonicalSemester } from "@/lib/semesters";
@@ -214,7 +215,7 @@ export async function deleteEquipmentRequest(
 
 export async function updateEquipmentRequestStatus(
   requestId: string,
-  status: EquipmentRequestStatus,
+  status: EquipmentRequestWorkflowStatus,
 ): Promise<EquipmentActionState> {
   const supabase = await createClient();
   const { data: claims } = await supabase.auth.getClaims();

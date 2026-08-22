@@ -9784,13 +9784,6 @@ body,
   overflow-wrap: anywhere;
 }
 
-.basic-medical-equipment-request-section-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
 .equipment-request-domain {
   display: inline-flex;
   width: fit-content;

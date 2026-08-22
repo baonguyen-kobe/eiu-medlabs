@@ -6,6 +6,9 @@ export const equipmentRequestWorkflowStatuses = [
   { value: "completed", label: "Hoàn Thành", color: "green" },
 ] as const;
 
+export type EquipmentRequestWorkflowStatus =
+  (typeof equipmentRequestWorkflowStatuses)[number]["value"];
+
 export const equipmentRequestStatuses = [
   ...equipmentRequestWorkflowStatuses,
   { value: "cancelled", label: "Đã hủy", color: "red" },

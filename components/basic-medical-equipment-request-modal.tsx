@@ -469,7 +469,7 @@ export function BasicMedicalEquipmentRequestModal({
                 <div className="form-grid four">
                   <label>
                     Ngày học
-                    <input value={scheduleDate} readOnly />
+                    <input value={formatDate(scheduleDate)} readOnly />
                   </label>
                   <label>
                     Giờ học
@@ -628,21 +628,23 @@ export function BasicMedicalEquipmentRequestModal({
                   </label>
                 </div>
                 {leadTime?.requiresLateApproval ? (
-                  <label className="equipment-late-warning">
-                    Lý do đăng ký trễ
-                    <textarea
-                      name="late_registration_reason"
-                      rows={3}
-                      required
-                      value={lateRegistrationReason}
-                      onChange={(event) =>
-                        setLateRegistrationReason(event.target.value)
-                      }
-                    />
-                  </label>
-                ) : null}
-                {leadTime?.requiresLateApproval ? (
-                  <strong>{lateEquipmentWarning(leadTime.remainingMs)}</strong>
+                  <div className="equipment-late-warning" role="alert">
+                    <strong>
+                      {lateEquipmentWarning(leadTime.remainingMs)}
+                    </strong>
+                    <label>
+                      Lý do đăng ký trễ *
+                      <textarea
+                        name="late_registration_reason"
+                        rows={3}
+                        required
+                        value={lateRegistrationReason}
+                        onChange={(event) =>
+                          setLateRegistrationReason(event.target.value)
+                        }
+                      />
+                    </label>
+                  </div>
                 ) : (
                   <input
                     type="hidden"
@@ -663,27 +665,6 @@ export function BasicMedicalEquipmentRequestModal({
                     Tên kỹ năng/Bài thực hành *
                     <input value={session.lesson_title} readOnly />
                   </label>
-                  <div className="basic-medical-equipment-request-section-heading">
-                    <button
-                      type="button"
-                      className="button button-secondary"
-                      disabled={pending}
-                      onClick={() =>
-                        setItems((current) => [
-                          ...current,
-                          {
-                            key: nextKey.current++,
-                            itemName: "",
-                            catalogItemId: "",
-                            quantity: 1,
-                            note: "",
-                          },
-                        ])
-                      }
-                    >
-                      + Thêm dòng
-                    </button>
-                  </div>
                   <div className="responsive-table">
                     <table className="data-table equipment-items-table">
                       <thead>
@@ -692,7 +673,7 @@ export function BasicMedicalEquipmentRequestModal({
                           <th>Tên thiết bị và vật tư *</th>
                           <th>Tên thương mại *</th>
                           <th>ĐVT</th>
-                          <th>Số lượng</th>
+                          <th>Số lượng *</th>
                           <th>Ghi chú</th>
                           <th>
                             <span className="sr-only">Xóa</span>
@@ -788,6 +769,25 @@ export function BasicMedicalEquipmentRequestModal({
                       </tbody>
                     </table>
                   </div>
+                  <button
+                    type="button"
+                    className="button button-secondary"
+                    disabled={pending}
+                    onClick={() =>
+                      setItems((current) => [
+                        ...current,
+                        {
+                          key: nextKey.current++,
+                          itemName: "",
+                          catalogItemId: "",
+                          quantity: 1,
+                          note: "",
+                        },
+                      ])
+                    }
+                  >
+                    + Thêm dòng
+                  </button>
                 </article>
               </section>
               <label>

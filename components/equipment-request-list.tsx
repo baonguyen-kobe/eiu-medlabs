@@ -31,6 +31,7 @@ import {
   type EquipmentLateApprovalStatus,
   type EquipmentRequestListItem,
   type EquipmentRequestStatus,
+  type EquipmentRequestWorkflowStatus,
 } from "@/lib/equipment-requests";
 import { equipmentRequestTargetPage } from "@/lib/equipment-calendar-request";
 import { TABLE_PAGE_SIZE, totalPagesFor } from "@/lib/pagination";
@@ -877,7 +878,10 @@ export function EquipmentRequestList({
     });
   }
 
-  function changeStatus(requestId: string, status: EquipmentRequestStatus) {
+  function changeStatus(
+    requestId: string,
+    status: EquipmentRequestWorkflowStatus,
+  ) {
     if (
       !canManageStatus ||
       (status === currentStatuses[requestId] &&
