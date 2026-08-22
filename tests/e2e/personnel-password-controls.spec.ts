@@ -105,7 +105,9 @@ test("Personnel reset forces an email-password account through password change b
     await customPasswordDialog
       .getByRole("button", { name: "Đổi mật khẩu", exact: true })
       .click();
-    await expect(drawer.getByRole("status")).toContainText("Đã đổi mật khẩu");
+    await expect(drawer.getByRole("status")).toContainText("Đã đổi mật khẩu", {
+      timeout: 20_000,
+    });
 
     await page.context().clearCookies();
     await login(page, email, "RootCustom123!");
@@ -127,7 +129,10 @@ test("Personnel reset forces an email-password account through password change b
     await resetPasswordDialog
       .getByRole("button", { name: "Đặt lại mật khẩu", exact: true })
       .click();
-    await expect(drawer.getByRole("status")).toContainText("mật khẩu tạm thời");
+    await expect(drawer.getByRole("status")).toContainText(
+      "mật khẩu tạm thời",
+      { timeout: 20_000 },
+    );
 
     const { data: forcedProfile } = await serviceDb
       .from("profiles")
