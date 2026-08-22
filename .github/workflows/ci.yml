@@ -6,8 +6,8 @@ on:
     branches: [main]
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-supabase-runtime
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -40,6 +40,11 @@ jobs:
 
       - name: Audit dependencies
         run: npm audit
+
+      - name: Retire stale CI Supabase runtime
+        shell: bash
+        run: |
+          npx --no-install supabase stop --project-id lich-truc-app-ci --no-backup || true
 
       - name: Prepare isolated CI Supabase workdir
         shell: bash
@@ -105,3 +110,20 @@ jobs:
 
       - name: Build and smoke-test production bundle
         run: npm run test:e2e:production-smoke
+
+      - name: Clean up isolated CI Supabase runtime
+        if: always()
+        shell: bash
+        run: |
+          npx --no-install supabase stop --project-id lich-truc-app-ci --no-backup || true
+          if [[ -n "${CI_SUPABASE_WORKDIR:-}" && -d "$CI_SUPABASE_WORKDIR" ]]; then
+            case "$CI_SUPABASE_WORKDIR" in
+              "$RUNNER_TEMP"/lich-truc-app-ci.*)
+                rm -rf -- "$CI_SUPABASE_WORKDIR"
+                ;;
+              *)
+                echo "Refusing to remove a non-CI Supabase workdir: $CI_SUPABASE_WORKDIR" >&2
+                exit 1
+                ;;
+            esac
+          fi

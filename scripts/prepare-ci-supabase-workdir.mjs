@@ -53,6 +53,7 @@ const runtimeReplacements = [
   ["port = 54324", "port = 55424"],
   ["inspector_port = 8083", "inspector_port = 55883"],
   ["port = 54327", "port = 55427"],
+  ["sign_in_sign_ups = 30", "sign_in_sign_ups = 1000"],
 ];
 
 for (const [from, to] of runtimeReplacements) {
