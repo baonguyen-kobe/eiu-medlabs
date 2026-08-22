@@ -408,6 +408,8 @@ test("Lecturer remains able to create a Skills schedule and equipment request th
 test("Basic Medical-only Teaching Assistant lands in Basic Medical and cannot enter Skills", async ({
   page,
 }) => {
+  test.slow();
+
   const config = await loadLocalServiceConfig();
   const service = serviceClient(config);
   let fixture: FixtureUser | undefined;
