@@ -1983,14 +1983,10 @@ test("người đăng ký được điều chỉnh nội dung nhưng không đư
   const admin = await signIn("admin@campus.local", "LocalAdmin123!");
   const lecturer = await signIn("giangvien@campus.local", "LocalLecturer123!");
   const firstScheduleId = crypto.randomUUID();
-  const secondScheduleId = crypto.randomUUID();
   const requestId = crypto.randomUUID();
   const catalogItemId = crypto.randomUUID();
 
-  for (const [id, date, sem] of [
-    [firstScheduleId, "2035-09-09", "HK1"],
-    [secondScheduleId, "2035-09-10", "HK2"],
-  ]) {
+  for (const [id, date, sem] of [[firstScheduleId, "2035-09-09", "HK1"]]) {
     const { error } = await serviceClient().from("class_schedules").insert({
       id,
       course_id: "10000000-0000-0000-0000-000000000001",
@@ -2065,8 +2061,8 @@ test("người đăng ký được điều chỉnh nội dung nhưng không đư
       target_class_schedule_id: firstScheduleId,
       target_semester: "HK1",
       target_responsible_lecturer_id: lecturer.user.id,
-      target_receive_at: "2035-09-10T02:00:00.000Z",
-      target_return_at: "2035-09-10T04:00:00.000Z",
+      target_receive_at: "2035-09-09T02:00:00.000Z",
+      target_return_at: "2035-09-09T04:00:00.000Z",
       target_note: "Nội dung đã điều chỉnh",
       target_items: [
         {
@@ -2127,8 +2123,8 @@ test("người đăng ký được điều chỉnh nội dung nhưng không đư
       target_class_schedule_id: firstScheduleId,
       target_semester: "HK1",
       target_responsible_lecturer_id: lecturer.user.id,
-      target_receive_at: "2035-09-10T02:00:00.000Z",
-      target_return_at: "2035-09-10T04:00:00.000Z",
+      target_receive_at: "2035-09-09T02:00:00.000Z",
+      target_return_at: "2035-09-09T04:00:00.000Z",
       target_note: "Không được cập nhật",
       target_items: [
         {
@@ -2165,7 +2161,7 @@ test("người đăng ký được điều chỉnh nội dung nhưng không đư
     .eq("id", requestId);
   assert.ifError(reqError);
 
-  for (const id of [firstScheduleId, secondScheduleId]) {
+  for (const id of [firstScheduleId]) {
     const { error } = await serviceClient()
       .from("class_schedules")
       .delete()

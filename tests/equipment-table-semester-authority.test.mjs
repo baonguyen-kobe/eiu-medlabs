@@ -413,10 +413,7 @@ test("D5: immutable source rejects a NULL-semester destination before semester v
       updateErr,
       "Moving to schedule with NULL semester must FAIL CLOSED",
     );
-    assert.match(
-      updateErr.message,
-      /EQUIPMENT_REQUEST_DOMAIN_OR_SOURCE_IMMUTABLE/i,
-    );
+    assert.match(updateErr.message, /EQUIPMENT_REQUEST_LIVE_SOURCE_IMMUTABLE/i);
   } finally {
     if (requestId) {
       await service.from("equipment_requests").delete().eq("id", requestId);
@@ -496,7 +493,7 @@ test("D6: immutable source rejects a canonical destination", async () => {
     assert.equal(updateErr?.code, "22023");
     assert.match(
       updateErr?.message ?? "",
-      /EQUIPMENT_REQUEST_DOMAIN_OR_SOURCE_IMMUTABLE/i,
+      /EQUIPMENT_REQUEST_LIVE_SOURCE_IMMUTABLE/i,
     );
   } finally {
     if (requestId) {
