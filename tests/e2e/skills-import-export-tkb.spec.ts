@@ -44,7 +44,9 @@ test("Skills Lab normalizes LAB room codes, accepts no email and resolves lectur
   await expect(semesterSelect).toBeVisible();
   await selectOptionUntilState(semesterSelect, "HK1", async () => {
     await expect(semesterSelect).toHaveValue("HK1", { timeout: 2_000 });
-    await expect(fileInput).toBeEnabled({ timeout: 2_000 });
+    await expect(dropZone).toHaveAttribute("for", "schedule-import-file", {
+      timeout: 2_000,
+    });
     await expect(dropZone).not.toHaveClass(/drop-zone-blocked/, {
       timeout: 2_000,
     });
@@ -128,7 +130,9 @@ test("Skills Lab preview displays and excludes an intra-file conflict", async ({
   await expect(semesterSelect).toBeVisible();
   await selectOptionUntilState(semesterSelect, "HK1", async () => {
     await expect(semesterSelect).toHaveValue("HK1", { timeout: 2_000 });
-    await expect(fileInput).toBeEnabled({ timeout: 2_000 });
+    await expect(dropZone).toHaveAttribute("for", "schedule-import-file", {
+      timeout: 2_000,
+    });
     await expect(dropZone).not.toHaveClass(/drop-zone-blocked/, {
       timeout: 2_000,
     });
@@ -173,7 +177,6 @@ test("Skills Lab import blocks file upload until Semester is selected", async ({
   await expect(semesterSelect).toHaveValue("");
 
   const dropZone = page.locator(".drop-zone");
-  const fileInput = page.locator("#schedule-import-file");
   await dropZone.click();
   await expect(page.locator(".form-error")).toContainText(
     "Vui lòng chọn Học kỳ trước khi chọn file import.",
@@ -181,7 +184,9 @@ test("Skills Lab import blocks file upload until Semester is selected", async ({
 
   await selectOptionUntilState(semesterSelect, "HK2", async () => {
     await expect(semesterSelect).toHaveValue("HK2", { timeout: 2_000 });
-    await expect(fileInput).toBeEnabled({ timeout: 2_000 });
+    await expect(dropZone).toHaveAttribute("for", "schedule-import-file", {
+      timeout: 2_000,
+    });
     await expect(dropZone).not.toHaveClass(/drop-zone-blocked/, {
       timeout: 2_000,
     });
