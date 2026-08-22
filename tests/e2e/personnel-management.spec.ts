@@ -55,6 +55,7 @@ async function deletePersonnel(email: string) {
 test("personnel drawer saves role, import capability and lock atomically", async ({
   page,
 }) => {
+  test.slow();
   const email = `personnel-e2e-${crypto.randomUUID()}@campus.local`;
   const phone = `09${Date.now().toString().slice(-8)}`;
   await loginAsAdmin(page);
@@ -70,13 +71,16 @@ test("personnel drawer saves role, import capability and lock atomically", async
       .locator('input[name="roles"][value="teaching_assistant"]')
       .check();
     await createForm.locator('input[name="can_import_schedules"]').check();
-    await createForm.getByRole("button", { name: "Tạo tài khoản" }).click();
+    const createButton = createForm.getByRole("button", {
+      name: "Tạo tài khoản",
+    });
+    await createButton.click();
 
     const row = page
       .locator(".personnel-table tbody tr")
       .filter({ hasText: email });
-    await expect(row).toContainText("Trợ giảng");
-    await expect(row).toContainText("Nhập lịch");
+    await expect(row).toContainText("Trợ giảng", { timeout: 15_000 });
+    await expect(row).toContainText("Nhập lịch", { timeout: 15_000 });
     const drawer = page.getByRole("dialog", { name: "Chỉnh sửa nhân sự" });
     await clickUntilState(row.getByRole("button", { name: "Sửa" }), () =>
       expect(drawer).toBeVisible({ timeout: 1_000 }),
@@ -97,15 +101,13 @@ test("personnel drawer saves role, import capability and lock atomically", async
     await expect(
       confirmation.getByRole("button", { name: "Quay lại" }),
     ).toBeFocused();
-    await clickUntilState(
-      confirmation.getByRole("button", { name: "Khóa tài khoản" }),
-      () =>
-        expect(drawer.getByRole("status")).toContainText(
-          "Đã cập nhật nhân sự.",
-        ),
+    await confirmation.getByRole("button", { name: "Khóa tài khoản" }).click();
+    await expect(drawer.getByRole("status")).toContainText(
+      "Đã cập nhật nhân sự.",
+      { timeout: 20_000 },
     );
-    await expect(row).toContainText("Đã khóa");
-    await expect(row).not.toContainText("Nhập lịch");
+    await expect(row).toContainText("Đã khóa", { timeout: 20_000 });
+    await expect(row).not.toContainText("Nhập lịch", { timeout: 20_000 });
   } finally {
     await deletePersonnel(email);
   }

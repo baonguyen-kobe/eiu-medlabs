@@ -1,5 +1,9 @@
 import { expect, test } from "@playwright/test";
-import { setInputFilesUntilState } from "./helpers/interaction-readiness";
+import {
+  clickUntilState,
+  selectOptionUntilState,
+  setInputFilesUntilState,
+} from "./helpers/interaction-readiness";
 import * as XLSX from "@e965/xlsx";
 
 test("Skills Lab normalizes LAB room codes, accepts no email and resolves lecturer email", async ({
@@ -35,10 +39,19 @@ test("Skills Lab normalizes LAB room codes, accepts no email and resolves lectur
 
   await page.goto("/schedule-entry/import");
   const semesterSelect = page.locator("#import-semester-select");
-  await expect(semesterSelect).toBeVisible();
-  await semesterSelect.selectOption("HK1");
-
   const fileInput = page.locator("#schedule-import-file");
+  const dropZone = page.locator(".drop-zone");
+  await expect(semesterSelect).toBeVisible();
+  await selectOptionUntilState(semesterSelect, "HK1", async () => {
+    await expect(semesterSelect).toHaveValue("HK1", { timeout: 2_000 });
+    await expect(dropZone).toHaveAttribute("for", "schedule-import-file", {
+      timeout: 2_000,
+    });
+    await expect(dropZone).not.toHaveClass(/drop-zone-blocked/, {
+      timeout: 2_000,
+    });
+  });
+
   const stepTwo = page.locator(".stepper li").nth(1);
   await setInputFilesUntilState(
     fileInput,
@@ -60,8 +73,10 @@ test("Skills Lab normalizes LAB room codes, accepts no email and resolves lectur
   );
   await expect(page.locator(".file-summary")).toContainText("HK1");
 
-  await continueButton.click();
-  await expect(page.locator(".stepper li").nth(2)).toHaveClass(/active/);
+  const stepThree = page.locator(".stepper li").nth(2);
+  await clickUntilState(continueButton, () =>
+    expect(stepThree).toHaveClass(/active/, { timeout: 2_000 }),
+  );
   await expect(page.locator(".preview-table tbody")).toContainText(
     "giangvien@campus.local",
   );
@@ -110,10 +125,19 @@ test("Skills Lab preview displays and excludes an intra-file conflict", async ({
 
   await page.goto("/schedule-entry/import");
   const semesterSelect = page.locator("#import-semester-select");
-  await expect(semesterSelect).toBeVisible();
-  await semesterSelect.selectOption("HK1");
-
   const fileInput = page.locator("#schedule-import-file");
+  const dropZone = page.locator(".drop-zone");
+  await expect(semesterSelect).toBeVisible();
+  await selectOptionUntilState(semesterSelect, "HK1", async () => {
+    await expect(semesterSelect).toHaveValue("HK1", { timeout: 2_000 });
+    await expect(dropZone).toHaveAttribute("for", "schedule-import-file", {
+      timeout: 2_000,
+    });
+    await expect(dropZone).not.toHaveClass(/drop-zone-blocked/, {
+      timeout: 2_000,
+    });
+  });
+
   const stepTwo = page.locator(".stepper li").nth(1);
   await setInputFilesUntilState(
     fileInput,
@@ -125,7 +149,11 @@ test("Skills Lab preview displays and excludes an intra-file conflict", async ({
     },
     () => expect(stepTwo).toHaveClass(/active/, { timeout: 8_000 }),
   );
-  await page.getByRole("button", { name: /Tiếp tục/ }).click();
+  const continueButton = page.getByRole("button", { name: /Tiếp tục/ });
+  const stepThree = page.locator(".stepper li").nth(2);
+  await clickUntilState(continueButton, () =>
+    expect(stepThree).toHaveClass(/active/, { timeout: 2_000 }),
+  );
 
   const conflict = page.locator(".preview-status-conflict");
   await expect(conflict).toHaveCount(1);
@@ -154,6 +182,14 @@ test("Skills Lab import blocks file upload until Semester is selected", async ({
     "Vui lòng chọn Học kỳ trước khi chọn file import.",
   );
 
-  await semesterSelect.selectOption("HK2");
-  await expect(page.locator(".form-error")).toHaveCount(0);
+  await selectOptionUntilState(semesterSelect, "HK2", async () => {
+    await expect(semesterSelect).toHaveValue("HK2", { timeout: 2_000 });
+    await expect(dropZone).toHaveAttribute("for", "schedule-import-file", {
+      timeout: 2_000,
+    });
+    await expect(dropZone).not.toHaveClass(/drop-zone-blocked/, {
+      timeout: 2_000,
+    });
+    await expect(page.locator(".form-error")).toHaveCount(0);
+  });
 });

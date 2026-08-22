@@ -26,6 +26,24 @@ export async function clickUntilState(
   }).toPass(readinessOptions);
 }
 
+export async function selectOptionUntilState(
+  select: Locator,
+  values: Parameters<Locator["selectOption"]>[0],
+  ready: ReadyAssertion,
+) {
+  await expect(async () => {
+    try {
+      await ready();
+      return;
+    } catch {
+      // The server-rendered select can be visible before React owns the event.
+    }
+
+    await select.selectOption(values);
+    await ready();
+  }).toPass(readinessOptions);
+}
+
 export async function openCombobox(combobox: Locator) {
   await clickUntilState(combobox, () =>
     expect(combobox).toHaveAttribute("aria-expanded", "true", {
