@@ -84,6 +84,9 @@ test("Basic Medical equipment edit preserves its source and stays domain-local",
     registrationB: crypto.randomUUID(),
     scheduleB: crypto.randomUUID(),
     sessionB: crypto.randomUUID(),
+    registrationLate: crypto.randomUUID(),
+    scheduleLate: crypto.randomUUID(),
+    sessionLate: crypto.randomUUID(),
     catalog: crypto.randomUUID(),
     inactiveCatalog: crypto.randomUUID(),
   };
@@ -104,9 +107,34 @@ test("Basic Medical equipment edit preserves its source and stays domain-local",
     localSql(
       "select delivery_mode from public.email_delivery_settings where setting_key = 'primary'",
     ) || "off";
+  const lateSlot = JSON.parse(
+    localSql(`
+      with now_hcm as (
+        select clock_timestamp() at time zone 'Asia/Ho_Chi_Minh' as value
+      )
+      select json_build_object(
+        'date', case
+          when value::time < time '08:45' then value::date
+          when value::time < time '10:45' then value::date
+          when value::time < time '13:45' then value::date
+          when value::time < time '15:45' then value::date
+          else value::date + 1
+        end,
+        'receive_time', case
+          when value::time < time '08:45' then '09:00'
+          when value::time < time '10:45' then '11:00'
+          when value::time < time '13:45' then '14:00'
+          when value::time < time '15:45' then '16:00'
+          else '09:00'
+        end
+      )::text
+      from now_hcm;
+    `),
+  );
   const skillsCatalogId = "30000000-0000-0000-0000-000000000001";
   let requestA;
   let requestB;
+  let requestLate;
 
   try {
     localSql(`
@@ -140,16 +168,19 @@ test("Basic Medical equipment edit preserves its source and stays domain-local",
         (id, academic_year, semester, start_date, end_date, course_id, room_id, student_count, registrant_id, responsible_lecturer_id, created_by)
       values
         ('${fixture.registrationA}', '2099-2100', 'HK1', '2099-11-22', '2099-11-22', '${fixture.course}', '${fixture.room}', 20, '${ownerId}', '${teachingLecturerId}', '${ownerId}'),
-        ('${fixture.registrationB}', '2099-2100', 'HK1', '2099-11-23', '2099-11-23', '${fixture.course}', '${fixture.room}', 20, '${ownerId}', '${teachingLecturerId}', '${ownerId}');
+        ('${fixture.registrationB}', '2099-2100', 'HK1', '2099-11-23', '2099-11-23', '${fixture.course}', '${fixture.room}', 20, '${ownerId}', '${teachingLecturerId}', '${ownerId}'),
+        ('${fixture.registrationLate}', '2099-2100', 'HK1', '${lateSlot.date}', '${lateSlot.date}', '${fixture.course}', '${fixture.room}', 20, '${ownerId}', '${teachingLecturerId}', '${ownerId}');
       insert into public.class_schedules
         (id, course_id, course_code_snapshot, course_name_snapshot, room_id, lecturer_id, schedule_date, start_time, end_time, source, schedule_status, student_count, basic_medical_registration_id, created_by, published_by, published_at)
       values
         ('${fixture.scheduleA}', '${fixture.course}', 'BM-EDIT', 'Basic Medical edit test', '${fixture.room}', '${teachingLecturerId}', '2099-11-22', '09:00', '11:00', 'manual', 'published', 20, '${fixture.registrationA}', '${ownerId}', '${ownerId}', clock_timestamp()),
-        ('${fixture.scheduleB}', '${fixture.course}', 'BM-EDIT', 'Basic Medical copy target', '${fixture.room}', '${teachingLecturerId}', '2099-11-23', '09:00', '11:00', 'manual', 'published', 20, '${fixture.registrationB}', '${ownerId}', '${ownerId}', clock_timestamp());
+        ('${fixture.scheduleB}', '${fixture.course}', 'BM-EDIT', 'Basic Medical copy target', '${fixture.room}', '${teachingLecturerId}', '2099-11-23', '09:00', '11:00', 'manual', 'published', 20, '${fixture.registrationB}', '${ownerId}', '${ownerId}', clock_timestamp()),
+        ('${fixture.scheduleLate}', '${fixture.course}', 'BM-EDIT', 'Basic Medical late email', '${fixture.room}', '${teachingLecturerId}', '${lateSlot.date}', '09:00', '11:00', 'manual', 'published', 20, '${fixture.registrationLate}', '${ownerId}', '${ownerId}', clock_timestamp());
       insert into public.basic_medical_registration_sessions (id, registration_id, class_schedule_id, lesson_title, teaching_lecturer_id, session_number)
       values
         ('${fixture.sessionA}', '${fixture.registrationA}', '${fixture.scheduleA}', 'Bài nguồn không đổi', '${teachingLecturerId}', 1),
-        ('${fixture.sessionB}', '${fixture.registrationB}', '${fixture.scheduleB}', 'Bài đích không đổi', '${teachingLecturerId}', 1);
+        ('${fixture.sessionB}', '${fixture.registrationB}', '${fixture.scheduleB}', 'Bài đích không đổi', '${teachingLecturerId}', 1),
+        ('${fixture.sessionLate}', '${fixture.registrationLate}', '${fixture.scheduleLate}', 'Bài đăng ký trễ', '${teachingLecturerId}', 1);
       insert into public.basic_medical_equipment_catalog (id, item_name, commercial_name, unit, is_active)
       values
         ('${fixture.catalog}', 'Thiết bị edit', 'Thiết bị edit thương mại', 'Cái', true),
@@ -385,6 +416,73 @@ test("Basic Medical equipment edit preserves its source and stays domain-local",
       "COPY keeps destination session uniqueness through create RPC",
     );
 
+    const lateCreate = await owner.client.rpc(
+      "create_equipment_request_with_items",
+      {
+        target_class_schedule_id: fixture.scheduleLate,
+        target_semester: "HK1",
+        target_responsible_lecturer_id: null,
+        target_receive_at: `${lateSlot.date}T${lateSlot.receive_time}:00+07:00`,
+        target_return_at: `${lateSlot.date}T16:00:00+07:00`,
+        target_note: "late email event",
+        target_late_registration_reason: "E2E late approval coverage",
+        target_items: [
+          {
+            skill_name: "ignored",
+            catalog_item_id: fixture.catalog,
+            quantity: 1,
+            note: "late",
+          },
+        ],
+      },
+    );
+    assert.ifError(lateCreate.error);
+    requestLate = lateCreate.data;
+    const lateOutbox = JSON.parse(
+      localSql(`
+        select coalesce(json_agg(json_build_object(
+          'event_type', event_type,
+          'request_domain', payload->>'request_domain'
+        )), '[]'::json)::text
+        from public.email_outbox_events
+        where aggregate_id = '${requestLate}';
+      `),
+    );
+    assert.deepEqual(
+      lateOutbox,
+      [
+        {
+          event_type: "late_approval_requested",
+          request_domain: "basic_medical",
+        },
+      ],
+      "EMAIL-BM-02 late create enqueues only the late approval event",
+    );
+    const lateEdit = await owner.client.rpc(
+      "update_basic_medical_equipment_request_content",
+      {
+        target_request_id: requestLate,
+        target_receive_at: `${lateSlot.date}T${lateSlot.receive_time}:00+07:00`,
+        target_return_at: `${lateSlot.date}T16:00:00+07:00`,
+        target_note: "late email adjustment",
+        target_late_registration_reason: "E2E late approval coverage",
+        target_items: items(fixture.catalog, 2, "late adjusted"),
+      },
+    );
+    assert.ifError(lateEdit.error);
+    const lateEditEvents = JSON.parse(
+      localSql(`
+        select coalesce(json_agg(event_type order by created_at), '[]'::json)::text
+        from public.email_outbox_events
+        where aggregate_id = '${requestLate}';
+      `),
+    );
+    assert.deepEqual(
+      lateEditEvents,
+      ["late_approval_requested", "late_approval_requested"],
+      "EMAIL-BM-05 late edit enqueues one late event instead of updated plus late",
+    );
+
     const outboxRows = JSON.parse(
       localSql(`
         select coalesce(json_agg(json_build_object(
@@ -474,7 +572,7 @@ test("Basic Medical equipment edit preserves its source and stays domain-local",
           'delivery_mode', delivery_mode_at_enqueue
         )), '[]'::json)::text
         from public.email_notifications
-        where payload->>'request_id' in ('${requestA}', '${requestB}');
+        where payload->>'request_id' in ('${requestA}', '${requestB}', '${requestLate}');
       `),
     );
     assert.ok(
@@ -494,14 +592,14 @@ test("Basic Medical equipment edit preserves its source and stays domain-local",
       begin;
       set local session_replication_role = replica;
       delete from public.email_notifications
-      where payload->>'request_id' in ('${requestA ?? "00000000-0000-0000-0000-000000000000"}', '${requestB ?? "00000000-0000-0000-0000-000000000000"}');
+      where payload->>'request_id' in ('${requestA ?? "00000000-0000-0000-0000-000000000000"}', '${requestB ?? "00000000-0000-0000-0000-000000000000"}', '${requestLate ?? "00000000-0000-0000-0000-000000000000"}');
       delete from public.email_outbox_events
-      where aggregate_id in ('${requestA ?? "00000000-0000-0000-0000-000000000000"}', '${requestB ?? "00000000-0000-0000-0000-000000000000"}');
-      delete from public.equipment_request_items where request_id in ('${requestA ?? "00000000-0000-0000-0000-000000000000"}', '${requestB ?? "00000000-0000-0000-0000-000000000000"}');
-      delete from public.equipment_requests where id in ('${requestA ?? "00000000-0000-0000-0000-000000000000"}', '${requestB ?? "00000000-0000-0000-0000-000000000000"}');
-      delete from public.basic_medical_registration_sessions where id in ('${fixture.sessionA}', '${fixture.sessionB}');
-      delete from public.class_schedules where id in ('${fixture.scheduleA}', '${fixture.scheduleB}');
-      delete from public.basic_medical_registrations where id in ('${fixture.registrationA}', '${fixture.registrationB}');
+      where aggregate_id in ('${requestA ?? "00000000-0000-0000-0000-000000000000"}', '${requestB ?? "00000000-0000-0000-0000-000000000000"}', '${requestLate ?? "00000000-0000-0000-0000-000000000000"}');
+      delete from public.equipment_request_items where request_id in ('${requestA ?? "00000000-0000-0000-0000-000000000000"}', '${requestB ?? "00000000-0000-0000-0000-000000000000"}', '${requestLate ?? "00000000-0000-0000-0000-000000000000"}');
+      delete from public.equipment_requests where id in ('${requestA ?? "00000000-0000-0000-0000-000000000000"}', '${requestB ?? "00000000-0000-0000-0000-000000000000"}', '${requestLate ?? "00000000-0000-0000-0000-000000000000"}');
+      delete from public.basic_medical_registration_sessions where id in ('${fixture.sessionA}', '${fixture.sessionB}', '${fixture.sessionLate}');
+      delete from public.class_schedules where id in ('${fixture.scheduleA}', '${fixture.scheduleB}', '${fixture.scheduleLate}');
+      delete from public.basic_medical_registrations where id in ('${fixture.registrationA}', '${fixture.registrationB}', '${fixture.registrationLate}');
       delete from public.basic_medical_equipment_catalog where id in ('${fixture.catalog}', '${fixture.inactiveCatalog}');
       delete from public.rooms where id = '${fixture.room}';
       delete from public.courses where id = '${fixture.course}';
