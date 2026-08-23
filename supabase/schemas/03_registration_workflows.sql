@@ -792,6 +792,9 @@ begin
   if not (select private.can_manage_equipment_request(target_request_id)) then
     raise exception 'EQUIPMENT_REQUEST_SCOPE_REQUIRED' using errcode = '42501';
   end if;
+  if current_row.status = 'cancelled' then
+    raise exception 'EQUIPMENT_REQUEST_CANCELLED_TERMINAL' using errcode = '22023';
+  end if;
   current_rank := case current_row.status
     when 'new' then 0 when 'preparing' then 1 when 'handed_over' then 2
     when 'returned' then 3 when 'completed' then 4 end;

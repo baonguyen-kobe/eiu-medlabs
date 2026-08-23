@@ -89,6 +89,10 @@ function getWarehouseStatus(
   status: EquipmentRequestStatus,
   confirmation?: EquipmentConfirmationState,
 ): EquipmentRequestStatus {
+  if (status === "cancelled") {
+    return "cancelled";
+  }
+
   if (
     status === "completed" ||
     (confirmation?.return_staff_confirmed_at &&
@@ -1010,12 +1014,19 @@ export function EquipmentRequestList({
     startTransition(async () => {
       const result = await deleteEquipmentRequest(request.id);
       if (result.ok) {
-        setDeletedIds((current) => new Set(current).add(request.id));
-        setExpandedIds((current) => {
-          const next = new Set(current);
-          next.delete(request.id);
-          return next;
-        });
+        if (request.request_domain === "basic_medical") {
+          setCurrentStatuses((current) => ({
+            ...current,
+            [request.id]: "cancelled",
+          }));
+        } else {
+          setDeletedIds((current) => new Set(current).add(request.id));
+          setExpandedIds((current) => {
+            const next = new Set(current);
+            next.delete(request.id);
+            return next;
+          });
+        }
         if (modalRequest?.id === request.id) setModalRequest(null);
       }
       setStatusNotice(result);
@@ -1171,6 +1182,7 @@ export function EquipmentRequestList({
                 confirmation?.late_registration_reason ??
                 request.late_registration_reason;
               const warehouseStatus = getWarehouseStatus(status, confirmation);
+              const isCancelled = warehouseStatus === "cancelled";
               const expanded = expandedIds.has(request.id);
               const isRegistrant = request.registrant_id === viewerId;
               const isResponsibleLecturer =
@@ -1253,11 +1265,12 @@ export function EquipmentRequestList({
                     <td>{request.equipment_request_items.length}</td>
                     <td className="equipment-request-status-cell">
                       <div className="equipment-request-status-stack">
-                        {lateApprovalStatus === "pending" ? (
+                        {!isCancelled && lateApprovalStatus === "pending" ? (
                           <span className="request-late-approval request-late-approval-pending">
                             Chờ duyệt đăng ký trễ
                           </span>
-                        ) : lateApprovalStatus === "rejected" ? (
+                        ) : !isCancelled &&
+                          lateApprovalStatus === "rejected" ? (
                           <span className="request-late-approval request-late-approval-rejected">
                             Đã từ chối đăng ký trễ
                           </span>
@@ -1377,7 +1390,8 @@ export function EquipmentRequestList({
                         <div className="equipment-request-details">
                           {canManageRequest ? (
                             <div className="equipment-status-section equipment-status-section-top">
-                              {lateApprovalStatus === "pending" ? (
+                              {!isCancelled &&
+                              lateApprovalStatus === "pending" ? (
                                 <div className="equipment-late-review-panel">
                                   <div>
                                     <strong>Chờ duyệt đăng ký trễ</strong>
@@ -1435,6 +1449,7 @@ export function EquipmentRequestList({
                                         key={option.value}
                                         className={`request-status-button request-status-${option.color}${warehouseStatus === option.value ? " active" : ""}`}
                                         disabled={
+                                          isCancelled ||
                                           (isPending &&
                                             updatingId === request.id) ||
                                           (option.value === "handed_over" &&
@@ -1470,20 +1485,22 @@ export function EquipmentRequestList({
                                   <Download size={17} aria-hidden="true" />
                                   Xuất phiếu PDF
                                 </a>
-                                <button
-                                  type="button"
-                                  className="button button-danger equipment-request-delete"
-                                  disabled={isPending}
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    setRequestToDelete(request);
-                                  }}
-                                >
-                                  <Trash2 size={17} aria-hidden="true" />
-                                  {request.request_domain === "basic_medical"
-                                    ? "Hủy phiếu"
-                                    : "Xóa phiếu"}
-                                </button>
+                                {!isCancelled ? (
+                                  <button
+                                    type="button"
+                                    className="button button-danger equipment-request-delete"
+                                    disabled={isPending}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      setRequestToDelete(request);
+                                    }}
+                                  >
+                                    <Trash2 size={17} aria-hidden="true" />
+                                    {request.request_domain === "basic_medical"
+                                      ? "Hủy phiếu"
+                                      : "Xóa phiếu"}
+                                  </button>
+                                ) : null}
                               </div>
                               <div className="equipment-confirmation-progress">
                                 <span>

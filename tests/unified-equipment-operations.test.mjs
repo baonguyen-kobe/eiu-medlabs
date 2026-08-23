@@ -60,6 +60,74 @@ test("unified operations retains domain-specific content and safety", async () =
   assert.match(actions, /soft_cancel_equipment_request/);
 });
 
+test("cancelled equipment requests remain historical and terminal", async () => {
+  const [list, workflowSchema, terminalMigration] = await Promise.all([
+    source("components/equipment-request-list.tsx"),
+    source("supabase/schemas/03_registration_workflows.sql"),
+    source(
+      "supabase/migrations/20260823203000_equipment_request_cancelled_terminal_guard.sql",
+    ),
+  ]);
+  const warehouseStatusStart = list.indexOf("function getWarehouseStatus(");
+  const warehouseStatusEnd = list.indexOf(
+    "\ntype EquipmentItemDraft",
+    warehouseStatusStart,
+  );
+  const warehouseStatus = list.slice(warehouseStatusStart, warehouseStatusEnd);
+  const cancelledIndex = warehouseStatus.indexOf('status === "cancelled"');
+  const completedIndex = warehouseStatus.indexOf('status === "completed"');
+
+  assert.ok(cancelledIndex >= 0);
+  assert.ok(cancelledIndex < completedIndex);
+  assert.match(
+    warehouseStatus,
+    /status === "cancelled"[\s\S]*?return "cancelled"/,
+  );
+
+  const deleteStart = list.indexOf("function confirmDeleteRequest()");
+  const deleteEnd = list.indexOf("\n  return (", deleteStart);
+  const deleteRequest = list.slice(deleteStart, deleteEnd);
+  const basicMedicalBranchStart = deleteRequest.indexOf(
+    'if (request.request_domain === "basic_medical")',
+  );
+  const skillsBranchStart = deleteRequest.indexOf(
+    "} else {",
+    basicMedicalBranchStart,
+  );
+  const basicMedicalBranch = deleteRequest.slice(
+    basicMedicalBranchStart,
+    skillsBranchStart,
+  );
+
+  assert.match(basicMedicalBranch, /\[request\.id\]: "cancelled"/);
+  assert.doesNotMatch(basicMedicalBranch, /setDeletedIds/);
+  assert.match(deleteRequest.slice(skillsBranchStart), /setDeletedIds/);
+
+  assert.match(list, /const isCancelled = warehouseStatus === "cancelled"/);
+  assert.match(list, /disabled=\{\s*isCancelled \|\|/);
+  assert.match(list, /!isCancelled && lateApprovalStatus === "pending"/);
+  assert.match(list, /\{!isCancelled \? \(/);
+
+  for (const sql of [workflowSchema, terminalMigration]) {
+    const functionStart = sql.indexOf(
+      "create or replace function public.manager_confirm_equipment_status(",
+    );
+    const functionEnd = sql.indexOf("\n$$;", functionStart);
+    const managerConfirm = sql.slice(functionStart, functionEnd);
+    const scopeCheck = managerConfirm.indexOf(
+      "private.can_manage_equipment_request(target_request_id)",
+    );
+    const terminalGuard = managerConfirm.indexOf(
+      "EQUIPMENT_REQUEST_CANCELLED_TERMINAL",
+    );
+    const currentRank = managerConfirm.indexOf("current_rank := case");
+
+    assert.ok(scopeCheck >= 0);
+    assert.ok(terminalGuard > scopeCheck);
+    assert.ok(terminalGuard < currentRank);
+  }
+});
+
 test("handover PDF and route apply domain-aware catalog and scope authorization", async () => {
   const [pdf, route] = await Promise.all([
     source("lib/equipment-handover-pdf.ts"),
