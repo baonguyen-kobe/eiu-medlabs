@@ -7442,7 +7442,7 @@ body,
 .equipment-request-filters {
   display: grid;
   grid-template-columns:
-    minmax(260px, 1.4fr) minmax(180px, 0.75fr)
+    minmax(260px, 1.4fr) repeat(2, minmax(170px, 0.75fr))
     repeat(2, minmax(190px, 0.8fr)) auto auto;
   align-items: center;
   gap: 12px;
@@ -7495,36 +7495,40 @@ body,
 
 .equipment-request-table {
   width: 100%;
-  min-width: 1040px;
+  min-width: 1120px;
   table-layout: fixed;
 }
 
-.equipment-request-table .equipment-col-course {
-  width: 28%;
-}
-
-.equipment-request-table .equipment-col-date {
-  width: 13%;
-}
-
-.equipment-request-table .equipment-col-time {
-  width: 13%;
-}
-
-.equipment-request-table .equipment-col-room {
+.equipment-request-table .equipment-col-domain {
   width: 15%;
 }
 
+.equipment-request-table .equipment-col-course {
+  width: 22%;
+}
+
+.equipment-request-table .equipment-col-date {
+  width: 12%;
+}
+
+.equipment-request-table .equipment-col-time {
+  width: 12%;
+}
+
+.equipment-request-table .equipment-col-room {
+  width: 13%;
+}
+
 .equipment-request-table .equipment-col-count {
-  width: 9%;
+  width: 8%;
 }
 
 .equipment-request-table .equipment-col-status {
-  width: 17%;
+  width: 14%;
 }
 
 .equipment-request-table .equipment-col-toggle {
-  width: 5%;
+  width: 4%;
 }
 
 .equipment-request-table-row {
@@ -8981,7 +8985,7 @@ body,
   }
 
   .equipment-request-table {
-    min-width: 980px;
+    min-width: 1060px;
   }
 
   .equipment-request-detail-grid {
@@ -9790,6 +9794,14 @@ body,
   background: #e5edf5;
   font-size: 11px;
   font-weight: 700;
+}
+
+.equipment-request-domain-cell {
+  vertical-align: middle;
+}
+
+.equipment-request-domain-cell .equipment-request-domain {
+  margin-top: 0;
 }
 
 @media (max-width: 820px) {

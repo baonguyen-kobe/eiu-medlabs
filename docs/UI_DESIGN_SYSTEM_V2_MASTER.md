@@ -1374,6 +1374,13 @@ Model
 ĐVT
 ```
 
+Unified equipment operations keeps both lab domains in one shared Data Table.
+Its first operational column is `Phạm vi`, followed by `Môn học`; the compact
+domain badge belongs only in `Phạm vi`, while `Môn học` keeps the course code
+and course name as its two lines. The shared filter toolbar places `Phạm vi`
+between Search and Status, using the same control rhythm and responsive table
+scroll contract as the existing equipment request list.
+
 Do NOT require visible reconciliation KPI cards `Cập nhật`, `Thêm mới`, `Kích hoạt lại`, `Ngừng sử dụng`, or `Xóa` inside this preview modal.
 
 The UI must present safe, mapped validation or stale-preview feedback and keep

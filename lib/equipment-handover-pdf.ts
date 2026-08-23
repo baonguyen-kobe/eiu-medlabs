@@ -44,6 +44,23 @@ export type EquipmentHandoverRequest = EquipmentRequestListItem & {
 
 type Item = EquipmentHandoverRequest["equipment_request_items"][number];
 
+function isBasicMedical(request: EquipmentHandoverRequest) {
+  return request.request_domain === "basic_medical";
+}
+
+function catalogForRequest(request: EquipmentHandoverRequest, item: Item) {
+  return isBasicMedical(request)
+    ? item.basic_medical_equipment_catalog
+    : item.equipment_catalog;
+}
+
+function lessonGroupHeading(
+  request: EquipmentHandoverRequest,
+  skillName: string,
+) {
+  return isBasicMedical(request) ? `TÊN BÀI TN-TH: ${skillName}` : skillName;
+}
+
 const dateFormatter = new Intl.DateTimeFormat("vi-VN", {
   timeZone: "Asia/Ho_Chi_Minh",
   day: "2-digit",
@@ -219,6 +236,10 @@ function drawInformationTable(
 ) {
   const schedule = request.class_schedules;
   const room = schedule?.rooms;
+  const responsibleLabel = isBasicMedical(request)
+    ? "Giảng viên giảng dạy/hướng dẫn"
+    : "Giảng viên";
+  const labType = isBasicMedical(request) ? "Y cơ sở" : "Kỹ năng Điều dưỡng";
   const widths = [78, 172, 78, CONTENT_WIDTH - 328];
   const rows: Array<[string, string, string, string]> = [
     [
@@ -254,17 +275,12 @@ function drawInformationTable(
         : "—",
     ],
     [
-      "Giảng viên",
+      responsibleLabel,
       text(request.responsible?.full_name, "—"),
       "Phòng/Lab",
       room ? `${room.room_code}.${room.building_code}` : "—",
     ],
-    [
-      "Email",
-      text(request.responsible?.email, "—"),
-      "Loại Lab",
-      "Kỹ năng Điều dưỡng",
-    ],
+    ["Email", text(request.responsible?.email, "—"), "Loại Lab", labType],
   ];
 
   const subHeaderHeight = 21;
@@ -315,10 +331,13 @@ function drawInformationTable(
   return y;
 }
 
-function groupItems(items: Item[]) {
+function groupItems(request: EquipmentHandoverRequest, items: Item[]) {
   const groups = new Map<string, Item[]>();
   items.forEach((item) => {
-    const skillName = text(item.skill_name, "Kỹ năng/Bài thực hành");
+    const skillName = text(
+      item.skill_name,
+      isBasicMedical(request) ? "Tên bài TN-TH" : "Kỹ năng/Bài thực hành",
+    );
     const group = groups.get(skillName) ?? [];
     group.push(item);
     groups.set(skillName, group);
@@ -352,8 +371,12 @@ function drawEquipmentHeader(doc: PDFKit.PDFDocument, y: number) {
   return y + 30;
 }
 
-function itemRowHeight(doc: PDFKit.PDFDocument, item: Item) {
-  const catalog = item.equipment_catalog;
+function itemRowHeight(
+  doc: PDFKit.PDFDocument,
+  request: EquipmentHandoverRequest,
+  item: Item,
+) {
+  const catalog = catalogForRequest(request, item);
   const values = [
     "1",
     text(catalog?.commercial_name || catalog?.item_name, "—"),
@@ -398,7 +421,7 @@ function drawEquipmentGroups(
   request: EquipmentHandoverRequest,
 ) {
   const requestCode = formatEquipmentRequestCode(request.created_at);
-  const groups = groupItems(request.equipment_request_items);
+  const groups = groupItems(request, request.equipment_request_items);
   if (!groups.length) {
     drawCell(doc, "Phiếu chưa có thiết bị.", LEFT, y, CONTENT_WIDTH, 30, {
       align: "center",
@@ -407,12 +430,13 @@ function drawEquipmentGroups(
   }
 
   groups.forEach(([skillName, items]) => {
+    const groupHeading = lessonGroupHeading(request, skillName);
     const titleHeight = Math.max(
       24,
       doc
         .font("Bold")
         .fontSize(8.5)
-        .heightOfString(skillName.toUpperCase(), {
+        .heightOfString(groupHeading.toUpperCase(), {
           width: CONTENT_WIDTH - 12,
         }) + 12,
     );
@@ -420,7 +444,7 @@ function drawEquipmentGroups(
       y = addContinuationPage(doc, requestCode);
     drawCell(
       doc,
-      skillName.toUpperCase(),
+      groupHeading.toUpperCase(),
       LEFT,
       y,
       CONTENT_WIDTH,
@@ -435,12 +459,12 @@ function drawEquipmentGroups(
     y = drawEquipmentHeader(doc, y);
 
     items.forEach((item, itemIndex) => {
-      const height = itemRowHeight(doc, item);
+      const height = itemRowHeight(doc, request, item);
       if (y + height > CONTENT_BOTTOM) {
         y = addContinuationPage(doc, requestCode);
         drawCell(
           doc,
-          `${skillName.toUpperCase()} (tiếp theo)`,
+          `${groupHeading.toUpperCase()} (tiếp theo)`,
           LEFT,
           y,
           CONTENT_WIDTH,
@@ -454,7 +478,7 @@ function drawEquipmentGroups(
         y += titleHeight;
         y = drawEquipmentHeader(doc, y);
       }
-      const catalog = item.equipment_catalog;
+      const catalog = catalogForRequest(request, item);
       const values = [
         String(itemIndex + 1),
         text(catalog?.commercial_name || catalog?.item_name, "—"),

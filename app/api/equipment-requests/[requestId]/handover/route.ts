@@ -6,6 +6,8 @@ import {
 import { formatEquipmentRequestCode } from "@/lib/equipment-request-code";
 import { equipmentHandoverSelect } from "@/lib/equipment-requests";
 import { createClient } from "@/lib/supabase/server";
+import { canManageEquipmentRequestDomain } from "@/lib/workspace-access";
+import type { AppRole } from "@/lib/viewer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,24 +23,20 @@ export async function GET(
     return NextResponse.json({ error: "Chưa đăng nhập." }, { status: 401 });
   }
 
-  const { data: roles } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId)
-    .in("role", ["admin", "staff"]);
-  if (!roles?.length) {
-    return NextResponse.json(
-      { error: "Chỉ Admin và Staff được xuất phiếu giao nhận." },
-      { status: 403 },
-    );
-  }
-
   const { requestId } = await params;
-  const { data, error } = await supabase
-    .from("equipment_requests")
-    .select(equipmentHandoverSelect)
-    .eq("id", requestId)
-    .maybeSingle();
+  const [{ data, error }, { data: roleRows }, { data: roomTypeRows }] =
+    await Promise.all([
+      supabase
+        .from("equipment_requests")
+        .select(equipmentHandoverSelect)
+        .eq("id", requestId)
+        .maybeSingle(),
+      supabase.from("user_roles").select("role").eq("user_id", userId),
+      supabase
+        .from("profile_room_types")
+        .select("room_types(code)")
+        .eq("profile_id", userId),
+    ]);
   if (error) {
     console.error("Không thể tải phiếu giao nhận thiết bị", {
       requestId,
@@ -56,8 +54,26 @@ export async function GET(
     );
   }
 
+  const roles = (roleRows ?? []).map(({ role }) => role) as AppRole[];
+  const roomTypeCodes = (roomTypeRows ?? []).flatMap((row) => {
+    const roomType = row.room_types as { code?: string } | null;
+    return roomType?.code ? [roomType.code] : [];
+  });
+  const request = data as unknown as EquipmentHandoverRequest;
+  if (
+    !canManageEquipmentRequestDomain(
+      roles,
+      roomTypeCodes,
+      request.request_domain,
+    )
+  ) {
+    return NextResponse.json(
+      { error: "Bạn không có quyền xuất phiếu giao nhận này." },
+      { status: 403 },
+    );
+  }
+
   try {
-    const request = data as unknown as EquipmentHandoverRequest;
     const output = await createEquipmentHandoverPdf(request);
     const code = formatEquipmentRequestCode(request.created_at);
     return new NextResponse(new Uint8Array(output), {

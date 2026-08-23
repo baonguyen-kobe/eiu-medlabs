@@ -39,6 +39,7 @@ import {
   canCreateBasicMedicalSchedules,
   canImportBasicMedicalSchedules,
   canManageBasicMedicalWorkspace,
+  canUseEquipmentOperations,
   canUseBasicMedicalEquipmentRegistration,
   canUseSkillsWorkspace,
   canViewBasicMedicalRegistrations,
@@ -92,6 +93,11 @@ function buildNavigation(
     roles,
     roomTypeCodes,
   );
+  const canUseEquipmentManagement = canUseEquipmentOperations(
+    roles,
+    roomTypeCodes,
+  );
+  const canManageSkillsEquipment = isAdmin || (isStaff && hasSkillsScope);
   const canImport =
     isAdmin ||
     (canImportSchedules &&
@@ -214,28 +220,30 @@ function buildNavigation(
 
   // Group 4 — Quản lý phòng
   const quanLyPhongItems: NavItem[] = [];
-  if (hasSkillsWorkspace && (isAdmin || isStaff)) {
-    quanLyPhongItems.push(
-      {
+  if (canUseEquipmentManagement) {
+    if (canManageSkillsEquipment) {
+      quanLyPhongItems.push({
         label: "Lịch trực",
         href: "/staff-shifts",
         icon: PackageCheck,
         activeIcon: PackageCheckSolid,
-      },
-      {
-        label: "Phiếu thiết bị",
-        href: "/equipment/requests",
-        icon: FileClock,
-        activeIcon: FileClockSolid,
-      },
-      {
+      });
+    }
+    quanLyPhongItems.push({
+      label: "Phiếu thiết bị",
+      href: "/equipment/requests",
+      icon: FileClock,
+      activeIcon: FileClockSolid,
+    });
+    if (canManageSkillsEquipment) {
+      quanLyPhongItems.push({
         label: "Import Phiếu thiết bị",
         href: "/equipment/import",
         icon: Import,
         activeIcon: ImportSolid,
-      },
-    );
-    if (canManageEmailNotifications) {
+      });
+    }
+    if (canManageSkillsEquipment && canManageEmailNotifications) {
       quanLyPhongItems.push({
         label: "Email thông báo",
         href: "/email-notifications",

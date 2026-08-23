@@ -44,6 +44,9 @@ function basicMedicalEquipmentRequestError(
     return "Buổi học này đã có phiếu đăng ký thiết bị.";
   }
   const source = error?.message ?? "";
+  if (source.includes("ROOT_ADMIN_OPERATIONAL_ASSIGNMENT_FORBIDDEN")) {
+    return "Buổi học đang phân công Root Admin làm giảng viên. Vui lòng điều chỉnh giảng viên giảng dạy/hướng dẫn trước khi đăng ký thiết bị.";
+  }
   if (
     source.includes("EQUIPMENT_REQUEST_SOURCE_NOT_AVAILABLE") ||
     source.includes("BASIC_MEDICAL_SESSION_CANCELLED") ||
