@@ -19,6 +19,10 @@ const outboxCompatibilityMigrationPath =
   "supabase/migrations/20260822150000_equipment_request_create_outbox_compatibility.sql";
 const outboxCompatibilitySchemaPath =
   "supabase/schemas/28_equipment_request_create_outbox_compatibility.sql";
+const basicMedicalEmailMigrationPath =
+  "supabase/migrations/20260823120000_basic_medical_equipment_request_email.sql";
+const basicMedicalEmailSchemaPath =
+  "supabase/schemas/29_basic_medical_equipment_request_email.sql";
 
 async function source(path) {
   return readFile(new URL(path, root), "utf8");
@@ -59,6 +63,31 @@ test("Wave 1 create correction preserves Skills-only transactional outbox", asyn
     migration,
     /if source_row\.session_id is not null then\s+perform private\.enqueue_equipment_request_outbox_event/,
   );
+});
+
+test("Basic Medical email parity extends the shared outbox without changing Skills compatibility", async () => {
+  const [migration, schema] = await Promise.all([
+    source(basicMedicalEmailMigrationPath),
+    source(basicMedicalEmailSchemaPath),
+  ]);
+
+  assert.match(
+    schema,
+    /20260823120000_basic_medical_equipment_request_email\.sql/,
+  );
+  assert.match(migration, /'request_domain', req_row\.request_domain/);
+  assert.match(migration, /'Y cơ sở'/);
+  assert.match(migration, /basic_medical_equipment_catalog basic_catalog/);
+  assert.match(
+    migration,
+    /case when req_row\.request_domain = 'basic_medical'/,
+  );
+  assert.match(
+    migration,
+    /private\.enqueue_equipment_request_outbox_event\(request_id/,
+  );
+  assert.match(migration, /late_approval_requested/);
+  assert.match(migration, /'updated'/);
 });
 
 test("Wave 1 Skills edit form locks its immutable class source", async () => {

@@ -255,6 +255,10 @@ function equipmentTable(payload: Record<string, unknown>) {
 
 function renderEquipment(notification: EmailNotification) {
   const payload = notification.payload;
+  const isBasicMedical = payload.request_domain === "basic_medical";
+  const responsibleLabel = isBasicMedical
+    ? "Giảng viên giảng dạy/hướng dẫn"
+    : "Giảng viên phụ trách";
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const requestCode = payload.request_code ?? payload.request_id;
   const content = `${valueTable(valueRow("Mã phiếu", requestCode))}
@@ -278,9 +282,9 @@ function renderEquipment(notification: EmailNotification) {
       ["Email", payload.registrant_email],
       ["Số điện thoại", payload.registrant_phone],
     ])}
-    ${sectionTitle("3. Thông tin giảng viên phụ trách")}
+    ${sectionTitle(`3. Thông tin ${responsibleLabel.toLocaleLowerCase("vi")}`)}
     ${pairedValueTable([
-      ["Giảng viên phụ trách", payload.responsible_name],
+      [responsibleLabel, payload.responsible_name],
       ["Email", payload.responsible_email],
     ])}
     ${sectionTitle("4. Thông tin nhận thiết bị")}
@@ -293,10 +297,14 @@ function renderEquipment(notification: EmailNotification) {
     ])}
     ${sectionTitle("5. Danh sách trang thiết bị")}${equipmentTable(payload)}`;
   return emailShell({
-    subtitle: "Phiếu đăng ký trang thiết bị",
+    subtitle: isBasicMedical
+      ? "Phiếu đăng ký trang thiết bị Y cơ sở"
+      : "Phiếu đăng ký trang thiết bị",
     intro: equipmentIntro(payload),
     content,
-    destination: `${appUrl}/equipment/requests`,
+    destination: isBasicMedical
+      ? `${appUrl}/basic-medical/equipment-requests`
+      : `${appUrl}/equipment/requests`,
     destinationLabel: "Mở phiếu trên MedLabs Calendar",
   });
 }

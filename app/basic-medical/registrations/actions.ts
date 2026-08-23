@@ -5,6 +5,7 @@ import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { processPendingScheduleEmails } from "@/lib/email-notifications";
+import { processPendingEmailOutbox } from "@/lib/equipment-request-emails";
 import { businessTodayString } from "@/lib/business-time";
 import {
   equipmentHandoffTimes,
@@ -222,6 +223,7 @@ export async function createBasicMedicalEquipmentRequest(
     return { ok: false, message: basicMedicalEquipmentRequestError(error) };
   }
 
+  after(() => processPendingEmailOutbox());
   revalidatePath("/basic-medical/registrations");
   revalidatePath("/basic-medical/equipment-requests");
   revalidatePath("/equipment/requests");
@@ -342,6 +344,7 @@ export async function updateBasicMedicalEquipmentRequest(
     };
   }
 
+  after(() => processPendingEmailOutbox());
   revalidatePath("/basic-medical/equipment-requests");
   revalidatePath("/basic-medical/registrations");
   revalidatePath("/equipment/requests");

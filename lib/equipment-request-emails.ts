@@ -1,7 +1,10 @@
 import "server-only";
 
 import { formatEquipmentRequestCode } from "@/lib/equipment-request-code";
-import { NURSING_SKILLS_ROOM_TYPE_ID } from "@/lib/room-types";
+import {
+  BASIC_MEDICAL_ROOM_TYPE_ID,
+  NURSING_SKILLS_ROOM_TYPE_ID,
+} from "@/lib/room-types";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 type EquipmentEmailEvent =
@@ -14,6 +17,7 @@ type EquipmentEmailEvent =
 
 export type EquipmentEmailRequestSnapshot = {
   id: string;
+  request_domain: "nursing_skills" | "basic_medical";
   created_at: string;
   semester: string;
   phone_snapshot: string;
@@ -50,6 +54,11 @@ export type EquipmentEmailRequestSnapshot = {
       commercial_name: string | null;
       unit: string;
     } | null;
+    basic_medical_equipment_catalog: {
+      item_name: string;
+      commercial_name: string | null;
+      unit: string;
+    } | null;
   }>;
 };
 
@@ -67,7 +76,7 @@ export async function loadEquipmentRequestEmailSnapshot(requestId: string) {
   const { data, error } = await supabase
     .from("equipment_requests")
     .select(
-      "id,created_at,semester,registrant_id,responsible_lecturer_id,phone_snapshot,email_snapshot,receive_at,return_at,note,late_approval_status,late_registration_reason,late_review_note,registrant:profiles!equipment_requests_registrant_id_fkey(full_name,email),responsible:profiles!equipment_requests_responsible_lecturer_id_fkey(full_name,email),class_schedules(schedule_date,start_time,end_time,course_code_snapshot,course_name_snapshot,student_count,rooms(room_code,building_code,room_name)),equipment_request_items(skill_name,quantity,note,equipment_catalog(item_name,commercial_name,unit))",
+      "id,request_domain,created_at,semester,registrant_id,responsible_lecturer_id,phone_snapshot,email_snapshot,receive_at,return_at,note,late_approval_status,late_registration_reason,late_review_note,registrant:profiles!equipment_requests_registrant_id_fkey(full_name,email),responsible:profiles!equipment_requests_responsible_lecturer_id_fkey(full_name,email),class_schedules(schedule_date,start_time,end_time,course_code_snapshot,course_name_snapshot,student_count,rooms(room_code,building_code,room_name)),equipment_request_items(skill_name,quantity,note,equipment_catalog(item_name,commercial_name,unit),basic_medical_equipment_catalog(item_name,commercial_name,unit))",
     )
     .eq("id", requestId)
     .maybeSingle();
@@ -80,11 +89,35 @@ function subjectForAudience({
   event,
   audience,
   baseSubject,
+  requestDomain,
 }: {
   event: EquipmentEmailEvent;
   audience: "registrant" | "responsible" | "admin";
   baseSubject: string;
+  requestDomain: EquipmentEmailRequestSnapshot["request_domain"];
 }) {
+  if (requestDomain === "basic_medical") {
+    const domain = "[Y cơ sở]";
+    if (audience === "admin") {
+      if (event === "created")
+        return `[Admin MedLabs Calendar]${domain}[New] Có đăng ký trang thiết bị mới - ${baseSubject}`;
+      if (event === "updated")
+        return `[Admin MedLabs Calendar]${domain}[Adjusted] Điều chỉnh phiếu đăng ký thiết bị - ${baseSubject}`;
+      return `[Admin MedLabs Calendar]${domain}[Late] Có phiếu chờ duyệt đăng ký trễ - ${baseSubject}`;
+    }
+    if (audience === "responsible") {
+      if (event === "created")
+        return `[MedLabs Calendar]${domain}[New] Phiếu thiết bị buổi học bạn phụ trách - ${baseSubject}`;
+      if (event === "updated")
+        return `[MedLabs Calendar]${domain}[Adjusted] Điều chỉnh phiếu đăng ký thiết bị - ${baseSubject}`;
+      return `[MedLabs Calendar]${domain}[Late] Phiếu thiết bị buổi học bạn phụ trách đăng ký trễ - ${baseSubject}`;
+    }
+    if (event === "created")
+      return `[MedLabs Calendar]${domain}[New] Xác nhận đăng ký trang thiết bị - ${baseSubject}`;
+    if (event === "updated")
+      return `[MedLabs Calendar]${domain}[Adjusted] Điều chỉnh phiếu đăng ký thiết bị - ${baseSubject}`;
+    return `[MedLabs Calendar]${domain}[Late] Gửi phiếu đăng ký thiết bị trễ - ${baseSubject}`;
+  }
   if (audience === "admin") {
     if (event === "created")
       return `[Admin MedLabs Calendar][New] Có đăng ký trang thiết bị mới - ${baseSubject}`;
@@ -158,6 +191,7 @@ export async function enqueueEquipmentRequestEmails({
     request_id: request.id,
     request_code: requestCode,
     event,
+    request_domain: request.request_domain,
     actor: actor?.full_name ?? request.registrant.full_name,
     course_code: schedule.course_code_snapshot,
     course_name: schedule.course_name_snapshot,
@@ -166,7 +200,10 @@ export async function enqueueEquipmentRequestEmails({
     end_time: formatTime(schedule.end_time),
     semester: request.semester,
     student_count: schedule.student_count,
-    lab_type: "Kỹ năng Điều dưỡng",
+    lab_type:
+      request.request_domain === "basic_medical"
+        ? "Y cơ sở"
+        : "Kỹ năng Điều dưỡng",
     room: roomLabel,
     room_name: room?.room_name ?? null,
     registrant_name: request.registrant.full_name,
@@ -183,10 +220,18 @@ export async function enqueueEquipmentRequestEmails({
     items: request.equipment_request_items.map((item) => ({
       skill_name: item.skill_name,
       item_name:
-        item.equipment_catalog?.item_name ??
+        (request.request_domain === "basic_medical"
+          ? item.basic_medical_equipment_catalog?.item_name
+          : item.equipment_catalog?.item_name) ??
         "Thiết bị không còn trong danh mục",
-      commercial_name: item.equipment_catalog?.commercial_name ?? "",
-      unit: item.equipment_catalog?.unit ?? "",
+      commercial_name:
+        (request.request_domain === "basic_medical"
+          ? item.basic_medical_equipment_catalog?.commercial_name
+          : item.equipment_catalog?.commercial_name) ?? "",
+      unit:
+        (request.request_domain === "basic_medical"
+          ? item.basic_medical_equipment_catalog?.unit
+          : item.equipment_catalog?.unit) ?? "",
       quantity: item.quantity,
       note: item.note,
     })),
@@ -217,6 +262,7 @@ export async function enqueueEquipmentRequestEmails({
       event,
       audience: "registrant",
       baseSubject,
+      requestDomain: request.request_domain,
     }),
     payload: { ...payload, audience: "registrant" },
   });
@@ -236,6 +282,7 @@ export async function enqueueEquipmentRequestEmails({
         event,
         audience: "responsible",
         baseSubject,
+        requestDomain: request.request_domain,
       }),
       payload: { ...payload, audience: "responsible" },
     });
@@ -268,7 +315,11 @@ export async function enqueueEquipmentRequestEmails({
       seenAdminEmails.has(email) ||
       (row.role === "staff" &&
         !profile.profile_room_types.some(
-          ({ room_type_id }) => room_type_id === NURSING_SKILLS_ROOM_TYPE_ID,
+          ({ room_type_id }) =>
+            room_type_id ===
+            (request.request_domain === "basic_medical"
+              ? BASIC_MEDICAL_ROOM_TYPE_ID
+              : NURSING_SKILLS_ROOM_TYPE_ID),
         ))
     )
       continue;
@@ -278,7 +329,12 @@ export async function enqueueEquipmentRequestEmails({
       recipient_id: row.user_id,
       recipient_email: email,
       dedupe_key: `equipment_request:${request.id}:${operationKey}:admin:${row.user_id}`,
-      subject: subjectForAudience({ event, audience: "admin", baseSubject }),
+      subject: subjectForAudience({
+        event,
+        audience: "admin",
+        baseSubject,
+        requestDomain: request.request_domain,
+      }),
       payload: { ...payload, audience: "admin" },
     });
   }

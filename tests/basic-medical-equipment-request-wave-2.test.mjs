@@ -15,7 +15,7 @@ test("Wave 2 creates Basic Medical requests through the shared guarded RPC", asy
   assert.match(actions, /skill_name: source\.lesson_title/);
   assert.match(actions, /error\?\.code === "23505"/);
   assert.match(actions, /Buổi học này đã có phiếu đăng ký thiết bị/);
-  assert.doesNotMatch(actions, /processPendingEmailOutbox/);
+  assert.match(actions, /after\(\(\) => processPendingEmailOutbox\(\)\)/);
 });
 
 test("Wave 2 uses a separate page-based Basic Medical registration form", async () => {
@@ -109,15 +109,19 @@ test("Basic Medical create refreshes the selected page after the guarded action"
 });
 
 test("Basic Medical edit and copy remain domain-local and immutable", async () => {
-  const [page, form, actions, migration, schema] = await Promise.all([
-    source("components/basic-medical-equipment-registration-page.tsx"),
-    source("components/basic-medical-equipment-request-form.tsx"),
-    source("app/basic-medical/registrations/actions.ts"),
-    source(
-      "supabase/migrations/20260823110000_basic_medical_equipment_request_edit.sql",
-    ),
-    source("supabase/schemas/03_registration_workflows.sql"),
-  ]);
+  const [page, form, actions, migration, schema, emailMigration] =
+    await Promise.all([
+      source("components/basic-medical-equipment-registration-page.tsx"),
+      source("components/basic-medical-equipment-request-form.tsx"),
+      source("app/basic-medical/registrations/actions.ts"),
+      source(
+        "supabase/migrations/20260823110000_basic_medical_equipment_request_edit.sql",
+      ),
+      source("supabase/schemas/03_registration_workflows.sql"),
+      source(
+        "supabase/migrations/20260823120000_basic_medical_equipment_request_email.sql",
+      ),
+    ]);
 
   assert.match(page, /BasicMedicalRequestModePicker/);
   assert.match(page, /request_domain", "basic_medical"/);
@@ -125,7 +129,7 @@ test("Basic Medical edit and copy remain domain-local and immutable", async () =
   assert.match(form, /mode: "edit" \| "copy"/);
   assert.match(form, /updateBasicMedicalEquipmentRequest/);
   assert.match(actions, /update_basic_medical_equipment_request_content/);
-  assert.doesNotMatch(actions, /processPendingEmailOutbox/);
+  assert.match(actions, /after\(\(\) => processPendingEmailOutbox\(\)\)/);
   for (const sql of [migration, schema]) {
     assert.match(sql, /update_basic_medical_equipment_request_content/);
     assert.match(sql, /request_domain = 'basic_medical'/);
@@ -134,6 +138,7 @@ test("Basic Medical edit and copy remain domain-local and immutable", async () =
     assert.match(sql, /source_row\.lesson_title/);
   }
   assert.doesNotMatch(migration, /enqueue_equipment_request_outbox_event/);
+  assert.match(emailMigration, /enqueue_equipment_request_outbox_event/);
 });
 
 test("shared request list renders the catalog that belongs to its domain", async () => {

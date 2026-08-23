@@ -91,6 +91,19 @@ test("Basic Medical equipment edit preserves its source and stays domain-local",
   const manager = await signIn("admin@campus.local", "LocalAdmin123!");
   const unrelated = await signIn("trogiang@campus.local", "LocalAssistant123!");
   const ownerId = owner.user.id;
+  const teachingLecturerId = localSql(
+    "select id from auth.users where email = 'importer@campus.local'",
+  );
+  const basicMedicalStaffId = localSql(
+    "select id from auth.users where email = 'staff@campus.local'",
+  );
+  const skillsOnlyStaffId = localSql(
+    "select id from auth.users where email = 'dieuphoi@eiu.edu.vn'",
+  );
+  const deliveryModeBefore =
+    localSql(
+      "select delivery_mode from public.email_delivery_settings where setting_key = 'primary'",
+    ) || "off";
   const skillsCatalogId = "30000000-0000-0000-0000-000000000001";
   let requestA;
   let requestB;
@@ -99,10 +112,23 @@ test("Basic Medical equipment edit preserves its source and stays domain-local",
     localSql(`
       begin;
       select set_config('app.basic_medical_registration_mutation', 'true', true);
+      update public.email_delivery_settings
+      set delivery_mode = 'off'
+      where setting_key = 'primary';
       insert into public.profile_room_types (profile_id, room_type_id)
-      select '${ownerId}', id
+      select scoped.profile_id, room_type.id
+      from (values
+        ('${ownerId}'::uuid),
+        ('${teachingLecturerId}'::uuid),
+        ('${basicMedicalStaffId}'::uuid)
+      ) as scoped(profile_id)
+      cross join public.room_types as room_type
+      where room_type.code = 'basic_medical'
+      on conflict do nothing;
+      insert into public.profile_room_types (profile_id, room_type_id)
+      select '${skillsOnlyStaffId}', id
       from public.room_types
-      where code = 'basic_medical'
+      where code = 'nursing_skills'
       on conflict do nothing;
       insert into public.courses (id, course_code, course_name, room_type_id, is_active)
       select '${fixture.course}', 'BM-EDIT', 'Basic Medical edit test', id, true
@@ -113,17 +139,17 @@ test("Basic Medical equipment edit preserves its source and stays domain-local",
       insert into public.basic_medical_registrations
         (id, academic_year, semester, start_date, end_date, course_id, room_id, student_count, registrant_id, responsible_lecturer_id, created_by)
       values
-        ('${fixture.registrationA}', '2099-2100', 'HK1', '2099-11-22', '2099-11-22', '${fixture.course}', '${fixture.room}', 20, '${ownerId}', '${ownerId}', '${ownerId}'),
-        ('${fixture.registrationB}', '2099-2100', 'HK1', '2099-11-23', '2099-11-23', '${fixture.course}', '${fixture.room}', 20, '${ownerId}', '${ownerId}', '${ownerId}');
+        ('${fixture.registrationA}', '2099-2100', 'HK1', '2099-11-22', '2099-11-22', '${fixture.course}', '${fixture.room}', 20, '${ownerId}', '${teachingLecturerId}', '${ownerId}'),
+        ('${fixture.registrationB}', '2099-2100', 'HK1', '2099-11-23', '2099-11-23', '${fixture.course}', '${fixture.room}', 20, '${ownerId}', '${teachingLecturerId}', '${ownerId}');
       insert into public.class_schedules
         (id, course_id, course_code_snapshot, course_name_snapshot, room_id, lecturer_id, schedule_date, start_time, end_time, source, schedule_status, student_count, basic_medical_registration_id, created_by, published_by, published_at)
       values
-        ('${fixture.scheduleA}', '${fixture.course}', 'BM-EDIT', 'Basic Medical edit test', '${fixture.room}', '${ownerId}', '2099-11-22', '09:00', '11:00', 'manual', 'published', 20, '${fixture.registrationA}', '${ownerId}', '${ownerId}', clock_timestamp()),
-        ('${fixture.scheduleB}', '${fixture.course}', 'BM-EDIT', 'Basic Medical copy target', '${fixture.room}', '${ownerId}', '2099-11-23', '09:00', '11:00', 'manual', 'published', 20, '${fixture.registrationB}', '${ownerId}', '${ownerId}', clock_timestamp());
+        ('${fixture.scheduleA}', '${fixture.course}', 'BM-EDIT', 'Basic Medical edit test', '${fixture.room}', '${teachingLecturerId}', '2099-11-22', '09:00', '11:00', 'manual', 'published', 20, '${fixture.registrationA}', '${ownerId}', '${ownerId}', clock_timestamp()),
+        ('${fixture.scheduleB}', '${fixture.course}', 'BM-EDIT', 'Basic Medical copy target', '${fixture.room}', '${teachingLecturerId}', '2099-11-23', '09:00', '11:00', 'manual', 'published', 20, '${fixture.registrationB}', '${ownerId}', '${ownerId}', clock_timestamp());
       insert into public.basic_medical_registration_sessions (id, registration_id, class_schedule_id, lesson_title, teaching_lecturer_id, session_number)
       values
-        ('${fixture.sessionA}', '${fixture.registrationA}', '${fixture.scheduleA}', 'Bài nguồn không đổi', '${ownerId}', 1),
-        ('${fixture.sessionB}', '${fixture.registrationB}', '${fixture.scheduleB}', 'Bài đích không đổi', '${ownerId}', 1);
+        ('${fixture.sessionA}', '${fixture.registrationA}', '${fixture.scheduleA}', 'Bài nguồn không đổi', '${teachingLecturerId}', 1),
+        ('${fixture.sessionB}', '${fixture.registrationB}', '${fixture.scheduleB}', 'Bài đích không đổi', '${teachingLecturerId}', 1);
       insert into public.basic_medical_equipment_catalog (id, item_name, commercial_name, unit, is_active)
       values
         ('${fixture.catalog}', 'Thiết bị edit', 'Thiết bị edit thương mại', 'Cái', true),
@@ -359,18 +385,118 @@ test("Basic Medical equipment edit preserves its source and stays domain-local",
       "COPY keeps destination session uniqueness through create RPC",
     );
 
-    const outboxCount = localSql(
-      `select count(*) from public.email_outbox_events where aggregate_id = '${requestA}';`,
+    const outboxRows = JSON.parse(
+      localSql(`
+        select coalesce(json_agg(json_build_object(
+          'id', id,
+          'domain', domain,
+          'event_type', event_type,
+          'delivery_mode', delivery_mode_at_event,
+          'request_domain', payload->>'request_domain',
+          'lab_type', payload->>'lab_type',
+          'item_name', payload #>> '{items,0,item_name}',
+          'commercial_name', payload #>> '{items,0,commercial_name}',
+          'unit', payload #>> '{items,0,unit}',
+          'recipients', recipients
+        )), '[]'::json)::text
+        from public.email_outbox_events
+        where aggregate_id = '${requestA}';
+      `),
     );
-    assert.equal(
-      outboxCount,
-      "0",
-      "EDIT-12 creates no Skills equipment outbox event",
+    assert.ok(
+      outboxRows.some((row) => row.event_type === "created"),
+      "EMAIL-BM-01 normal Basic Medical create enqueues created",
+    );
+    assert.ok(
+      outboxRows.some((row) => row.event_type === "updated"),
+      "EMAIL-BM-04 normal Basic Medical edit enqueues updated",
+    );
+    for (const row of outboxRows) {
+      assert.equal(row.domain, "equipment_request");
+      assert.equal(row.delivery_mode, "off", "EMAIL-BM-15 uses delivery OFF");
+      assert.equal(row.request_domain, "basic_medical", "EMAIL-BM-06");
+      assert.equal(row.lab_type, "Y cơ sở", "EMAIL-BM-07");
+      assert.equal(row.item_name, "Thiết bị edit", "EMAIL-BM-08");
+      assert.equal(
+        row.commercial_name,
+        "Thiết bị edit thương mại",
+        "EMAIL-BM-09",
+      );
+      assert.equal(row.unit, "Cái", "EMAIL-BM-09");
+      const recipientEmails = row.recipients.map(
+        (recipient) => recipient.recipient_email,
+      );
+      assert.ok(
+        recipientEmails.includes("importer@campus.local"),
+        "EMAIL-BM-13 teaching lecturer receives the responsible audience",
+      );
+      assert.ok(
+        recipientEmails.includes("admin@campus.local"),
+        "EMAIL-BM-10 admin receives the manager audience",
+      );
+      assert.ok(
+        recipientEmails.includes("staff@campus.local"),
+        "EMAIL-BM-11 Basic Medical-scoped staff receives the manager audience",
+      );
+      assert.ok(
+        !recipientEmails.includes("dieuphoi@eiu.edu.vn"),
+        "EMAIL-BM-12 Skills-only staff is excluded from Basic Medical events",
+      );
+      assert.equal(
+        recipientEmails.length,
+        new Set(recipientEmails).size,
+        "EMAIL-BM-14 recipient emails are deduplicated",
+      );
+    }
+    const copyOutbox = JSON.parse(
+      localSql(`
+        select coalesce(json_agg(json_build_object(
+          'event_type', event_type,
+          'request_domain', payload->>'request_domain'
+        )), '[]'::json)::text
+        from public.email_outbox_events
+        where aggregate_id = '${requestB}';
+      `),
+    );
+    assert.ok(
+      copyOutbox.some(
+        (row) =>
+          row.event_type === "created" &&
+          row.request_domain === "basic_medical",
+      ),
+      "EMAIL-BM-03 copy uses the guarded create path and enqueues its destination event",
+    );
+    localSql("select public.process_email_outbox_events(100)");
+    const notifications = JSON.parse(
+      localSql(`
+        select coalesce(json_agg(json_build_object(
+          'status', status,
+          'delivery_mode', delivery_mode_at_enqueue
+        )), '[]'::json)::text
+        from public.email_notifications
+        where payload->>'request_id' in ('${requestA}', '${requestB}');
+      `),
+    );
+    assert.ok(
+      notifications.length > 0,
+      "EMAIL-BM-15 creates local notifications",
+    );
+    assert.ok(
+      notifications.every(
+        (notification) =>
+          notification.status === "suppressed" &&
+          notification.delivery_mode === "off",
+      ),
+      "EMAIL-BM-15 delivery OFF suppresses external delivery",
     );
   } finally {
     localSql(`
       begin;
       set local session_replication_role = replica;
+      delete from public.email_notifications
+      where payload->>'request_id' in ('${requestA ?? "00000000-0000-0000-0000-000000000000"}', '${requestB ?? "00000000-0000-0000-0000-000000000000"}');
+      delete from public.email_outbox_events
+      where aggregate_id in ('${requestA ?? "00000000-0000-0000-0000-000000000000"}', '${requestB ?? "00000000-0000-0000-0000-000000000000"}');
       delete from public.equipment_request_items where request_id in ('${requestA ?? "00000000-0000-0000-0000-000000000000"}', '${requestB ?? "00000000-0000-0000-0000-000000000000"}');
       delete from public.equipment_requests where id in ('${requestA ?? "00000000-0000-0000-0000-000000000000"}', '${requestB ?? "00000000-0000-0000-0000-000000000000"}');
       delete from public.basic_medical_registration_sessions where id in ('${fixture.sessionA}', '${fixture.sessionB}');
@@ -380,10 +506,18 @@ test("Basic Medical equipment edit preserves its source and stays domain-local",
       delete from public.rooms where id = '${fixture.room}';
       delete from public.courses where id = '${fixture.course}';
       delete from public.profile_room_types
-      where profile_id = '${ownerId}'
+      where profile_id in ('${ownerId}', '${teachingLecturerId}', '${basicMedicalStaffId}')
         and room_type_id = (
           select id from public.room_types where code = 'basic_medical'
         );
+      delete from public.profile_room_types
+      where profile_id = '${skillsOnlyStaffId}'
+        and room_type_id = (
+          select id from public.room_types where code = 'nursing_skills'
+        );
+      update public.email_delivery_settings
+      set delivery_mode = '${deliveryModeBefore}'
+      where setting_key = 'primary';
       commit;
     `);
   }

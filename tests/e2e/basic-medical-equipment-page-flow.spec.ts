@@ -15,6 +15,7 @@ const fixture = {
   catalog: crypto.randomUUID(),
   suffix: crypto.randomUUID().slice(0, 8),
 };
+let fixtureTeachingLecturerId = "";
 const courseCode = `BM-EQUIP-PAGE-${fixture.suffix}`;
 const lessonTitle = `Basic Medical equipment page ${fixture.suffix}`;
 const lessonTitleB = `Basic Medical equipment copy target ${fixture.suffix}`;
@@ -87,10 +88,16 @@ test.beforeAll(() => {
   const lecturerId = localSql(
     "select id from public.profiles where email = 'giangvien@campus.local' limit 1;",
   );
+  fixtureTeachingLecturerId = lecturerId;
   localSql(`
     begin;
     set local session_replication_role = replica;
     select set_config('app.basic_medical_registration_mutation', 'true', true);
+    insert into public.profile_room_types (profile_id, room_type_id)
+    select '${lecturerId}', id
+    from public.room_types
+    where code = 'basic_medical'
+    on conflict do nothing;
     insert into public.courses (id, course_code, course_name, room_type_id, is_active)
     select '${fixture.course}', '${courseCode}', 'Basic Medical equipment page test', id, true
     from public.room_types where code = 'basic_medical';
@@ -158,6 +165,11 @@ test.afterAll(() => {
     delete from public.basic_medical_equipment_catalog where id = '${fixture.catalog}';
     delete from public.rooms where id = '${fixture.room}';
     delete from public.courses where id = '${fixture.course}';
+    delete from public.profile_room_types
+    where profile_id = '${fixtureTeachingLecturerId}'
+      and room_type_id = (
+        select id from public.room_types where code = 'basic_medical'
+      );
     commit;
   `);
 });
