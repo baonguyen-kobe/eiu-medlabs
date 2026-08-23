@@ -1,4 +1,5 @@
 import type { AppRole } from "@/lib/viewer";
+import type { EquipmentRequestDomain } from "@/lib/equipment-requests";
 
 const nursingSkillsRoomTypeCode = "nursing_skills";
 const basicMedicalRoomTypeCode = "basic_medical";
@@ -19,6 +20,42 @@ export function canManageBasicMedicalWorkspace(
     roles.includes("admin") ||
     (roles.includes("staff") &&
       roomTypeCodes.includes(basicMedicalRoomTypeCode))
+  );
+}
+
+export function equipmentOperationsDomains(
+  roles: AppRole[],
+  roomTypeCodes: string[],
+): EquipmentRequestDomain[] {
+  if (roles.includes("admin")) {
+    return ["nursing_skills", "basic_medical"];
+  }
+  if (!roles.includes("staff")) return [];
+
+  const domains: EquipmentRequestDomain[] = [];
+  if (roomTypeCodes.includes(nursingSkillsRoomTypeCode)) {
+    domains.push("nursing_skills");
+  }
+  if (roomTypeCodes.includes(basicMedicalRoomTypeCode)) {
+    domains.push("basic_medical");
+  }
+  return domains;
+}
+
+export function canUseEquipmentOperations(
+  roles: AppRole[],
+  roomTypeCodes: string[],
+) {
+  return equipmentOperationsDomains(roles, roomTypeCodes).length > 0;
+}
+
+export function canManageEquipmentRequestDomain(
+  roles: AppRole[],
+  roomTypeCodes: string[],
+  requestDomain: EquipmentRequestDomain,
+) {
+  return equipmentOperationsDomains(roles, roomTypeCodes).includes(
+    requestDomain,
   );
 }
 

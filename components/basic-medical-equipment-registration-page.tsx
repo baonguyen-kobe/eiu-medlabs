@@ -101,6 +101,14 @@ function sessionCanCreateEquipmentRequest(
   );
 }
 
+function rootAdminAssignedToSession(
+  session: BasicMedicalRegistrationSessionItem,
+  viewerId: string,
+  isRootAdministrator: boolean,
+) {
+  return isRootAdministrator && session.teaching_lecturer_id === viewerId;
+}
+
 function dateTimeInputParts(value: string) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Ho_Chi_Minh",
@@ -276,6 +284,7 @@ export async function BasicMedicalEquipmentRegistrationPage({
     canManagePersonnel,
     canManageEmailNotifications,
     canManageBasicMedical,
+    isRootAdministrator,
   } = viewer;
   const roomTypeCodes = roomTypes.map(({ code }) => code);
   const today = businessTodayString();
@@ -370,6 +379,10 @@ export async function BasicMedicalEquipmentRegistrationPage({
     : undefined;
   const canEditSelected = Boolean(mode === "edit" && canUseSource && selected);
   const canCopySelected = Boolean(mode === "copy" && canUseSource && selected);
+  const selectedHasRootAssignment = Boolean(
+    selected &&
+    rootAdminAssignedToSession(selected.session, userId, isRootAdministrator),
+  );
   const canCreateSelected = Boolean(
     selected &&
     sessionCanCreateEquipmentRequest(
@@ -377,6 +390,7 @@ export async function BasicMedicalEquipmentRegistrationPage({
       selected.session,
       today,
     ) &&
+    !selectedHasRootAssignment &&
     !selectedRequest &&
     (!mode || canCopySelected),
   );
@@ -400,6 +414,7 @@ export async function BasicMedicalEquipmentRegistrationPage({
       .filter(
         ({ registration, session }) =>
           sessionCanCreateEquipmentRequest(registration, session, today) &&
+          !rootAdminAssignedToSession(session, userId, isRootAdministrator) &&
           !requestsBySession.has(session.id),
       )
       .map(({ registration, session }) => {
@@ -518,7 +533,9 @@ export async function BasicMedicalEquipmentRegistrationPage({
       ) : (
         <>
           <p className="form-error" role="alert">
-            Buổi học Y cơ sở đã hủy hoặc không còn hợp lệ để đăng ký thiết bị.
+            {selectedHasRootAssignment
+              ? "Buổi học đang phân công Root Admin làm giảng viên. Vui lòng điều chỉnh giảng viên giảng dạy/hướng dẫn trước khi đăng ký thiết bị."
+              : "Buổi học Y cơ sở đã hủy hoặc không còn hợp lệ để đăng ký thiết bị."}
           </p>
           <BasicMedicalEquipmentSessionSelector
             sessions={availableSessionOptions}

@@ -29,6 +29,7 @@ import {
   type EquipmentCatalogListItem,
   type EquipmentConfirmationState,
   type EquipmentLateApprovalStatus,
+  type EquipmentRequestDomain,
   type EquipmentRequestListItem,
   type EquipmentRequestStatus,
   type EquipmentRequestWorkflowStatus,
@@ -88,6 +89,10 @@ function getWarehouseStatus(
   status: EquipmentRequestStatus,
   confirmation?: EquipmentConfirmationState,
 ): EquipmentRequestStatus {
+  if (status === "cancelled") {
+    return "cancelled";
+  }
+
   if (
     status === "completed" ||
     (confirmation?.return_staff_confirmed_at &&
@@ -366,7 +371,9 @@ function EquipmentItemsModal({
             return (
               <article className="equipment-modal-skill" key={skillName}>
                 <h3>
-                  Kỹ năng/Bài thực hành #{skillIndex + 1}: {skillName}
+                  {request.request_domain === "basic_medical"
+                    ? `Bài TN-TH #${skillIndex + 1}: ${skillName}`
+                    : `Kỹ năng/Bài thực hành #${skillIndex + 1}: ${skillName}`}
                 </h3>
                 <div className="responsive-table">
                   <table className="data-table equipment-detail-table">
@@ -735,6 +742,7 @@ export function EquipmentRequestList({
   viewerId,
   viewerEmail = "",
   viewerRoles = [],
+  manageableDomains = [],
   initialRequestId,
 }: {
   requests: unknown[];
@@ -745,6 +753,7 @@ export function EquipmentRequestList({
   viewerId?: string;
   viewerEmail?: string;
   viewerRoles?: AppRole[];
+  manageableDomains?: EquipmentRequestDomain[];
   initialRequestId?: string;
 }) {
   const items = requests as EquipmentRequestListItem[];
@@ -759,6 +768,7 @@ export function EquipmentRequestList({
   const [modalRequest, setModalRequest] =
     useState<EquipmentRequestListItem | null>(null);
   const [query, setQuery] = useState("");
+  const [domainFilter, setDomainFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -838,6 +848,7 @@ export function EquipmentRequestList({
             room?.building_code,
             request.profiles?.full_name,
             request.responsible?.full_name,
+            domainLabel(request),
           ].some((value) =>
             String(value ?? "")
               .toLocaleLowerCase("vi")
@@ -845,6 +856,7 @@ export function EquipmentRequestList({
           );
         return (
           matchesQuery &&
+          (!domainFilter || request.request_domain === domainFilter) &&
           (!statusFilter || status === statusFilter) &&
           (!dateFrom || scheduleDate >= dateFrom) &&
           (!dateTo || scheduleDate <= dateTo)
@@ -855,6 +867,7 @@ export function EquipmentRequestList({
       currentStatuses,
       dateFrom,
       dateTo,
+      domainFilter,
       query,
       statusFilter,
       visibleItems,
@@ -884,6 +897,10 @@ export function EquipmentRequestList({
   ) {
     if (
       !canManageStatus ||
+      !manageableDomains.includes(
+        items.find((request) => request.id === requestId)?.request_domain ??
+          "nursing_skills",
+      ) ||
       (status === currentStatuses[requestId] &&
         !["handed_over", "returned"].includes(status))
     )
@@ -920,7 +937,14 @@ export function EquipmentRequestList({
     requestId: string,
     decision: Extract<EquipmentLateApprovalStatus, "approved" | "rejected">,
   ) {
-    if (!canManageStatus) return;
+    if (
+      !canManageStatus ||
+      !manageableDomains.includes(
+        items.find((request) => request.id === requestId)?.request_domain ??
+          "nursing_skills",
+      )
+    )
+      return;
     const note =
       decision === "rejected"
         ? window.prompt("Ghi chú lý do từ chối (không bắt buộc):", "")
@@ -979,18 +1003,30 @@ export function EquipmentRequestList({
 
   function confirmDeleteRequest() {
     const request = requestToDelete;
-    if (!request || !canManageStatus) return;
+    if (
+      !request ||
+      !canManageStatus ||
+      !manageableDomains.includes(request.request_domain)
+    )
+      return;
     setUpdatingId(request.id);
     setStatusNotice(null);
     startTransition(async () => {
       const result = await deleteEquipmentRequest(request.id);
       if (result.ok) {
-        setDeletedIds((current) => new Set(current).add(request.id));
-        setExpandedIds((current) => {
-          const next = new Set(current);
-          next.delete(request.id);
-          return next;
-        });
+        if (request.request_domain === "basic_medical") {
+          setCurrentStatuses((current) => ({
+            ...current,
+            [request.id]: "cancelled",
+          }));
+        } else {
+          setDeletedIds((current) => new Set(current).add(request.id));
+          setExpandedIds((current) => {
+            const next = new Set(current);
+            next.delete(request.id);
+            return next;
+          });
+        }
         if (modalRequest?.id === request.id) setModalRequest(null);
       }
       setStatusNotice(result);
@@ -1014,6 +1050,20 @@ export function EquipmentRequestList({
             autoComplete="off"
             spellCheck={false}
           />
+        </label>
+        <label className="class-range-mode">
+          <span className="sr-only">Phạm vi</span>
+          <select
+            value={domainFilter}
+            onChange={(event) => {
+              setDomainFilter(event.target.value);
+              setCurrentPage(1);
+            }}
+          >
+            <option value="">Tất cả phạm vi</option>
+            <option value="nursing_skills">Kỹ năng Điều dưỡng</option>
+            <option value="basic_medical">Y cơ sở</option>
+          </select>
         </label>
         <label className="class-range-mode">
           <span className="sr-only">Trạng thái</span>
@@ -1061,6 +1111,7 @@ export function EquipmentRequestList({
           className="button button-secondary"
           onClick={() => {
             setQuery("");
+            setDomainFilter("");
             setStatusFilter("");
             setDateFrom("");
             setDateTo("");
@@ -1094,6 +1145,7 @@ export function EquipmentRequestList({
         >
           <table className="data-table equipment-request-table">
             <colgroup>
+              <col className="equipment-col-domain" />
               <col className="equipment-col-course" />
               <col className="equipment-col-date" />
               <col className="equipment-col-time" />
@@ -1104,6 +1156,7 @@ export function EquipmentRequestList({
             </colgroup>
             <thead>
               <tr>
+                <th>Phạm vi</th>
                 <th>Môn học</th>
                 <th>Ngày</th>
                 <th>Thời gian</th>
@@ -1129,11 +1182,19 @@ export function EquipmentRequestList({
                 confirmation?.late_registration_reason ??
                 request.late_registration_reason;
               const warehouseStatus = getWarehouseStatus(status, confirmation);
+              const isCancelled = warehouseStatus === "cancelled";
               const expanded = expandedIds.has(request.id);
               const isRegistrant = request.registrant_id === viewerId;
               const isResponsibleLecturer =
                 request.responsible_lecturer_id === viewerId;
               const canSignForRequest = isRegistrant || isResponsibleLecturer;
+              const canManageRequest =
+                canManageStatus &&
+                manageableDomains.includes(request.request_domain);
+              const recipientRoleLabel =
+                request.request_domain === "basic_medical"
+                  ? "Người đăng ký/GV giảng dạy-hướng dẫn"
+                  : "Người đăng ký/GV phụ trách";
               const handoverSigned = Boolean(
                 confirmation?.handover_recipient_signed_at,
               );
@@ -1168,6 +1229,11 @@ export function EquipmentRequestList({
                     className="equipment-request-table-row"
                     onClick={() => toggleExpanded(request.id)}
                   >
+                    <td className="equipment-request-domain-cell">
+                      <span className="equipment-request-domain">
+                        {domainLabel(request)}
+                      </span>
+                    </td>
                     <td>
                       <button
                         type="button"
@@ -1179,9 +1245,6 @@ export function EquipmentRequestList({
                         }}
                       >
                         <strong>{schedule?.course_code_snapshot}</strong>
-                        <span className="equipment-request-domain">
-                          {domainLabel(request)}
-                        </span>
                         <span>{schedule?.course_name_snapshot}</span>
                       </button>
                     </td>
@@ -1202,11 +1265,12 @@ export function EquipmentRequestList({
                     <td>{request.equipment_request_items.length}</td>
                     <td className="equipment-request-status-cell">
                       <div className="equipment-request-status-stack">
-                        {lateApprovalStatus === "pending" ? (
+                        {!isCancelled && lateApprovalStatus === "pending" ? (
                           <span className="request-late-approval request-late-approval-pending">
                             Chờ duyệt đăng ký trễ
                           </span>
-                        ) : lateApprovalStatus === "rejected" ? (
+                        ) : !isCancelled &&
+                          lateApprovalStatus === "rejected" ? (
                           <span className="request-late-approval request-late-approval-rejected">
                             Đã từ chối đăng ký trễ
                           </span>
@@ -1322,11 +1386,12 @@ export function EquipmentRequestList({
 
                   {expanded ? (
                     <tr className="equipment-request-detail-row">
-                      <td colSpan={7}>
+                      <td colSpan={8}>
                         <div className="equipment-request-details">
-                          {canManageStatus ? (
+                          {canManageRequest ? (
                             <div className="equipment-status-section equipment-status-section-top">
-                              {lateApprovalStatus === "pending" ? (
+                              {!isCancelled &&
+                              lateApprovalStatus === "pending" ? (
                                 <div className="equipment-late-review-panel">
                                   <div>
                                     <strong>Chờ duyệt đăng ký trễ</strong>
@@ -1384,6 +1449,7 @@ export function EquipmentRequestList({
                                         key={option.value}
                                         className={`request-status-button request-status-${option.color}${warehouseStatus === option.value ? " active" : ""}`}
                                         disabled={
+                                          isCancelled ||
                                           (isPending &&
                                             updatingId === request.id) ||
                                           (option.value === "handed_over" &&
@@ -1419,18 +1485,22 @@ export function EquipmentRequestList({
                                   <Download size={17} aria-hidden="true" />
                                   Xuất phiếu PDF
                                 </a>
-                                <button
-                                  type="button"
-                                  className="button button-danger equipment-request-delete"
-                                  disabled={isPending}
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    setRequestToDelete(request);
-                                  }}
-                                >
-                                  <Trash2 size={17} aria-hidden="true" />
-                                  Xóa phiếu
-                                </button>
+                                {!isCancelled ? (
+                                  <button
+                                    type="button"
+                                    className="button button-danger equipment-request-delete"
+                                    disabled={isPending}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      setRequestToDelete(request);
+                                    }}
+                                  >
+                                    <Trash2 size={17} aria-hidden="true" />
+                                    {request.request_domain === "basic_medical"
+                                      ? "Hủy phiếu"
+                                      : "Xóa phiếu"}
+                                  </button>
+                                ) : null}
                               </div>
                               <div className="equipment-confirmation-progress">
                                 <span>
@@ -1440,7 +1510,7 @@ export function EquipmentRequestList({
                                     : "Chưa"}
                                 </span>
                                 <span>
-                                  Người đăng ký/GV phụ trách:{" "}
+                                  {recipientRoleLabel}:{" "}
                                   {confirmation?.handover_recipient_signed_at
                                     ? "Đã ký"
                                     : "Chưa"}
@@ -1452,7 +1522,7 @@ export function EquipmentRequestList({
                                     : "Chưa"}
                                 </span>
                                 <span>
-                                  Người đăng ký/GV phụ trách:{" "}
+                                  {recipientRoleLabel}:{" "}
                                   {confirmation?.return_recipient_signed_at
                                     ? "Đã ký"
                                     : "Chưa"}
@@ -1506,7 +1576,11 @@ export function EquipmentRequestList({
                               <dd>{request.phone_snapshot}</dd>
                             </div>
                             <div>
-                              <dt>Giảng viên phụ trách</dt>
+                              <dt>
+                                {request.request_domain === "basic_medical"
+                                  ? "Giảng viên giảng dạy/hướng dẫn"
+                                  : "Giảng viên phụ trách"}
+                              </dt>
                               <dd>{request.responsible?.full_name}</dd>
                             </div>
                             <div>
@@ -1600,13 +1674,23 @@ export function EquipmentRequestList({
       ) : null}
       <ConfirmDialog
         open={Boolean(requestToDelete)}
-        title="Xóa phiếu thiết bị?"
+        title={
+          requestToDelete?.request_domain === "basic_medical"
+            ? "Hủy phiếu thiết bị?"
+            : "Xóa phiếu thiết bị?"
+        }
         description={
           requestToDelete
-            ? `Phiếu ${formatEquipmentRequestCode(requestToDelete.created_at)} và toàn bộ danh sách thiết bị trong phiếu sẽ bị xóa. Lớp Skills lab gốc vẫn được giữ lại.`
+            ? requestToDelete.request_domain === "basic_medical"
+              ? `Phiếu ${formatEquipmentRequestCode(requestToDelete.created_at)} sẽ chuyển sang trạng thái Đã hủy. Lịch sử phiếu vẫn được giữ và buổi học Y cơ sở gốc không bị xóa bởi thao tác này.`
+              : `Phiếu ${formatEquipmentRequestCode(requestToDelete.created_at)} và toàn bộ danh sách thiết bị trong phiếu sẽ bị xóa. Lớp Skills lab gốc vẫn được giữ lại.`
             : ""
         }
-        confirmLabel="Xóa phiếu"
+        confirmLabel={
+          requestToDelete?.request_domain === "basic_medical"
+            ? "Hủy phiếu"
+            : "Xóa phiếu"
+        }
         pending={isPending && updatingId === requestToDelete?.id}
         onConfirm={confirmDeleteRequest}
         onCancel={() => {

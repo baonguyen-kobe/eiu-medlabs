@@ -91,7 +91,7 @@ export async function addEquipmentRequestItem({
     supabase.from("user_roles").select("role").eq("user_id", userId),
     supabase
       .from("equipment_requests")
-      .select("id,status")
+      .select("id,status,request_domain")
       .eq("id", requestId)
       .maybeSingle(),
   ]);
@@ -107,6 +107,13 @@ export async function addEquipmentRequestItem({
       ok: false,
       message:
         "Chỉ được bổ sung thiết bị khi phiếu ở trạng thái Mới hoặc Đã soạn.",
+    };
+  }
+  if (request.request_domain !== "nursing_skills") {
+    return {
+      ok: false,
+      message:
+        "Chỉ có thể bổ sung thiết bị cho phiếu Kỹ năng Điều dưỡng trong không gian quản lý này.",
     };
   }
 
@@ -149,6 +156,7 @@ export async function addEquipmentRequestItem({
   revalidatePath("/equipment/requests");
   revalidatePath("/equipment/mine");
   revalidatePath("/equipment/register");
+  revalidatePath("/basic-medical/equipment-requests");
   return {
     ok: true,
     message: "Đã bổ sung thiết bị vào phiếu.",
@@ -207,6 +215,7 @@ export async function deleteEquipmentRequest(
   revalidatePath("/equipment/requests");
   revalidatePath("/equipment/mine");
   revalidatePath("/equipment/register");
+  revalidatePath("/basic-medical/equipment-requests");
   revalidatePath("/class-schedules");
   revalidatePath("/classes/open");
   revalidatePath("/classes/mine");

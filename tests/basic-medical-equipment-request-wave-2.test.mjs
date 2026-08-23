@@ -167,6 +167,22 @@ test("Basic Medical session selection reuses the Skills picker layout without ch
   assert.match(page, /!requestsBySession\.has\(session\.id\)/);
 });
 
+test("Root assignment safety keeps Root as requester rather than a teaching lecturer", async () => {
+  const [page, actions] = await Promise.all([
+    source("components/basic-medical-equipment-registration-page.tsx"),
+    source("app/basic-medical/registrations/actions.ts"),
+  ]);
+
+  assert.match(page, /rootAdminAssignedToSession/);
+  assert.match(page, /!selectedHasRootAssignment/);
+  assert.match(
+    page,
+    /đang phân công Root Admin làm giảng viên[\s\S]*?giảng viên giảng dạy\/hướng dẫn/,
+  );
+  assert.match(actions, /ROOT_ADMIN_OPERATIONAL_ASSIGNMENT_FORBIDDEN/);
+  assert.match(actions, /target_responsible_lecturer_id: null/);
+});
+
 test("shared request list renders the catalog that belongs to its domain", async () => {
   const list = await source("components/equipment-request-list.tsx");
 

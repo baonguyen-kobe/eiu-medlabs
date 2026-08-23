@@ -4,6 +4,10 @@ import { WorkspaceShell } from "@/components/workspace-shell";
 import { equipmentRequestSelect } from "@/lib/equipment-requests";
 import { isEquipmentRequestId } from "@/lib/equipment-calendar-request";
 import { getViewer } from "@/lib/viewer";
+import {
+  canUseEquipmentOperations,
+  equipmentOperationsDomains,
+} from "@/lib/workspace-access";
 
 export default async function EquipmentRequestsPage({
   searchParams,
@@ -22,7 +26,9 @@ export default async function EquipmentRequestsPage({
     canManagePersonnel,
     canManageEmailNotifications,
   } = await getViewer();
-  if (!roles.some((role) => ["admin", "staff"].includes(role))) {
+  const roomTypeCodes = roomTypes.map(({ code }) => code);
+  const manageableDomains = equipmentOperationsDomains(roles, roomTypeCodes);
+  if (!canUseEquipmentOperations(roles, roomTypeCodes)) {
     redirect("/equipment/mine");
   }
 
@@ -31,6 +37,7 @@ export default async function EquipmentRequestsPage({
     supabase
       .from("equipment_requests")
       .select(equipmentRequestSelect)
+      .in("request_domain", manageableDomains)
       .order("created_at", { ascending: false }),
     supabase
       .from("equipment_catalog")
@@ -45,7 +52,7 @@ export default async function EquipmentRequestsPage({
     <WorkspaceShell
       fullName={fullName}
       roles={roles}
-      roomTypeCodes={roomTypes.map(({ code }) => code)}
+      roomTypeCodes={roomTypeCodes}
       allowBasicMedicalAccess={allowBasicMedicalAccess}
       canImportSchedules={canImportSchedules}
       canManagePersonnel={canManagePersonnel}
@@ -58,6 +65,7 @@ export default async function EquipmentRequestsPage({
         emptyMessage="Chưa có phiếu đăng ký thiết bị."
         canManageStatus
         canAddItems
+        manageableDomains={[...manageableDomains]}
         catalog={catalog ?? []}
         viewerId={userId}
         viewerEmail={email}

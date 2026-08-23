@@ -246,6 +246,30 @@ test("equipment handover PDF separates missing, authorization, and query failure
       directPdfObjects.match(/\/Subtype\s*\/Image\b/g)?.length ?? 0,
     ).toBeGreaterThanOrEqual(3);
 
+    const basicMedicalPdf = await createEquipmentHandoverPdf({
+      ...handoverRequest,
+      request_domain: "basic_medical",
+      equipment_request_items: [
+        {
+          ...handoverRequest.equipment_request_items[0],
+          skill_name: "Bài TN-TH PDF Y cơ sở",
+          equipment_catalog: null,
+          basic_medical_equipment_catalog: {
+            id: catalogId,
+            item_name: "Thiết bị PDF Y cơ sở",
+            commercial_name: "PDF Y cơ sở",
+            item_type: "Thiết bị",
+            country_of_origin: "Việt Nam",
+            manufacturer: "MedLabs",
+            model: "BM-PDF",
+            unit: "Bộ",
+          },
+        },
+      ],
+    });
+    expect(basicMedicalPdf.subarray(0, 5).toString("ascii")).toBe("%PDF-");
+    expect(basicMedicalPdf.byteLength).toBeGreaterThan(1_000);
+
     const completed = await page.request.get(
       `/api/equipment-requests/${requestId}/handover`,
     );

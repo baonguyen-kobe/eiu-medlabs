@@ -1,6 +1,6 @@
 -- pgTAP test suite for TB-06 Transactional Destructive Equipment Lifecycle
 begin;
-select plan(17);
+select plan(18);
 
 -- 1. Ensure test fixture setup (profiles, phones, room types, catalog)
 insert into public.profile_room_types (profile_id, room_type_id)
@@ -114,6 +114,18 @@ select results_eq(
   $$ select status from public.equipment_requests where class_schedule_id = '90000000-0000-0000-0000-000000000010'::uuid $$,
   array['cancelled'],
   'Test 7. Request status is updated to cancelled'
+);
+
+select throws_ok(
+  $$
+    select public.manager_confirm_equipment_status(
+      (select id from public.equipment_requests where class_schedule_id = '90000000-0000-0000-0000-000000000010'::uuid),
+      'preparing'
+    )
+  $$,
+  '22023',
+  'EQUIPMENT_REQUEST_CANCELLED_TERMINAL',
+  'Test 7a. Cancelled request cannot re-enter the equipment lifecycle'
 );
 
 -- Test 8: Exactly one TB-06 outbox event created

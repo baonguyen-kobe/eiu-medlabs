@@ -70,6 +70,16 @@ function extractBuildNavigation() {
       );
     }
 
+    function canUseEquipmentOperations(roles, roomTypeCodes) {
+      return Boolean(
+        roles.includes("admin") ||
+          (roles.includes("staff") &&
+            roomTypeCodes.some((code) =>
+              ["nursing_skills", "basic_medical"].includes(code),
+            )),
+      );
+    }
+
     function canViewBasicMedicalSchedules(roles, roomTypeCodes) {
       if (roles.includes("admin")) return true;
       return roomTypeCodes.includes("basic_medical");
@@ -309,6 +319,28 @@ test("Sidebar Navigation: Staff with Basic Medical scope sees 'Danh mục TB Y c
   assert.deepEqual(
     quanTriGroup.items.map((i) => ({ label: i.label, href: i.href })),
     [{ label: "Danh mục TB Y cơ sở", href: "/basic-medical/equipment" }],
+  );
+});
+
+test("Sidebar Navigation: Basic Medical-only Staff receives the unified operations destination only", () => {
+  const nav = buildNavigation(
+    ["staff"],
+    ["basic_medical"],
+    false,
+    false,
+    false,
+    false,
+  );
+  const management = nav.find((group) => group.label === "Quản lý phòng");
+  assert.deepEqual(
+    management.items.map((item) => ({ label: item.label, href: item.href })),
+    [{ label: "Phiếu thiết bị", href: "/equipment/requests" }],
+  );
+  assert.equal(
+    nav
+      .flatMap((group) => group.items)
+      .filter((item) => item.href === "/equipment/requests").length,
+    1,
   );
 });
 
