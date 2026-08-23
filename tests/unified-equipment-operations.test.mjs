@@ -125,6 +125,10 @@ test("cancelled equipment requests remain historical and terminal", async () => 
     assert.ok(scopeCheck >= 0);
     assert.ok(terminalGuard > scopeCheck);
     assert.ok(terminalGuard < currentRank);
+    assert.match(managerConfirm, /handover_signature_path/);
+    assert.match(managerConfirm, /return_signature_path/);
+    assert.doesNotMatch(managerConfirm, /\bhandover_recipient_signature\b/);
+    assert.doesNotMatch(managerConfirm, /\breturn_recipient_signature\b/);
   }
 });
 

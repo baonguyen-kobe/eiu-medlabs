@@ -808,12 +808,12 @@ begin
     set status = target_status,
         handover_staff_confirmed_by = case when target_rank >= 2 then handover_staff_confirmed_by else null end,
         handover_staff_confirmed_at = case when target_rank >= 2 then handover_staff_confirmed_at else null end,
-        handover_recipient_signature = case when target_rank >= 2 then handover_recipient_signature else null end,
+        handover_signature_path = case when target_rank >= 2 then handover_signature_path else null end,
         handover_recipient_signed_at = case when target_rank >= 2 then handover_recipient_signed_at else null end,
         handover_effective_at = case when target_rank >= 2 then handover_effective_at else null end,
         return_staff_confirmed_by = null,
         return_staff_confirmed_at = null,
-        return_recipient_signature = null,
+        return_signature_path = null,
         return_recipient_signed_at = null,
         return_effective_at = null
     where id = target_request_id returning * into changed_row;
@@ -834,7 +834,7 @@ begin
     update public.equipment_requests
     set handover_staff_confirmed_by = actor_id,
         handover_staff_confirmed_at = clock_timestamp(),
-        status = case when handover_recipient_signature is not null then 'handed_over' else status end
+        status = case when handover_signature_path is not null then 'handed_over' else status end
     where id = target_request_id returning * into changed_row;
   elsif target_status = 'returned' then
     if current_row.status not in ('handed_over','returned') then
@@ -843,7 +843,7 @@ begin
     update public.equipment_requests
     set return_staff_confirmed_by = actor_id,
         return_staff_confirmed_at = clock_timestamp(),
-        status = case when return_recipient_signature is not null then 'completed' else status end
+        status = case when return_signature_path is not null then 'completed' else status end
     where id = target_request_id returning * into changed_row;
   else
     raise exception 'Trạng thái Hoàn thành chỉ được tạo khi đủ hai xác nhận trả.' using errcode = '22023';
