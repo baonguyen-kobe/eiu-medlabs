@@ -44,3 +44,22 @@ test("Basic Medical actions process the durable outbox only after successful mut
     /update_basic_medical_equipment_request_content[\s\S]*?if \(error \|\| !updatedId\)[\s\S]*?after\(\(\) => processPendingEmailOutbox\(\)\)/,
   );
 });
+
+test("the final domain-aware outbox processor skips deleted recipient profiles", async () => {
+  const [migration, schema] = await Promise.all([
+    source(
+      "supabase/migrations/20260823121000_restore_email_outbox_deleted_recipient_guard.sql",
+    ),
+    source("supabase/schemas/29_basic_medical_equipment_request_email.sql"),
+  ]);
+
+  assert.match(migration, /public\.process_email_outbox_events/);
+  assert.match(
+    migration,
+    /if not exists \(select 1 from public\.profiles where id = recipient_id_value\) then continue; end if;/,
+  );
+  assert.match(
+    schema,
+    /20260823121000_restore_email_outbox_deleted_recipient_guard\.sql/,
+  );
+});
