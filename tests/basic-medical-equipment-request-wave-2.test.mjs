@@ -141,6 +141,32 @@ test("Basic Medical edit and copy remain domain-local and immutable", async () =
   assert.match(emailMigration, /enqueue_equipment_request_outbox_event/);
 });
 
+test("Basic Medical session selection reuses the Skills picker layout without changing access", async () => {
+  const [selector, page] = await Promise.all([
+    source("components/basic-medical-equipment-session-selector.tsx"),
+    source("components/basic-medical-equipment-registration-page.tsx"),
+  ]);
+
+  assert.match(selector, /className="class-picker-row"/);
+  assert.doesNotMatch(selector, /className="data-panel"/);
+  assert.match(selector, /Buổi học Y cơ sở \*/);
+  assert.match(selector, /placeholder="Chọn buổi học theo ngày, giờ và phòng"/);
+  assert.match(selector, /\+ Tạo lịch Y cơ sở/);
+  assert.match(selector, /href="\/basic-medical\/new"/);
+  assert.doesNotMatch(selector, /schedule-entry\/new/);
+  assert.match(
+    page,
+    /canManageBasicMedical \|\|[\s\S]*?registration\.created_by === userId[\s\S]*?registration\.registrant_id === userId[\s\S]*?session\.teaching_lecturer_id === userId/,
+  );
+  assert.match(page, /\["new", "preparing"\]\.includes\(request\.status\)/);
+  assert.match(
+    page,
+    /canManageBasicMedical \|\| request\.registrant_id === userId/,
+  );
+  assert.match(page, /mode === "copy" && canUseSource/);
+  assert.match(page, /!requestsBySession\.has\(session\.id\)/);
+});
+
 test("shared request list renders the catalog that belongs to its domain", async () => {
   const list = await source("components/equipment-request-list.tsx");
 
