@@ -99,6 +99,11 @@ test("Basic Medical equipment edit preserves its source and stays domain-local",
     localSql(`
       begin;
       select set_config('app.basic_medical_registration_mutation', 'true', true);
+      insert into public.profile_room_types (profile_id, room_type_id)
+      select '${ownerId}', id
+      from public.room_types
+      where code = 'basic_medical'
+      on conflict do nothing;
       insert into public.courses (id, course_code, course_name, room_type_id, is_active)
       select '${fixture.course}', 'BM-EDIT', 'Basic Medical edit test', id, true
       from public.room_types where code = 'basic_medical';
@@ -374,6 +379,11 @@ test("Basic Medical equipment edit preserves its source and stays domain-local",
       delete from public.basic_medical_equipment_catalog where id in ('${fixture.catalog}', '${fixture.inactiveCatalog}');
       delete from public.rooms where id = '${fixture.room}';
       delete from public.courses where id = '${fixture.course}';
+      delete from public.profile_room_types
+      where profile_id = '${ownerId}'
+        and room_type_id = (
+          select id from public.room_types where code = 'basic_medical'
+        );
       commit;
     `);
   }
