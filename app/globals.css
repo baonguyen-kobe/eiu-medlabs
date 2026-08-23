@@ -9725,6 +9725,80 @@ body,
   gap: 18px;
 }
 
+.basic-medical-equipment-request-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.basic-medical-equipment-detail {
+  display: grid;
+  gap: 20px;
+}
+
+.basic-medical-equipment-detail > section {
+  display: grid;
+  gap: 12px;
+}
+
+.basic-medical-equipment-detail h3 {
+  margin: 0;
+  color: var(--eiu-blue);
+  font-size: 16px;
+}
+
+.basic-medical-equipment-source-grid,
+.basic-medical-equipment-detail-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+  margin: 0;
+}
+
+.basic-medical-equipment-source-grid > div,
+.basic-medical-equipment-detail-summary > div {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper-100);
+}
+
+.basic-medical-equipment-source-grid dt,
+.basic-medical-equipment-detail-summary span {
+  color: var(--ink-500);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.basic-medical-equipment-source-grid dd,
+.basic-medical-equipment-detail-summary strong {
+  display: block;
+  margin: 4px 0 0;
+  color: var(--ink-950);
+  overflow-wrap: anywhere;
+}
+
+.equipment-request-domain {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 4px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: var(--eiu-blue);
+  background: #e5edf5;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+@media (max-width: 820px) {
+  .basic-medical-equipment-source-grid,
+  .basic-medical-equipment-detail-summary {
+    grid-template-columns: 1fr;
+  }
+}
+
 .basic-medical-catalog-actions {
   display: grid;
   gap: 18px;

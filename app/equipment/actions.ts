@@ -7,12 +7,14 @@ import { businessTodayString } from "@/lib/business-time";
 import {
   equipmentLeadTime,
   equipmentReceiveAt,
+  equipmentHandoffTimes,
 } from "@/lib/equipment-lead-time";
 import {
-  equipmentRequestStatuses,
+  equipmentRequestWorkflowStatuses,
   type EquipmentConfirmationState,
   type EquipmentRequestListItem,
   type EquipmentRequestStatus,
+  type EquipmentRequestWorkflowStatus,
 } from "@/lib/equipment-requests";
 import { NURSING_SKILLS_ROOM_TYPE_ID } from "@/lib/room-types";
 import { isCanonicalSemester } from "@/lib/semesters";
@@ -29,8 +31,6 @@ export type EquipmentItemActionState = {
   message: string;
   item?: EquipmentRequestListItem["equipment_request_items"][number];
 };
-
-const equipmentHandoffTimes = new Set(["09:00", "11:00", "14:00", "16:00"]);
 
 function toEquipmentConfirmationState(
   row: Record<string, unknown>,
@@ -215,7 +215,7 @@ export async function deleteEquipmentRequest(
 
 export async function updateEquipmentRequestStatus(
   requestId: string,
-  status: EquipmentRequestStatus,
+  status: EquipmentRequestWorkflowStatus,
 ): Promise<EquipmentActionState> {
   const supabase = await createClient();
   const { data: claims } = await supabase.auth.getClaims();
@@ -223,7 +223,7 @@ export async function updateEquipmentRequestStatus(
   if (!userId) return { ok: false, message: "Phiên đăng nhập đã hết hạn." };
 
   const allowedStatuses = new Set(
-    equipmentRequestStatuses.map((item) => item.value),
+    equipmentRequestWorkflowStatuses.map((item) => item.value),
   );
   if (!/^[0-9a-f-]{36}$/i.test(requestId) || !allowedStatuses.has(status)) {
     return { ok: false, message: "Phiếu hoặc trạng thái không hợp lệ." };
@@ -491,8 +491,12 @@ export async function updateEquipmentRequest(
   const receiveAt = equipmentReceiveAt(receiveDate, receiveTime);
   const returnAt = new Date(`${returnDate}T${returnTime}:00+07:00`);
   if (
-    !equipmentHandoffTimes.has(receiveTime) ||
-    !equipmentHandoffTimes.has(returnTime)
+    !equipmentHandoffTimes.includes(
+      receiveTime as (typeof equipmentHandoffTimes)[number],
+    ) ||
+    !equipmentHandoffTimes.includes(
+      returnTime as (typeof equipmentHandoffTimes)[number],
+    )
   ) {
     return { ok: false, message: "Giờ nhận và giờ trả không hợp lệ." };
   }
@@ -700,8 +704,12 @@ export async function createEquipmentRequest(
   const receiveAt = equipmentReceiveAt(receiveDate, receiveTime);
   const returnAt = new Date(`${returnDate}T${returnTime}:00+07:00`);
   if (
-    !equipmentHandoffTimes.has(receiveTime) ||
-    !equipmentHandoffTimes.has(returnTime)
+    !equipmentHandoffTimes.includes(
+      receiveTime as (typeof equipmentHandoffTimes)[number],
+    ) ||
+    !equipmentHandoffTimes.includes(
+      returnTime as (typeof equipmentHandoffTimes)[number],
+    )
   ) {
     return { ok: false, message: "Giờ nhận và giờ trả không hợp lệ." };
   }

@@ -157,6 +157,7 @@ export type BasicMedicalRegistrationSessionItem = {
   cancelled_by?: string | null;
   cancellation_reason?: string | null;
   class_schedules: {
+    id: string;
     schedule_date: string;
     start_time: string;
     end_time: string;
@@ -174,6 +175,7 @@ export type BasicMedicalInstructorOption = {
 export type BasicMedicalRegistrationListItem = {
   id: string;
   created_by?: string;
+  registrant_id?: string;
   registration_code: string;
   created_at: string;
   academic_year: string;

@@ -6,6 +6,8 @@ import {
 import { normalizeImportDate, normalizeImportTime } from "@/lib/import-values";
 import type { EquipmentRequestStatus } from "@/lib/equipment-requests";
 
+type EquipmentImportStatus = Exclude<EquipmentRequestStatus, "cancelled">;
+
 export type EquipmentImportRow = Record<string, unknown>;
 
 export type EquipmentImportFormatIssue = {
@@ -52,7 +54,7 @@ export function normalizeEquipmentRequestCode(value: unknown) {
     .trim();
 }
 
-const statusAliases = new Map<string, EquipmentRequestStatus>([
+const statusAliases = new Map<string, EquipmentImportStatus>([
   ["moi", "new"],
   ["new", "new"],
   ["dasoan", "preparing"],
@@ -68,12 +70,12 @@ const statusAliases = new Map<string, EquipmentRequestStatus>([
 
 export function normalizeEquipmentStatus(
   value: unknown,
-): EquipmentRequestStatus | null {
+): EquipmentImportStatus | null {
   return statusAliases.get(normalizeEquipmentLookupKey(value)) ?? null;
 }
 
 export const equipmentStatusDisplayLabels: Record<
-  EquipmentRequestStatus,
+  EquipmentImportStatus,
   string
 > = {
   new: "Mới",

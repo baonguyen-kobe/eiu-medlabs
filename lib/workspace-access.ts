@@ -33,6 +33,17 @@ export function canUseSkillsWorkspace(
   );
 }
 
+export function canUseBasicMedicalEquipmentRegistration(
+  roles: AppRole[],
+  roomTypeCodes: string[],
+) {
+  return (
+    roles.includes("admin") ||
+    (roomTypeCodes.includes(basicMedicalRoomTypeCode) &&
+      hasAnyRole(roles, ["staff", "lecturer", "teaching_assistant"]))
+  );
+}
+
 export function canViewBasicMedicalSchedules(
   roles: AppRole[],
   roomTypeCodes: string[],

@@ -185,6 +185,10 @@ function equipmentIntroText(payload: Record<string, unknown>) {
 
 function renderEquipmentEmail(notification: EmailNotification) {
   const payload = notification.payload;
+  const isBasicMedical = payload.request_domain === "basic_medical";
+  const responsibleLabel = isBasicMedical
+    ? "Giảng viên giảng dạy/hướng dẫn"
+    : "Giảng viên phụ trách";
   const receive = formatVietnameseDateTime(payload.receive_at);
   const returned = formatVietnameseDateTime(payload.return_at);
   const groups = groupedEquipmentItems(payload);
@@ -229,11 +233,8 @@ function renderEquipmentEmail(notification: EmailNotification) {
     equipmentSectionRow("SĐT", payload.registrant_phone),
   ].join("");
   const responsibleRows = [
-    equipmentSectionRow("Giảng viên phụ trách", payload.responsible_name, true),
-    equipmentSectionRow(
-      "Email Giảng viên phụ trách",
-      payload.responsible_email,
-    ),
+    equipmentSectionRow(responsibleLabel, payload.responsible_name, true),
+    equipmentSectionRow(`Email ${responsibleLabel}`, payload.responsible_email),
   ].join("");
   const receiptRows = [
     equipmentSectionRow("Ngày nhận", receive.date, true),
@@ -256,7 +257,7 @@ function renderEquipmentEmail(notification: EmailNotification) {
       </div>
       ${equipmentSectionHtml("1. Thông tin môn học", courseRows)}
       ${equipmentSectionHtml("2. Thông tin người đăng ký", registrantRows)}
-      ${equipmentSectionHtml("3. Thông tin giảng viên phụ trách", responsibleRows)}
+      ${equipmentSectionHtml(`3. Thông tin ${responsibleLabel.toLocaleLowerCase("vi")}`, responsibleRows)}
       ${equipmentSectionHtml("4. Thông tin nhận thiết bị", receiptRows)}
       <h3 style="margin:16px 0 12px;font-size:16px;color:#2563eb;border-bottom:2px solid #2563eb;padding-bottom:4px">Danh sách chi tiết thiết bị</h3>
       ${equipmentTables}
@@ -268,6 +269,10 @@ function renderEquipmentEmail(notification: EmailNotification) {
 
 function renderEquipmentEmailText(notification: EmailNotification) {
   const payload = notification.payload;
+  const responsibleLabel =
+    payload.request_domain === "basic_medical"
+      ? "Giảng viên giảng dạy/hướng dẫn"
+      : "Giảng viên phụ trách";
   const receive = formatVietnameseDateTime(payload.receive_at);
   const returned = formatVietnameseDateTime(payload.return_at);
   const lines = [
@@ -290,9 +295,9 @@ function renderEquipmentEmailText(notification: EmailNotification) {
     `Email: ${payload.registrant_email ?? ""}`,
     `Số điện thoại: ${payload.registrant_phone ?? ""}`,
     "",
-    "=== 3. THÔNG TIN GIẢNG VIÊN PHỤ TRÁCH ===",
-    `Giảng viên phụ trách: ${payload.responsible_name ?? ""}`,
-    `Email Giảng viên phụ trách: ${payload.responsible_email ?? ""}`,
+    `=== 3. THÔNG TIN ${responsibleLabel.toLocaleUpperCase("vi")} ===`,
+    `${responsibleLabel}: ${payload.responsible_name ?? ""}`,
+    `Email ${responsibleLabel}: ${payload.responsible_email ?? ""}`,
     "",
     "=== 4. THÔNG TIN NHẬN THIẾT BỊ ===",
     `Ngày nhận: ${receive.date}`,

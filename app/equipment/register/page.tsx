@@ -20,6 +20,12 @@ import {
 
 type RequestMode = "copy" | "edit";
 
+type RegisterSearchParams = {
+  schedule?: string;
+  mode?: string;
+  request?: string;
+};
+
 type RequestOption = {
   id: string;
   created_at: string;
@@ -242,7 +248,7 @@ function buildInitialData(
 export default async function EquipmentRegisterPage({
   searchParams,
 }: {
-  searchParams: Promise<{ schedule?: string; mode?: string; request?: string }>;
+  searchParams: Promise<RegisterSearchParams>;
 }) {
   const [viewer, query] = await Promise.all([getViewer(), searchParams]);
   const {
@@ -258,7 +264,8 @@ export default async function EquipmentRegisterPage({
     isRootAdministrator,
   } = viewer;
   const roomTypeCodes = roomTypes.map(({ code }) => code);
-  if (!canUseSkillsWorkspace(roles, roomTypeCodes)) {
+  const canUseSkills = canUseSkillsWorkspace(roles, roomTypeCodes);
+  if (!canUseSkills) {
     redirect(defaultWorkspacePath(roles, roomTypeCodes));
   }
   if (

@@ -59,6 +59,17 @@ function extractBuildNavigation() {
       return false;
     }
 
+    function canUseBasicMedicalEquipmentRegistration(roles, roomTypeCodes) {
+      if (roles.includes("admin")) return true;
+
+      return Boolean(
+        roomTypeCodes.includes("basic_medical") &&
+        roles.some((role) =>
+          ["staff", "lecturer", "teaching_assistant"].includes(role),
+        ),
+      );
+    }
+
     function canViewBasicMedicalSchedules(roles, roomTypeCodes) {
       if (roles.includes("admin")) return true;
       return roomTypeCodes.includes("basic_medical");
@@ -162,6 +173,10 @@ test("Sidebar Navigation: Admin with all permissions gets all 6 groups in exact 
       { label: "Lịch Y cơ sở", href: "/basic-medical/schedules" },
       { label: "Tạo lịch Y cơ sở", href: "/basic-medical/new" },
       { label: "Phiếu Y cơ sở", href: "/basic-medical/registrations" },
+      {
+        label: "Đăng ký thiết bị",
+        href: "/basic-medical/equipment-requests",
+      },
       { label: "Import lịch Y cơ sở", href: "/basic-medical/import" },
     ],
   );
@@ -242,6 +257,38 @@ test("Sidebar Navigation: Viewer (Basic Medical only) sees conditional 'Thiết 
   // Ensure 'Danh mục TB Y cơ sở' is NOT present
   const allHrefs = nav.flatMap((g) => g.items.map((i) => i.href));
   assert.ok(!allHrefs.includes("/basic-medical/equipment"));
+  assert.ok(
+    !nav
+      .flatMap((group) => group.items)
+      .some((item) => item.label === "Đăng ký thiết bị"),
+  );
+});
+
+test("Sidebar Navigation: Basic Medical-only lecturer enters the Basic Medical equipment registration workspace", () => {
+  const nav = buildNavigation(
+    ["lecturer"],
+    ["basic_medical"],
+    false,
+    false,
+    false,
+    false,
+  );
+  const items = nav.flatMap((group) => group.items);
+  const equipmentEntries = items.filter(
+    (item) => item.label === "Đăng ký thiết bị",
+  );
+
+  assert.deepEqual(equipmentEntries, [
+    {
+      label: "Đăng ký thiết bị",
+      href: "/basic-medical/equipment-requests",
+      icon: "ClipboardList",
+      activeIcon: "ClipboardListSolid",
+    },
+  ]);
+  assert.ok(!items.some((item) => item.label === "Tạo lịch Skills lab"));
+  assert.ok(!items.some((item) => item.label === "Import lịch Skills lab"));
+  assert.ok(!items.some((item) => item.label === "Phiếu thiết bị của tôi"));
 });
 
 test("Sidebar Navigation: Staff with Basic Medical scope sees 'Danh mục TB Y cơ sở' under Quản trị", () => {

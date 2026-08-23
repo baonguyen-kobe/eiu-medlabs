@@ -1258,6 +1258,21 @@ Export PDF = Secondary
 Delete     = Danger
 ```
 
+## Basic Medical equipment session picker
+
+The Basic Medical equipment workspace reuses the Skills equipment registration
+`class-picker-row` layout for a new-request or copy destination selection:
+
+```text
+Buổi học Y cơ sở *
+[ selector ] [ + Tạo lịch Y cơ sở ]
+```
+
+It has no surrounding `data-panel` card. The shared responsive rule keeps the
+selector and action on one row on desktop and stacks them cleanly on narrow
+viewports. Edit mode keeps its immutable source session read-only and does not
+offer this picker or a create-schedule action.
+
 ---
 
 # 29. EQUIPMENT LIST MODAL OVERRIDE

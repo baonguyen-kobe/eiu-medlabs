@@ -20,6 +20,7 @@ import {
 import {
   equipmentLeadTime,
   equipmentReceiveAt,
+  equipmentHandoffTimes,
   lateEquipmentWarning,
 } from "@/lib/equipment-lead-time";
 import type { EquipmentLateApprovalStatus } from "@/lib/equipment-requests";
@@ -63,8 +64,6 @@ type DraftSkill = {
   skillName: string;
   rows: DraftEquipment[];
 };
-
-const equipmentHandoffTimes = ["09:00", "11:00", "14:00", "16:00"] as const;
 
 export type EquipmentRequestInitialData = {
   mode: "copy" | "edit";
