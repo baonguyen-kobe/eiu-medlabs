@@ -74,6 +74,20 @@ function items(catalogId, quantity = 1, note = "") {
   return [{ catalog_item_id: catalogId, quantity, note }];
 }
 
+function hasRoomTypeScope(profileId, roomTypeCode) {
+  return (
+    localSql(`
+      select exists(
+        select 1
+        from public.profile_room_types as scope
+        join public.room_types as room_type on room_type.id = scope.room_type_id
+        where scope.profile_id = '${profileId}'
+          and room_type.code = '${roomTypeCode}'
+      );
+    `) === "t"
+  );
+}
+
 test("Basic Medical equipment edit preserves its source and stays domain-local", async () => {
   const fixture = {
     course: crypto.randomUUID(),
@@ -103,6 +117,33 @@ test("Basic Medical equipment edit preserves its source and stays domain-local",
   const skillsOnlyStaffId = localSql(
     "select id from auth.users where email = 'dieuphoi@eiu.edu.vn'",
   );
+  const ownerHadBasicMedicalScope = hasRoomTypeScope(ownerId, "basic_medical");
+  const teachingLecturerHadBasicMedicalScope = hasRoomTypeScope(
+    teachingLecturerId,
+    "basic_medical",
+  );
+  const basicMedicalStaffHadBasicMedicalScope = hasRoomTypeScope(
+    basicMedicalStaffId,
+    "basic_medical",
+  );
+  const skillsOnlyStaffHadSkillsScope = hasRoomTypeScope(
+    skillsOnlyStaffId,
+    "nursing_skills",
+  );
+  const removeTemporaryScopes = [
+    !ownerHadBasicMedicalScope
+      ? `delete from public.profile_room_types where profile_id = '${ownerId}' and room_type_id = (select id from public.room_types where code = 'basic_medical');`
+      : "",
+    !teachingLecturerHadBasicMedicalScope
+      ? `delete from public.profile_room_types where profile_id = '${teachingLecturerId}' and room_type_id = (select id from public.room_types where code = 'basic_medical');`
+      : "",
+    !basicMedicalStaffHadBasicMedicalScope
+      ? `delete from public.profile_room_types where profile_id = '${basicMedicalStaffId}' and room_type_id = (select id from public.room_types where code = 'basic_medical');`
+      : "",
+    !skillsOnlyStaffHadSkillsScope
+      ? `delete from public.profile_room_types where profile_id = '${skillsOnlyStaffId}' and room_type_id = (select id from public.room_types where code = 'nursing_skills');`
+      : "",
+  ].join("\n");
   const deliveryModeBefore =
     localSql(
       "select delivery_mode from public.email_delivery_settings where setting_key = 'primary'",
@@ -603,20 +644,31 @@ test("Basic Medical equipment edit preserves its source and stays domain-local",
       delete from public.basic_medical_equipment_catalog where id in ('${fixture.catalog}', '${fixture.inactiveCatalog}');
       delete from public.rooms where id = '${fixture.room}';
       delete from public.courses where id = '${fixture.course}';
-      delete from public.profile_room_types
-      where profile_id in ('${ownerId}', '${teachingLecturerId}', '${basicMedicalStaffId}')
-        and room_type_id = (
-          select id from public.room_types where code = 'basic_medical'
-        );
-      delete from public.profile_room_types
-      where profile_id = '${skillsOnlyStaffId}'
-        and room_type_id = (
-          select id from public.room_types where code = 'nursing_skills'
-        );
+      ${removeTemporaryScopes}
       update public.email_delivery_settings
       set delivery_mode = '${deliveryModeBefore}'
       where setting_key = 'primary';
       commit;
     `);
+    assert.equal(
+      hasRoomTypeScope(ownerId, "basic_medical"),
+      ownerHadBasicMedicalScope,
+      "fixture cleanup preserves the owner's original Basic Medical scope",
+    );
+    assert.equal(
+      hasRoomTypeScope(teachingLecturerId, "basic_medical"),
+      teachingLecturerHadBasicMedicalScope,
+      "fixture cleanup preserves the teaching lecturer's original Basic Medical scope",
+    );
+    assert.equal(
+      hasRoomTypeScope(basicMedicalStaffId, "basic_medical"),
+      basicMedicalStaffHadBasicMedicalScope,
+      "fixture cleanup preserves the staff member's original Basic Medical scope",
+    );
+    assert.equal(
+      hasRoomTypeScope(skillsOnlyStaffId, "nursing_skills"),
+      skillsOnlyStaffHadSkillsScope,
+      "fixture cleanup preserves the Skills-only staff member's original scope",
+    );
   }
 });
