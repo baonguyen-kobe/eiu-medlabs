@@ -32,6 +32,9 @@ export type EquipmentItemActionState = {
   item?: EquipmentRequestListItem["equipment_request_items"][number];
 };
 
+const duplicateCommercialNameInActivityMessage =
+  "Cùng một tên thương mại thiết bị đã được đăng ký trong kỹ năng/bài thực hành này.";
+
 function toEquipmentConfirmationState(
   row: Record<string, unknown>,
 ): EquipmentConfirmationState {
@@ -128,6 +131,13 @@ export async function addEquipmentRequestItem({
     },
   );
   if (error || !newItemId) {
+    if (
+      error?.message?.includes(
+        "EQUIPMENT_REQUEST_DUPLICATE_COMMERCIAL_NAME_IN_ACTIVITY",
+      )
+    ) {
+      return { ok: false, message: duplicateCommercialNameInActivityMessage };
+    }
     if (error?.message?.includes("CATALOG_ITEM_INACTIVE_OR_MISSING")) {
       return {
         ok: false,
@@ -573,8 +583,11 @@ export async function updateEquipmentRequest(
   if (error || !updatedId) {
     return {
       ok: false,
-      message:
-        error?.code === "23505"
+      message: error?.message?.includes(
+        "EQUIPMENT_REQUEST_DUPLICATE_COMMERCIAL_NAME_IN_ACTIVITY",
+      )
+        ? duplicateCommercialNameInActivityMessage
+        : error?.code === "23505"
           ? "Lớp này đã có một phiếu đăng ký thiết bị khác."
           : error?.message || "Không thể lưu nội dung điều chỉnh.",
     };
@@ -777,8 +790,11 @@ export async function createEquipmentRequest(
   if (error || !requestId)
     return {
       ok: false,
-      message:
-        error?.code === "23505"
+      message: error?.message?.includes(
+        "EQUIPMENT_REQUEST_DUPLICATE_COMMERCIAL_NAME_IN_ACTIVITY",
+      )
+        ? duplicateCommercialNameInActivityMessage
+        : error?.code === "23505"
           ? "Lớp này đã có phiếu đăng ký thiết bị."
           : error?.message || "Không thể tạo phiếu thiết bị.",
     };

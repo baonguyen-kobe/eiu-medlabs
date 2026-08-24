@@ -682,10 +682,7 @@ begin
     raise exception 'CLASS_MANAGEMENT_SCOPE_REQUIRED' using errcode = '42501';
   end if;
 
-  select coalesce(array_agg(distinct id_value order by id_value), '{}'::uuid[])
-  into normalized_ids
-  from unnest(coalesce(target_lecturer_ids, '{}'::uuid[])) as values_list(id_value)
-  where id_value is not null;
+  normalized_ids := array_remove(coalesce(target_lecturer_ids, '{}'::uuid[]), null);
 
   if cardinality(normalized_ids) > 2 then
     raise exception 'TOO_MANY_CLASS_LECTURERS' using errcode = '22023';

@@ -204,10 +204,7 @@ begin
   -- For Lecturer / TA own-edit: MUST strictly preserve existing lecturer_id and lecturer_2_id
   if is_manager then
     if target_lecturer_ids is not null then
-      select coalesce(array_agg(distinct id_val order by id_val), '{}'::uuid[])
-      into normalized_lecturer_ids
-      from unnest(target_lecturer_ids) as id_val
-      where id_val is not null;
+      normalized_lecturer_ids := array_remove(target_lecturer_ids, null);
 
       if cardinality(normalized_lecturer_ids) > 2 then
         raise exception 'TOO_MANY_CLASS_LECTURERS' using errcode = '22023';
@@ -286,6 +283,15 @@ begin
     into lecturer_name
     from public.profiles as profiles
     where profiles.id in (changed_row.lecturer_id, changed_row.lecturer_2_id);
+
+    select nullif(
+      concat_ws(
+        ' · ',
+        (select profiles.full_name from public.profiles as profiles where profiles.id = changed_row.lecturer_id),
+        (select profiles.full_name from public.profiles as profiles where profiles.id = changed_row.lecturer_2_id)
+      ),
+      ''
+    ) into lecturer_name;
 
     schedule_code := to_char(
       before_row.created_at at time zone 'Asia/Ho_Chi_Minh',
@@ -498,6 +504,15 @@ begin
     from public.profiles as profiles
     where profiles.id in (before_row.lecturer_id, before_row.lecturer_2_id);
 
+    select nullif(
+      concat_ws(
+        ' · ',
+        (select profiles.full_name from public.profiles as profiles where profiles.id = before_row.lecturer_id),
+        (select profiles.full_name from public.profiles as profiles where profiles.id = before_row.lecturer_2_id)
+      ),
+      ''
+    ) into lecturer_name;
+
     schedule_code := to_char(
       before_row.created_at at time zone 'Asia/Ho_Chi_Minh',
       'YYMMDDHH24MISS'
@@ -617,6 +632,15 @@ begin
   into lecturer_name
   from public.profiles as profiles
   where profiles.id in (before_row.lecturer_id, before_row.lecturer_2_id);
+
+  select nullif(
+    concat_ws(
+      ' · ',
+      (select profiles.full_name from public.profiles as profiles where profiles.id = before_row.lecturer_id),
+      (select profiles.full_name from public.profiles as profiles where profiles.id = before_row.lecturer_2_id)
+    ),
+    ''
+  ) into lecturer_name;
 
   schedule_code := to_char(
     before_row.created_at at time zone 'Asia/Ho_Chi_Minh',
@@ -787,10 +811,7 @@ begin
     raise exception 'CLASS_MANAGEMENT_SCOPE_REQUIRED' using errcode = '42501';
   end if;
 
-  select coalesce(array_agg(distinct id_value order by id_value), '{}'::uuid[])
-  into normalized_ids
-  from unnest(coalesce(target_lecturer_ids, '{}'::uuid[])) values_list(id_value)
-  where id_value is not null;
+  normalized_ids := array_remove(coalesce(target_lecturer_ids, '{}'::uuid[]), null);
 
   if cardinality(normalized_ids) > 2 then
     raise exception 'TOO_MANY_CLASS_LECTURERS' using errcode = '22023';

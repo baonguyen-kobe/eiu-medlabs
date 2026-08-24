@@ -14,6 +14,7 @@ import {
   equipmentReceiveAt,
   lateEquipmentWarning,
 } from "@/lib/equipment-lead-time";
+import { hasDuplicateCommercialNameWithinActivity } from "@/lib/equipment-request-commercial-name-duplicate";
 import type {
   BasicMedicalEquipmentCatalogItem,
   BasicMedicalRegistrationListItem,
@@ -217,6 +218,21 @@ export function BasicMedicalEquipmentRequestForm({
     if (leadTime?.requiresLateApproval && !lateRegistrationReason.trim()) {
       event.preventDefault();
       setClientError("Vui lòng nhập Lý do đăng ký trễ.");
+      return;
+    }
+    if (
+      hasDuplicateCommercialNameWithinActivity(
+        items.map((item) => ({
+          activityId: session.id,
+          catalogItemId: item.catalogItemId,
+        })),
+        catalogIndex.byId,
+      )
+    ) {
+      event.preventDefault();
+      setClientError(
+        "Cùng một tên thương mại thiết bị đã được đăng ký trong bài TN-TH này.",
+      );
       return;
     }
     setClientError("");
