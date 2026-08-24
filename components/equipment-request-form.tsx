@@ -23,6 +23,7 @@ import {
   equipmentHandoffTimes,
   lateEquipmentWarning,
 } from "@/lib/equipment-lead-time";
+import { hasDuplicateCommercialNameWithinActivity } from "@/lib/equipment-request-commercial-name-duplicate";
 import type { EquipmentLateApprovalStatus } from "@/lib/equipment-requests";
 
 type CatalogItem = {
@@ -453,20 +454,20 @@ export function EquipmentRequestForm({
       setClientError("Bắt buộc nhập “Lý do đăng ký trễ”.");
       return;
     }
-    const duplicateKeys = new Set<string>();
-    let hasDuplicate = false;
-    for (const item of payload) {
-      const key = `${item.skillName.trim().toLocaleLowerCase("vi")}|${item.catalogItemId}`;
-      if (duplicateKeys.has(key)) hasDuplicate = true;
-      duplicateKeys.add(key);
-    }
     if (
-      hasDuplicate &&
-      !window.confirm(
-        "Có thiết bị bị trùng trong cùng một kỹ năng/bài thực hành. Bạn vẫn muốn gửi phiếu?",
+      hasDuplicateCommercialNameWithinActivity(
+        payload.map((item) => ({
+          activityId: item.skillName,
+          catalogItemId: item.catalogItemId,
+        })),
+        catalogIndex.byId,
       )
     ) {
       event.preventDefault();
+      setClientError(
+        "Cùng một tên thương mại thiết bị đã được đăng ký trong kỹ năng/bài thực hành này.",
+      );
+      return;
     }
   }
 

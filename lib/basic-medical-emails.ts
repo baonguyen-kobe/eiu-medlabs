@@ -93,15 +93,19 @@ export async function enqueueBasicMedicalRegistrationEmails({
       ).some(({ room_type_id }) => room_type_id === BASIC_MEDICAL_ROOM_TYPE_ID)
     );
   });
-  const labels: Record<BasicMedicalEmailEvent, string> = {
-    created: "Có đăng ký phòng TNTH mới",
-    updated: "Điều chỉnh phiếu đăng ký phòng TNTH",
-    cancelled: "Hủy phiếu đăng ký phòng TNTH",
-  };
+  const labels: Record<BasicMedicalEmailEvent, { tag: string; text: string }> =
+    {
+      created: { tag: "New", text: "Có Phiếu Y cơ sở mới" },
+      updated: { tag: "Adjusted", text: "Điều chỉnh Phiếu Y cơ sở" },
+      cancelled: { tag: "Cancelled", text: "Hủy Phiếu Y cơ sở" },
+    };
   const registrationCode = formatBasicMedicalRegistrationCode(
     snapshot.registration_code,
   );
-  const dateRange = `${snapshot.start_date.split("-").reverse().join("/")} - ${snapshot.end_date.split("-").reverse().join("/")}`;
+  const startDate = snapshot.start_date.split("-").reverse().join("/");
+  const endDate = snapshot.end_date.split("-").reverse().join("/");
+  const dateRange =
+    startDate === endDate ? startDate : `${startDate} - ${endDate}`;
   const subjectDetails = `${snapshot.registrant?.full_name ?? "Giảng viên"} - ${snapshot.course?.course_code ?? "Môn học"} - ${dateRange} - ${registrationCode}`;
   const payload = {
     registration_id: snapshot.id,
@@ -136,14 +140,34 @@ export async function enqueueBasicMedicalRegistrationEmails({
   };
   const notifications = recipients
     .filter(({ email }) => email?.includes("@"))
-    .map((recipient) => ({
-      notification_type: `basic_medical_registration_${event}`,
-      recipient_id: recipient.id,
-      recipient_email: recipient.email.toLowerCase(),
-      dedupe_key: `basic_medical_registration:${snapshot.id}:${event}:${operationId}:${recipient.id}`,
-      subject: `[MedLabs Calendar] ${labels[event]} · ${subjectDetails}`,
-      payload,
-    }));
+    .map((recipient) => {
+      const roles = new Set(
+        ((recipient.user_roles ?? []) as Array<{ role: string }>).map(
+          ({ role }) => role,
+        ),
+      );
+      const isManagementCopy =
+        roles.has("admin") ||
+        (roles.has("staff") &&
+          (
+            (recipient.profile_room_types ?? []) as Array<{
+              room_type_id: string;
+            }>
+          ).some(
+            ({ room_type_id }) => room_type_id === BASIC_MEDICAL_ROOM_TYPE_ID,
+          ));
+      const prefix = isManagementCopy
+        ? "[Admin MedLabs Calendar]"
+        : "[MedLabs Calendar]";
+      return {
+        notification_type: `basic_medical_registration_${event}`,
+        recipient_id: recipient.id,
+        recipient_email: recipient.email.toLowerCase(),
+        dedupe_key: `basic_medical_registration:${snapshot.id}:${event}:${operationId}:${recipient.id}`,
+        subject: `${prefix}[Y cơ sở][${labels[event].tag}] ${labels[event].text} - ${subjectDetails}`,
+        payload,
+      };
+    });
   if (!notifications.length) return [];
   const { error: insertError } = await supabase
     .from("email_notifications")

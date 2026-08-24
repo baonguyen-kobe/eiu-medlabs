@@ -1,4 +1,4 @@
-﻿export type Json =
+export type Json =
   | string
   | number
   | boolean
@@ -1043,7 +1043,8 @@ export type Database = {
       }
       equipment_request_items: {
         Row: {
-          catalog_item_id: string
+          basic_medical_catalog_item_id: string | null
+          catalog_item_id: string | null
           created_at: string
           id: string
           note: string | null
@@ -1052,7 +1053,8 @@ export type Database = {
           skill_name: string
         }
         Insert: {
-          catalog_item_id: string
+          basic_medical_catalog_item_id?: string | null
+          catalog_item_id?: string | null
           created_at?: string
           id?: string
           note?: string | null
@@ -1061,7 +1063,8 @@ export type Database = {
           skill_name: string
         }
         Update: {
-          catalog_item_id?: string
+          basic_medical_catalog_item_id?: string | null
+          catalog_item_id?: string | null
           created_at?: string
           id?: string
           note?: string | null
@@ -1070,6 +1073,13 @@ export type Database = {
           skill_name?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "equipment_request_items_basic_medical_catalog_item_id_fkey"
+            columns: ["basic_medical_catalog_item_id"]
+            isOneToOne: false
+            referencedRelation: "basic_medical_equipment_catalog"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "equipment_request_items_catalog_item_id_fkey"
             columns: ["catalog_item_id"]
@@ -1088,7 +1098,7 @@ export type Database = {
       }
       equipment_requests: {
         Row: {
-          class_schedule_id: string
+          class_schedule_id: string | null
           created_at: string
           created_by: string
           email_snapshot: string
@@ -1109,6 +1119,7 @@ export type Database = {
           phone_snapshot: string
           receive_at: string
           registrant_id: string
+          request_domain: Database["public"]["Enums"]["equipment_request_domain"]
           responsible_lecturer_id: string
           return_at: string
           return_effective_at: string | null
@@ -1117,11 +1128,12 @@ export type Database = {
           return_staff_confirmed_at: string | null
           return_staff_confirmed_by: string | null
           semester: string
+          source_identity_id: string
           status: string
           updated_at: string
         }
         Insert: {
-          class_schedule_id: string
+          class_schedule_id?: string | null
           created_at?: string
           created_by: string
           email_snapshot: string
@@ -1142,6 +1154,7 @@ export type Database = {
           phone_snapshot: string
           receive_at: string
           registrant_id: string
+          request_domain: Database["public"]["Enums"]["equipment_request_domain"]
           responsible_lecturer_id: string
           return_at: string
           return_effective_at?: string | null
@@ -1150,11 +1163,12 @@ export type Database = {
           return_staff_confirmed_at?: string | null
           return_staff_confirmed_by?: string | null
           semester: string
+          source_identity_id: string
           status?: string
           updated_at?: string
         }
         Update: {
-          class_schedule_id?: string
+          class_schedule_id?: string | null
           created_at?: string
           created_by?: string
           email_snapshot?: string
@@ -1175,6 +1189,7 @@ export type Database = {
           phone_snapshot?: string
           receive_at?: string
           registrant_id?: string
+          request_domain?: Database["public"]["Enums"]["equipment_request_domain"]
           responsible_lecturer_id?: string
           return_at?: string
           return_effective_at?: string | null
@@ -1183,6 +1198,7 @@ export type Database = {
           return_staff_confirmed_at?: string | null
           return_staff_confirmed_by?: string | null
           semester?: string
+          source_identity_id?: string
           status?: string
           updated_at?: string
         }
@@ -1190,7 +1206,7 @@ export type Database = {
           {
             foreignKeyName: "equipment_requests_class_schedule_id_fkey"
             columns: ["class_schedule_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "class_schedules"
             referencedColumns: ["id"]
           },
@@ -1858,6 +1874,72 @@ export type Database = {
           },
         ]
       }
+      user_notifications: {
+        Row: {
+          actor_id: string | null
+          body: string
+          created_at: string
+          dedupe_key: string
+          domain: string
+          entity_id: string | null
+          entity_type: string
+          href: string | null
+          id: string
+          metadata: Json
+          notification_type: string
+          read_at: string | null
+          recipient_id: string
+          title: string
+        }
+        Insert: {
+          actor_id?: string | null
+          body: string
+          created_at?: string
+          dedupe_key: string
+          domain: string
+          entity_id?: string | null
+          entity_type: string
+          href?: string | null
+          id?: string
+          metadata?: Json
+          notification_type: string
+          read_at?: string | null
+          recipient_id: string
+          title: string
+        }
+        Update: {
+          actor_id?: string | null
+          body?: string
+          created_at?: string
+          dedupe_key?: string
+          domain?: string
+          entity_id?: string | null
+          entity_type?: string
+          href?: string | null
+          id?: string
+          metadata?: Json
+          notification_type?: string
+          read_at?: string | null
+          recipient_id?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_notifications_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_notifications_recipient_id_fkey"
+            columns: ["recipient_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -2508,6 +2590,18 @@ export type Database = {
           signer_name_snapshot: string
         }[]
       }
+      list_equipment_request_lifecycle_audit: {
+        Args: { target_request_id: string }
+        Returns: {
+          action: string
+          actor_id: string
+          actor_name: string
+          created_at: string
+          metadata: Json
+          new_status: string
+          old_status: string
+        }[]
+      }
       list_import_lecturers: {
         Args: never
         Returns: {
@@ -2563,7 +2657,7 @@ export type Database = {
       manager_confirm_equipment_status: {
         Args: { target_request_id: string; target_status: string }
         Returns: {
-          class_schedule_id: string
+          class_schedule_id: string | null
           created_at: string
           created_by: string
           email_snapshot: string
@@ -2584,6 +2678,7 @@ export type Database = {
           phone_snapshot: string
           receive_at: string
           registrant_id: string
+          request_domain: Database["public"]["Enums"]["equipment_request_domain"]
           responsible_lecturer_id: string
           return_at: string
           return_effective_at: string | null
@@ -2592,6 +2687,7 @@ export type Database = {
           return_staff_confirmed_at: string | null
           return_staff_confirmed_by: string | null
           semester: string
+          source_identity_id: string
           status: string
           updated_at: string
         }
@@ -2605,7 +2701,7 @@ export type Database = {
       manager_confirm_equipment_status_scoped_impl: {
         Args: { target_request_id: string; target_status: string }
         Returns: {
-          class_schedule_id: string
+          class_schedule_id: string | null
           created_at: string
           created_by: string
           email_snapshot: string
@@ -2626,6 +2722,7 @@ export type Database = {
           phone_snapshot: string
           receive_at: string
           registrant_id: string
+          request_domain: Database["public"]["Enums"]["equipment_request_domain"]
           responsible_lecturer_id: string
           return_at: string
           return_effective_at: string | null
@@ -2634,6 +2731,7 @@ export type Database = {
           return_staff_confirmed_at: string | null
           return_staff_confirmed_by: string | null
           semester: string
+          source_identity_id: string
           status: string
           updated_at: string
         }
@@ -2651,7 +2749,7 @@ export type Database = {
           target_request_id: string
         }
         Returns: {
-          class_schedule_id: string
+          class_schedule_id: string | null
           created_at: string
           created_by: string
           email_snapshot: string
@@ -2672,6 +2770,7 @@ export type Database = {
           phone_snapshot: string
           receive_at: string
           registrant_id: string
+          request_domain: Database["public"]["Enums"]["equipment_request_domain"]
           responsible_lecturer_id: string
           return_at: string
           return_effective_at: string | null
@@ -2680,6 +2779,7 @@ export type Database = {
           return_staff_confirmed_at: string | null
           return_staff_confirmed_by: string | null
           semester: string
+          source_identity_id: string
           status: string
           updated_at: string
         }
@@ -2697,7 +2797,7 @@ export type Database = {
           target_request_id: string
         }
         Returns: {
-          class_schedule_id: string
+          class_schedule_id: string | null
           created_at: string
           created_by: string
           email_snapshot: string
@@ -2718,6 +2818,7 @@ export type Database = {
           phone_snapshot: string
           receive_at: string
           registrant_id: string
+          request_domain: Database["public"]["Enums"]["equipment_request_domain"]
           responsible_lecturer_id: string
           return_at: string
           return_effective_at: string | null
@@ -2726,6 +2827,7 @@ export type Database = {
           return_staff_confirmed_at: string | null
           return_staff_confirmed_by: string | null
           semester: string
+          source_identity_id: string
           status: string
           updated_at: string
         }
@@ -2819,7 +2921,7 @@ export type Database = {
           target_signature: string
         }
         Returns: {
-          class_schedule_id: string
+          class_schedule_id: string | null
           created_at: string
           created_by: string
           email_snapshot: string
@@ -2840,6 +2942,7 @@ export type Database = {
           phone_snapshot: string
           receive_at: string
           registrant_id: string
+          request_domain: Database["public"]["Enums"]["equipment_request_domain"]
           responsible_lecturer_id: string
           return_at: string
           return_effective_at: string | null
@@ -2848,6 +2951,7 @@ export type Database = {
           return_staff_confirmed_at: string | null
           return_staff_confirmed_by: string | null
           semester: string
+          source_identity_id: string
           status: string
           updated_at: string
         }
@@ -3063,6 +3167,17 @@ export type Database = {
       soft_cancel_equipment_request: {
         Args: { target_request_id: string }
         Returns: boolean
+      }
+      update_basic_medical_equipment_request_content: {
+        Args: {
+          target_items: Json
+          target_late_registration_reason: string
+          target_note: string
+          target_receive_at: string
+          target_request_id: string
+          target_return_at: string
+        }
+        Returns: string
       }
       update_basic_medical_session_teaching_lecturer: {
         Args: { target_session_id: string; target_teaching_lecturer_id: string }
@@ -3343,6 +3458,7 @@ export type Database = {
         | "teaching_assistant"
         | "importer"
         | "viewer"
+      equipment_request_domain: "nursing_skills" | "basic_medical"
       import_row_status:
         | "valid"
         | "warning"
@@ -3505,6 +3621,7 @@ export const Constants = {
         "importer",
         "viewer",
       ],
+      equipment_request_domain: ["nursing_skills", "basic_medical"],
       import_row_status: [
         "valid",
         "warning",

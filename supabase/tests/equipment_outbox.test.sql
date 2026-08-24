@@ -75,6 +75,12 @@ insert into public.equipment_catalog (id, item_name, commercial_name, unit, is_a
 values ('50000000-0000-0000-0000-000000000001'::uuid, 'Mô hình tiêm', 'Mô hình tiêm fixture outbox', 'cái', true)
 on conflict (id) do nothing;
 
+-- The manager quick-add contract requires a distinct commercial-name identity
+-- within the same practical activity.
+insert into public.equipment_catalog (id, item_name, commercial_name, unit, is_active)
+values ('50000000-0000-0000-0000-000000000003'::uuid, 'Outbox additional item', 'Outbox additional commercial name', 'unit', true)
+on conflict (id) do nothing;
+
 -- 2. Create test class schedules
 -- Sched 1: 7 days in future (morning 07:30 - 11:30)
 insert into public.class_schedules (id, course_id, room_id, lecturer_id, schedule_date, start_time, end_time, student_count, course_code_snapshot, course_name_snapshot, semester, schedule_status, published_at, published_by, source, created_by)
@@ -254,7 +260,7 @@ select lives_ok(
     select public.add_equipment_request_item(
       (select id from public.equipment_requests where class_schedule_id = '90000000-0000-0000-0000-000000000001'::uuid),
       'Kỹ năng tiêm',
-      '50000000-0000-0000-0000-000000000001'::uuid,
+      '50000000-0000-0000-0000-000000000003'::uuid,
       2,
       'Bổ sung'
     );

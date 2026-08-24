@@ -10447,6 +10447,139 @@ body {
   justify-content: flex-end;
 }
 
+.notification-bell {
+  position: relative;
+}
+
+.notification-bell-trigger {
+  position: relative;
+  display: grid;
+  width: 40px;
+  padding: 0;
+  place-items: center;
+}
+
+.notification-badge {
+  position: absolute;
+  top: -6px;
+  right: -7px;
+  min-width: 18px;
+  padding: 2px 5px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  color: #fff;
+  background: var(--danger);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.notification-popover {
+  position: absolute;
+  z-index: 80;
+  top: calc(100% + 10px);
+  right: 0;
+  width: min(390px, calc(100vw - 28px));
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: #fff;
+  box-shadow: 0 18px 44px rgb(20 64 105 / 18%);
+}
+
+.notification-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.notification-read-all {
+  min-height: 32px;
+  padding: 6px 9px;
+  font-size: 12px;
+}
+
+.notification-list {
+  max-height: min(60vh, 520px);
+  overflow: auto;
+}
+
+.notification-item {
+  display: grid;
+  width: 100%;
+  gap: 4px;
+  padding: 12px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  color: inherit;
+  background: #fff;
+  text-align: left;
+}
+
+.notification-item:hover,
+.notification-item:focus-visible {
+  background: var(--surface-muted);
+}
+
+.notification-item.unread {
+  background: color-mix(in srgb, var(--primary) 7%, #fff);
+}
+
+.notification-item span,
+.notification-item small,
+.notification-empty {
+  color: var(--foreground-muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.notification-empty {
+  margin: 0;
+  padding: 18px 12px;
+}
+
+.equipment-lifecycle-history {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.equipment-lifecycle-history h3 {
+  margin: 0 0 10px;
+  color: var(--foreground);
+  font-size: 14px;
+}
+
+.equipment-lifecycle-history p {
+  margin: 0;
+  color: var(--foreground-muted);
+  font-size: 13px;
+}
+
+.equipment-lifecycle-history ol {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.equipment-lifecycle-history li {
+  display: grid;
+  gap: 2px;
+  padding-left: 10px;
+  border-left: 3px solid var(--primary);
+  font-size: 13px;
+}
+
+.equipment-lifecycle-history li span,
+.equipment-lifecycle-history li small {
+  color: var(--foreground-muted);
+}
+
 .workspace-content.page-container,
 .workspace-content {
   max-width: none;

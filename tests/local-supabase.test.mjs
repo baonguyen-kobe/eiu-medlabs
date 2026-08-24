@@ -3400,6 +3400,8 @@ test("Phiếu thiết bị chỉ cho ký giao sau khi kho xác nhận và GV ph�
   const requestId = crypto.randomUUID();
   const invalidRequestId = crypto.randomUUID();
   const catalogItemId = crypto.randomUUID();
+  const supplementalCatalogItemId = crypto.randomUUID();
+  const postHandoverCatalogItemId = crypto.randomUUID();
   const signature =
     "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 
@@ -3443,6 +3445,24 @@ test("Phiếu thiết bị chỉ cho ký giao sau khi kho xác nhận và GV ph�
           commercial_name: `Workflow QA ${catalogItemId}`,
           unit: "Cái",
         })
+      ).error,
+    );
+    assert.ifError(
+      (
+        await admin.supabase.from("equipment_catalog").insert([
+          {
+            id: supplementalCatalogItemId,
+            item_name: `Thiết bị bổ sung workflow ${supplementalCatalogItemId.slice(0, 8)}`,
+            commercial_name: `Workflow supplemental ${supplementalCatalogItemId}`,
+            unit: "Cái",
+          },
+          {
+            id: postHandoverCatalogItemId,
+            item_name: `Thiết bị sau giao workflow ${postHandoverCatalogItemId.slice(0, 8)}`,
+            commercial_name: `Workflow post-handover ${postHandoverCatalogItemId}`,
+            unit: "Cái",
+          },
+        ])
       ).error,
     );
     assert.ifError(
@@ -3574,7 +3594,7 @@ test("Phiếu thiết bị chỉ cho ký giao sau khi kho xác nhận và GV ph�
       .insert({
         request_id: requestId,
         skill_name: "Kỹ năng workflow",
-        catalog_item_id: catalogItemId,
+        catalog_item_id: supplementalCatalogItemId,
         quantity: 2,
         note: "Bổ sung trước khi giao",
       });
@@ -3618,7 +3638,7 @@ test("Phiếu thiết bị chỉ cho ký giao sau khi kho xác nhận và GV ph�
       .insert({
         request_id: requestId,
         skill_name: "Kỹ năng workflow",
-        catalog_item_id: catalogItemId,
+        catalog_item_id: postHandoverCatalogItemId,
         quantity: 1,
       });
     assert.ok(managerAddsAfterHandover.error);
@@ -3687,7 +3707,11 @@ test("Phiếu thiết bị chỉ cho ký giao sau khi kho xác nhận và GV ph�
     await admin.supabase
       .from("equipment_catalog")
       .delete()
-      .eq("id", catalogItemId);
+      .in("id", [
+        catalogItemId,
+        supplementalCatalogItemId,
+        postHandoverCatalogItemId,
+      ]);
   }
 });
 

@@ -7,6 +7,7 @@ import {
   ArrowRightIcon,
   ArrowRightStartOnRectangleIcon,
   Bars3Icon,
+  BellIcon,
   BookOpenIcon,
   BuildingOffice2Icon,
   CalendarDaysIcon,
@@ -82,6 +83,7 @@ export const GraduationCap = createIcon(AcademicCapIcon);
 export const Import = createIcon(ArrowDownTrayIcon);
 export const LayoutDashboard = createIcon(Squares2X2Icon);
 export const Menu = createIcon(Bars3Icon);
+export const Bell = createIcon(BellIcon);
 export const PackageCheck = createIcon(ArchiveBoxIcon);
 export const PanelLeftClose = createIcon(XMarkIcon);
 export const Plus = createIcon(PlusIcon);

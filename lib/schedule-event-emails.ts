@@ -109,10 +109,25 @@ export async function enqueueScheduleEventEmails({
     return event.startsWith("basic_medical_") && roles.has("viewer") && optedIn;
   });
 
-  const eventLabels: Record<ScheduleEmailEvent, string> = {
-    skills_lab_deleted: "Giảng viên xóa lớp Skills Lab",
-    basic_medical_updated: "Điều chỉnh lịch Y cơ sở",
-    basic_medical_cancelled: "Hủy lịch Y cơ sở",
+  const eventLabels: Record<
+    ScheduleEmailEvent,
+    { domain: string; tag: string; text: string }
+  > = {
+    skills_lab_deleted: {
+      domain: "Skills Lab",
+      tag: "Deleted",
+      text: "Xóa lịch Skills Lab",
+    },
+    basic_medical_updated: {
+      domain: "Y cơ sở",
+      tag: "Adjusted",
+      text: "Điều chỉnh lịch Y cơ sở",
+    },
+    basic_medical_cancelled: {
+      domain: "Y cơ sở",
+      tag: "Cancelled",
+      text: "Hủy lịch Y cơ sở",
+    },
   };
   const payload = {
     schedule_id: snapshot.id,
@@ -134,17 +149,44 @@ export async function enqueueScheduleEventEmails({
   };
   const notifications = recipients
     .filter(({ email }) => email?.includes("@"))
-    .map((recipient) => ({
-      notification_type: `class_schedule_${event}`,
-      recipient_id: recipient.id,
-      recipient_email: recipient.email.toLowerCase(),
-      dedupe_key: `class_schedule:${snapshot.id}:${event}:${operationId}:${recipient.id}`,
-      subject:
+    .map((recipient) => {
+      const roles = new Set(
+        ((recipient.user_roles ?? []) as Array<{ role: string }>).map(
+          ({ role }) => role,
+        ),
+      );
+      const isManagementCopy =
+        roles.has("admin") ||
+        (roles.has("staff") &&
+          (
+            (recipient.profile_room_types ?? []) as Array<{
+              room_type_id: string;
+            }>
+          ).some(({ room_type_id }) => room_type_id === roomTypeId));
+      const prefix = isManagementCopy
+        ? "[Admin MedLabs Calendar]"
+        : "[MedLabs Calendar]";
+      const label = eventLabels[event];
+      const recordCode = formatTimestampRecordCode(snapshot.created_at);
+      const date = snapshot.schedule_date.split("-").reverse().join("/");
+      const subjectTail =
         event === "skills_lab_deleted"
-          ? `[MedLabs Calendar] Giảng viên ${actor?.full_name ?? "Người dùng hệ thống"} xóa lớp Skills Lab - ${snapshot.course_code_snapshot} - ${snapshot.schedule_date.split("-").reverse().join("/")} - ${formatTimestampRecordCode(snapshot.created_at)}`
-          : `[MedLabs Calendar] ${eventLabels[event]} · ${snapshot.course_code_snapshot}`,
-      payload,
-    }));
+          ? [snapshot.course_code_snapshot, date, recordCode]
+          : [
+              payload.lecturer || payload.actor,
+              snapshot.course_code_snapshot,
+              date,
+              recordCode,
+            ];
+      return {
+        notification_type: `class_schedule_${event}`,
+        recipient_id: recipient.id,
+        recipient_email: recipient.email.toLowerCase(),
+        dedupe_key: `class_schedule:${snapshot.id}:${event}:${operationId}:${recipient.id}`,
+        subject: `${prefix}[${label.domain}][${label.tag}] ${label.text} - ${subjectTail.filter(Boolean).join(" - ")}`,
+        payload,
+      };
+    });
 
   if (!notifications.length) return [];
   const { error: insertError } = await supabase

@@ -257,6 +257,22 @@ test("Basic Medical equipment registration stays on a stable page flow", async (
   await expect(
     page.getByRole("combobox", { name: "Tên thiết bị dòng 2" }),
   ).toBeVisible();
+  await page.getByRole("combobox", { name: "Tên thiết bị dòng 2" }).click();
+  await page.getByRole("option", { name: catalogName }).click();
+  await page.getByRole("combobox", { name: "Tên thương mại dòng 2" }).click();
+  await page
+    .getByRole("option", { name: `E2E commercial ${fixture.suffix}` })
+    .click();
+  await page.locator('input[name="receive_date"]').fill(sourceDate);
+  await page.getByRole("button", { name: "Gửi đăng ký", exact: true }).click();
+  await expect(
+    page.locator(".equipment-request-form .form-error"),
+  ).toContainText(
+    "Cùng một tên thương mại thiết bị đã được đăng ký trong bài TN-TH này.",
+  );
+  await expect(
+    page.getByRole("button", { name: "Gửi đăng ký", exact: true }),
+  ).toHaveCount(1);
   await page.getByRole("button", { name: "Xóa", exact: true }).last().click();
 
   await page.locator('input[name="receive_date"]').fill(sourceDate);

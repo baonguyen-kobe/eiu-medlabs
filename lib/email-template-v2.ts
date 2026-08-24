@@ -198,7 +198,9 @@ function equipmentIntro(payload: Record<string, unknown>) {
   if (event === "late_approval_rejected")
     return "Phiếu đăng ký thiết bị đã bị từ chối đăng ký trễ. Vui lòng mở hệ thống để điều chỉnh và gửi lại.";
   if (event === "deleted")
-    return `Phiếu đăng ký thiết bị của ${registrant} đã bị xóa bởi <strong>${escapeHtml(payload.actor)}</strong>.`;
+    return payload.request_domain === "basic_medical"
+      ? `Phiếu đăng ký thiết bị của ${registrant} đã được hủy bởi <strong>${escapeHtml(payload.actor)}</strong>.`
+      : `Phiếu đăng ký thiết bị của ${registrant} đã bị xóa bởi <strong>${escapeHtml(payload.actor)}</strong>.`;
   if (audience === "admin")
     return event === "created"
       ? `Có phiếu đăng ký trang thiết bị mới do ${registrant} gửi.`
@@ -409,12 +411,20 @@ function renderBasicMedicalEquipmentDamage(notification: EmailNotification) {
         <tbody>${rows}</tbody>
       </table>
     </div>`;
+  const managementCopy = payload.audience === "admin";
+  const intro = managementCopy
+    ? `<strong>${escapeHtml(payload.reporter_name)}</strong> đã báo thiết bị hư khi xác nhận buổi học tại phòng <strong>${escapeHtml(room)}</strong>. Vui lòng kiểm tra danh sách thiết bị hư bên dưới.`
+    : `Hệ thống đã ghi nhận báo cáo thiết bị hư trong quá trình xác nhận buổi học tại phòng <strong>${escapeHtml(room)}</strong>. Thông tin đã được gửi đến bộ phận phụ trách Y cơ sở để kiểm tra và xử lý.`;
   return emailShell({
     subtitle: "Thiết bị phòng được báo Hư",
-    intro: `<strong>${escapeHtml(payload.reporter_name)}</strong> đã báo thiết bị hư khi xác nhận buổi học tại phòng <strong>${escapeHtml(room)}</strong>.`,
+    intro,
     content,
-    destination: `${appUrl}/basic-medical/equipment?tab=damaged`,
-    destinationLabel: "Mở danh sách thiết bị hư",
+    destination: managementCopy
+      ? `${appUrl}/basic-medical/equipment?tab=damaged`
+      : `${appUrl}/basic-medical/registrations`,
+    destinationLabel: managementCopy
+      ? "Mở danh sách thiết bị hư"
+      : "Mở Phiếu Y cơ sở",
   });
 }
 

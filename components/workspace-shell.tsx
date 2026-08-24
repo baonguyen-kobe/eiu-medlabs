@@ -35,6 +35,7 @@ import type { AppRole } from "@/lib/viewer";
 import { logout } from "@/app/login/actions";
 import { getNameInitials } from "@/lib/person-name";
 import { PageHeader } from "@/components/patterns/page-header";
+import { NotificationBell } from "@/components/notification-bell";
 import {
   canCreateBasicMedicalSchedules,
   canImportBasicMedicalSchedules,
@@ -649,7 +650,12 @@ export function WorkspaceShell({
           }
           title={title}
           description={description}
-          actions={actions}
+          actions={
+            <>
+              <NotificationBell />
+              {actions}
+            </>
+          }
         />
         <div className="workspace-content page-container">{children}</div>
       </main>

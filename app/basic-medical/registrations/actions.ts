@@ -67,6 +67,11 @@ function basicMedicalEquipmentRequestError(
   if (source.includes("EQUIPMENT_REQUEST_BASIC_MEDICAL_CATALOG_REQUIRED")) {
     return "Thiết bị đã chọn không còn hoạt động trong Danh mục Y cơ sở.";
   }
+  if (
+    source.includes("EQUIPMENT_REQUEST_DUPLICATE_COMMERCIAL_NAME_IN_ACTIVITY")
+  ) {
+    return "Cùng một tên thương mại thiết bị đã được đăng ký trong bài TN-TH này.";
+  }
   return "Không thể tạo phiếu đăng ký thiết bị Y cơ sở.";
 }
 
@@ -328,6 +333,17 @@ export async function updateBasicMedicalEquipmentRequest(
     },
   );
   if (error || !updatedId) {
+    if (
+      error?.message?.includes(
+        "EQUIPMENT_REQUEST_DUPLICATE_COMMERCIAL_NAME_IN_ACTIVITY",
+      )
+    ) {
+      return {
+        ok: false,
+        message:
+          "Cùng một tên thương mại thiết bị đã được đăng ký trong bài TN-TH này.",
+      };
+    }
     const source = error?.message ?? "";
     return {
       ok: false,

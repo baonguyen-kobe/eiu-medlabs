@@ -153,7 +153,7 @@ test("Nursing-only Staff cannot mutate Basic Medical inventory by table or RPC",
         },
       );
       assert.ok(error);
-      assert.match(error.message, /quyá»n|permission|MANAGER/i);
+      assert.equal(error.code, "42501");
     }
   } finally {
     await service.auth.admin.deleteUser(userId);

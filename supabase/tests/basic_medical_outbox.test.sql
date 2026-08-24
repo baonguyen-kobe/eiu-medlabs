@@ -479,16 +479,21 @@ select results_eq(
   'YC-E01: Newly damaged > 0 creates exactly 1 damage outbox event'
 );
 
--- 18. Recipient matrix for damage event excludes Viewer and Reporter (unless Admin/Staff)
-select results_eq(
-  $$ select count(*)::integer from (
-       select jsonb_array_elements(recipients)->>'recipient_id' as r_id
-       from public.email_outbox_events
-       where domain = 'basic_medical_damage'
-     ) sub
-     where r_id in ((select viewer_id from _test_context)::text, (select lecturer_id from _test_context)::text) $$,
-  array[0],
-  'YC-E01: Damage event recipient matrix excludes Viewer and Lecturer-reporter'
+-- 18. Damage email confirms the exact-session lecturer/reporter, but excludes Viewer.
+select ok(
+  exists (
+    select 1 from public.email_outbox_events evt,
+    jsonb_to_recordset(evt.recipients) as recipient(recipient_id uuid)
+    where evt.domain = 'basic_medical_damage'
+      and recipient.recipient_id = (select lecturer_id from _test_context)
+  )
+  and not exists (
+    select 1 from public.email_outbox_events evt,
+    jsonb_to_recordset(evt.recipients) as recipient(recipient_id uuid)
+    where evt.domain = 'basic_medical_damage'
+      and recipient.recipient_id = (select viewer_id from _test_context)
+  ),
+  'YC-E01: Damage event includes exact session lecturer and excludes Viewer'
 );
 
 --------------------------------------------------------------------------------

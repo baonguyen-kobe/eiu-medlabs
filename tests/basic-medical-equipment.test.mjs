@@ -52,10 +52,10 @@ test("phiếu chỉ hoàn thành khi mọi buổi có xác nhận còn hiệu l�
 test("tiêu đề email báo Hư dùng số phòng và tên phòng đã chốt", () => {
   assert.equal(
     equipment.basicMedicalDamageEmailSubject("114", "Phòng Thực hành"),
-    "[MedLabs Calendar] Thiết bị phòng 114 Phòng Thực hành được báo Hư",
+    "[MedLabs Calendar][Y cơ sở][Alert] Thiết bị phòng 114 Phòng Thực hành được báo Hư",
   );
   assert.equal(
     equipment.basicMedicalDamageEmailSubject("114", null),
-    "[MedLabs Calendar] Thiết bị phòng 114 được báo Hư",
+    "[MedLabs Calendar][Y cơ sở][Alert] Thiết bị phòng 114 được báo Hư",
   );
 });

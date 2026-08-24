@@ -520,8 +520,19 @@ test("Basic Medical equipment edit preserves its source and stays domain-local",
     );
     assert.deepEqual(
       lateEditEvents,
-      ["late_approval_requested", "late_approval_requested"],
-      "EMAIL-BM-05 late edit enqueues one late event instead of updated plus late",
+      ["late_approval_requested"],
+      "EMAIL-BM-05 pending late edit does not enqueue a duplicate late email",
+    );
+    assert.ok(
+      Number(
+        localSql(`
+          select count(*)
+          from public.user_notifications
+          where entity_id = '${requestLate}'
+            and notification_type = 'late_pending_updated';
+        `),
+      ) > 0,
+      "EMAIL-BM-05 pending late edit creates in-app stakeholder notifications",
     );
 
     const outboxRows = JSON.parse(
@@ -632,6 +643,8 @@ test("Basic Medical equipment edit preserves its source and stays domain-local",
     localSql(`
       begin;
       set local session_replication_role = replica;
+      delete from public.user_notifications
+      where entity_id in ('${requestA ?? "00000000-0000-0000-0000-000000000000"}', '${requestB ?? "00000000-0000-0000-0000-000000000000"}', '${requestLate ?? "00000000-0000-0000-0000-000000000000"}');
       delete from public.email_notifications
       where payload->>'request_id' in ('${requestA ?? "00000000-0000-0000-0000-000000000000"}', '${requestB ?? "00000000-0000-0000-0000-000000000000"}', '${requestLate ?? "00000000-0000-0000-0000-000000000000"}');
       delete from public.email_outbox_events
