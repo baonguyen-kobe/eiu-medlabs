@@ -247,9 +247,14 @@ export function isBasicMedicalRegistrationCompleted(
 export function basicMedicalDamageEmailSubject(
   roomCode: string,
   roomName?: string | null,
+  audience: "management" | "user" = "user",
 ) {
   const roomTitle = [roomCode.trim(), roomName?.trim()]
     .filter(Boolean)
     .join(" ");
-  return `[MedLabs Calendar] Thiết bị phòng ${roomTitle} được báo Hư`;
+  const prefix =
+    audience === "management"
+      ? "[Admin MedLabs Calendar]"
+      : "[MedLabs Calendar]";
+  return `${prefix}[Y cơ sở][Alert] Thiết bị phòng ${roomTitle} được báo Hư`;
 }

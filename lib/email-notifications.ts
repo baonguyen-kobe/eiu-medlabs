@@ -136,7 +136,9 @@ function equipmentIntro(payload: Record<string, unknown>) {
     return "Phiếu đăng ký thiết bị đã bị từ chối đăng ký trễ. Vui lòng mở hệ thống để điều chỉnh và gửi lại.";
   }
   if (event === "deleted") {
-    return `Phiếu đăng ký thiết bị của <strong>${escapeHtml(payload.registrant_name)}</strong> đã bị xóa bởi <strong>${escapeHtml(payload.actor)}</strong>.`;
+    return payload.request_domain === "basic_medical"
+      ? `Phiếu đăng ký thiết bị của <strong>${escapeHtml(payload.registrant_name)}</strong> đã được hủy bởi <strong>${escapeHtml(payload.actor)}</strong>.`
+      : `Phiếu đăng ký thiết bị của <strong>${escapeHtml(payload.registrant_name)}</strong> đã bị xóa bởi <strong>${escapeHtml(payload.actor)}</strong>.`;
   }
   if (audience === "admin") {
     return event === "created"
@@ -166,7 +168,9 @@ function equipmentIntroText(payload: Record<string, unknown>) {
     return "Phiếu đăng ký thiết bị đã bị từ chối đăng ký trễ. Vui lòng mở hệ thống để điều chỉnh và gửi lại.";
   }
   if (event === "deleted") {
-    return `Phiếu đăng ký thiết bị của ${payload.registrant_name ?? ""} đã bị xóa bởi ${payload.actor ?? "Người dùng hệ thống"}.`;
+    return payload.request_domain === "basic_medical"
+      ? `Phiếu đăng ký thiết bị của ${payload.registrant_name ?? ""} đã được hủy bởi ${payload.actor ?? "Người dùng hệ thống"}.`
+      : `Phiếu đăng ký thiết bị của ${payload.registrant_name ?? ""} đã bị xóa bởi ${payload.actor ?? "Người dùng hệ thống"}.`;
   }
   if (audience === "admin") {
     return event === "created"
@@ -481,7 +485,7 @@ function renderBasicMedicalEquipmentDamageEmail(
     <div style="max-width:900px;margin:0 auto;padding:24px;font-family:Verdana,Arial,sans-serif;color:#17324d;line-height:1.5">
       <div style="background:#173f6b;color:white;padding:18px 20px"><h2 style="margin:0">MedLabs Calendar</h2><div>Thiết bị phòng được báo Hư</div></div>
       <div style="background:white;padding:20px;border:1px solid #e4d8c8">
-        <p><strong>${escapeHtml(payload.reporter_name)}</strong> đã báo thiết bị hư tại phòng <strong>${escapeHtml(room)}</strong>.</p>
+        <p>${payload.audience === "admin" ? `<strong>${escapeHtml(payload.reporter_name)}</strong> đã báo thiết bị hư khi xác nhận buổi học tại phòng <strong>${escapeHtml(room)}</strong>. Vui lòng kiểm tra danh sách thiết bị hư bên dưới.` : `Hệ thống đã ghi nhận báo cáo thiết bị hư trong quá trình xác nhận buổi học tại phòng <strong>${escapeHtml(room)}</strong>. Thông tin đã được gửi đến bộ phận phụ trách Y cơ sở để kiểm tra và xử lý.`}</p>
         <table style="border-collapse:collapse;width:100%"><thead><tr><th>#</th><th>Thiết bị</th><th>Tên thương mại</th><th>ĐVT</th><th>Hư mới</th><th>Tốt</th><th>Hư</th></tr></thead><tbody>${rows}</tbody></table>
         <p><a href="${escapeHtml(`${appUrl}/basic-medical/equipment?tab=damaged`)}">Mở danh sách thiết bị hư</a></p>
         <p>Trân trọng,<br>EIU - MedLabs</p>
@@ -508,6 +512,10 @@ function renderBasicMedicalEquipmentDamageText(
     .join(" · ");
   const lines = [
     notification.subject,
+    "",
+    payload.audience === "admin"
+      ? `${payload.reporter_name ?? "Người dùng"} đã báo thiết bị hư khi xác nhận buổi học tại phòng ${room}. Vui lòng kiểm tra danh sách thiết bị hư bên dưới.`
+      : `Hệ thống đã ghi nhận báo cáo thiết bị hư trong quá trình xác nhận buổi học tại phòng ${room}. Thông tin đã được gửi đến bộ phận phụ trách Y cơ sở để kiểm tra và xử lý.`,
     "",
     `Người báo hư: ${payload.reporter_name ?? ""}`,
     `Phòng: ${room}`,

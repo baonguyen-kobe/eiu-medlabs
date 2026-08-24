@@ -391,7 +391,7 @@ select ok(
   exists (
     select 1 from public.email_notifications
     where notification_type = 'class_schedule_basic_medical_updated'
-      and subject = '[MedLabs Calendar] Điều chỉnh lịch Y cơ sở · BM-TEST-101'
+      and subject = '[MedLabs Calendar][Y cơ sở][Adjusted] Điều chỉnh lịch Y cơ sở - BM-TEST-101'
   ),
   'Processor created email_notifications with correct type and subject'
 );
@@ -513,7 +513,7 @@ select ok(
   exists (
     select 1 from public.email_notifications
     where notification_type = 'class_schedule_basic_medical_cancelled'
-      and subject = '[MedLabs Calendar] Hủy lịch Y cơ sở · BM-TEST-101'
+      and subject = '[MedLabs Calendar][Y cơ sở][Cancelled] Hủy lịch Y cơ sở - BM-TEST-101'
   ),
   'Processor created cancelled notification with correct type and subject'
 );

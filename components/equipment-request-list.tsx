@@ -17,6 +17,7 @@ import {
   updateEquipmentRequestStatus,
 } from "@/app/equipment/actions";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { EquipmentRequestLifecycleHistory } from "@/components/equipment-request-lifecycle-history";
 import { Download, Search, Trash2 } from "@/components/icons";
 import { PaginationControls } from "@/components/pagination-controls";
 import { SearchableCombobox } from "@/components/searchable-combobox";
@@ -1528,6 +1529,9 @@ export function EquipmentRequestList({
                                     : "Chưa"}
                                 </span>
                               </div>
+                              <EquipmentRequestLifecycleHistory
+                                requestId={request.id}
+                              />
                             </div>
                           ) : null}
                           <dl className="detail-list equipment-request-detail-grid">
