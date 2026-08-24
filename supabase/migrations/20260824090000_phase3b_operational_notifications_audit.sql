@@ -369,15 +369,31 @@ returns text language plpgsql stable security definer set search_path = '' as $$
 declare prefix text := case when target_audience = 'admin' then '[Admin MedLabs Calendar]' else '[MedLabs Calendar]' end;
 declare course_code text := coalesce(target_payload->>'course_code', '');
 declare imported_rows text := coalesce(target_payload->>'imported_rows', '0');
+declare lecturer_name text := coalesce(nullif(target_payload->>'lecturer', ''), nullif(target_payload->>'actor', ''), 'Giảng viên');
+declare schedule_date text := '';
+declare record_code text := coalesce(nullif(target_payload->>'request_code', ''), nullif(target_payload->>'record_code', ''));
+declare identifying_tail text;
 begin
-  if target_event_type = 'class_schedule_created' then return concat(prefix, '[Skills Lab][New] Lịch Skills Lab mới - ', course_code); end if;
+  if nullif(target_payload->>'schedule_date', '') is not null then
+    schedule_date := to_char((target_payload->>'schedule_date')::date, 'DD/MM/YYYY');
+  end if;
+  identifying_tail := concat_ws(' - ', lecturer_name, nullif(schedule_date, ''), nullif(course_code, ''), nullif(record_code, ''));
+  if target_event_type = 'class_schedule_created' then return concat(prefix, '[Skills Lab][New] Lịch Skills Lab mới - ', identifying_tail); end if;
   if target_event_type = 'class_schedule_import_summary' then return concat(prefix, '[Skills Lab][Import] Cập nhật lịch sử import - ', imported_rows, ' lịch mới'); end if;
-  if target_event_type = 'class_schedule_rescheduled' then return concat(prefix, '[Skills Lab][Adjusted] Đổi ngày học - ', course_code); end if;
-  if target_event_type = 'skills_lab_deleted' then return concat(prefix, '[Skills Lab][Deleted] Xóa lịch Skills Lab - ', course_code); end if;
+  if target_event_type = 'class_schedule_rescheduled' then return concat(prefix, '[Skills Lab][Adjusted] Đổi ngày học - ', identifying_tail); end if;
+  if target_event_type = 'skills_lab_deleted' then return concat(prefix, '[Skills Lab][Deleted] Xóa lịch Skills Lab - ', concat_ws(' - ', nullif(course_code, ''), nullif(schedule_date, ''), nullif(record_code, ''))); end if;
   return concat(prefix, '[Skills Lab][New] Lịch Skills Lab - ', course_code);
 end;
 $$;
 revoke all on function private.format_skills_lab_email_subject(text,jsonb,text) from public, anon, authenticated;
+create or replace function private.format_skills_lab_email_subject(
+  target_event_type text,
+  target_payload jsonb
+)
+returns text language sql stable security definer set search_path = '' as $$
+  select private.format_skills_lab_email_subject(target_event_type, target_payload, 'registrant');
+$$;
+revoke all on function private.format_skills_lab_email_subject(text,jsonb) from public, anon, authenticated;
 
 create or replace function private.format_basic_medical_registration_subject(
   target_event_type text,
@@ -387,14 +403,36 @@ create or replace function private.format_basic_medical_registration_subject(
 returns text language plpgsql stable security definer set search_path = '' as $$
 declare prefix text := case when target_audience = 'admin' then '[Admin MedLabs Calendar]' else '[MedLabs Calendar]' end;
 declare course_code text := coalesce(target_payload->>'course_code', '');
+declare registrant_name text := coalesce(nullif(target_payload->>'registrant_name', ''), 'Giảng viên');
+declare start_date text := '';
+declare end_date text := '';
+declare registration_code text := coalesce(nullif(target_payload->>'registration_code', ''), '');
+declare date_range text;
+declare identifying_tail text;
 begin
-  if target_event_type = 'created' then return concat(prefix, '[Y cơ sở][New] Có Phiếu Y cơ sở mới - ', course_code); end if;
-  if target_event_type = 'updated' then return concat(prefix, '[Y cơ sở][Adjusted] Điều chỉnh Phiếu Y cơ sở - ', course_code); end if;
-  if target_event_type = 'cancelled' then return concat(prefix, '[Y cơ sở][Cancelled] Hủy Phiếu Y cơ sở - ', course_code); end if;
+  if nullif(target_payload->>'start_date', '') is not null then
+    start_date := to_char((target_payload->>'start_date')::date, 'DD/MM/YYYY');
+  end if;
+  if nullif(target_payload->>'end_date', '') is not null then
+    end_date := to_char((target_payload->>'end_date')::date, 'DD/MM/YYYY');
+  end if;
+  date_range := case when start_date = '' then '' when end_date = '' or end_date = start_date then start_date else concat(start_date, ' - ', end_date) end;
+  identifying_tail := concat_ws(' - ', registrant_name, nullif(course_code, ''), nullif(date_range, ''), nullif(registration_code, ''));
+  if target_event_type = 'created' then return concat(prefix, '[Y cơ sở][New] Có Phiếu Y cơ sở mới - ', identifying_tail); end if;
+  if target_event_type = 'updated' then return concat(prefix, '[Y cơ sở][Adjusted] Điều chỉnh Phiếu Y cơ sở - ', identifying_tail); end if;
+  if target_event_type = 'cancelled' then return concat(prefix, '[Y cơ sở][Cancelled] Hủy Phiếu Y cơ sở - ', identifying_tail); end if;
   return concat(prefix, '[Y cơ sở][New] Phiếu Y cơ sở - ', course_code);
 end;
 $$;
 revoke all on function private.format_basic_medical_registration_subject(text,jsonb,text) from public, anon, authenticated;
+create or replace function private.format_basic_medical_registration_subject(
+  target_event_type text,
+  target_payload jsonb
+)
+returns text language sql stable security definer set search_path = '' as $$
+  select private.format_basic_medical_registration_subject(target_event_type, target_payload, 'registrant');
+$$;
+revoke all on function private.format_basic_medical_registration_subject(text,jsonb) from public, anon, authenticated;
 
 create or replace function private.format_basic_medical_damage_subject(
   target_payload jsonb,

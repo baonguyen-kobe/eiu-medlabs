@@ -1,9 +1,13 @@
 "use client";
 
 import { Bell } from "@/components/icons";
+import {
+  markNotificationBeforeNavigation,
+  notificationBadgeText,
+} from "@/lib/notification-bell-state";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type UserNotification = {
   id: string;
@@ -35,11 +39,7 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<UserNotification[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
-
-  const unreadCount = useMemo(
-    () => notifications.filter((notification) => !notification.read_at).length,
-    [notifications],
-  );
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     const supabase = createClient();
@@ -47,12 +47,20 @@ export function NotificationBell() {
     let channel: ReturnType<typeof supabase.channel> | null = null;
 
     async function refreshNotifications() {
-      const { data } = await supabase
-        .from("user_notifications")
-        .select("id,title,body,href,read_at,created_at")
-        .order("created_at", { ascending: false })
-        .limit(30);
-      if (active && data) setNotifications(data as UserNotification[]);
+      const [{ data }, { count }] = await Promise.all([
+        supabase
+          .from("user_notifications")
+          .select("id,title,body,href,read_at,created_at")
+          .order("created_at", { ascending: false })
+          .limit(30),
+        supabase
+          .from("user_notifications")
+          .select("id", { count: "exact", head: true })
+          .is("read_at", null),
+      ]);
+      if (!active) return;
+      if (data) setNotifications(data as UserNotification[]);
+      if (count !== null) setUnreadCount(count);
     }
 
     void supabase.auth.getUser().then(({ data }) => {
@@ -101,29 +109,36 @@ export function NotificationBell() {
 
   async function markRead(id: string) {
     const supabase = createClient();
-    await supabase
+    const readAt = new Date().toISOString();
+    const { data, error } = await supabase
       .from("user_notifications")
-      .update({ read_at: new Date().toISOString() })
+      .update({ read_at: readAt })
       .eq("id", id)
-      .is("read_at", null);
+      .is("read_at", null)
+      .select("id");
+    if (error) return false;
+    if (!data?.length) return true;
     setNotifications((current) =>
       current.map((notification) =>
         notification.id === id && !notification.read_at
-          ? { ...notification, read_at: new Date().toISOString() }
+          ? { ...notification, read_at: readAt }
           : notification,
       ),
     );
+    setUnreadCount((current) => Math.max(0, current - 1));
+    return true;
   }
 
   async function markAllRead() {
     if (!userId || unreadCount === 0) return;
     const readAt = new Date().toISOString();
     const supabase = createClient();
-    await supabase
+    const { error } = await supabase
       .from("user_notifications")
       .update({ read_at: readAt })
       .eq("recipient_id", userId)
       .is("read_at", null);
+    if (error) return;
     setNotifications((current) =>
       current.map((notification) =>
         notification.read_at
@@ -131,6 +146,7 @@ export function NotificationBell() {
           : { ...notification, read_at: readAt },
       ),
     );
+    setUnreadCount(0);
   }
 
   return (
@@ -147,9 +163,9 @@ export function NotificationBell() {
         type="button"
       >
         <Bell size={20} />
-        {unreadCount ? (
+        {notificationBadgeText(unreadCount) ? (
           <span className="notification-badge" aria-hidden="true">
-            {unreadCount > 99 ? "99+" : unreadCount}
+            {notificationBadgeText(unreadCount)}
           </span>
         ) : null}
       </button>
@@ -176,10 +192,14 @@ export function NotificationBell() {
                 <button
                   className={`notification-item${notification.read_at ? "" : " unread"}`}
                   key={notification.id}
-                  onClick={() => {
-                    void markRead(notification.id);
-                    setOpen(false);
-                    if (notification.href) router.push(notification.href);
+                  onClick={async () => {
+                    await markNotificationBeforeNavigation({
+                      markRead: () => markRead(notification.id),
+                      close: () => setOpen(false),
+                      navigate: notification.href
+                        ? () => router.push(notification.href!)
+                        : undefined,
+                    });
                   }}
                   type="button"
                 >

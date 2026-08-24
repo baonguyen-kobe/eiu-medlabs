@@ -36,30 +36,43 @@ export async function enqueueBasicMedicalEquipmentDamageEmails({
     .eq("id", confirmationId)
     .maybeSingle();
   if (confirmationError) throw new Error(confirmationError.message);
-  const [{ data: profiles, error }, { data: schedule, error: scheduleError }] =
-    await Promise.all([
-      supabase
-        .from("profiles")
-        .select(
-          "id,email,is_active,user_roles(role),profile_room_types(room_type_id)",
-        )
-        .eq("is_active", true),
-      supabase
-        .from("class_schedules")
-        .select(
-          "course_code_snapshot,course_name_snapshot,schedule_date,start_time,end_time",
-        )
-        .eq(
-          "id",
-          confirmation?.class_schedule_id_snapshot ??
-            "00000000-0000-0000-0000-000000000000",
-        )
-        .maybeSingle(),
-    ]);
+  const [
+    { data: profiles, error },
+    { data: schedule, error: scheduleError },
+    { data: registration, error: registrationError },
+  ] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select(
+        "id,email,is_active,user_roles(role),profile_room_types(room_type_id)",
+      )
+      .eq("is_active", true),
+    supabase
+      .from("class_schedules")
+      .select(
+        "course_code_snapshot,course_name_snapshot,schedule_date,start_time,end_time",
+      )
+      .eq(
+        "id",
+        confirmation?.class_schedule_id_snapshot ??
+          "00000000-0000-0000-0000-000000000000",
+      )
+      .maybeSingle(),
+    supabase
+      .from("basic_medical_registrations")
+      .select("registrant_id")
+      .eq(
+        "id",
+        confirmation?.registration_id_snapshot ??
+          "00000000-0000-0000-0000-000000000000",
+      )
+      .maybeSingle(),
+  ]);
   if (error) throw new Error(error.message);
   if (scheduleError) throw new Error(scheduleError.message);
+  if (registrationError) throw new Error(registrationError.message);
 
-  const registrantId = confirmation?.registration_id_snapshot;
+  const registrantId = registration?.registrant_id;
   const teachingLecturerId = confirmation?.teaching_lecturer_id_snapshot;
   const recipients = (profiles ?? []).filter((profile) => {
     if (profile.id === registrantId || profile.id === teachingLecturerId) {

@@ -14,6 +14,8 @@ type LifecycleAuditEntry = {
 };
 
 const actionLabels: Record<string, string> = {
+  "equipment_request.cancelled": "Phiếu đã được hủy",
+  "equipment_request.hard_deleted": "Phiếu đã được xóa",
   "equipment_request.status_changed": "Điều chỉnh trạng thái phiếu",
   "equipment_request.handover_staff_confirmed": "Kho xác nhận giao",
   "equipment_request.handover_recipient_signed": "Người nhận ký xác nhận giao",

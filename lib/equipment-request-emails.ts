@@ -105,6 +105,10 @@ function subjectForAudience({
         return `[Admin MedLabs Calendar]${domain}[Adjusted] Điều chỉnh phiếu đăng ký thiết bị - ${baseSubject}`;
       if (event === "deleted")
         return `[Admin MedLabs Calendar]${domain}[Cancelled] Hủy phiếu đăng ký thiết bị - ${baseSubject}`;
+      if (event === "late_approval_approved")
+        return `[Admin MedLabs Calendar]${domain}[Late] Đã duyệt đăng ký trễ - ${baseSubject}`;
+      if (event === "late_approval_rejected")
+        return `[Admin MedLabs Calendar]${domain}[Late] Đã từ chối đăng ký trễ - ${baseSubject}`;
       return `[Admin MedLabs Calendar]${domain}[Late] Có phiếu chờ duyệt đăng ký trễ - ${baseSubject}`;
     }
     if (audience === "responsible") {
@@ -114,6 +118,10 @@ function subjectForAudience({
         return `[MedLabs Calendar]${domain}[Adjusted] Điều chỉnh phiếu đăng ký thiết bị - ${baseSubject}`;
       if (event === "deleted")
         return `[MedLabs Calendar]${domain}[Cancelled] Hủy phiếu đăng ký thiết bị - ${baseSubject}`;
+      if (event === "late_approval_approved")
+        return `[MedLabs Calendar]${domain}[Late] Đã duyệt đăng ký trễ - ${baseSubject}`;
+      if (event === "late_approval_rejected")
+        return `[MedLabs Calendar]${domain}[Late] Đã từ chối đăng ký trễ - ${baseSubject}`;
       return `[MedLabs Calendar]${domain}[Late] Phiếu thiết bị buổi học bạn phụ trách đăng ký trễ - ${baseSubject}`;
     }
     if (event === "created")
@@ -122,6 +130,10 @@ function subjectForAudience({
       return `[MedLabs Calendar]${domain}[Adjusted] Điều chỉnh phiếu đăng ký thiết bị - ${baseSubject}`;
     if (event === "deleted")
       return `[MedLabs Calendar]${domain}[Cancelled] Hủy phiếu đăng ký thiết bị - ${baseSubject}`;
+    if (event === "late_approval_approved")
+      return `[MedLabs Calendar]${domain}[Late] Đã duyệt đăng ký trễ - ${baseSubject}`;
+    if (event === "late_approval_rejected")
+      return `[MedLabs Calendar]${domain}[Late] Đã từ chối đăng ký trễ - ${baseSubject}`;
     return `[MedLabs Calendar]${domain}[Late] Gửi phiếu đăng ký thiết bị trễ - ${baseSubject}`;
   }
   if (audience === "admin") {

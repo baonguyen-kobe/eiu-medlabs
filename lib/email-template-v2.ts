@@ -419,8 +419,12 @@ function renderBasicMedicalEquipmentDamage(notification: EmailNotification) {
     subtitle: "Thiết bị phòng được báo Hư",
     intro,
     content,
-    destination: `${appUrl}/basic-medical/equipment?tab=damaged`,
-    destinationLabel: "Mở danh sách thiết bị hư",
+    destination: managementCopy
+      ? `${appUrl}/basic-medical/equipment?tab=damaged`
+      : `${appUrl}/basic-medical/registrations`,
+    destinationLabel: managementCopy
+      ? "Mở danh sách thiết bị hư"
+      : "Mở Phiếu Y cơ sở",
   });
 }
 

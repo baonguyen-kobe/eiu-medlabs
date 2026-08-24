@@ -167,12 +167,23 @@ export async function enqueueScheduleEventEmails({
         ? "[Admin MedLabs Calendar]"
         : "[MedLabs Calendar]";
       const label = eventLabels[event];
+      const recordCode = formatTimestampRecordCode(snapshot.created_at);
+      const date = snapshot.schedule_date.split("-").reverse().join("/");
+      const subjectTail =
+        event === "skills_lab_deleted"
+          ? [snapshot.course_code_snapshot, date, recordCode]
+          : [
+              payload.lecturer || payload.actor,
+              snapshot.course_code_snapshot,
+              date,
+              recordCode,
+            ];
       return {
         notification_type: `class_schedule_${event}`,
         recipient_id: recipient.id,
         recipient_email: recipient.email.toLowerCase(),
         dedupe_key: `class_schedule:${snapshot.id}:${event}:${operationId}:${recipient.id}`,
-        subject: `${prefix}[${label.domain}][${label.tag}] ${label.text} - ${snapshot.course_code_snapshot} - ${snapshot.schedule_date.split("-").reverse().join("/")} - ${formatTimestampRecordCode(snapshot.created_at)}`,
+        subject: `${prefix}[${label.domain}][${label.tag}] ${label.text} - ${subjectTail.filter(Boolean).join(" - ")}`,
         payload,
       };
     });

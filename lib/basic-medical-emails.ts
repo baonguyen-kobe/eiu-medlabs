@@ -102,7 +102,10 @@ export async function enqueueBasicMedicalRegistrationEmails({
   const registrationCode = formatBasicMedicalRegistrationCode(
     snapshot.registration_code,
   );
-  const dateRange = `${snapshot.start_date.split("-").reverse().join("/")} - ${snapshot.end_date.split("-").reverse().join("/")}`;
+  const startDate = snapshot.start_date.split("-").reverse().join("/");
+  const endDate = snapshot.end_date.split("-").reverse().join("/");
+  const dateRange =
+    startDate === endDate ? startDate : `${startDate} - ${endDate}`;
   const subjectDetails = `${snapshot.registrant?.full_name ?? "Giảng viên"} - ${snapshot.course?.course_code ?? "Môn học"} - ${dateRange} - ${registrationCode}`;
   const payload = {
     registration_id: snapshot.id,
