@@ -26,11 +26,11 @@ Phase 2 — Shared accessibility and UI foundations
 
 ## Active task
 
-FORM-01
+A11Y-04
 
 **Status:** IN_PROGRESS
 
-**Starting commit:** `1c7acec55b1b7b32d504bd9bdcf3e6a2324d00f7`
+**Starting commit:** `dc675c6bbc10c5a0b707ca7dd58502ded42c1859`
 
 ## Recently completed
 
@@ -38,17 +38,16 @@ AUTH-01 — DONE
 
 A11Y-03 — VERIFY
 
-- Implementation commit: `df72c829ae293cedd590559b8b4bc0bdd820a551`
-- Awaiting user review of keyboard behavior.
-
 TABLE-01 — VERIFY
 
-- Implementation commit: `1c7acec55b1b7b32d504bd9bdcf3e6a2324d00f7`
-- Awaiting user review of local table-scroll behavior.
+FORM-01 — VERIFY
+
+- Implementation commit: `dc675c6bbc10c5a0b707ca7dd58502ded42c1859`
+- `getFieldAria` adopted by TimePicker; awaiting user review of field error semantics.
 
 ## Next batch task
 
-FORM-01 is active. Do not claim A11Y-04 until FORM-01 verification is recorded.
+A11Y-04 is active. Do not claim TOUCH-01 or PILOT-01.
 
 ## Blocked tasks
 
