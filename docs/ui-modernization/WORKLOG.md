@@ -302,3 +302,16 @@ PERF-01 is `DONE`; manual user review deferred by explicit overnight authorizati
 ### Task state
 
 INT-01 is `DONE` at `24d9efa`; manual user review deferred by explicit authorization for MEGA RUN A v2. BASE-01 started next.
+
+## 2026-08-25 — BASE-01 authenticated protected baseline
+
+### Evidence
+
+- Used the approved local Supabase runtime and local administrator account only; no production dependency or auth bypass.
+- Authenticated password login and the WorkspaceShell/topbar rendered successfully.
+- At 375/768/1024/1440, `/dashboard`, `/classes/open`, `/staff-shifts`, `/equipment/requests`, `/basic-medical/registrations`, `/basic-medical/equipment`, and `/admin/personnel` each rendered their expected page heading and representative data surface without page-level horizontal overflow.
+- Existing limitations were retained as tracked: pointer-only signature interaction (DEC-UI-013/A11Y-01), incomplete overlay focus contracts (A11Y-02), and route-family-specific mobile/state work.
+
+### Task state
+
+BASE-01 is `DONE`; manual user review deferred by explicit authorization for MEGA RUN A v2. A11Y-02 started next.

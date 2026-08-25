@@ -26,11 +26,11 @@ Phase 2 — Shared accessibility and UI foundations
 
 ## Active task
 
-BASE-01
+A11Y-02
 
 **Status:** IN_PROGRESS
 
-**Starting commit:** `24d9efa`
+**Starting commit:** `3de3271`
 
 ## Recently completed
 
@@ -58,7 +58,7 @@ PERF-01 — DONE
 
 ## Next batch task
 
-BASE-01 is active. Do not claim A11Y-02 until its local authenticated baseline evidence is recorded.
+A11Y-02 is active. Inventory the current overlay families and shared interaction behavior before changing consumers.
 
 ## Blocked tasks
 
