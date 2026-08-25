@@ -21,6 +21,7 @@ import {
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { Trash2 } from "@/components/icons";
+import { useOverlayFocus } from "@/components/use-overlay-focus";
 import { formatBasicMedicalRegistrationCode } from "@/lib/basic-medical-registration-code";
 import {
   activeSessionConfirmation,
@@ -90,19 +91,18 @@ function BasicMedicalConfirmationModal({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawingRef = useRef(false);
   const [hasInk, setHasInk] = useState(false);
+  const modalRef = useRef<HTMLElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const signatureConditionRef = useRef<HTMLButtonElement>(null);
+  const conditionContinueRef = useRef<HTMLButtonElement>(null);
 
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !isPending) onClose();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [isPending, onClose]);
+  useOverlayFocus({
+    open: true,
+    containerRef: modalRef,
+    initialFocusRef: closeRef,
+    pending: isPending,
+    onDismiss: onClose,
+  });
 
   useEffect(() => {
     if (stage !== "signature") return;
@@ -120,6 +120,11 @@ function BasicMedicalConfirmationModal({
       context.lineWidth = 2.5;
       context.strokeStyle = "#173f6b";
     }
+  }, [stage]);
+
+  useEffect(() => {
+    if (stage !== "signature") return;
+    requestAnimationFrame(() => signatureConditionRef.current?.focus());
   }, [stage]);
 
   function pointFromEvent(event: ReactPointerEvent<HTMLCanvasElement>) {
@@ -195,6 +200,8 @@ function BasicMedicalConfirmationModal({
       />
       <section
         className="equipment-modal basic-medical-confirmation-modal"
+        ref={modalRef}
+        data-overlay-focus-root="true"
         role="dialog"
         aria-modal="true"
         aria-labelledby="basic-medical-confirmation-title"
@@ -213,6 +220,7 @@ function BasicMedicalConfirmationModal({
             </p>
           </div>
           <button
+            ref={closeRef}
             type="button"
             className="equipment-modal-close"
             disabled={isPending}
@@ -350,6 +358,7 @@ function BasicMedicalConfirmationModal({
                   Hủy
                 </button>
                 <button
+                  ref={conditionContinueRef}
                   type="button"
                   className="button button-primary"
                   onClick={validateAndContinue}
@@ -365,10 +374,15 @@ function BasicMedicalConfirmationModal({
                 phòng.
               </p>
               <button
+                ref={signatureConditionRef}
                 type="button"
                 className="button button-secondary basic-medical-condition-trigger"
-                disabled={isPending}
-                onClick={() => setStage("condition")}
+                onClick={() => {
+                  setStage("condition");
+                  requestAnimationFrame(() =>
+                    conditionContinueRef.current?.focus(),
+                  );
+                }}
               >
                 Thay đổi tình trạng thiết bị phòng
               </button>
