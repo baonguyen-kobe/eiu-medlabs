@@ -231,8 +231,8 @@ PILOT-01 is `DONE`; manual user review deferred by explicit overnight authorizat
 
 ### Work
 
-- Applied Strategy B only to read-only narrow class rows: hide course code and student count.
-- Editable rows retain all controls and the existing local scroll contract.
+- Applied Strategy B only when the current table is fully read-only: hide course code and student count.
+- Mixed tables deliberately retain those shared columns because hiding cells per row would break HTML table geometry; editable rows retain all controls and the existing local scroll contract.
 
 ### Verification
 
