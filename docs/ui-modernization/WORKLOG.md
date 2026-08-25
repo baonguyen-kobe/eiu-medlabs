@@ -97,3 +97,21 @@ AUTH-01 is `DONE`. No successor task was started.
 - `01065037e3e7fe8e90da73a132b4050b782a0ebb` — `fix(AUTH-01): unify password recovery auth shell`
 - `cdbcd1e339736cb2476e7b72e5ce2a352b4f6660` — `fix(AUTH-01): preserve focus during pending submits`
 - `de471341a192fda6e8a62512be2738101a591128` — `fix(AUTH-01): apply approved auth visual polish`
+
+## 2026-08-25 — AUTH-01 continuity/design-governance reconciliation
+
+### Work
+
+- AUTH-01 remains `DONE`; no successor task was claimed.
+- Synchronized the canonical UI Master with approved Authentication Family rules.
+- Recorded source-first UI interpretation and the user visual-acceptance gate.
+- Recorded UI-only local preview/backend-isolation policy.
+- Corrected current continuity so `main` startup directs agents to `ui-modernization`.
+
+### Application source changed
+
+NO
+
+### Evidence
+
+- Final AUTH-01 closure commit: `f570bafddd932149f651b0d689793978b4644323`.

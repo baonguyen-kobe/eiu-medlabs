@@ -62,5 +62,5 @@ N/A
 App Router page routes represented: 32
 Rendered-screen routes represented: 29
 Redirect/alias routes represented: 3
-Protected rendered baseline: BLOCKED — approved authentication/environment unavailable
+Protected rendered baseline: BLOCKED — an approved authenticated protected-route baseline has not been established; local Supabase UI preview is not equivalent to BASE-01
 ```

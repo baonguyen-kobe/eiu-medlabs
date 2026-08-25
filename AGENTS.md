@@ -48,6 +48,19 @@ For new or substantially modified source files, treat 350 lines as a review sign
 
 For every MedLabs UI/UX implementation or review task, read `docs/UI_DESIGN_SYSTEM_V2_MASTER.md` before modifying UI. After existing business/security requirements, it is the canonical UI authority. Do not recreate or copy the full Master into prompts or new files; when the user approves a UI rule change, update this file first and then implement against it.
 
+## Source-first UI correction interpretation
+
+Before formulating or executing a user UI correction:
+
+1. Inspect the current component/source.
+2. Inspect the relevant CSS and selectors.
+3. Determine the actual responsive breakpoint.
+4. Inspect shared consumers and blast radius when relevant.
+5. Consult the canonical UI Master.
+6. Compare the request or screenshot against that real implementation.
+
+Do not infer scope, selector, breakpoint, ownership, or shared impact from a screenshot alone when source inspection resolves it. Use GitNexus for complex shared components when useful; direct inspection is sufficient for localized work. **DISCOVER → VERIFY → REUSE → MODIFY** remains governing.
+
 OpenSpec lifecycle:
 
 1. `$openspec-propose` for a large change.
@@ -60,6 +73,8 @@ The persistent UI/UX/responsive modernization state is stored in:
 
 `docs/ui-modernization/`
 
+If this checkout is `main` and UI modernization is active, fetch `origin`, confirm `origin/ui-modernization` exists, switch to `ui-modernization`, then re-read `CURRENT.md`, `TRACKER.md`, and `DECISIONS.md` before source work. Do not implement UI modernization directly on `main`; it is the durable bootstrap and current-continuity mirror.
+
 For any UI modernization, responsive, accessibility, design-system, frontend-polish, or related continuation task:
 
 1. Read `docs/ui-modernization/README.md`.
@@ -71,12 +86,19 @@ For any UI modernization, responsive, accessibility, design-system, frontend-pol
 7. Before ending the task, update the tracking files required by the session-end protocol.
 8. Never mark `DONE` without applicable verification evidence.
 
+### User visual acceptance gate
+
+For user-visible visual changes: implement → technical/rendered verification → localhost preview → user visual review → approved polish → quick regression → commit/push → `DONE`.
+
+During active user visual review, keep the task `VERIFY`, keep localhost available when practical, and do not commit/push iterative visual revisions unless the user approves it or interruption safety requires a clearly recorded checkpoint. After explicit acceptance, run the smallest relevant final regression, update tracking, and move `VERIFY` to `DONE`. This gate does not apply mechanically to documentation-only or non-visual work.
+
 If the user says only `continue`, `resume`, `proceed`, `tiếp tục`, `làm tiếp`, `đọc repo rồi tiếp tục`, or equivalent while UI modernization is active:
 
-1. Read `CURRENT.md` and `TRACKER.md`.
-2. Inspect Git status, diff, branch, and commit.
-3. Resume the recorded `IN_PROGRESS` task, or take the first eligible `READY` task.
-4. If Git and tracking disagree, reconcile Git history, the diff, `WORKLOG.md`, and `TRACKER.md`; report the inconsistency before destructive action.
+1. If on `main`, fetch `origin`, confirm and switch to `ui-modernization`, then re-read continuity files.
+2. Read `CURRENT.md` and `TRACKER.md`.
+3. Inspect Git status, diff, branch, and commit.
+4. Resume the recorded `IN_PROGRESS` task, or take the first eligible `READY` task.
+5. If Git and tracking disagree, reconcile Git history, the diff, `WORKLOG.md`, and `TRACKER.md`; report the inconsistency before destructive action.
 
 An explicit current user request always takes precedence over automatic continuation. Do not redirect unrelated work into UI modernization.
 

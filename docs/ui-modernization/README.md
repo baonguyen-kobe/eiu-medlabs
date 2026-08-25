@@ -45,12 +45,26 @@ git branch --show-current
 git rev-parse HEAD
 ```
 
+If this checkout is `main` and UI modernization is active:
+
+1. `git fetch origin`
+2. Confirm `origin/ui-modernization` exists.
+3. `git switch ui-modernization`
+4. Re-read `CURRENT.md`, `TRACKER.md`, and `DECISIONS.md` from that branch.
+5. Only then select or continue source work.
+
+Do not implement UI modernization directly on `main`; it is the durable bootstrap and current-continuity mirror.
+
 Rules:
 
 - Do not redo tasks whose tracker status is `DONE`.
 - If `CURRENT.md` identifies an active task, inspect existing source and `git diff`, then continue that task.
 - If there is no active task, select the first eligible `READY` task by dependency order, phase order, then priority unless the user explicitly requests another task.
 - Do not put unrelated tasks `IN_PROGRESS` together.
+
+## Source-first UI request interpretation
+
+Before translating a new UI correction into instructions or code: inspect the current component, relevant CSS/selectors, actual responsive breakpoint, and shared consumers/blast radius; then consult the UI Master and compare the request or screenshot to the real implementation. Do not infer scope, selector, breakpoint, ownership, or shared impact from a screenshot alone. Use GitNexus for complex shared components when useful; direct inspection is sufficient for local changes. **DISCOVER → VERIFY → REUSE → MODIFY** remains governing.
 
 ## Explicit user-request rule
 
@@ -116,6 +130,23 @@ N/A
 
 If implementation exists but required verification is incomplete, use `VERIFY`, not `DONE`. Never turn an unavailable check into `PASS`. Keep the known local test-environment limitations distinct from code regressions.
 
+## User visual acceptance gate
+
+For user-visible visual changes:
+
+```text
+implementation
+→ technical/rendered verification
+→ localhost preview
+→ user visual review
+→ final approved polish
+→ final quick regression
+→ commit/push
+→ DONE
+```
+
+During active user visual review, retain `VERIFY`, keep localhost available when practical, and do not commit/push iterative visual revisions unless the user explicitly approves it or interruption safety requires a recorded checkpoint. After explicit approval, run the smallest relevant regression, update tracking, then move `VERIFY` to `DONE`. This gate does not apply mechanically to documentation-only or non-visual work.
+
 ## Interruption recovery
 
 ### Case A — Uncommitted source changes exist
@@ -170,8 +201,9 @@ Implementation, verification evidence, and tracking updates for the same task sh
 
 - Canonical repository: `baonguyen1301/eiu-medlabs`.
 - Canonical delivery remote and push target: `origin`.
-- Durable continuity foundation and approved documentation cleanup belong on `origin/main`.
+- `origin/main` is the durable bootstrap and current-continuity mirror.
 - UI implementation uses the long-lived `ui-modernization` branch based on current `origin/main`.
+- A main checkout must switch to `ui-modernization` before implementation work.
 - Do not use `baonguyen-kobe/eiu-medlabs` for EIU MedLabs UI modernization delivery.
 - Do not merge or open a pull request automatically unless explicitly authorized.
 - Explicit user direction may change this strategy.

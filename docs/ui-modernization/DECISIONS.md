@@ -91,3 +91,21 @@ DISCOVER
 ```
 
 GitHub Actions workflow presence does not require a modernization task to use, change, or trigger workflows. Do not configure or reuse self-hosted runners unless separately approved and explicitly required. Local-first verification remains authoritative until a later documented decision changes this policy.
+
+## DEC-UI-010 — Source-first UI interpretation and user visual acceptance
+
+**Status:** ACCEPTED
+
+Before translating a UI correction into code, inspect the current component, relevant CSS/selectors, actual responsive breakpoint, and shared consumers/blast radius; then consult the UI Master and compare the request or screenshot with that real implementation. Do not infer scope, selector, breakpoint, ownership, or shared impact from a screenshot alone. Use GitNexus for complex shared components when useful; direct inspection is sufficient for localized changes.
+
+For user-visible visual work: implementation → technical/rendered verification → localhost preview → user visual review → final approved polish → quick regression → commit/push → `DONE`. Retain `VERIFY` during active review and do not commit/push iterative visual revisions without user approval unless interruption safety requires a recorded checkpoint.
+
+## DEC-UI-011 — UI-only local preview backend isolation
+
+**Status:** ACCEPTED
+
+Manual UI preview uses `localhost:4000`, or the next free port at or above 4001. Reuse a local Supabase Docker/runtime only when the app needs its contract to render; use local mock or seed data only when a screen needs data.
+
+Do not connect UI modernization preview to production Supabase, obtain production credentials for preview, change business/auth logic to bypass security, or introduce a committed auth-bypass mode. Production auth, email, and reset flows are not required unless a future task explicitly includes them.
+
+Local UI rendering does not satisfy `BASE-01`. It remains a distinct blocked task until an authenticated protected-route baseline is explicitly requested and established.

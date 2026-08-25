@@ -22,21 +22,29 @@ Last updated: 2026-08-25
 
 ## Current phase
 
-Phase 1 — Blocking fixes
+Phase 2 — Shared accessibility and UI foundations
 
 ## Active task
 
 NONE
 
+## Recently completed
+
+AUTH-01 — DONE
+
+- Final visual-polish commit: `de471341a192fda6e8a62512be2738101a591128`
+- Closure/tracking commit: `f570bafddd932149f651b0d689793978b4644323`
+- User visual acceptance: PASS
+
 ## Next eligible READY task
 
 A11Y-03 — Complete SearchableCombobox keyboard model.
 
-Reason: it is the first Phase 2 P1 task whose only dependency, AUTH-01, is now `DONE`. A11Y-02 remains blocked by BASE-01. Do not start A11Y-03 without a new explicit task claim.
+Do not claim or start it without a new explicit task.
 
 ## Blocked tasks
 
-- BASE-01 — requires approved authenticated local environment.
+- BASE-01 — an approved authenticated protected-route baseline has not been requested or established for the current UI-only workflow.
 - DEC-01 — accessible signature/confirmation business decision required.
 - A11Y-01 — blocked by DEC-01.
 
@@ -65,5 +73,3 @@ A new agent should:
 5. Continue the active task or, if none, take the first eligible `READY` task.
 
 If this checkpoint and Git disagree, reconcile Git history, `WORKLOG.md`, `TRACKER.md`, and the current diff before changing source.
-
-Complete AUTH-01 rendered verification in an approved local Supabase environment before changing its tracker status from `VERIFY` to `DONE`.
