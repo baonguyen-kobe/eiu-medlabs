@@ -246,7 +246,12 @@ function BasicMedicalConfirmationModal({
                   Lưu tình trạng
                 </button>
               </div>
-              <div className="responsive-table">
+              <div
+                className="responsive-table"
+                role="region"
+                aria-label="Tình trạng thiết bị phòng"
+                tabIndex={0}
+              >
                 <table className="data-table basic-medical-condition-table">
                   <thead>
                     <tr>
@@ -881,7 +886,12 @@ export function BasicMedicalRegistrationList({
   return (
     <>
       <div className="equipment-request-list-panel data-panel basic-medical-registration-panel">
-        <div className="responsive-table">
+        <div
+          className="responsive-table"
+          role="region"
+          aria-label="Phiếu Y cơ sở"
+          tabIndex={0}
+        >
           <table className="data-table equipment-request-table basic-medical-registration-table">
             <colgroup>
               <col className="basic-medical-registration-col-course" />
@@ -1086,7 +1096,12 @@ export function BasicMedicalRegistrationList({
                                   );
                                 })}
                           </div>
-                          <div className="responsive-table basic-medical-session-viewport">
+                          <div
+                            className="responsive-table basic-medical-session-viewport"
+                            role="region"
+                            aria-label="Buổi học Y cơ sở"
+                            tabIndex={0}
+                          >
                             <table className="data-table basic-medical-session-table">
                               <colgroup>
                                 <col className="basic-medical-session-col-index" />

@@ -858,7 +858,12 @@ export function EquipmentRequestForm({
                   placeholder="Nhập hoặc chọn tên kỹ năng…"
                 />
               </label>
-              <div className="responsive-table">
+              <div
+                className="responsive-table"
+                role="region"
+                aria-label={`Thiết bị theo kỹ năng ${skill.skillName || "chưa đặt tên"}`}
+                tabIndex={0}
+              >
                 <table className="data-table equipment-items-table">
                   <thead>
                     <tr>

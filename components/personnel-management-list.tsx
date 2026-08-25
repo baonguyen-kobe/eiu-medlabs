@@ -486,7 +486,12 @@ export function PersonnelManagementList({
       {viewerIsRoot && passwordReconciliationItems.length ? (
         <section className="data-panel" aria-label="Đối soát mật khẩu">
           <h2>Thao tác mật khẩu cần đối soát</h2>
-          <div className="responsive-table">
+          <div
+            className="responsive-table"
+            role="region"
+            aria-label="Thao tác mật khẩu cần đối soát"
+            tabIndex={0}
+          >
             <table className="data-table">
               <thead>
                 <tr>

@@ -13,6 +13,7 @@ import {
 } from "@/app/basic-medical/equipment/actions";
 import { SearchableCombobox } from "@/components/searchable-combobox";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { TableScrollViewport } from "@/components/table-scroll-viewport";
 import type {
   BasicMedicalConditionLogItem,
   BasicMedicalEquipmentCatalogItem,
@@ -224,7 +225,10 @@ function InventoryTab({
           onCancel={() => setBulkAction(null)}
           onConfirm={applyBulkAction}
         />
-        <div className="responsive-table equipment-catalog-table-wrap">
+        <TableScrollViewport
+          className="equipment-catalog-table-wrap"
+          label="Danh sách thiết bị Y cơ sở"
+        >
           <table className="data-table basic-medical-catalog-table">
             <thead>
               <tr>
@@ -326,7 +330,7 @@ function InventoryTab({
               })}
             </tbody>
           </table>
-        </div>
+        </TableScrollViewport>
         {!catalog.length ? (
           <p className="panel-empty">
             Không có thiết bị phù hợp với bộ lọc hiện tại.
@@ -422,7 +426,7 @@ function RoomInventoryTab({
             pending={isPending}
           />
         ) : null}
-        <div className="responsive-table">
+        <TableScrollViewport label="Thiết bị theo phòng">
           <table className="data-table">
             <thead>
               <tr>
@@ -463,7 +467,7 @@ function RoomInventoryTab({
               ))}
             </tbody>
           </table>
-        </div>
+        </TableScrollViewport>
         {!inventories.length ? (
           <p className="panel-empty">
             Chưa có thiết bị được phân bổ cho phòng phù hợp.
@@ -642,7 +646,7 @@ function DamagedTab({
           {inventories.length} thiết bị hư
         </span>
       </div>
-      <div className="responsive-table">
+      <TableScrollViewport label="Thiết bị hư">
         <table className="data-table">
           <thead>
             <tr>
@@ -694,7 +698,7 @@ function DamagedTab({
             ))}
           </tbody>
         </table>
-      </div>
+      </TableScrollViewport>
       {!inventories.length ? (
         <p className="panel-empty">Không có thiết bị đang được báo Hư.</p>
       ) : null}
@@ -813,7 +817,7 @@ function LogsTab({ logs }: { logs: BasicMedicalConditionLogItem[] }) {
       <div className="basic-medical-list-filters">
         <span className="equipment-catalog-count">{logs.length} thay đổi</span>
       </div>
-      <div className="responsive-table">
+      <TableScrollViewport label="Lịch sử thay đổi thiết bị">
         <table className="data-table">
           <thead>
             <tr>
@@ -848,7 +852,7 @@ function LogsTab({ logs }: { logs: BasicMedicalConditionLogItem[] }) {
             ))}
           </tbody>
         </table>
-      </div>
+      </TableScrollViewport>
       {!logs.length ? (
         <p className="panel-empty">Chưa có lịch sử thay đổi phù hợp.</p>
       ) : null}

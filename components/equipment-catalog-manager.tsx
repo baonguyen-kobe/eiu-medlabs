@@ -506,7 +506,12 @@ export function EquipmentCatalogManager({
           </p>
         ) : null}
 
-        <div className="responsive-table equipment-catalog-table-wrap">
+        <div
+          className="responsive-table equipment-catalog-table-wrap"
+          role="region"
+          aria-label="Danh mục thiết bị Skills lab"
+          tabIndex={0}
+        >
           <table className="data-table equipment-catalog-table">
             <colgroup>
               {mode === "activate" ||

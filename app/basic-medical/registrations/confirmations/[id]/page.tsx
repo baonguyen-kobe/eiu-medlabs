@@ -168,7 +168,12 @@ export default async function BasicMedicalConfirmationEvidencePage({
         />
 
         <h2>4. Tình trạng thiết bị</h2>
-        <div className="responsive-table">
+        <div
+          className="responsive-table"
+          role="region"
+          aria-label="Tình trạng thiết bị"
+          tabIndex={0}
+        >
           <table className="data-table basic-medical-condition-table">
             <thead>
               <tr>

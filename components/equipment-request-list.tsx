@@ -376,7 +376,12 @@ function EquipmentItemsModal({
                     ? `Bài TN-TH #${skillIndex + 1}: ${skillName}`
                     : `Kỹ năng/Bài thực hành #${skillIndex + 1}: ${skillName}`}
                 </h3>
-                <div className="responsive-table">
+                <div
+                  className="responsive-table"
+                  role="region"
+                  aria-label={`Danh sách trang thiết bị cho ${skillName}`}
+                  tabIndex={0}
+                >
                   <table className="data-table equipment-detail-table">
                     <thead>
                       <tr>
