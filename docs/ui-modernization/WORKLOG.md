@@ -315,3 +315,13 @@ INT-01 is `DONE` at `24d9efa`; manual user review deferred by explicit authoriza
 ### Task state
 
 BASE-01 is `DONE`; manual user review deferred by explicit authorization for MEGA RUN A v2. A11Y-02 started next.
+
+## 2026-08-25 — A11Y-02 overlay foundation and mobile sidebar
+
+- Added `useOverlayFocus`: topmost-overlay-only Tab/Shift+Tab containment, Escape guarded by pending state, deterministic initial focus, return focus, and reference-counted body scroll locking for nested overlays.
+- Migrated `ConfirmDialog` without changing its visual API or pending controls.
+- Migrated the mobile `WorkspaceShell` sidebar. At 375px it enters at the close button, locks body scroll, traps Tab/Shift+Tab, closes on Escape, and returns focus to the menu trigger.
+
+### Task state
+
+A11Y-02 and A11Y-02.1 are `DONE` at `ff6e06f` and `86e89fa`; manual user review deferred by explicit authorization for MEGA RUN A v2. A11Y-02.2 started next.
