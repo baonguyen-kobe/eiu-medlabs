@@ -28,3 +28,6 @@ AUTH-01
 - Audit hash preserved.
 - Documentation paths verified.
 - Git diff reviewed before commit.
+- Foundation commit: `507e08c869049f38882e7129ad47fb319df4ad50`.
+- Foundation pushed to `baonguyen-kobe/eiu-medlabs` `main`.
+- `ui-modernization` created from the foundation commit and pushed with upstream tracking.

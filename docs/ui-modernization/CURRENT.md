@@ -4,11 +4,11 @@ Last updated: 2026-08-25
 
 ## Current branch
 
-`main`
+`ui-modernization`
 
 ## Baseline commit
 
-`aeb9a8302d20126afae116f82b613635b1a6f627` — pre-foundation repository commit; replace with the durable tracking foundation commit after Git delivery.
+`507e08c869049f38882e7129ad47fb319df4ad50` — durable tracking foundation commit on writable fork `main`; `ui-modernization` was created from this commit.
 
 ## Current phase
 
