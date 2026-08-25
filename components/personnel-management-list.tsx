@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import {
   changePersonnelPasswordByRoot,
   reconcilePersonnelPasswordOperation,
@@ -11,6 +11,7 @@ import {
 } from "@/app/admin/actions";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { getNameInitials } from "@/lib/person-name";
+import { useOverlayFocus } from "@/components/use-overlay-focus";
 import type { AppRole } from "@/lib/viewer";
 import { BASIC_MEDICAL_ROOM_TYPE_ID } from "@/lib/room-types";
 
@@ -93,6 +94,9 @@ export function PersonnelManagementList({
   const [confirmation, setConfirmation] =
     useState<PersonnelConfirmation | null>(null);
   const [pending, startTransition] = useTransition();
+  const drawerRef = useRef<HTMLElement>(null);
+  const drawerCloseRef = useRef<HTMLButtonElement>(null);
+  const drawerTriggerRef = useRef<HTMLElement>(null);
   const dirty = useMemo(
     () =>
       Boolean(
@@ -110,6 +114,7 @@ export function PersonnelManagementList({
   );
 
   function open(item: PersonnelListItem) {
+    drawerTriggerRef.current = document.activeElement as HTMLElement | null;
     setOriginal(clone(item));
     setDraft(clone(item));
     setEmailCapability(Boolean(item.can_manage_email_notifications));
@@ -132,6 +137,15 @@ export function PersonnelManagementList({
     }
     closeDrawer();
   }
+
+  useOverlayFocus({
+    open: Boolean(draft),
+    containerRef: drawerRef,
+    initialFocusRef: drawerCloseRef,
+    returnFocusRef: drawerTriggerRef,
+    pending,
+    onDismiss: close,
+  });
 
   function reconcilePasswordOperation(operationId: string) {
     setResult(null);
@@ -637,6 +651,8 @@ export function PersonnelManagementList({
           }
         >
           <section
+            ref={drawerRef}
+            data-overlay-focus-root="true"
             className="personnel-drawer"
             role="dialog"
             aria-modal="true"
@@ -648,6 +664,7 @@ export function PersonnelManagementList({
                 <p>{draft.email}</p>
               </div>
               <button
+                ref={drawerCloseRef}
                 aria-label="Đóng"
                 className="button button-secondary"
                 type="button"
