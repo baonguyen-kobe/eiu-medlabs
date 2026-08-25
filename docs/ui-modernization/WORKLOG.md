@@ -284,3 +284,21 @@ ARCH-01 is `DONE`; manual user review deferred by explicit overnight authorizati
 ### Task state
 
 PERF-01 is `DONE`; manual user review deferred by explicit overnight authorization. The fixed overnight queue is complete.
+
+## 2026-08-25 — Recovery and INT-01 login control correction
+
+### Recovery
+
+- The cancelled 30-day remember-login prompt left no uncommitted changes, post-`75a6408` commits, pushed commits, custom cookie lifetime code, or auth persistence policy to revert.
+- Preserved valid completed overnight work at `75a6408`; `dd32eab` records the corrected business decisions and tracker reconciliation.
+
+### INT-01
+
+- Removed the non-functional `Ghi nhớ đăng nhập` option.
+- Added off-by-default `Hiển thị mật khẩu` state local to `LoginForm`. Toggling changes only the input type and preserves the typed browser value.
+- Left all Supabase SSR client/server/proxy/callback files unchanged. No password or display state is written to browser storage or cookies.
+- Verified password login, logout, recovery route smoke, the Show Password keyboard toggle, 375/768/1024/1440 layout/no-overflow, and the dashboard lecturer `Link` source target `/classes/open`.
+
+### Task state
+
+INT-01 is `DONE` at `24d9efa`; manual user review deferred by explicit authorization for MEGA RUN A v2. BASE-01 started next.

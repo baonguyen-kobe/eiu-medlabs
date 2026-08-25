@@ -26,9 +26,11 @@ Phase 2 — Shared accessibility and UI foundations
 
 ## Active task
 
-INT-01
+BASE-01
 
 **Status:** IN_PROGRESS
+
+**Starting commit:** `24d9efa`
 
 ## Recently completed
 
@@ -56,7 +58,7 @@ PERF-01 — DONE
 
 ## Next batch task
 
-INT-01 is active. Do not claim BASE-01 until INT-01 verification is recorded.
+BASE-01 is active. Do not claim A11Y-02 until its local authenticated baseline evidence is recorded.
 
 ## Blocked tasks
 
