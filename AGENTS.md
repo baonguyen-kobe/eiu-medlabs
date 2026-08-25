@@ -1,25 +1,20 @@
 # MedLabs Calendar agent guide
 
-## Codebase navigation: Graphify first
+## Codebase navigation and intelligence
 
-The project knowledge graph lives in the ignored `graphify-out/` directory.
+Use the smallest sufficient navigation tool for the task:
 
-- Run Graphify commands from the repository root so its output stays at `graphify-out/`; do not run `graphify update .` from inside `graphify-out/`.
-- In a fresh worktree, run `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap-graphify-worktree.ps1` to verify repository instructions and skills, build the ignored local graph, and run a scoped query.
-- For codebase questions, run `graphify query "<question>" --graph graphify-out/graph.json` first when `graphify-out/graph.json` exists.
-- Use `graphify path "<A>" "<B>" --graph graphify-out/graph.json` for relationships and `graphify explain "<concept>" --graph graphify-out/graph.json` for focused concepts.
-- Use `graphify-out/wiki/index.md` for broad navigation when available.
-- Dirty graph files are expected and are not a reason to skip Graphify.
-- Keep generated, temporary, backup, and tool-index files out of the graph via `.graphifyignore`.
-- After modifying code or project instructions, run `graphify update .`.
+- Use direct code search and file inspection for simple localized work.
+- Use GitNexus for repository architecture, dependencies, execution flow, shared consumers, or blast-radius analysis when useful. The GitNexus CLI is installed globally, this repository has a current project-local index, and GitNexus MCP is configured project-locally.
+- Do not require GitNexus for trivial local edits and do not re-index solely to answer a localized question.
+- Graphify remains optional when `graphify-out/graph.json` exists. Run Graphify commands from the repository root so generated output stays under `graphify-out/`; use its query, path, explain, or wiki output only when present and relevant.
+- Keep generated, temporary, backup, and tool-index files out of Graphify via `.graphifyignore`.
 
 ## Repository skill discovery
 
 Before planning implementation work, inspect `.agents/skills`, `.codex/skills`, and `.claude/skills` when they exist. Read each candidate `SKILL.md` front matter first, classify its relevance, then read and apply the full instructions only for relevant skills.
 
 The repository-owned baseline skills live in `.agents/skills` and are tracked with the source. `.codex/` and `.claude/` remain available as optional tool-specific local integrations; do not copy generated local skills into a worktree or commit them as a provisioning substitute.
-
-GitNexus is optional and is not currently configured in this checkout. Use it only when it is available and a large or high-risk refactor benefits from a second impact-analysis view. Do not require it for routine work, and do not let generated GitNexus instructions override this guide.
 
 ## Version-matched Next.js guidance
 
@@ -58,6 +53,32 @@ OpenSpec lifecycle:
 1. `$openspec-propose` for a large change.
 2. `$openspec-apply-change` after approval.
 3. `$openspec-archive-change` after verification.
+
+## UI Modernization Continuity
+
+The persistent UI/UX/responsive modernization state is stored in:
+
+`docs/ui-modernization/`
+
+For any UI modernization, responsive, accessibility, design-system, frontend-polish, or related continuation task:
+
+1. Read `docs/ui-modernization/README.md`.
+2. Read `docs/ui-modernization/CURRENT.md`.
+3. Read `docs/ui-modernization/TRACKER.md`.
+4. Respect `docs/ui-modernization/DECISIONS.md`.
+5. Do not redo tasks marked `DONE`.
+6. If a task is `IN_PROGRESS`, inspect the current Git diff and continue it rather than restarting.
+7. Before ending the task, update the tracking files required by the session-end protocol.
+8. Never mark `DONE` without applicable verification evidence.
+
+If the user says only `continue`, `resume`, `proceed`, `tiếp tục`, `làm tiếp`, `đọc repo rồi tiếp tục`, or equivalent while UI modernization is active:
+
+1. Read `CURRENT.md` and `TRACKER.md`.
+2. Inspect Git status, diff, branch, and commit.
+3. Resume the recorded `IN_PROGRESS` task, or take the first eligible `READY` task.
+4. If Git and tracking disagree, reconcile Git history, the diff, `WORKLOG.md`, and `TRACKER.md`; report the inconsistency before destructive action.
+
+An explicit current user request always takes precedence over automatic continuation. Do not redirect unrelated work into UI modernization.
 
 ## Verification
 
