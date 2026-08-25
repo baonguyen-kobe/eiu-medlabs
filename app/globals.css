@@ -9262,6 +9262,19 @@ body,
     background: var(--violet-100);
     opacity: 1;
   }
+
+  .staff-shift-event-actions {
+    gap: 4px;
+  }
+
+  .staff-shift-event-actions button {
+    width: 40px;
+    min-height: 40px;
+  }
+
+  .staff-shift-empty-action {
+    min-height: 44px;
+  }
 }
 
 .staff-shift-registration-card {
