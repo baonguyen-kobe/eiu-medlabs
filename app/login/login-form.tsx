@@ -12,6 +12,7 @@ export function LoginForm({ oauthError }: { oauthError?: string }) {
   const [state, formAction, pending] = useActionState(login, initialState);
   const [googlePending, setGooglePending] = useState(false);
   const [googleError, setGoogleError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   async function signInWithGoogle() {
     setGooglePending(true);
@@ -60,7 +61,7 @@ export function LoginForm({ oauthError }: { oauthError?: string }) {
           <LockKeyhole size={20} />
           <input
             name="password"
-            type="password"
+            type={showPassword ? "text" : "password"}
             autoComplete="current-password"
             required
           />
@@ -68,7 +69,12 @@ export function LoginForm({ oauthError }: { oauthError?: string }) {
       </label>
       <div className="login-options">
         <label>
-          <input type="checkbox" /> Ghi nhớ đăng nhập
+          <input
+            type="checkbox"
+            checked={showPassword}
+            onChange={(event) => setShowPassword(event.target.checked)}
+          />
+          Hiển thị mật khẩu
         </label>
         <Link href="/forgot-password">Quên mật khẩu?</Link>
       </div>
