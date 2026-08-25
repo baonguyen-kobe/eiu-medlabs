@@ -254,3 +254,18 @@ MOB-01.1 is `DONE`; manual user review deferred by explicit overnight authorizat
 ### Task state
 
 MOB-01.4 is `DONE`; manual user review deferred by explicit overnight authorization. ARCH-01 started next.
+
+## 2026-08-25 — ARCH-01 import presentation shell
+
+### Work
+
+- Extracted `ImportPreviewViewport` for the shared accessible preview table and pagination presentation.
+- Kept schedule/basic-medical/equipment parsing, validation, actions, result content, and five-step state machines separate.
+
+### Verification
+
+- PASS: `/schedule-entry/import`, `/basic-medical/import`, and `/equipment/import` render initial five-step shells without page overflow.
+
+### Task state
+
+ARCH-01 is `DONE`; manual user review deferred by explicit overnight authorization. PERF-01 started next.

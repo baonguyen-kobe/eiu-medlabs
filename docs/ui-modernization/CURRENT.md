@@ -26,11 +26,11 @@ Phase 2 — Shared accessibility and UI foundations
 
 ## Active task
 
-ARCH-01
+PERF-01
 
 **Status:** IN_PROGRESS
 
-**Starting commit:** `9b3ff5980ffdccccc29290f4886a094a37328d29`
+**Starting commit:** `95f2678f722af4130b9de0c3a291612fd2daa92b`
 
 ## Recently completed
 
@@ -52,13 +52,15 @@ MOB-01.1 — DONE
 
 MOB-01.4 — DONE
 
-- Implementation commit: `9b3ff5980ffdccccc29290f4886a094a37328d29`
-- Catalog/logs retain Strategy A local scroll; rooms/damaged use Strategy B on narrow viewports.
+ARCH-01 — DONE
+
+- Implementation commit: `95f2678f722af4130b9de0c3a291612fd2daa92b`
+- Shared preview viewport only; parsing, validation, action, and five-step domain behavior remain local.
 - Manual user review deferred by explicit overnight authorization.
 
 ## Next batch task
 
-ARCH-01 is active. Do not claim PERF-01 until ARCH-01 verification is recorded.
+PERF-01 is active. This is the final approved overnight task.
 
 ## Blocked tasks
 
