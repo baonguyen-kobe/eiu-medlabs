@@ -168,10 +168,22 @@ Implementation, verification evidence, and tracking updates for the same task sh
 
 ## Branch strategy
 
-- Durable tracking foundation: writable fork `main`.
-- UI implementation: long-lived `ui-modernization` branch.
+- Canonical repository: `baonguyen1301/eiu-medlabs`.
+- Canonical delivery remote and push target: `origin`.
+- Durable continuity foundation and approved documentation cleanup belong on `origin/main`.
+- UI implementation uses the long-lived `ui-modernization` branch based on current `origin/main`.
+- Do not use `baonguyen-kobe/eiu-medlabs` for EIU MedLabs UI modernization delivery.
 - Do not merge or open a pull request automatically unless explicitly authorized.
 - Explicit user direction may change this strategy.
+
+## Infrastructure and verification policy
+
+- Local-first verification is authoritative for current UI modernization work.
+- For manual UI verification, use `localhost` port `4000`; if occupied, select the next free port from `4001`, `4002`, `4003`, and onward. Do not change `package.json` merely to enforce a port.
+- Before requesting or creating infrastructure: **DISCOVER → VERIFY → REUSE → CREATE only if needed**.
+- Inspect and reuse existing automated test infrastructure first.
+- Workflow YAML does not require UI modernization to use, change, or trigger GitHub Actions.
+- Do not configure or reuse a self-hosted runner unless separately approved and explicitly required.
 
 ## Key files
 

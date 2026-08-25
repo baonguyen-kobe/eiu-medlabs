@@ -66,3 +66,28 @@ Never perform one giant `globals.css` rewrite. Execute the stable `DS-02.N` batc
 **Question:** What business-approved non-pointer method should satisfy equipment handover/return and Basic Medical confirmation/signature workflows?
 
 Do not invent the answer. `DEC-01` and `A11Y-01` remain blocked until the user/business owner accepts a behavior.
+
+## DEC-UI-008 — Canonical repository and development branch
+
+**Status:** ACCEPTED
+
+**Decision:** `baonguyen1301/eiu-medlabs` is the canonical repository. `origin` is the canonical remote and only delivery push target for EIU MedLabs UI modernization. `ui-modernization` is the development branch and must remain based on current `origin/main`.
+
+Do not use `baonguyen-kobe/eiu-medlabs` for UI modernization delivery.
+
+## DEC-UI-009 — Local-first verification and infrastructure restraint
+
+**Status:** ACCEPTED
+
+**Decision:** Manual UI verification runs locally on `localhost` port `4000`, or the next free port from `4001` upward. Existing automated test infrastructure must be discovered and reused before new infrastructure is considered.
+
+Use:
+
+```text
+DISCOVER
+→ VERIFY
+→ REUSE
+→ CREATE only if needed
+```
+
+GitHub Actions workflow presence does not require a modernization task to use, change, or trigger workflows. Do not configure or reuse self-hosted runners unless separately approved and explicitly required. Local-first verification remains authoritative until a later documented decision changes this policy.

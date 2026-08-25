@@ -6,9 +6,19 @@ Last updated: 2026-08-25
 
 `ui-modernization`
 
-## Baseline commit
+## Canonical repository
 
-`507e08c869049f38882e7129ad47fb319df4ad50` — durable tracking foundation commit on writable fork `main`; `ui-modernization` was created from this commit.
+`baonguyen1301/eiu-medlabs`
+
+## Canonical base
+
+`origin/main`
+
+## Tracking foundation history
+
+`507e08c869049f38882e7129ad47fb319df4ad50` — initial tracking foundation commit.
+
+`b36880d5e18ca39d2da5db8464981d0e601b7ad3` — baseline/continuity follow-up commit.
 
 ## Current phase
 
