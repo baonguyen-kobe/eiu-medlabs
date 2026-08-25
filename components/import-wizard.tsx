@@ -30,7 +30,7 @@ import {
   normalizeImportRowValues,
   normalizeImportTime,
 } from "@/lib/import-values";
-import { PaginationControls } from "@/components/pagination-controls";
+import { ImportPreviewViewport } from "@/components/import-preview-viewport";
 import { TABLE_PAGE_SIZE, totalPagesFor } from "@/lib/pagination";
 import { CANONICAL_SEMESTERS, isCanonicalSemester } from "@/lib/semesters";
 
@@ -90,67 +90,60 @@ function ImportRowsTable({
   );
 
   return (
-    <div>
-      <div
-        className="preview-table-wrap"
-        role="region"
-        aria-label="Dữ liệu import; vuốt ngang để xem đầy đủ"
-        tabIndex={0}
-      >
-        <table className="preview-table">
-          <thead>
-            <tr>
-              <th>Dòng</th>
-              {visibleHeaders.map((header) => (
-                <th key={header}>{importHeaderLabels[header]}</th>
-              ))}
-              {showValidation ? <th>Kiểm tra</th> : null}
-            </tr>
-          </thead>
-          <tbody>
-            {pageIndexes.map((index) => {
-              const rowNumber = index + 2;
-              const review = validationByRow?.get(rowNumber);
-              const rowInvalid =
-                review?.status === "error" ||
-                review?.status === "duplicate" ||
-                review?.status === "conflict";
-              return (
-                <tr className={rowInvalid ? "row-error" : ""} key={index}>
-                  <td>{rowNumber}</td>
-                  {visibleHeaders.map((header) => (
-                    <td key={header}>
-                      {displayImportValue(rows[index], header)}
-                    </td>
-                  ))}
-                  {showValidation ? (
-                    <td className="preview-status-cell">
-                      {review ? (
-                        <>
-                          <span
-                            className={`preview-status preview-status-${review.status}`}
-                          >
-                            {statusLabel(review.status)}
-                          </span>
-                          <small>{validationMessage(review)}</small>
-                        </>
-                      ) : (
-                        "Chưa có kết quả"
-                      )}
-                    </td>
-                  ) : null}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-      <PaginationControls
-        currentPage={safePage}
-        totalItems={indexes.length}
-        onPageChange={setCurrentPage}
-      />
-    </div>
+    <ImportPreviewViewport
+      currentPage={safePage}
+      label="Dữ liệu import; vuốt ngang để xem đầy đủ"
+      totalItems={indexes.length}
+      onPageChange={setCurrentPage}
+    >
+      <table className="preview-table">
+        <thead>
+          <tr>
+            <th>Dòng</th>
+            {visibleHeaders.map((header) => (
+              <th key={header}>{importHeaderLabels[header]}</th>
+            ))}
+            {showValidation ? <th>Kiểm tra</th> : null}
+          </tr>
+        </thead>
+        <tbody>
+          {pageIndexes.map((index) => {
+            const rowNumber = index + 2;
+            const review = validationByRow?.get(rowNumber);
+            const rowInvalid =
+              review?.status === "error" ||
+              review?.status === "duplicate" ||
+              review?.status === "conflict";
+            return (
+              <tr className={rowInvalid ? "row-error" : ""} key={index}>
+                <td>{rowNumber}</td>
+                {visibleHeaders.map((header) => (
+                  <td key={header}>
+                    {displayImportValue(rows[index], header)}
+                  </td>
+                ))}
+                {showValidation ? (
+                  <td className="preview-status-cell">
+                    {review ? (
+                      <>
+                        <span
+                          className={`preview-status preview-status-${review.status}`}
+                        >
+                          {statusLabel(review.status)}
+                        </span>
+                        <small>{validationMessage(review)}</small>
+                      </>
+                    ) : (
+                      "Chưa có kết quả"
+                    )}
+                  </td>
+                ) : null}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </ImportPreviewViewport>
   );
 }
 
