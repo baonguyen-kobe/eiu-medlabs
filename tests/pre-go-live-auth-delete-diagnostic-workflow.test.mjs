@@ -102,34 +102,87 @@ test("database and FK inspection are select-only and output only approved fields
   );
 });
 
-test("Management log diagnostic uses bounded, separate read-only source queries", () => {
+test("Management log diagnostic uses the canonical bounded POST wire contract and accepts only result arrays", () => {
   const logStep = workflow.match(
     /      - name: Query bounded Auth and Postgres Management logs with sanitized output only[\s\S]*$/,
   )?.[0];
   assert.ok(logStep);
   assert.match(
     logStep,
-    /https:\/\/api\.supabase\.com\/v1\/projects\/\$PROJECT_REF\/analytics\/endpoints\/logs/,
+    /https:\/\/api\.supabase\.com\/v1\/projects\/\$\{projectRef\}\/analytics\/endpoints\/logs\.all\.otel/,
   );
+  assert.doesNotMatch(logStep, /analytics\/endpoints\/logs["']/);
   assert.match(logStep, /2026-08-16T09:43:30Z/);
   assert.match(logStep, /2026-08-16T09:45:00Z/);
-  assert.equal((logStep.match(/--request GET/g) ?? []).length, 2);
-  assert.equal((logStep.match(/--get/g) ?? []).length, 2);
-  assert.equal((logStep.match(/--data-urlencode "sql=\$/g) ?? []).length, 2);
-  assert.match(logStep, /source = 'auth_logs'/);
-  assert.match(logStep, /source = 'postgres_logs'/);
-  assert.match(logStep, /severity_text in \('ERROR', 'FATAL', 'PANIC'\)/);
-  assert.match(logStep, /supabase_auth_admin/);
+  assert.match(logStep, /method: 'POST'/);
+  assert.match(logStep, /'Content-Type': 'application\/json'/);
   assert.match(
     logStep,
+    /body: JSON\.stringify\(\{\s+sql,\s+iso_timestamp_start: windowStart,\s+iso_timestamp_end: windowEnd,\s+\}\)/,
+  );
+  assert.doesNotMatch(
+    logStep,
+    /--request GET|--get|--data-urlencode|toDateTime\(/,
+  );
+  const authSql = logStep.match(/const authSql = "([^"]+)";/)?.[1];
+  const postgresSql = logStep.match(/const postgresSql = "([^"]+)";/)?.[1];
+  assert.ok(authSql);
+  assert.ok(postgresSql);
+  assert.match(
+    authSql,
+    /^select .* from logs where source = 'auth_logs' order by timestamp asc limit 50$/i,
+  );
+  assert.match(
+    postgresSql,
+    /^select .* from logs where source = 'postgres_logs'/i,
+  );
+  assert.match(postgresSql, /severity_text in \('ERROR', 'FATAL', 'PANIC'\)/);
+  assert.match(postgresSql, /supabase_auth_admin/);
+  assert.doesNotMatch(authSql, /2026-|iso_timestamp|toDateTime/i);
+  assert.doesNotMatch(postgresSql, /2026-|iso_timestamp|toDateTime/i);
+  assert.match(
+    postgresSql,
     /log_attributes\['parsed\.sql_state_code'\] as sql_state_code/,
   );
   assert.match(
-    logStep,
+    postgresSql,
     /log_attributes\['parsed\.user_name'\] as parsed_user_name/,
   );
-  assert.match(logStep, /--output "\$RUNNER_TEMP\/auth-logs\.json"/);
-  assert.match(logStep, /--output "\$RUNNER_TEMP\/postgres-logs\.json"/);
+  assert.match(
+    logStep,
+    /writeFileSync\(join\(process\.env\.RUNNER_TEMP, responseFile\), rawBody, 'utf8'\)/,
+  );
+  assert.match(logStep, /queryLogs\('auth_logs', authSql, 'auth-logs\.json'\)/);
+  assert.match(
+    logStep,
+    /queryLogs\('postgres_logs', postgresSql, 'postgres-logs\.json'\)/,
+  );
+  assert.match(logStep, /if \(!response\.ok\) \{/);
+  assert.match(
+    logStep,
+    /LOG_TRANSPORT_DIAGNOSTIC source=\$\{source\}; http_status=\$\{redact\(response\.status\)\}; status_text=\$\{redact\(response\.statusText\)\}/,
+  );
+  assert.match(logStep, /throw new Error\('LOG_ANALYTICS_TRANSPORT_FAILED'\)/);
+  assert.match(logStep, /payload = JSON\.parse\(rawBody\)/);
+  assert.match(logStep, /if \(payload\?\.error\) \{/);
+  assert.match(
+    logStep,
+    /const nested = typeof error === 'object' && error !== null/,
+  );
+  assert.match(
+    logStep,
+    /LOG_ANALYTICS_ERROR_DIAGNOSTIC source=\$\{source\}; code=\$\{code\}; message=\$\{message\}/,
+  );
+  assert.match(logStep, /throw new Error\('LOG_ANALYTICS_ERROR_OBJECT'\)/);
+  assert.match(logStep, /if \(!Array\.isArray\(payload\?\.result\)\) \{/);
+  assert.equal(
+    (logStep.match(/LOG_ANALYTICS_RESPONSE_SHAPE_INVALID/g) ?? []).length,
+    2,
+  );
+  assert.match(
+    logStep,
+    /return \{ status: response\.status, result: payload\.result \}/,
+  );
   assert.doesNotMatch(
     logStep,
     /actions\/upload-artifact|\.zip|\.tar|artifact/i,
@@ -180,15 +233,21 @@ test("Management log diagnostic uses bounded, separate read-only source queries"
     logStep,
     /const sqlState = redact\(firstPostgres\.sql_state_code\)/,
   );
-  assert.match(logStep, /AUTH_LOG_DIAGNOSTIC http_status=\$\{redact\(/);
-  assert.match(logStep, /POSTGRES_LOG_DIAGNOSTIC http_status=\$\{redact\(/);
+  assert.match(
+    logStep,
+    /AUTH_LOG_DIAGNOSTIC http_status=\$\{redact\(authStatus\)\}/,
+  );
+  assert.match(
+    logStep,
+    /POSTGRES_LOG_DIAGNOSTIC http_status=\$\{redact\(postgresStatus\)\}/,
+  );
   assert.match(
     logStep,
     /SUPABASE_ACCESS_TOKEN: \$\{\{ secrets\.SUPABASE_ACCESS_TOKEN \}\}/,
   );
   assert.doesNotMatch(
     logStep,
-    /console\.log\([^)]*(?:content|resultPath|error|response|body|parsed_user_name)/i,
+    /console\.log\([^)]*(?:rawBody|parsed_user_name)/i,
   );
   assert.doesNotMatch(
     logStep,
