@@ -324,4 +324,4 @@ BASE-01 is `DONE`; manual user review deferred by explicit authorization for MEG
 
 ### Task state
 
-A11Y-02 and A11Y-02.1 are `DONE` at `ff6e06f` and `86e89fa`; manual user review deferred by explicit authorization for MEGA RUN A v2. A11Y-02.2 started next.
+A11Y-02 foundation and A11Y-02.1 are `DONE` at `ff6e06f` and `86e89fa`; A11Y-02 remains `IN_PROGRESS` until all family children complete. Manual user review deferred by explicit authorization for MEGA RUN A v2. A11Y-02.2 started next.
