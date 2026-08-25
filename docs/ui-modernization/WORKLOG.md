@@ -131,3 +131,19 @@ NO
 ### Task state
 
 A11Y-03 is `VERIFY`, pending user review. TABLE-01 started next in the approved unattended batch.
+
+## 2026-08-25 — TABLE-01 table scroll foundation
+
+### Work
+
+- Added `TableScrollViewport` and named/focusable local scroll contracts for current responsive table wrappers.
+- Preserved existing table classes, DOM layout, widths, local scrolling, and visual shell ownership.
+
+### Verification
+
+- Current responsive-table inventory: 23; 8 already equivalent; 15 migrated/named.
+- PASS: `/classes/open`, `/basic-medical/equipment`, and `/admin/equipment` at 375/768/1024/1440, keyboard focus, local scroll, and no page overflow.
+
+### Task state
+
+TABLE-01 is `VERIFY`, pending user review. FORM-01 started next in the approved unattended batch.

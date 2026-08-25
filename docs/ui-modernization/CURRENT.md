@@ -26,28 +26,29 @@ Phase 2 — Shared accessibility and UI foundations
 
 ## Active task
 
-TABLE-01
+FORM-01
 
 **Status:** IN_PROGRESS
 
-**Starting commit:** `df72c829ae293cedd590559b8b4bc0bdd820a551`
+**Starting commit:** `1c7acec55b1b7b32d504bd9bdcf3e6a2324d00f7`
 
 ## Recently completed
 
 AUTH-01 — DONE
-
-- Final visual-polish commit: `de471341a192fda6e8a62512be2738101a591128`
-- Closure/tracking commit: `f570bafddd932149f651b0d689793978b4644323`
-- User visual acceptance: PASS
 
 A11Y-03 — VERIFY
 
 - Implementation commit: `df72c829ae293cedd590559b8b4bc0bdd820a551`
 - Awaiting user review of keyboard behavior.
 
+TABLE-01 — VERIFY
+
+- Implementation commit: `1c7acec55b1b7b32d504bd9bdcf3e6a2324d00f7`
+- Awaiting user review of local table-scroll behavior.
+
 ## Next batch task
 
-TABLE-01 is active. Do not claim FORM-01 until TABLE-01 verification is recorded.
+FORM-01 is active. Do not claim A11Y-04 until FORM-01 verification is recorded.
 
 ## Blocked tasks
 
