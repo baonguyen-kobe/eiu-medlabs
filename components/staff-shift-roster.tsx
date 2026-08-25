@@ -17,6 +17,7 @@ import {
   updateStaffShiftTimeAction,
 } from "@/app/dashboard/actions";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { useOverlayFocus } from "@/components/use-overlay-focus";
 import {
   Check,
   ChevronDown,
@@ -438,18 +439,25 @@ export function StaffShiftRoster({
     shift: Shift;
     historicalReason: string;
   } | null>(null);
+  const quickDialogRef = useRef<HTMLDivElement>(null);
+  const quickCloseRef = useRef<HTMLButtonElement>(null);
+  const editDialogRef = useRef<HTMLDivElement>(null);
+  const editCloseRef = useRef<HTMLButtonElement>(null);
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        if (quickRegisterModal) setQuickRegisterModal(null);
-        if (editShiftModal) setEditShiftModal(null);
-        if (cancelShiftDialog) setCancelShiftDialog(null);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [quickRegisterModal, editShiftModal, cancelShiftDialog]);
+  useOverlayFocus({
+    open: Boolean(quickRegisterModal?.open),
+    containerRef: quickDialogRef,
+    initialFocusRef: quickCloseRef,
+    pending,
+    onDismiss: () => setQuickRegisterModal(null),
+  });
+  useOverlayFocus({
+    open: Boolean(editShiftModal?.open),
+    containerRef: editDialogRef,
+    initialFocusRef: editCloseRef,
+    pending,
+    onDismiss: () => setEditShiftModal(null),
+  });
 
   // Tab 2: Registration State
   const [regMode, setRegMode] = useState<"week" | "freeform">("week");
@@ -1620,6 +1628,8 @@ export function StaffShiftRoster({
       {/* DIALOG 1: Quick Register Modal (Accessible canonical dialog) */}
       {quickRegisterModal?.open && (
         <div
+          ref={quickDialogRef}
+          data-overlay-focus-root="true"
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-neutral-950/40 backdrop-blur-xs"
           role="dialog"
           aria-modal="true"
@@ -1642,6 +1652,7 @@ export function StaffShiftRoster({
                 </p>
               </div>
               <button
+                ref={quickCloseRef}
                 type="button"
                 onClick={() => setQuickRegisterModal(null)}
                 className="text-neutral-400 hover:text-neutral-700 p-1"
@@ -1815,6 +1826,8 @@ export function StaffShiftRoster({
       {/* DIALOG 2: Edit Shift Time Modal (Accessible canonical dialog for Admin or Self) */}
       {editShiftModal?.open && (
         <div
+          ref={editDialogRef}
+          data-overlay-focus-root="true"
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-neutral-950/40 backdrop-blur-xs"
           role="dialog"
           aria-modal="true"
@@ -1839,6 +1852,7 @@ export function StaffShiftRoster({
                 </p>
               </div>
               <button
+                ref={editCloseRef}
                 type="button"
                 onClick={() => setEditShiftModal(null)}
                 className="text-neutral-400 hover:text-neutral-700 p-1"
