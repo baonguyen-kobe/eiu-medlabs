@@ -54,24 +54,26 @@ export function PasswordChangeForm({
           required
         />
       </label>
-      {state ? (
-        <p
-          className={
-            state.ok ? "action-feedback success" : "action-feedback error"
-          }
-          role={state.ok ? "status" : "alert"}
-          aria-live={state.ok ? "polite" : "assertive"}
+      <div className="auth-form-actions">
+        {state ? (
+          <p
+            className={
+              state.ok ? "action-feedback success" : "action-feedback error"
+            }
+            role={state.ok ? "status" : "alert"}
+            aria-live={state.ok ? "polite" : "assertive"}
+          >
+            {state.message}
+          </p>
+        ) : null}
+        <button
+          className="button button-primary full-width"
+          type="submit"
+          aria-disabled={pending}
         >
-          {state.message}
-        </p>
-      ) : null}
-      <button
-        className="button button-primary full-width"
-        type="submit"
-        aria-disabled={pending}
-      >
-        {pending ? "Đang cập nhật…" : "Cập nhật mật khẩu"}
-      </button>
+          {pending ? "Đang cập nhật…" : "Cập nhật mật khẩu"}
+        </button>
+      </div>
     </form>
   );
 }

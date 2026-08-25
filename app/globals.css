@@ -2117,6 +2117,31 @@ span.filter-control {
   opacity: 0.58;
 }
 
+.auth-form-actions {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.auth-form-actions .action-feedback {
+  margin: 0;
+}
+
+.forgot-password-action-area {
+  margin-top: 36px;
+}
+
+.forgot-password-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.forgot-password-actions .button {
+  min-width: 0;
+  padding-inline: 8px;
+}
+
 .input-with-icon {
   height: 52px;
   display: flex;
@@ -9117,6 +9142,10 @@ body,
 
   .login-divider span {
     background: #fcf5e4;
+  }
+
+  .login-form .input-with-icon {
+    background: var(--surface);
   }
 }
 

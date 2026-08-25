@@ -32,21 +32,29 @@ export function ForgotPasswordForm() {
           required
         />
       </label>
-      {state ? (
-        <p className="action-feedback success" role="status" aria-live="polite">
-          {state.message}
-        </p>
-      ) : null}
-      <button
-        className="button button-primary full-width"
-        type="submit"
-        aria-disabled={pending}
-      >
-        {pending ? "Đang gửi…" : "Gửi hướng dẫn"}
-      </button>
-      <Link className="button button-secondary full-width" href="/login">
-        Quay lại đăng nhập
-      </Link>
+      <div className="auth-form-actions forgot-password-action-area">
+        {state ? (
+          <p
+            className="action-feedback success"
+            role="status"
+            aria-live="polite"
+          >
+            {state.message}
+          </p>
+        ) : null}
+        <div className="forgot-password-actions">
+          <button
+            className="button button-primary full-width"
+            type="submit"
+            aria-disabled={pending}
+          >
+            {pending ? "Đang gửi…" : "Gửi hướng dẫn"}
+          </button>
+          <Link className="button button-secondary full-width" href="/login">
+            Quay lại đăng nhập
+          </Link>
+        </div>
+      </div>
     </form>
   );
 }
