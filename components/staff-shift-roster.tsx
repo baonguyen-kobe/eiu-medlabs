@@ -143,11 +143,13 @@ function generateWeekRows(
 
 /** Per-row Assignee Multi-Select Dropdown for Admin */
 function RowAssigneePicker({
+  ariaLabel,
   assignees,
   selectedIds,
   onChange,
   onApplyToAll,
 }: {
+  ariaLabel: string;
   assignees: Assignee[];
   selectedIds: string[];
   onChange: (ids: string[]) => void;
@@ -202,6 +204,7 @@ function RowAssigneePicker({
         }`}
         aria-haspopup="listbox"
         aria-expanded={open}
+        aria-label={ariaLabel}
       >
         <span className="truncate">{summaryText}</span>
         <ChevronDown size={13} className="text-neutral-400 flex-shrink-0" />
@@ -215,6 +218,7 @@ function RowAssigneePicker({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="input text-xs px-2 py-1 w-full"
+            aria-label={`Tìm nhân sự cho ${ariaLabel}`}
             autoFocus
           />
 
@@ -223,6 +227,7 @@ function RowAssigneePicker({
               type="button"
               onClick={() => onChange(assignees.map((a) => a.id))}
               className="text-primary-700 hover:underline font-medium"
+              aria-label={`Chọn tất cả người trực cho ${ariaLabel}`}
             >
               Chọn tất cả
             </button>
@@ -230,6 +235,7 @@ function RowAssigneePicker({
               type="button"
               onClick={() => onChange([])}
               className="text-neutral-500 hover:underline"
+              aria-label={`Bỏ chọn người trực cho ${ariaLabel}`}
             >
               Bỏ chọn
             </button>
@@ -241,7 +247,7 @@ function RowAssigneePicker({
                   setOpen(false);
                 }}
                 className="text-sky-700 hover:underline font-medium"
-                title="Áp dụng danh sách người trực này cho tất cả các dòng"
+                aria-label={`Áp dụng người trực của ${ariaLabel} cho tất cả các dòng`}
               >
                 Áp dụng cho tất cả
               </button>
@@ -267,6 +273,7 @@ function RowAssigneePicker({
                       }
                     }}
                     className="w-3.5 h-3.5 rounded border-neutral-300 text-primary-600 focus:ring-primary-500"
+                    aria-label={`${person.fullName} — ${ariaLabel}`}
                   />
                   <span className="truncate">{person.fullName}</span>
                 </label>
@@ -286,9 +293,11 @@ function RowAssigneePicker({
 
 function RegistrationTimeControls({
   row,
+  rowLabel,
   onChange,
 }: {
   row: RegistrationTimes & { slotOption: SlotOption };
+  rowLabel: string;
   onChange: (field: keyof RegistrationTimes, value: string) => void;
 }) {
   const renderLine = (
@@ -303,7 +312,7 @@ function RegistrationTimeControls({
         value={row[startField]}
         onChange={(value) => onChange(startField, value)}
         allowedValues={allowedValues}
-        ariaLabel={`Giờ bắt đầu ca ${label?.toLowerCase() ?? "trực"}`}
+        ariaLabel={`Giờ bắt đầu ca ${label?.toLowerCase() ?? "trực"} cho ${rowLabel}`}
         className="staff-shift-time-picker"
       />
       <span aria-hidden="true">–</span>
@@ -311,7 +320,7 @@ function RegistrationTimeControls({
         value={row[endField]}
         onChange={(value) => onChange(endField, value)}
         allowedValues={allowedValues}
-        ariaLabel={`Giờ kết thúc ca ${label?.toLowerCase() ?? "trực"}`}
+        ariaLabel={`Giờ kết thúc ca ${label?.toLowerCase() ?? "trực"} cho ${rowLabel}`}
         className="staff-shift-time-picker"
       />
     </div>
@@ -1291,6 +1300,7 @@ export function StaffShiftRoster({
                               {/* Column 2: Người trực */}
                               {isAdmin ? (
                                 <RowAssigneePicker
+                                  ariaLabel={`Chọn người trực cho ${row.dayLabel}`}
                                   assignees={assignees}
                                   selectedIds={row.selectedAssigneeIds}
                                   onChange={(ids) => {
@@ -1325,6 +1335,7 @@ export function StaffShiftRoster({
                                   setWeekRows(next);
                                 }}
                                 className="input text-xs py-1 px-2 font-medium"
+                                aria-label={`Chọn buổi trực cho ${row.dayLabel}`}
                               >
                                 <option value="MORNING">
                                   Sáng (07:30 – 11:30)
@@ -1339,6 +1350,7 @@ export function StaffShiftRoster({
 
                               <RegistrationTimeControls
                                 row={row}
+                                rowLabel={row.dayLabel}
                                 onChange={(field, value) => {
                                   const next = [...weekRows];
                                   next[idx][field] = value;
@@ -1361,6 +1373,7 @@ export function StaffShiftRoster({
                                   )
                                 }
                                 disabled={pending}
+                                aria-label={`Đăng ký ca trực ${row.dayLabel}`}
                                 className="button button-secondary text-xs px-2.5 py-1 flex items-center gap-1 font-semibold text-primary-700 hover:bg-primary-50"
                               >
                                 <Plus size={13} /> Đăng ký ca
@@ -1418,6 +1431,7 @@ export function StaffShiftRoster({
                           <div className="staff-shift-registration-date flex items-center gap-2">
                             <input
                               type="date"
+                              aria-label={`Chọn ngày trực dòng ${idx + 1}`}
                               value={row.date}
                               onChange={(e) => {
                                 const next = [...freeformRows];
@@ -1437,6 +1451,7 @@ export function StaffShiftRoster({
                             {/* Column 2: Người trực */}
                             {isAdmin ? (
                               <RowAssigneePicker
+                                ariaLabel={`Chọn người trực ngày ${formatBusinessDate(row.date)}`}
                                 assignees={assignees}
                                 selectedIds={row.selectedAssigneeIds}
                                 onChange={(ids) => {
@@ -1471,6 +1486,7 @@ export function StaffShiftRoster({
                                 setFreeformRows(next);
                               }}
                               className="input text-xs py-1 px-2 font-medium"
+                              aria-label={`Chọn buổi trực ngày ${formatBusinessDate(row.date)}`}
                             >
                               <option value="MORNING">
                                 Sáng (07:30 – 11:30)
@@ -1485,6 +1501,7 @@ export function StaffShiftRoster({
 
                             <RegistrationTimeControls
                               row={row}
+                              rowLabel={formatBusinessDate(row.date)}
                               onChange={(field, value) => {
                                 const next = [...freeformRows];
                                 next[idx][field] = value;
@@ -1508,6 +1525,7 @@ export function StaffShiftRoster({
                                   },
                                 )
                               }
+                              aria-label={`Đăng ký ca trực ngày ${formatBusinessDate(row.date)}`}
                               disabled={pending}
                               className="button button-secondary text-xs px-2.5 py-1 flex items-center gap-1 font-semibold text-primary-700 hover:bg-primary-50"
                             >
@@ -1517,14 +1535,13 @@ export function StaffShiftRoster({
                             {/* Column 6: Xóa dòng tự chọn */}
                             {freeformRows.length > 1 && (
                               <button
-                                type="button"
+                                aria-label={`Xóa dòng trực ngày ${formatBusinessDate(row.date)}`}
                                 onClick={() =>
                                   setFreeformRows((prev) =>
                                     prev.filter((r) => r.id !== row.id),
                                   )
                                 }
                                 className="button button-danger staff-shift-delete-button text-xs px-2.5 py-1 flex items-center gap-1"
-                                aria-label="Xóa dòng ngày trực này"
                               >
                                 <Trash2 size={14} /> Xóa
                               </button>
@@ -1553,6 +1570,7 @@ export function StaffShiftRoster({
                 </div>
                 {canManageShiftHistory ? (
                   <textarea
+                    aria-label="Lý do điều chỉnh lịch sử"
                     rows={2}
                     placeholder="Nhập lý do điều chỉnh lịch sử (bắt buộc)..."
                     value={regHistoricalReason}

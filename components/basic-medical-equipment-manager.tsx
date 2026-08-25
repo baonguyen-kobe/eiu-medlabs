@@ -20,6 +20,15 @@ import type {
   BasicMedicalRoomInventoryItem,
 } from "@/lib/basic-medical-equipment";
 
+const catalogFieldLabels: Record<string, string> = {
+  item_name: "Tên thiết bị và vật tư",
+  commercial_name: "Tên thương mại",
+  item_type: "Loại",
+  country_of_origin: "Nước sản xuất",
+  manufacturer: "Hãng",
+  model: "Model",
+  unit: "Đơn vị tính",
+};
 type Tab = "inventory" | "rooms" | "damaged" | "logs";
 type Room = {
   id: string;
@@ -301,7 +310,7 @@ function InventoryTab({
                       <td key={key}>
                         {editing ? (
                           <input
-                            aria-label={`${key} của ${item.item_name}`}
+                            aria-label={`${catalogFieldLabels[key]} của ${item.item_name}`}
                             value={draft[key] ?? ""}
                             onChange={(event) =>
                               setDrafts((current) => ({
@@ -455,6 +464,7 @@ function RoomInventoryTab({
                   {canManage ? (
                     <td>
                       <button
+                        aria-label={`Sửa số lượng ${item.catalog?.item_name ?? "thiết bị"} tại ${roomLabel(item.room)}`}
                         type="button"
                         className="text-action"
                         onClick={() => setStockAdjustment(item)}
@@ -685,6 +695,7 @@ function DamagedTab({
                 {canManage ? (
                   <td>
                     <button
+                      aria-label={`Sửa tình trạng ${item.catalog?.item_name ?? "thiết bị"} tại ${roomLabel(item.room)}`}
                       className="button button-warning"
                       type="button"
                       disabled={isPending}
