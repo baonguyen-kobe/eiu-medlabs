@@ -10315,6 +10315,54 @@ body,
   }
 }
 
+.personnel-mobile-list {
+  display: none;
+}
+
+@media (max-width: 820px) {
+  .personnel-table-wrap {
+    display: none;
+  }
+
+  .personnel-mobile-list {
+    display: grid;
+    gap: 12px;
+  }
+
+  .personnel-mobile-card {
+    display: grid;
+    gap: 12px;
+    padding: 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
+  }
+
+  .personnel-mobile-summary {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 8px 12px;
+    align-items: center;
+  }
+
+  .personnel-mobile-summary .status-pill {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .personnel-mobile-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .personnel-mobile-actions .button {
+    flex: 0 0 auto;
+  }
+}
+
 /* --------------------------------------------------------------------------
    MedLabs UI Design System V2 – shared local-preview foundation.
    These semantic aliases intentionally sit last: older feature selectors keep
