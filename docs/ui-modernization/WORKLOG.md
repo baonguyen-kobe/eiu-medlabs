@@ -343,3 +343,13 @@ A11Y-02.2 is `DONE` at `0884d75`; manual user review deferred by explicit author
 ### Task state
 
 A11Y-02.3 is `DONE` at `62ba3d3`; manual user review deferred by explicit authorization for MEGA RUN A v2. A11Y-02.4 started next.
+
+## 2026-08-25 — MOB-01.5 Personnel summary/detail
+
+- Added Strategy E mobile summary cards at 375/768 using existing personnel data and the same `open(item)` drawer action; identity, title/email fallback, active status, up to two roles, and Sửa/Xem remain visible.
+- The existing accessible drawer retains detailed permissions, scopes, supplementary capabilities, and security metadata. The dense table remains at 1024/1440.
+- PASS: 375/768/1024/1440 no page overflow; mobile action opens the existing drawer with close-button focus and scroll lock.
+
+### Task state
+
+MOB-01.5 is `DONE` at `e2856c9`; manual user review deferred by explicit authorization for MEGA RUN A v2. MOB-01.6 started next.

@@ -26,11 +26,11 @@ Phase 2 — Shared accessibility and UI foundations
 
 ## Active task
 
-A11Y-02.4 / A11Y-02.5
+MOB-01.6
 
-**Status:** VERIFY
+**Status:** IN_PROGRESS
 
-**Starting commit:** `fd2d23c`
+**Starting commit:** `e2856c9`
 
 ## Recently completed
 
@@ -58,7 +58,7 @@ PERF-01 — DONE
 
 ## Next batch task
 
-Provide local actionable equipment-request and Basic Medical session data, then complete rendered verification for A11Y-02.4 and A11Y-02.5 before claiming dependent mobile tasks.
+MOB-01.6 is active. Inspect the current Staff Shift roster and registration responsive contracts before editing.
 
 ## Blocked tasks
 
