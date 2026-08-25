@@ -26,22 +26,13 @@ Phase 1 — Blocking fixes
 
 ## Active task
 
-AUTH-01
+NONE
 
-**Status:** VERIFY
+## Next eligible READY task
 
-**Starting commit:** `db5f2f558921dba48d81d90d2ce54d3ef4aa3346`
+A11Y-03 — Complete SearchableCombobox keyboard model.
 
-**Implementation commits:**
-
-- `01065037e3e7fe8e90da73a132b4050b782a0ebb` — approved auth shell, semantics, and full-width fields.
-- `cdbcd1e339736cb2476e7b72e5ce2a352b4f6660` — shared `/login` shell ownership and pending-focus retention.
-
-**Verification state:** Automated and rendered verification passed on local Supabase at `http://localhost:4000`. AUTH-01 remains `VERIFY` pending the user's required visual acceptance.
-
-## Next READY task
-
-AUTH-01 — Await user visual acceptance at `http://localhost:4000` before moving to `DONE`.
+Reason: it is the first Phase 2 P1 task whose only dependency, AUTH-01, is now `DONE`. A11Y-02 remains blocked by BASE-01. Do not start A11Y-03 without a new explicit task claim.
 
 ## Blocked tasks
 

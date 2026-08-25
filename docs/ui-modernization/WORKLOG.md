@@ -84,16 +84,16 @@ YES — AUTH-01 auth route, form, shared shell, and scoped login heading styles 
 - PASS: local axe scan found no WCAG A/AA violations; automated contrast remains incomplete. Existing login secondary-copy contrast remains `CONTRAST-01`.
 - ADVISORY: React Doctor was run; its full audit reported unrelated baseline diagnostics, while the changed-scope invocation emitted no diagnostics.
 
-### User inspection
+### User acceptance
 
-- Opened `http://localhost:4000/login` in the user's browser.
-- Persistent local server remains available at port 4000 for manual acceptance.
+PASS — user approved AUTH-01, including the requested 36px action-area rhythm, forgot-password two-action row, and mobile-only white login input background.
 
 ### Task state
 
-AUTH-01 remains `VERIFY`, not `DONE`, pending required user visual acceptance.
+AUTH-01 is `DONE`. No successor task was started.
 
 ### Commits
 
 - `01065037e3e7fe8e90da73a132b4050b782a0ebb` — `fix(AUTH-01): unify password recovery auth shell`
 - `cdbcd1e339736cb2476e7b72e5ce2a352b4f6660` — `fix(AUTH-01): preserve focus during pending submits`
+- `de471341a192fda6e8a62512be2738101a591128` — `fix(AUTH-01): apply approved auth visual polish`
