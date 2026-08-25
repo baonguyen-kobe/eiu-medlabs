@@ -26,11 +26,11 @@ Phase 2 — Shared accessibility and UI foundations
 
 ## Active task
 
-A11Y-02.4
+A11Y-02.4 / A11Y-02.5
 
-**Status:** IN_PROGRESS
+**Status:** VERIFY
 
-**Starting commit:** `62ba3d3`
+**Starting commit:** `fd2d23c`
 
 ## Recently completed
 
@@ -58,7 +58,7 @@ PERF-01 — DONE
 
 ## Next batch task
 
-A11Y-02.4 is active. Inspect Equipment modal families before changing their focus contract.
+Provide local actionable equipment-request and Basic Medical session data, then complete rendered verification for A11Y-02.4 and A11Y-02.5 before claiming dependent mobile tasks.
 
 ## Blocked tasks
 
