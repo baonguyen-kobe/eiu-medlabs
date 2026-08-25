@@ -26,11 +26,7 @@ Phase 2 — Shared accessibility and UI foundations
 
 ## Active task
 
-PERF-01
-
-**Status:** IN_PROGRESS
-
-**Starting commit:** `95f2678f722af4130b9de0c3a291612fd2daa92b`
+NONE
 
 ## Recently completed
 
@@ -54,13 +50,14 @@ MOB-01.4 — DONE
 
 ARCH-01 — DONE
 
-- Implementation commit: `95f2678f722af4130b9de0c3a291612fd2daa92b`
-- Shared preview viewport only; parsing, validation, action, and five-step domain behavior remain local.
-- Manual user review deferred by explicit overnight authorization.
+PERF-01 — DONE
 
-## Next batch task
+- Implementation commit: `705fc62d434f04ca7005598ad654ea52fda676a5`
+- Manual user review deferred by explicit user authorization for the 2026-08-25 overnight batch.
 
-PERF-01 is active. This is the final approved overnight task.
+## Next task
+
+No next task is claimed. The explicit overnight queue is complete; await a new user plan.
 
 ## Blocked tasks
 

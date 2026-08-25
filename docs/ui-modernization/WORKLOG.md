@@ -269,3 +269,18 @@ MOB-01.4 is `DONE`; manual user review deferred by explicit overnight authorizat
 ### Task state
 
 ARCH-01 is `DONE`; manual user review deferred by explicit overnight authorization. PERF-01 started next.
+
+## 2026-08-25 — PERF-01 personnel fan-out reduction
+
+### Result
+
+- Replaced per-row Auth Admin lookup and per-row profile lookup with paginated Auth Admin discovery plus one batched profile query.
+- Local 29-row personnel page baseline: 58 row-scoped calls before; 2 batch calls after.
+
+### Verification
+
+- PASS: `/admin/personnel` preserves 29 rows at 375/768/1024/1440.
+
+### Task state
+
+PERF-01 is `DONE`; manual user review deferred by explicit overnight authorization. The fixed overnight queue is complete.
