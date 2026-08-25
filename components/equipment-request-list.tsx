@@ -38,6 +38,7 @@ import {
 import { equipmentRequestTargetPage } from "@/lib/equipment-calendar-request";
 import { TABLE_PAGE_SIZE, totalPagesFor } from "@/lib/pagination";
 import type { AppRole } from "@/lib/viewer";
+import { useOverlayFocus } from "@/components/use-overlay-focus";
 
 const EARLY_HANDOVER_ADMIN_EMAILS = new Set([
   "admin@campus.local",
@@ -141,6 +142,8 @@ function EquipmentItemsModal({
     message: string;
   } | null>(null);
   const [isAdding, startAdding] = useTransition();
+  const modalRef = useRef<HTMLElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
   const catalogById = useMemo(
     () => new Map(catalog.map((item) => [item.id, item])),
     [catalog],
@@ -197,6 +200,13 @@ function EquipmentItemsModal({
     }));
     setNotice(null);
   }
+
+  useOverlayFocus({
+    open: true,
+    containerRef: modalRef,
+    initialFocusRef: closeRef,
+    onDismiss: onClose,
+  });
 
   function updateDraft(
     skillName: string,
@@ -324,6 +334,8 @@ function EquipmentItemsModal({
         onClick={onClose}
       />
       <section
+        ref={modalRef}
+        data-overlay-focus-root="true"
         className="equipment-modal"
         role="dialog"
         aria-modal="true"
@@ -344,6 +356,7 @@ function EquipmentItemsModal({
           </div>
           <button
             type="button"
+            ref={closeRef}
             className="equipment-modal-close"
             aria-label="Đóng danh sách trang thiết bị"
             onClick={onClose}
@@ -593,15 +606,17 @@ function SignatureModal({
   const drawingRef = useRef(false);
   const [hasInk, setHasInk] = useState(false);
   const isHandover = phase === "handover";
+  const modalRef = useRef<HTMLElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useOverlayFocus({
+    open: true,
+    containerRef: modalRef,
+    initialFocusRef: closeRef,
+    pending,
+    onDismiss: onClose,
+  });
 
   useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !pending) onClose();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-
     const canvas = canvasRef.current;
     if (canvas) {
       const rect = canvas.getBoundingClientRect();
@@ -617,12 +632,7 @@ function SignatureModal({
         context.strokeStyle = "#173f6b";
       }
     }
-
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [onClose, pending]);
+  }, []);
 
   function pointFromEvent(event: ReactPointerEvent<HTMLCanvasElement>) {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -648,6 +658,8 @@ function SignatureModal({
         onClick={() => !pending && onClose()}
       />
       <section
+        ref={modalRef}
+        data-overlay-focus-root="true"
         className="equipment-modal signature-modal"
         role="dialog"
         aria-modal="true"
@@ -668,6 +680,7 @@ function SignatureModal({
           </div>
           <button
             type="button"
+            ref={closeRef}
             className="equipment-modal-close"
             disabled={pending}
             onClick={onClose}
