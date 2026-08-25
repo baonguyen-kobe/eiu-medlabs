@@ -76,14 +76,24 @@ YES — AUTH-01 auth route, form, shared shell, and scoped login heading styles 
 - PASS: Prettier check on touched source and tracking files.
 - PASS: targeted ESLint.
 - PASS: `npm.cmd run typecheck`.
+- PASS: local Supabase Auth health check and `npm.cmd run build` using only runtime-provided local values.
+- PASS: existing Playwright login accessibility E2E against `http://localhost:4000`.
+- PASS: rendered 375/768/1024/1440 sweep for login, forgot-password, reset-password, and change-password.
+- PASS: no horizontal page overflow; approved shell, headings, controls, gutters, desktop composition, and login regression.
+- PASS: keyboard focus order, visible focus, pending focus retention, recovery status, and password error alert.
+- PASS: local axe scan found no WCAG A/AA violations; automated contrast remains incomplete. Existing login secondary-copy contrast remains `CONTRAST-01`.
 - ADVISORY: React Doctor was run; its full audit reported unrelated baseline diagnostics, while the changed-scope invocation emitted no diagnostics.
-- BLOCKED: local server started on `localhost:4000`, but proxy initialization failed because required public Supabase environment values are unavailable. No environment file or credentials were created.
-- BLOCKED: rendered 375/768/1024/1440, `/login` regression, keyboard, accessibility, and visual-identity verification.
+
+### User inspection
+
+- Opened `http://localhost:4000/login` in the user's browser.
+- Persistent local server remains available at port 4000 for manual acceptance.
 
 ### Task state
 
-AUTH-01 is `VERIFY`, not `DONE`, until the approved local environment permits rendered verification.
+AUTH-01 remains `VERIFY`, not `DONE`, pending required user visual acceptance.
 
-### Commit
+### Commits
 
-`01065037e3e7fe8e90da73a132b4050b782a0ebb` — `fix(AUTH-01): unify password recovery auth shell`
+- `01065037e3e7fe8e90da73a132b4050b782a0ebb` — `fix(AUTH-01): unify password recovery auth shell`
+- `cdbcd1e339736cb2476e7b72e5ce2a352b4f6660` — `fix(AUTH-01): preserve focus during pending submits`

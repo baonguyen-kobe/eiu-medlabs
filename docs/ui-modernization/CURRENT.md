@@ -32,13 +32,16 @@ AUTH-01
 
 **Starting commit:** `db5f2f558921dba48d81d90d2ce54d3ef4aa3346`
 
-**Implementation commit:** `01065037e3e7fe8e90da73a132b4050b782a0ebb`
+**Implementation commits:**
 
-**Verification blocker:** The local server at `localhost:4000` cannot initialize the Supabase proxy because required public Supabase environment values are unavailable. Source implementation, formatting, lint, and typecheck are complete; rendered 375/768/1024/1440 and `/login` regression verification remain blocked.
+- `01065037e3e7fe8e90da73a132b4050b782a0ebb` — approved auth shell, semantics, and full-width fields.
+- `cdbcd1e339736cb2476e7b72e5ce2a352b4f6660` — shared `/login` shell ownership and pending-focus retention.
+
+**Verification state:** Automated and rendered verification passed on local Supabase at `http://localhost:4000`. AUTH-01 remains `VERIFY` pending the user's required visual acceptance.
 
 ## Next READY task
 
-AUTH-01 — Complete blocked rendered verification when the approved local environment is available.
+AUTH-01 — Await user visual acceptance at `http://localhost:4000` before moving to `DONE`.
 
 ## Blocked tasks
 
