@@ -26,11 +26,11 @@ Phase 2 — Shared accessibility and UI foundations
 
 ## Active task
 
-PILOT-01
+ARCH-01
 
 **Status:** IN_PROGRESS
 
-**Starting commit:** `b75e5715c8b61447d2cc4550b91c89c3a0ab9413`
+**Starting commit:** `9b3ff5980ffdccccc29290f4886a094a37328d29`
 
 ## Recently completed
 
@@ -46,12 +46,19 @@ A11Y-04 — DONE
 
 TOUCH-01 — DONE
 
-- Implementation commit: `b75e5715c8b61447d2cc4550b91c89c3a0ab9413`
-- Manual user review deferred by explicit user authorization for the 2026-08-25 overnight batch.
+PILOT-01 — DONE
+
+MOB-01.1 — DONE
+
+MOB-01.4 — DONE
+
+- Implementation commit: `9b3ff5980ffdccccc29290f4886a094a37328d29`
+- Catalog/logs retain Strategy A local scroll; rooms/damaged use Strategy B on narrow viewports.
+- Manual user review deferred by explicit overnight authorization.
 
 ## Next batch task
 
-PILOT-01 is active. Do not claim MOB-01.1 until PILOT-01 verification is recorded.
+ARCH-01 is active. Do not claim PERF-01 until ARCH-01 verification is recorded.
 
 ## Blocked tasks
 

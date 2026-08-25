@@ -215,3 +215,42 @@ A11Y-03, TABLE-01, FORM-01, and A11Y-04 remain `VERIFY` pending user review. No 
 ### Task state
 
 TOUCH-01 is `DONE`; manual user review deferred by explicit overnight authorization. PILOT-01 started next.
+
+## 2026-08-25 — PILOT-01 Classes representative pilot
+
+### Result
+
+- Verification-only: no additional Classes implementation was justified after A11Y-03, TABLE-01, FORM-01, A11Y-04, and TOUCH-01.
+- PASS: `/classes/open` and `/classes/mine` at 375/768/1024/1440; toolbar, combobox/TimePicker integration, focusable local scroll, actions, and visual identity retained.
+
+### Task state
+
+PILOT-01 is `DONE`; manual user review deferred by explicit overnight authorization. MOB-01.1 started next.
+
+## 2026-08-25 — MOB-01.1 Classes mobile priority
+
+### Work
+
+- Applied Strategy B only to read-only narrow class rows: hide course code and student count.
+- Editable rows retain all controls and the existing local scroll contract.
+
+### Verification
+
+- PASS: 375/768 narrow strategy gate and 1024/1440 full layout parity.
+
+### Task state
+
+MOB-01.1 is `DONE`; manual user review deferred by explicit overnight authorization. MOB-01.4 started next.
+
+## 2026-08-25 — MOB-01.4 Basic Medical equipment strategies
+
+### Decision matrix
+
+- Catalog: A — local horizontal comparison remains appropriate.
+- Rooms: B — narrow view hides commercial name, unit, and good count while preserving room, device, total, damage, and actions.
+- Damaged: B — narrow view hides unit, good count, actor, and date while preserving device, room, damage, and actions.
+- Logs: A — local horizontal comparison remains appropriate for audit data.
+
+### Task state
+
+MOB-01.4 is `DONE`; manual user review deferred by explicit overnight authorization. ARCH-01 started next.
