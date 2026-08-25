@@ -26,11 +26,11 @@ Phase 2 — Shared accessibility and UI foundations
 
 ## Active task
 
-MOB-01.6
+MOB-01.7
 
 **Status:** IN_PROGRESS
 
-**Starting commit:** `e2856c9`
+**Starting commit:** `e7f4dc9`
 
 ## Recently completed
 
@@ -58,7 +58,7 @@ PERF-01 — DONE
 
 ## Next batch task
 
-MOB-01.6 is active. Inspect the current Staff Shift roster and registration responsive contracts before editing.
+MOB-01.7 is active. Inventory remaining table families without changing dedicated children.
 
 ## Blocked tasks
 

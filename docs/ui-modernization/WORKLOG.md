@@ -353,3 +353,12 @@ A11Y-02.3 is `DONE` at `62ba3d3`; manual user review deferred by explicit author
 ### Task state
 
 MOB-01.5 is `DONE` at `e2856c9`; manual user review deferred by explicit authorization for MEGA RUN A v2. MOB-01.6 started next.
+
+## 2026-08-25 — MOB-01.6 Staff Shift responsive strategy
+
+- Verification-only: current roster retains intentional calendar-local horizontal scrolling and existing TOUCH-01 controls; registration rows intentionally stack below 920px.
+- PASS: roster and register routes at 375/768/1024/1440 without page-level horizontal overflow.
+
+### Task state
+
+MOB-01.6 is `DONE`; manual user review deferred by explicit authorization for MEGA RUN A v2. MOB-01.7 started next.
