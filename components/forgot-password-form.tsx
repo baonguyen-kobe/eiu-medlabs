@@ -11,7 +11,14 @@ export function ForgotPasswordForm() {
   );
 
   return (
-    <form action={action} className="login-form" aria-busy={pending}>
+    <form
+      action={action}
+      className="login-form"
+      aria-busy={pending}
+      onSubmit={(event) => {
+        if (pending) event.preventDefault();
+      }}
+    >
       <header className="login-form-heading">
         <h1>Quên mật khẩu</h1>
       </header>
@@ -33,7 +40,7 @@ export function ForgotPasswordForm() {
       <button
         className="button button-primary full-width"
         type="submit"
-        disabled={pending}
+        aria-disabled={pending}
       >
         {pending ? "Đang gửi…" : "Gửi hướng dẫn"}
       </button>

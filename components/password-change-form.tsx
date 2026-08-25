@@ -15,7 +15,14 @@ export function PasswordChangeForm({
   const [state, action, pending] = useActionState(completePasswordChange, null);
 
   return (
-    <form action={action} className="login-form" aria-busy={pending}>
+    <form
+      action={action}
+      className="login-form"
+      aria-busy={pending}
+      onSubmit={(event) => {
+        if (pending) event.preventDefault();
+      }}
+    >
       <input name="reason" type="hidden" value={reason} />
       <header className="login-form-heading">
         <h1>{title}</h1>
@@ -61,7 +68,7 @@ export function PasswordChangeForm({
       <button
         className="button button-primary full-width"
         type="submit"
-        disabled={pending}
+        aria-disabled={pending}
       >
         {pending ? "Đang cập nhật…" : "Cập nhật mật khẩu"}
       </button>
