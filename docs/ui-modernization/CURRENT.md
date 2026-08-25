@@ -26,11 +26,11 @@ Phase 2 — Shared accessibility and UI foundations
 
 ## Active task
 
-A11Y-02.3
+A11Y-02.4
 
 **Status:** IN_PROGRESS
 
-**Starting commit:** `0884d75`
+**Starting commit:** `62ba3d3`
 
 ## Recently completed
 
@@ -58,7 +58,7 @@ PERF-01 — DONE
 
 ## Next batch task
 
-A11Y-02.3 is active. Inspect Staff Shift dialog and popover ownership before changing its focus contract.
+A11Y-02.4 is active. Inspect Equipment modal families before changing their focus contract.
 
 ## Blocked tasks
 

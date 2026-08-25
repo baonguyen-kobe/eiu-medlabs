@@ -334,3 +334,12 @@ A11Y-02 foundation and A11Y-02.1 are `DONE` at `ff6e06f` and `86e89fa`; A11Y-02 
 ### Task state
 
 A11Y-02.2 is `DONE` at `0884d75`; manual user review deferred by explicit authorization for MEGA RUN A v2. A11Y-02.3 started next.
+
+## 2026-08-25 — A11Y-02.3 Staff Shift dialogs
+
+- Quick and Edit dialogs use the shared overlay contract; the existing cancellation flow remains on `ConfirmDialog`.
+- At 375px the quick dialog enters at Close, locks page scroll, and closes safely by Escape.
+
+### Task state
+
+A11Y-02.3 is `DONE` at `62ba3d3`; manual user review deferred by explicit authorization for MEGA RUN A v2. A11Y-02.4 started next.
