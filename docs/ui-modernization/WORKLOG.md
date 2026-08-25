@@ -325,3 +325,12 @@ BASE-01 is `DONE`; manual user review deferred by explicit authorization for MEG
 ### Task state
 
 A11Y-02 foundation and A11Y-02.1 are `DONE` at `ff6e06f` and `86e89fa`; A11Y-02 remains `IN_PROGRESS` until all family children complete. Manual user review deferred by explicit authorization for MEGA RUN A v2. A11Y-02.2 started next.
+
+## 2026-08-25 — A11Y-02.2 personnel drawer
+
+- The Personnel drawer now uses the shared focus contract, captures the exact Sửa/Xem opener, enters at its close button, contains Tab/Shift+Tab, is Escape/pending-safe, and restores the opener after close.
+- Existing dirty-discard and nested `ConfirmDialog` behavior remain unchanged; topmost-overlay handling prevents the drawer from competing for keyboard events.
+
+### Task state
+
+A11Y-02.2 is `DONE` at `0884d75`; manual user review deferred by explicit authorization for MEGA RUN A v2. A11Y-02.3 started next.

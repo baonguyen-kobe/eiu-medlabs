@@ -26,11 +26,11 @@ Phase 2 — Shared accessibility and UI foundations
 
 ## Active task
 
-A11Y-02.2
+A11Y-02.3
 
 **Status:** IN_PROGRESS
 
-**Starting commit:** `86e89fa`
+**Starting commit:** `0884d75`
 
 ## Recently completed
 
@@ -58,7 +58,7 @@ PERF-01 — DONE
 
 ## Next batch task
 
-A11Y-02.2 is active. Inspect the Personnel drawer and nested confirmation behavior before changing its focus contract.
+A11Y-02.3 is active. Inspect Staff Shift dialog and popover ownership before changing its focus contract.
 
 ## Blocked tasks
 
