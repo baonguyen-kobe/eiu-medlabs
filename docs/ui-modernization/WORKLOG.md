@@ -58,3 +58,28 @@ AUTH-01
 
 - Tracking foundation commits verified as documentation-only.
 - Canonical main promotion and branch topology verified after normal pushes.
+
+## 2026-08-25 — AUTH-01 implementation
+
+### Work
+
+- Reused the approved login image/logo/form-wrap composition for forgot, reset, and forced-change password routes.
+- Added semantic password-recovery/change headings, email/new-password autocomplete, explicit submit controls, pending state, and live feedback.
+- Preserved existing server actions, field names, recovery reason, and Supabase behavior.
+
+### Application source changed
+
+YES — AUTH-01 auth route, form, shared shell, and scoped login heading styles only.
+
+### Verification
+
+- PASS: Prettier check on touched source and tracking files.
+- PASS: targeted ESLint.
+- PASS: `npm.cmd run typecheck`.
+- ADVISORY: React Doctor was run; its full audit reported unrelated baseline diagnostics, while the changed-scope invocation emitted no diagnostics.
+- BLOCKED: local server started on `localhost:4000`, but proxy initialization failed because required public Supabase environment values are unavailable. No environment file or credentials were created.
+- BLOCKED: rendered 375/768/1024/1440, `/login` regression, keyboard, accessibility, and visual-identity verification.
+
+### Task state
+
+AUTH-01 is `VERIFY`, not `DONE`, until the approved local environment permits rendered verification.

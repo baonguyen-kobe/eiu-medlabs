@@ -26,11 +26,17 @@ Phase 1 — Blocking fixes
 
 ## Active task
 
-NONE
+AUTH-01
+
+**Status:** VERIFY
+
+**Starting commit:** `db5f2f558921dba48d81d90d2ce54d3ef4aa3346`
+
+**Verification blocker:** The local server at `localhost:4000` cannot initialize the Supabase proxy because required public Supabase environment values are unavailable. Source implementation, formatting, lint, and typecheck are complete; rendered 375/768/1024/1440 and `/login` regression verification remain blocked.
 
 ## Next READY task
 
-AUTH-01 — Repair forgot/reset/change-password screens using the approved current login visual family.
+AUTH-01 — Complete blocked rendered verification when the approved local environment is available.
 
 ## Blocked tasks
 
@@ -64,6 +70,4 @@ A new agent should:
 
 If this checkpoint and Git disagree, reconcile Git history, `WORKLOG.md`, `TRACKER.md`, and the current diff before changing source.
 
-## Next action
-
-Implement AUTH-01 only in a separate implementation batch after the planning foundation is reviewed.
+Complete AUTH-01 rendered verification in an approved local Supabase environment before changing its tracker status from `VERIFY` to `DONE`.
