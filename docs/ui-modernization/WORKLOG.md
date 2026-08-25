@@ -83,3 +83,7 @@ YES — AUTH-01 auth route, form, shared shell, and scoped login heading styles 
 ### Task state
 
 AUTH-01 is `VERIFY`, not `DONE`, until the approved local environment permits rendered verification.
+
+### Commit
+
+`01065037e3e7fe8e90da73a132b4050b782a0ebb` — `fix(AUTH-01): unify password recovery auth shell`

@@ -32,6 +32,8 @@ AUTH-01
 
 **Starting commit:** `db5f2f558921dba48d81d90d2ce54d3ef4aa3346`
 
+**Implementation commit:** `01065037e3e7fe8e90da73a132b4050b782a0ebb`
+
 **Verification blocker:** The local server at `localhost:4000` cannot initialize the Supabase proxy because required public Supabase environment values are unavailable. Source implementation, formatting, lint, and typecheck are complete; rendered 375/768/1024/1440 and `/login` regression verification remain blocked.
 
 ## Next READY task
