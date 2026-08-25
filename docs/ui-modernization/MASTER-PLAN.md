@@ -110,7 +110,7 @@ Tasks:
 - `TRACK-01` persistent tracking foundation
 - `BASE-01` protected-route authenticated rendered baseline
 
-The tracking foundation is created in this phase. Protected authenticated screens were not rendered during the audit. `BASE-01` remains `BLOCKED` until approved local authentication/environment access exists. Do not manufacture credentials.
+The tracking foundation is created in this phase. Local Supabase availability for UI preview is not an approved authenticated protected-route baseline. `BASE-01` remains `BLOCKED` until an authenticated protected-route baseline is explicitly requested and established. Do not manufacture credentials.
 
 ### Phase 1 — Blocking fixes
 
@@ -271,29 +271,21 @@ A UI implementation task is not complete because it compiles.
 Applicable completion flow:
 
 ```text
+source/current implementation inspected
+↓
 implementation
 ↓
-typecheck
+technical checks
 ↓
-lint
+required viewport checks
 ↓
-relevant tests
-↓
-375px verification
-↓
-768px verification
-↓
-1024px verification
-↓
-1440px verification
-↓
-keyboard verification if interactive
-↓
-accessibility verification if relevant
+keyboard/a11y where applicable
 ↓
 MedLabs visual-identity check
 ↓
-git diff review
+user visual acceptance when the task is user-facing and reviewable
+↓
+final diff review
 ↓
 tracking updated
 ↓
@@ -335,3 +327,5 @@ Rules:
 - A screenshot alone does not prove interaction or accessibility.
 - Review the final diff for unrelated source, business, security, data, package, or environment changes.
 - Update `TRACKER.md`, `CURRENT.md`, `QA-MATRIX.md`, and `WORKLOG.md` as part of the coherent task commit.
+
+For user-visible visual work, retain `VERIFY` during active user review. Keep localhost available when practical; do not commit/push iterative visual revisions without user approval unless interruption safety requires a clearly recorded checkpoint. After explicit approval, run the smallest relevant regression, commit/push, then move `VERIFY` to `DONE`. Documentation-only and non-visual tasks do not require this gate.

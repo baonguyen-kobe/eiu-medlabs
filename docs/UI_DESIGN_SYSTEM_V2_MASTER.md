@@ -7,7 +7,7 @@ Canonical path:
 docs/UI_DESIGN_SYSTEM_V2_MASTER.md
 
 Last updated:
-2026-08-16
+2026-08-25
 
 ---
 
@@ -1422,20 +1422,62 @@ Principles:
 
 ---
 
-# 34. LOGIN OVERRIDE
+# 34. AUTHENTICATION / LOGIN FAMILY OVERRIDE — APPROVED
 
-Keep gần production hiện tại.
+Applies to:
 
-Inherit shared:
+```text
+/login
+/forgot-password
+/reset-password
+/change-password
+```
 
-- font
-- input
-- button
-- focus
-- error
-- accessibility
+Classification:
 
-Không redesign login thành unrelated visual family.
+```text
+Authentication Family Master
+with approved page overrides below
+```
+
+## Shared family contract
+
+- Use the approved campus image, corner logo, and form-panel composition.
+- Reuse `AuthPageShell` where implementation reuse is appropriate.
+- Preserve Be Vietnam Pro and the EIU blue/gold/cream identity.
+- Recovery, reset, and forced-change pages belong visually to the `/login` family.
+- Inherit the Global Control, Focus, Button/Status, Responsive, and Accessibility Masters.
+- Preserve auth, business, Supabase, email, recovery, and redirect semantics; this family defines visual and accessibility presentation only.
+
+## Forgot password — approved page override
+
+- The final email field to action-area spacing is `36px`.
+- `Gửi hướng dẫn` and `Quay lại đăng nhập` remain on the same row.
+- The pair has equal-height, aligned geometry with primary/secondary hierarchy preserved.
+- At the approved narrow viewport, neither action may wrap, clip, or create page horizontal overflow.
+- Feedback inside the action area keeps a sensible internal gap without adding a second field-to-action margin.
+
+## Reset password — approved page override
+
+- The final password field to the full-width primary action rhythm is `18px`.
+- Preserve approved full-width field and primary-action geometry.
+
+## Change password — approved page override
+
+- The final password field to the full-width primary action rhythm is `18px`.
+- Preserve approved helper-copy hierarchy, full-width field geometry, and primary action.
+
+## Login mobile/tablet presentation override
+
+Use the existing login presentation breakpoint:
+
+```text
+max-width: 900px
+```
+
+At this presentation, the `/login` composite input wrapper background is `Surface` / white. Desktop preserves the approved existing wrapper background; do not force the mobile white background onto desktop.
+
+The family/page spacing and mobile-wrapper values above are approved Authentication Family / Page Overrides where they intentionally differ from Global spacing defaults.
 
 ---
 

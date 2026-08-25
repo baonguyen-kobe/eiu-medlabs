@@ -22,19 +22,29 @@ Last updated: 2026-08-25
 
 ## Current phase
 
-Phase 1 — Blocking fixes
+Phase 2 — Shared accessibility and UI foundations
 
 ## Active task
 
 NONE
 
-## Next READY task
+## Recently completed
 
-AUTH-01 — Repair forgot/reset/change-password screens using the approved current login visual family.
+AUTH-01 — DONE
+
+- Final visual-polish commit: `de471341a192fda6e8a62512be2738101a591128`
+- Closure/tracking commit: `f570bafddd932149f651b0d689793978b4644323`
+- User visual acceptance: PASS
+
+## Next eligible READY task
+
+A11Y-03 — Complete SearchableCombobox keyboard model.
+
+Do not claim or start it without a new explicit task.
 
 ## Blocked tasks
 
-- BASE-01 — requires approved authenticated local environment.
+- BASE-01 — an approved authenticated protected-route baseline has not been requested or established for the current UI-only workflow.
 - DEC-01 — accessible signature/confirmation business decision required.
 - A11Y-01 — blocked by DEC-01.
 
@@ -63,7 +73,3 @@ A new agent should:
 5. Continue the active task or, if none, take the first eligible `READY` task.
 
 If this checkpoint and Git disagree, reconcile Git history, `WORKLOG.md`, `TRACKER.md`, and the current diff before changing source.
-
-## Next action
-
-Implement AUTH-01 only in a separate implementation batch after the planning foundation is reviewed.

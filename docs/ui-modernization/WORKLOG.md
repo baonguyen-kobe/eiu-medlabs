@@ -58,3 +58,60 @@ AUTH-01
 
 - Tracking foundation commits verified as documentation-only.
 - Canonical main promotion and branch topology verified after normal pushes.
+
+## 2026-08-25 — AUTH-01 implementation
+
+### Work
+
+- Reused the approved login image/logo/form-wrap composition for forgot, reset, and forced-change password routes.
+- Added semantic password-recovery/change headings, email/new-password autocomplete, explicit submit controls, pending state, and live feedback.
+- Preserved existing server actions, field names, recovery reason, and Supabase behavior.
+
+### Application source changed
+
+YES — AUTH-01 auth route, form, shared shell, and scoped login heading styles only.
+
+### Verification
+
+- PASS: Prettier check on touched source and tracking files.
+- PASS: targeted ESLint.
+- PASS: `npm.cmd run typecheck`.
+- PASS: local Supabase Auth health check and `npm.cmd run build` using only runtime-provided local values.
+- PASS: existing Playwright login accessibility E2E against `http://localhost:4000`.
+- PASS: rendered 375/768/1024/1440 sweep for login, forgot-password, reset-password, and change-password.
+- PASS: no horizontal page overflow; approved shell, headings, controls, gutters, desktop composition, and login regression.
+- PASS: keyboard focus order, visible focus, pending focus retention, recovery status, and password error alert.
+- PASS: local axe scan found no WCAG A/AA violations; automated contrast remains incomplete. Existing login secondary-copy contrast remains `CONTRAST-01`.
+- ADVISORY: React Doctor was run; its full audit reported unrelated baseline diagnostics, while the changed-scope invocation emitted no diagnostics.
+
+### User acceptance
+
+PASS — user approved AUTH-01, including the requested 36px action-area rhythm, forgot-password two-action row, and mobile-only white login input background.
+
+### Task state
+
+AUTH-01 is `DONE`. No successor task was started.
+
+### Commits
+
+- `01065037e3e7fe8e90da73a132b4050b782a0ebb` — `fix(AUTH-01): unify password recovery auth shell`
+- `cdbcd1e339736cb2476e7b72e5ce2a352b4f6660` — `fix(AUTH-01): preserve focus during pending submits`
+- `de471341a192fda6e8a62512be2738101a591128` — `fix(AUTH-01): apply approved auth visual polish`
+
+## 2026-08-25 — AUTH-01 continuity/design-governance reconciliation
+
+### Work
+
+- AUTH-01 remains `DONE`; no successor task was claimed.
+- Synchronized the canonical UI Master with approved Authentication Family rules.
+- Recorded source-first UI interpretation and the user visual-acceptance gate.
+- Recorded UI-only local preview/backend-isolation policy.
+- Corrected current continuity so `main` startup directs agents to `ui-modernization`.
+
+### Application source changed
+
+NO
+
+### Evidence
+
+- Final AUTH-01 closure commit: `f570bafddd932149f651b0d689793978b4644323`.
