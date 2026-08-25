@@ -162,3 +162,18 @@ TABLE-01 is `VERIFY`, pending user review. FORM-01 started next in the approved 
 ### Task state
 
 FORM-01 is `VERIFY`, pending user review. A11Y-04 started next in the approved unattended batch.
+
+## 2026-08-25 — A11Y-04 control naming foundation
+
+### Work
+
+- Added Vietnamese accessible names to Basic Medical filters and row/item-specific equipment controls.
+- Added date/row-specific names to Staff Shift assignee, shift, time, registration, date, removal, and historical-reason controls.
+
+### Verification
+
+- PASS: rendered accessibility trees show meaningful repeated Staff Shift names and named Basic Medical controls.
+
+### Task state
+
+A11Y-04 is `VERIFY`, pending user review. No successor task was claimed.

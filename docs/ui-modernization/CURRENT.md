@@ -26,11 +26,7 @@ Phase 2 — Shared accessibility and UI foundations
 
 ## Active task
 
-A11Y-04
-
-**Status:** IN_PROGRESS
-
-**Starting commit:** `dc675c6bbc10c5a0b707ca7dd58502ded42c1859`
+NONE
 
 ## Recently completed
 
@@ -42,12 +38,16 @@ TABLE-01 — VERIFY
 
 FORM-01 — VERIFY
 
-- Implementation commit: `dc675c6bbc10c5a0b707ca7dd58502ded42c1859`
-- `getFieldAria` adopted by TimePicker; awaiting user review of field error semantics.
+A11Y-04 — VERIFY
 
-## Next batch task
+- Implementation commit: `6e5d20239d4899268427eebe8125ea437c35b971`
+- Awaiting user review of Basic Medical and Staff Shift accessible names.
 
-A11Y-04 is active. Do not claim TOUCH-01 or PILOT-01.
+## Next eligible READY task
+
+TOUCH-01 — Establish touch-target baseline for compact actions.
+
+Do not claim or start it without a new explicit task.
 
 ## Blocked tasks
 
