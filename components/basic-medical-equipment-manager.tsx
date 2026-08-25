@@ -436,7 +436,7 @@ function RoomInventoryTab({
           />
         ) : null}
         <TableScrollViewport label="Thiết bị theo phòng">
-          <table className="data-table">
+          <table className="data-table basic-medical-room-inventory-table">
             <thead>
               <tr>
                 <th>Phòng</th>
@@ -657,7 +657,7 @@ function DamagedTab({
         </span>
       </div>
       <TableScrollViewport label="Thiết bị hư">
-        <table className="data-table">
+        <table className="data-table basic-medical-damaged-table">
           <thead>
             <tr>
               <th>Tên thiết bị</th>
@@ -829,7 +829,7 @@ function LogsTab({ logs }: { logs: BasicMedicalConditionLogItem[] }) {
         <span className="equipment-catalog-count">{logs.length} thay đổi</span>
       </div>
       <TableScrollViewport label="Lịch sử thay đổi thiết bị">
-        <table className="data-table">
+        <table className="data-table basic-medical-condition-log-table">
           <thead>
             <tr>
               <th>Thời gian</th>
