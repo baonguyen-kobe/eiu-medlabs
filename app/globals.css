@@ -6222,6 +6222,13 @@ body,
     font-size: 13px;
   }
 
+  /* Read-only class rows prioritize identity, room, lecturer, and actions.
+     Editable rows keep every required control and retain local scrolling. */
+  .class-registration-table:not(:has(.class-registration-mobile-editing))
+    :is(th:nth-child(3), td:nth-child(3), th:nth-child(6), td:nth-child(6)) {
+    display: none;
+  }
+
   .class-filter-panel {
     display: grid;
     grid-template-columns: 1fr;
@@ -11619,6 +11626,11 @@ time,
 
   .filter-bar > * {
     width: 100%;
+  }
+
+  .class-registration-table:not(:has(.class-registration-mobile-editing))
+    :is(th:nth-child(3), td:nth-child(3), th:nth-child(6), td:nth-child(6)) {
+    display: none;
   }
 
   .import-stepper-bar {
