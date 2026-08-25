@@ -26,11 +26,11 @@ Phase 2 — Shared accessibility and UI foundations
 
 ## Active task
 
-MOB-01.7
+STATE-02
 
-**Status:** IN_PROGRESS
+**Status:** VERIFY
 
-**Starting commit:** `e7f4dc9`
+**Starting commit:** `37c4975`
 
 ## Recently completed
 
@@ -58,7 +58,7 @@ PERF-01 — DONE
 
 ## Next batch task
 
-MOB-01.7 is active. Inventory remaining table families without changing dedicated children.
+STATE-02 rendered history verification requires an actionable local equipment request; independent STATE-01 and ARCH-02 remain eligible.
 
 ## Blocked tasks
 

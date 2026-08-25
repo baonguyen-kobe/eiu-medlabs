@@ -362,3 +362,9 @@ MOB-01.5 is `DONE` at `e2856c9`; manual user review deferred by explicit authori
 ### Task state
 
 MOB-01.6 is `DONE`; manual user review deferred by explicit authorization for MEGA RUN A v2. MOB-01.7 started next.
+
+## 2026-08-25 — STATE-02 equipment lifecycle history
+
+- Replaced the unhandled RPC promise with explicit loading, success entries, empty, and error states plus keyboard-accessible retry.
+- The active guard prevents state writes after unmount; retry replaces rather than appends entries.
+- PASS: Prettier, targeted ESLint, TypeScript. Rendered request-history evidence remains pending local actionable request data.
