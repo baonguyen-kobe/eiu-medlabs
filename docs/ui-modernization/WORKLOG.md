@@ -115,3 +115,19 @@ NO
 ### Evidence
 
 - Final AUTH-01 closure commit: `f570bafddd932149f651b0d689793978b4644323`.
+
+## 2026-08-25 — A11Y-03 keyboard foundation
+
+### Work
+
+- Added input-focused active-descendant keyboard navigation to `SearchableCombobox`.
+- Preserved controlled/uncontrolled values, hidden fields, empty options, pointer selection, and current visual selection semantics.
+
+### Verification
+
+- Direct consumer imports: 7.
+- PASS: `/schedule-entry/new` at 375/768/1024/1440, keyboard model, local axe scan, targeted format/lint/typecheck.
+
+### Task state
+
+A11Y-03 is `VERIFY`, pending user review. TABLE-01 started next in the approved unattended batch.

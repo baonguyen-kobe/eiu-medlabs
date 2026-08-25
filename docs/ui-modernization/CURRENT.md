@@ -26,7 +26,11 @@ Phase 2 — Shared accessibility and UI foundations
 
 ## Active task
 
-NONE
+TABLE-01
+
+**Status:** IN_PROGRESS
+
+**Starting commit:** `df72c829ae293cedd590559b8b4bc0bdd820a551`
 
 ## Recently completed
 
@@ -36,11 +40,14 @@ AUTH-01 — DONE
 - Closure/tracking commit: `f570bafddd932149f651b0d689793978b4644323`
 - User visual acceptance: PASS
 
-## Next eligible READY task
+A11Y-03 — VERIFY
 
-A11Y-03 — Complete SearchableCombobox keyboard model.
+- Implementation commit: `df72c829ae293cedd590559b8b4bc0bdd820a551`
+- Awaiting user review of keyboard behavior.
 
-Do not claim or start it without a new explicit task.
+## Next batch task
+
+TABLE-01 is active. Do not claim FORM-01 until TABLE-01 verification is recorded.
 
 ## Blocked tasks
 
