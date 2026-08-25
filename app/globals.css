@@ -8862,7 +8862,8 @@ body,
 }
 
 .searchable-combobox-list button:hover,
-.searchable-combobox-list button.selected {
+.searchable-combobox-list button.selected,
+.searchable-combobox-list button.active {
   color: var(--eiu-blue);
   background: #e5edf5;
   font-weight: 700;

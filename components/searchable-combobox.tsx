@@ -1,7 +1,14 @@
 "use client";
 
 import { ChevronRight, Search } from "@/components/icons";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 
 export type ComboboxOption = {
@@ -45,6 +52,9 @@ export function SearchableCombobox({
 }) {
   const generatedId = useId();
   const listboxId = `${generatedId}-listbox`;
+  const inputRef = useRef<HTMLInputElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const controlled = value !== undefined;
   const [internalValue, setInternalValue] = useState(defaultValue);
   const selectedValue = controlled ? value : internalValue;
@@ -53,10 +63,71 @@ export function SearchableCombobox({
   );
   const [query, setQuery] = useState(selectedOption?.label ?? "");
   const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const listRef = useRef<HTMLDivElement>(null);
+  const [activeValue, setActiveValue] = useState<string | null>(null);
   const [listStyle, setListStyle] = useState<React.CSSProperties>({});
   const displayQuery = open ? query : (selectedOption?.label ?? "");
+
+  const filtered = useMemo(() => {
+    const term = normalize(query);
+    if (!term || query === selectedOption?.label) return options;
+    return options.filter((option) =>
+      normalize(`${option.label} ${option.keywords ?? ""}`).includes(term),
+    );
+  }, [options, query, selectedOption?.label]);
+
+  const visibleOptions = useMemo(
+    () => [
+      ...(emptyLabel ? [{ value: "", label: emptyLabel }] : []),
+      ...filtered,
+    ],
+    [emptyLabel, filtered],
+  );
+
+  const activeOptionValue = visibleOptions.some(
+    (option) => option.value === activeValue,
+  )
+    ? activeValue
+    : null;
+
+  const optionId = useCallback(
+    (optionValue: string) =>
+      `${listboxId}-option-${encodeURIComponent(optionValue || "empty")}`,
+    [listboxId],
+  );
+
+  function closeList() {
+    setOpen(false);
+    setActiveValue(null);
+  }
+
+  function select(nextValue: string, focusInput = false) {
+    const nextOption = options.find((option) => option.value === nextValue);
+    if (!controlled) setInternalValue(nextValue);
+    onChange?.(nextValue);
+    setQuery(nextOption?.label ?? "");
+    closeList();
+    if (focusInput) requestAnimationFrame(() => inputRef.current?.focus());
+  }
+
+  function setActiveAt(index: number) {
+    const option = visibleOptions[index];
+    setActiveValue(option?.value ?? null);
+  }
+
+  function moveActive(direction: 1 | -1) {
+    if (!visibleOptions.length) return;
+    const currentIndex = visibleOptions.findIndex(
+      (option) => option.value === activeOptionValue,
+    );
+    const nextIndex =
+      currentIndex < 0
+        ? direction === 1
+          ? 0
+          : visibleOptions.length - 1
+        : (currentIndex + direction + visibleOptions.length) %
+          visibleOptions.length;
+    setActiveAt(nextIndex);
+  }
 
   useEffect(() => {
     function closeOnOutsideClick(event: PointerEvent) {
@@ -64,12 +135,19 @@ export function SearchableCombobox({
         !rootRef.current?.contains(event.target as Node) &&
         !listRef.current?.contains(event.target as Node)
       )
-        setOpen(false);
+        closeList();
     }
     document.addEventListener("pointerdown", closeOnOutsideClick);
     return () =>
       document.removeEventListener("pointerdown", closeOnOutsideClick);
   }, []);
+
+  useEffect(() => {
+    if (!open || activeOptionValue === null) return;
+    document
+      .getElementById(optionId(activeOptionValue))
+      ?.scrollIntoView({ block: "nearest" });
+  }, [activeOptionValue, open, optionId]);
 
   useEffect(() => {
     if (!open) return;
@@ -94,28 +172,18 @@ export function SearchableCombobox({
     };
   }, [open]);
 
-  const filtered = useMemo(() => {
-    const term = normalize(query);
-    if (!term || query === selectedOption?.label) return options;
-    return options.filter((option) =>
-      normalize(`${option.label} ${option.keywords ?? ""}`).includes(term),
-    );
-  }, [options, query, selectedOption?.label]);
-
-  function select(nextValue: string) {
-    const nextOption = options.find((option) => option.value === nextValue);
-    if (!controlled) setInternalValue(nextValue);
-    onChange?.(nextValue);
-    setQuery(nextOption?.label ?? "");
-    setOpen(false);
-  }
-
   return (
     <div className="searchable-combobox" ref={rootRef}>
       {name ? <input name={name} type="hidden" value={selectedValue} /> : null}
       <span className="searchable-combobox-control">
         <Search size={17} />
         <input
+          ref={inputRef}
+          aria-activedescendant={
+            open && activeOptionValue !== null
+              ? optionId(activeOptionValue)
+              : undefined
+          }
           aria-autocomplete="list"
           aria-controls={listboxId}
           aria-expanded={open}
@@ -133,6 +201,7 @@ export function SearchableCombobox({
               if (!controlled) setInternalValue("");
               onChange?.("");
             }
+            setActiveValue(null);
             setOpen(true);
           }}
           onFocus={() => {
@@ -140,10 +209,53 @@ export function SearchableCombobox({
             setOpen(true);
           }}
           onKeyDown={(event) => {
-            if (event.key === "Escape") setOpen(false);
-            if (event.key === "Enter" && open && filtered.length === 1) {
-              event.preventDefault();
-              select(filtered[0].value);
+            switch (event.key) {
+              case "ArrowDown":
+                event.preventDefault();
+                if (!open) {
+                  setOpen(true);
+                  setActiveAt(0);
+                } else {
+                  moveActive(1);
+                }
+                break;
+              case "ArrowUp":
+                event.preventDefault();
+                if (!open) {
+                  setOpen(true);
+                  setActiveAt(visibleOptions.length - 1);
+                } else {
+                  moveActive(-1);
+                }
+                break;
+              case "Home":
+                if (open && visibleOptions.length) {
+                  event.preventDefault();
+                  setActiveAt(0);
+                }
+                break;
+              case "End":
+                if (open && visibleOptions.length) {
+                  event.preventDefault();
+                  setActiveAt(visibleOptions.length - 1);
+                }
+                break;
+              case "Enter":
+                if (open && activeOptionValue !== null) {
+                  event.preventDefault();
+                  select(activeOptionValue, true);
+                }
+                break;
+              case "Escape":
+                if (open) {
+                  event.preventDefault();
+                  closeList();
+                  requestAnimationFrame(() => inputRef.current?.focus());
+                }
+                break;
+              case "Tab":
+                if (open) closeList();
+                break;
             }
           }}
         />
@@ -157,31 +269,26 @@ export function SearchableCombobox({
               style={listStyle}
               id={listboxId}
               role="listbox"
+              aria-label={ariaLabel}
             >
-              {emptyLabel ? (
+              {visibleOptions.map((option) => (
                 <button
-                  className={!selectedValue ? "selected" : ""}
-                  role="option"
-                  aria-selected={!selectedValue}
-                  type="button"
-                  onClick={() => select("")}
-                >
-                  {emptyLabel}
-                </button>
-              ) : null}
-              {filtered.map((option) => (
-                <button
-                  className={option.value === selectedValue ? "selected" : ""}
-                  key={option.value}
+                  className={`${option.value === selectedValue ? "selected" : ""} ${option.value === activeOptionValue ? "active" : ""}`}
+                  id={optionId(option.value)}
+                  key={option.value || "empty"}
                   role="option"
                   aria-selected={option.value === selectedValue}
+                  tabIndex={-1}
                   type="button"
                   onClick={() => select(option.value)}
+                  onMouseMove={() => setActiveValue(option.value)}
                 >
                   {option.label}
                 </button>
               ))}
-              {!filtered.length ? <p>Không tìm thấy kết quả phù hợp.</p> : null}
+              {!visibleOptions.length ? (
+                <p role="status">Không tìm thấy kết quả phù hợp.</p>
+              ) : null}
             </div>,
             document.body,
           )
