@@ -117,3 +117,27 @@ Local UI rendering does not satisfy `BASE-01`. It remains a distinct blocked tas
 **Scope:** The explicitly authorized 2026-08-25 unattended batch only.
 
 Technical and rendered verification remain mandatory. The covered user-visible tasks may move to `DONE` when that evidence passes, but no record may state user visual acceptance tonight. Manual review is deferred to the next review session; any regression found then becomes a new correction/regression task linked to its origin. This exception does not weaken the permanent visual-acceptance gate, authorize merging `ui-modernization` into `main`, or apply outside this batch.
+
+## DEC-UI-013 — Retain pointer-drawn signature confirmation
+
+**Status:** ACCEPTED
+
+The business owner explicitly retains the existing drawn canvas signature for Equipment handover/return and Basic Medical session confirmation. No keyboard-only, typed, or alternate non-pointer signature method is approved in this modernization scope. This remains a known accessibility limitation; overlay focus work may improve the surrounding modal but must not reinterpret signature semantics.
+
+## DEC-UI-014 — Local authenticated protected baseline authorized
+
+**Status:** ACCEPTED
+
+The local Supabase runtime and approved local administrator test account are authorized for establishing `BASE-01`. This authorizes local-only rendered baseline evidence; it does not authorize production credentials, production data, auth bypass, or completion of an unrelated production baseline.
+
+## DEC-UI-015 — Supabase default session behavior and show-password control
+
+**Status:** ACCEPTED
+
+Remove the non-functional `Ghi nhớ đăng nhập` control. Retain the current Supabase SSR session/cookie behavior without a custom persistence mode, 30-day lifetime, persistence-policy cookie, or token/password storage. Add an off-by-default `Hiển thị mật khẩu` control that toggles the password input type only in memory and never persists or submits password-display state.
+
+## DEC-UI-016 — 2026-08-25 MEGA RUN A v2 deferred manual review
+
+**Status:** ACCEPTED
+
+**Scope:** The fixed MEGA RUN A v2 queue only. Technical and rendered verification remain mandatory. User-visible tasks may reach `DONE` after those gates pass, while manual review is recorded as deferred by explicit user authorization for MEGA RUN A v2. No evidence may state user visual acceptance tonight. This exception does not alter the permanent review gate or authorize merging `ui-modernization` into `main`.

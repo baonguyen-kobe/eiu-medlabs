@@ -26,7 +26,9 @@ Phase 2 — Shared accessibility and UI foundations
 
 ## Active task
 
-NONE
+INT-01
+
+**Status:** IN_PROGRESS
 
 ## Recently completed
 
@@ -52,18 +54,13 @@ ARCH-01 — DONE
 
 PERF-01 — DONE
 
-- Implementation commit: `705fc62d434f04ca7005598ad654ea52fda676a5`
-- Manual user review deferred by explicit user authorization for the 2026-08-25 overnight batch.
+## Next batch task
 
-## Next task
-
-No next task is claimed. The explicit overnight queue is complete; await a new user plan.
+INT-01 is active. Do not claim BASE-01 until INT-01 verification is recorded.
 
 ## Blocked tasks
 
-- BASE-01 — an approved authenticated protected-route baseline has not been requested or established for the current UI-only workflow.
-- DEC-01 — accessible signature/confirmation business decision required.
-- A11Y-01 — blocked by DEC-01.
+- A11Y-01 — deferred: business owner retained the pointer-drawn signature limitation.
 
 ## Completed foundation
 
