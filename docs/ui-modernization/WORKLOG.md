@@ -177,3 +177,14 @@ FORM-01 is `VERIFY`, pending user review. A11Y-04 started next in the approved u
 ### Task state
 
 A11Y-04 is `VERIFY`, pending user review. No successor task was claimed.
+
+## 2026-08-25 — Phase-2 foundation batch regression
+
+### Verification
+
+- PASS: consolidated `typecheck`, repository lint, local-Supabase build, and `git diff --check`.
+- Local review server remains available at `http://localhost:4000`.
+
+### Task state
+
+A11Y-03, TABLE-01, FORM-01, and A11Y-04 remain `VERIFY` pending user review. No next task was claimed.
