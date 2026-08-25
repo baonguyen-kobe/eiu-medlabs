@@ -188,3 +188,30 @@ A11Y-04 is `VERIFY`, pending user review. No successor task was claimed.
 ### Task state
 
 A11Y-03, TABLE-01, FORM-01, and A11Y-04 remain `VERIFY` pending user review. No next task was claimed.
+
+## 2026-08-25 — Overnight deferred-review authorization
+
+### Decision
+
+- `DEC-UI-012` authorizes technical completion of this overnight batch while manual user review is deferred.
+- No task in the batch is recorded as user-visually-approved tonight.
+
+### Foundation closure
+
+- A11Y-03, TABLE-01, FORM-01, and A11Y-04 moved to `DONE` on existing technical/rendered evidence.
+- Manual user review deferred by explicit user authorization for the 2026-08-25 overnight batch.
+
+## 2026-08-25 — TOUCH-01 touch-target baseline
+
+### Work
+
+- Added coarse-pointer/mobile-only 40px event action targets and 44px empty-cell quick actions.
+- Preserved compact desktop 24×28px Staff Shift geometry.
+
+### Verification
+
+- PASS: `/staff-shifts` at 375/768/1024/1440; no page overflow.
+
+### Task state
+
+TOUCH-01 is `DONE`; manual user review deferred by explicit overnight authorization. PILOT-01 started next.

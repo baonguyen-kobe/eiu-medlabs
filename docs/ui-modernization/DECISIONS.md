@@ -109,3 +109,11 @@ Manual UI preview uses `localhost:4000`, or the next free port at or above 4001.
 Do not connect UI modernization preview to production Supabase, obtain production credentials for preview, change business/auth logic to bypass security, or introduce a committed auth-bypass mode. Production auth, email, and reset flows are not required unless a future task explicitly includes them.
 
 Local UI rendering does not satisfy `BASE-01`. It remains a distinct blocked task until an authenticated protected-route baseline is explicitly requested and established.
+
+## DEC-UI-012 — 2026-08-25 overnight deferred manual review
+
+**Status:** ACCEPTED
+
+**Scope:** The explicitly authorized 2026-08-25 unattended batch only.
+
+Technical and rendered verification remain mandatory. The covered user-visible tasks may move to `DONE` when that evidence passes, but no record may state user visual acceptance tonight. Manual review is deferred to the next review session; any regression found then becomes a new correction/regression task linked to its origin. This exception does not weaken the permanent visual-acceptance gate, authorize merging `ui-modernization` into `main`, or apply outside this batch.

@@ -26,28 +26,32 @@ Phase 2 — Shared accessibility and UI foundations
 
 ## Active task
 
-NONE
+PILOT-01
+
+**Status:** IN_PROGRESS
+
+**Starting commit:** `b75e5715c8b61447d2cc4550b91c89c3a0ab9413`
 
 ## Recently completed
 
 AUTH-01 — DONE
 
-A11Y-03 — VERIFY
+A11Y-03 — DONE
 
-TABLE-01 — VERIFY
+TABLE-01 — DONE
 
-FORM-01 — VERIFY
+FORM-01 — DONE
 
-A11Y-04 — VERIFY
+A11Y-04 — DONE
 
-- Implementation commit: `6e5d20239d4899268427eebe8125ea437c35b971`
-- Awaiting user review of Basic Medical and Staff Shift accessible names.
+TOUCH-01 — DONE
 
-## Next eligible READY task
+- Implementation commit: `b75e5715c8b61447d2cc4550b91c89c3a0ab9413`
+- Manual user review deferred by explicit user authorization for the 2026-08-25 overnight batch.
 
-TOUCH-01 — Establish touch-target baseline for compact actions.
+## Next batch task
 
-Do not claim or start it without a new explicit task.
+PILOT-01 is active. Do not claim MOB-01.1 until PILOT-01 verification is recorded.
 
 ## Blocked tasks
 
