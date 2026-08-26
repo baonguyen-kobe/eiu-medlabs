@@ -548,3 +548,24 @@ MOB-01.2 correction Batch 03B is `VERIFY` pending user visual review.
 ### Task state
 
 MOB-01.2 correction Batch 03C is `VERIFY` pending user visual review.
+
+## 2026-08-26 — User Review Correction Batch 03D
+
+### Work
+
+- Fixed mobile card shell border context: set `border-collapse: separate; border-spacing: 0; border: 0;` on `.equipment-request-table` at <=920px and neutralized desktop `tbody + tbody` cell border-top override (`border: 0 !important;`), ensuring Card 0 and subsequent cards have identical outer 1px borders, radii, and shadows without missing/inconsistent borders.
+- Neutralized staggered per-cell detail borders on mobile: removed `border-bottom` on `.equipment-request-detail-grid.detail-list > div`, stacked label and value cleanly per cell, and added a single clean `border-top: 1px solid var(--line)` on `.equipment-request-detail-row`.
+- Aligned mobile item modal secondary line (`SL · Unit · Note`) typography to 14px (`font-size: 14px; font-weight: 400; color: var(--ink-600);`), matching the 14px font size of the primary commercial-name line.
+- Widened desktop expanded detail label column to 145px (`.equipment-request-detail-grid.detail-list > div { grid-template-columns: 145px minmax(0, 1fr); gap: 12px; }`), allowing standard labels ("Mã phiếu", "Người đăng ký", "Email", "Số điện thoại", "Giảng viên phụ trách", "Thời gian nhận", "Thời gian trả", "Danh sách TTB") to fit on a single line.
+- Renamed the visible expanded detail label from "Danh sách trang thiết bị" to "Danh sách TTB" in `components/equipment-request-list.tsx` while preserving full wording in accessibility `aria-label` and modal title.
+
+### Verification
+
+- PASS: `npm.cmd run typecheck`, `npm.cmd run lint`, and `npx.cmd prettier --check <touched-files>`.
+- PASS: `tests/review-batch-03d.test.mjs` verifies mobile card shell, neutralized detail separators, 14px modal item typography, 145px desktop label column, and "Danh sách TTB" label.
+- PASS: `node --test tests/review-batch-03a.test.mjs tests/review-batch-03b.test.mjs tests/review-batch-03d.test.mjs tests/review-batch-02b.test.mjs tests/staff-shifts-ui-contract.test.mjs` (25/25 tests pass).
+- PASS: Playwright rendered sweep across 375, 768, 1024, and 1440 for `/equipment/requests` and `/equipment/mine`.
+
+### Task state
+
+MOB-01.2 correction Batch 03D is `VERIFY` pending user visual review.

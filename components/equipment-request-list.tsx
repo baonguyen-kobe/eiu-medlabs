@@ -1736,7 +1736,7 @@ export function EquipmentRequestList({
                               <dd>{formatDateTime(request.return_at)}</dd>
                             </div>
                             <div className="equipment-list-detail-row">
-                              <dt>Danh sách trang thiết bị</dt>
+                              <dt>Danh sách TTB</dt>
                               <dd>
                                 <button
                                   type="button"
