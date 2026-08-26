@@ -41,11 +41,12 @@ test("MOB-01.2 hides phone on mobile while preserving desktop detail phone field
   );
   assert.match(
     styles,
-    /@media \(max-width: 920px\)[\s\S]*\.equipment-detail-phone\s*\{\s*display:\s*none;\s*\}/,
+    /@media \(max-width: 920px\)[\s\S]*\.equipment-request-detail-grid > \.equipment-detail-phone\s*\{\s*display:\s*none;\s*\}/,
   );
 });
 
 test("MOB-01.2 mobile item cards display commercial name on line 1 and quantity/unit/note on line 2", () => {
+  assert.match(requestList, /<div className="equipment-mobile-item-content">/);
   assert.match(
     requestList,
     /const commercialName =\s*catalogItem\?\.commercial_name \|\| catalogItem\?\.item_name;/,

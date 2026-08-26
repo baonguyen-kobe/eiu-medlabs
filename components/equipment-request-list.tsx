@@ -547,7 +547,7 @@ function EquipmentItemsModal({
                         <span className="equipment-mobile-item-index">
                           {index + 1}
                         </span>
-                        <div>
+                        <div className="equipment-mobile-item-content">
                           <strong>
                             {commercialName ||
                               "Danh mục thiết bị không còn khả dụng"}
