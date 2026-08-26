@@ -480,4 +480,29 @@ User Review Correction Batch 02A remains `VERIFY` pending user visual review.
 
 ### Task state
 
-User Review Correction Batch 02B remains `VERIFY` pending user visual review.
+Batch 02B received explicit user visual approval; its completed child tasks are
+reconciled in the tracker.
+
+## 2026-08-26 — MOB-01.2 Equipment Request mobile strategy
+
+### Work
+
+- Used Strategy D for request summaries at <=920px: the shared request table
+  becomes compact expandable summaries while retaining the existing
+  `expandedIds`, detail, lifecycle, status, signature, PDF, and deletion paths.
+- Used Strategy C in the item modal: mobile cards expose every existing item
+  field, while mobile add drafts retain both SearchableCombobox controls,
+  quantity, and note fields. Desktop tables remain unchanged.
+
+### Verification
+
+- PASS: `/equipment/requests` and `/equipment/mine` render compact summaries
+  at 375/768, with no page overflow; desktop tables remain at 1024/1440.
+- PASS: keyboard request expansion, item modal opening, Escape close, and
+  close-button focus entry were rendered against local review data.
+- PASS: mobile item cards render while the 1450px item table wrapper hides;
+  desktop retains the table wrapper.
+
+### Task state
+
+MOB-01.2 is `VERIFY` pending user visual review.

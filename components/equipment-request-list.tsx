@@ -534,6 +534,130 @@ function EquipmentItemsModal({
                     </tbody>
                   </table>
                 </div>
+                <div className="equipment-mobile-item-list">
+                  {items.map((item, index) => {
+                    const catalogItem = catalogForRequest(request, item);
+                    return (
+                      <article
+                        className="equipment-mobile-item-card"
+                        key={item.id}
+                      >
+                        <span className="equipment-mobile-item-index">
+                          {index + 1}
+                        </span>
+                        <div>
+                          <strong>
+                            {catalogItem?.item_name ||
+                              "Danh mục thiết bị không còn khả dụng"}
+                          </strong>
+                          <p>
+                            {catalogItem?.commercial_name || "—"} ·{" "}
+                            {catalogItem?.unit || "—"} · SL {item.quantity}
+                          </p>
+                          <dl>
+                            <div>
+                              <dt>Loại</dt>
+                              <dd>{catalogItem?.item_type || "—"}</dd>
+                            </div>
+                            <div>
+                              <dt>Nước SX</dt>
+                              <dd>{catalogItem?.country_of_origin || "—"}</dd>
+                            </div>
+                            <div>
+                              <dt>Hãng / Model</dt>
+                              <dd>
+                                {catalogItem?.manufacturer || "—"} /{" "}
+                                {catalogItem?.model || "—"}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt>Ghi chú</dt>
+                              <dd>{item.note || "—"}</dd>
+                            </div>
+                          </dl>
+                        </div>
+                      </article>
+                    );
+                  })}
+                  {canAddItemsForRequest
+                    ? drafts.map((draft, draftIndex) => {
+                        const selectedDraftCatalog = catalogById.get(
+                          draft.catalogId,
+                        );
+                        return (
+                          <section
+                            className="equipment-mobile-item-draft"
+                            key={draft.key}
+                          >
+                            <strong>
+                              Thêm thiết bị #{items.length + draftIndex + 1}
+                            </strong>
+                            <SearchableCombobox
+                              value={draft.itemName}
+                              options={itemNameOptions}
+                              onChange={(itemName) =>
+                                selectDraftItemName(
+                                  skillName,
+                                  draft.key,
+                                  itemName,
+                                )
+                              }
+                              required
+                              ariaLabel={`Tên thiết bị bổ sung dòng ${draftIndex + 1} cho ${skillName}`}
+                              placeholder="Gõ hoặc chọn tên thiết bị…"
+                            />
+                            <SearchableCombobox
+                              value={draft.catalogId}
+                              options={commercialOptionsFor(draft.itemName)}
+                              onChange={(catalogItemId) =>
+                                selectDraftCommercial(
+                                  skillName,
+                                  draft.key,
+                                  catalogItemId,
+                                )
+                              }
+                              required
+                              ariaLabel={`Tên thương mại bổ sung dòng ${draftIndex + 1} cho ${skillName}`}
+                              placeholder="Gõ hoặc chọn tên thương mại…"
+                            />
+                            <div className="equipment-mobile-item-draft-meta">
+                              <span>
+                                {selectedDraftCatalog?.item_type || "—"}
+                              </span>
+                              <span>{selectedDraftCatalog?.unit || "—"}</span>
+                            </div>
+                            <label>
+                              Số lượng
+                              <input
+                                aria-label={`Số lượng bổ sung dòng ${draftIndex + 1} cho ${skillName}`}
+                                type="number"
+                                min="1"
+                                value={draft.quantity}
+                                onChange={(event) =>
+                                  updateDraft(skillName, draft.key, {
+                                    quantity: Number(event.target.value),
+                                  })
+                                }
+                              />
+                            </label>
+                            <label>
+                              Ghi chú
+                              <input
+                                aria-label={`Ghi chú thiết bị bổ sung dòng ${draftIndex + 1} cho ${skillName}`}
+                                value={draft.note}
+                                onChange={(event) =>
+                                  updateDraft(skillName, draft.key, {
+                                    note: event.target.value,
+                                  })
+                                }
+                                placeholder="Nếu có"
+                              />
+                            </label>
+                          </section>
+                        );
+                      })
+                    : null}
+                </div>
                 {canAddItemsForRequest ? (
                   <div className="equipment-modal-add-actions equipment-modal-add-actions-persistent">
                     <button
@@ -902,12 +1026,9 @@ export function EquipmentRequestList({
   );
 
   function toggleExpanded(requestId: string) {
-    setExpandedIds((current) => {
-      const next = new Set(current);
-      if (next.has(requestId)) next.delete(requestId);
-      else next.add(requestId);
-      return next;
-    });
+    setExpandedIds((current) =>
+      current.has(requestId) ? new Set() : new Set([requestId]),
+    );
   }
 
   function changeStatus(

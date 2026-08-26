@@ -1258,6 +1258,15 @@ Export PDF = Secondary
 Delete     = Danger
 ```
 
+## Mobile request and item presentation
+
+At widths through 920px, equipment-request summaries use Strategy D: compact
+summary followed by the existing expandable detail. Desktop retains the dense
+table. The item modal uses Strategy C cards on mobile while retaining its full
+desktop table. These are presentation-only adaptations: filters, expanded
+state, authorization, handlers, lifecycle history, and modal focus behavior
+remain shared.
+
 ## Basic Medical equipment session picker
 
 The Basic Medical equipment workspace reuses the Skills equipment registration

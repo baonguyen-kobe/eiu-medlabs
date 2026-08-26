@@ -26,11 +26,11 @@ Phase 2 — Shared accessibility and UI foundations
 
 ## Active task
 
-User Review Correction Batch 02B
+MOB-01.2
 
 **Status:** VERIFY
 
-**Starting commit:** `6333def`
+**Starting commit:** `1688f87`
 
 ## Recently completed
 
@@ -52,12 +52,13 @@ STATE-02 — DONE — USER VISUAL PASS
 
 MOB-01.4 — DONE — USER VISUAL PASS
 
-PILOT-01 and MOB-01.1 — VERIFY — USER VISUAL PASS CONFIRMED
+PILOT-01, MOB-01.1, MOB-01.4, MOB-01.5, MOB-01.6, and TOUCH-01 — DONE — USER VISUAL PASS
 
 ## Next batch task
 
-Batch 02B is awaiting user visual review. Do not resume the general queue
-until the user accepts or supplies new correction evidence.
+MOB-01.2 is technically rendered and awaiting user visual review. Do not
+resume the general queue until the user accepts or supplies new correction
+evidence.
 
 ## Blocked tasks
 

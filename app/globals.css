@@ -12023,6 +12023,245 @@ body {
   display: none;
 }
 
+/* MOB-01.2 — Equipment request Strategy D and item-modal Strategy C. */
+.equipment-mobile-item-list {
+  display: none;
+}
+
+@media (max-width: 920px) {
+  .equipment-request-list-panel .responsive-table {
+    overflow: visible;
+  }
+
+  .equipment-request-table {
+    min-width: 0;
+    display: block;
+  }
+
+  .equipment-request-table thead {
+    display: none;
+  }
+
+  .equipment-request-list-item {
+    display: block;
+    margin-bottom: 10px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-card);
+    overflow: hidden;
+    background: var(--surface);
+    box-shadow: var(--shadow-card);
+  }
+
+  .equipment-request-table-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px 12px;
+    padding: 14px;
+  }
+
+  .equipment-request-table-row > td {
+    display: block;
+    height: auto;
+    padding: 0;
+    border: 0;
+  }
+
+  .equipment-request-domain-cell,
+  .equipment-request-date-cell,
+  .equipment-request-room-cell,
+  .equipment-request-table-row > td:nth-child(4),
+  .equipment-request-table-row > td:nth-child(6) {
+    color: var(--ink-600);
+    font-size: 13px;
+  }
+
+  .equipment-request-domain-cell {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .equipment-request-table-row > td:nth-child(2) {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .equipment-request-date-cell {
+    grid-column: 1;
+    grid-row: 3;
+  }
+
+  .equipment-request-table-row > td:nth-child(4) {
+    grid-column: 1;
+    grid-row: 4;
+  }
+
+  .equipment-request-room-cell {
+    grid-column: 1;
+    grid-row: 5;
+  }
+
+  .equipment-request-table-row > td:nth-child(6) {
+    grid-column: 1;
+    grid-row: 6;
+  }
+
+  .equipment-request-status-cell {
+    grid-column: 2;
+    grid-row: 1 / span 5;
+    align-self: start;
+  }
+
+  .equipment-request-status-stack,
+  .equipment-request-status-stack .request-status,
+  .equipment-request-status-stack .equipment-sign-status-button,
+  .equipment-request-status-stack .equipment-confirmation-waiting,
+  .request-late-approval,
+  .request-late-approval-approved {
+    width: auto;
+    min-width: 0;
+  }
+
+  .equipment-request-status-stack {
+    min-height: 0;
+    align-items: flex-end;
+    text-align: right;
+  }
+
+  .equipment-request-toggle-cell {
+    grid-column: 2;
+    grid-row: 6;
+    align-self: end;
+  }
+
+  .equipment-request-chevron {
+    width: 44px;
+    height: 44px;
+  }
+
+  .equipment-request-detail-row,
+  .equipment-request-detail-row > td {
+    display: block;
+  }
+
+  .equipment-request-detail-row > td {
+    padding: 0 !important;
+    border: 0;
+  }
+
+  .equipment-request-details {
+    padding: 14px;
+  }
+
+  .equipment-modal-body > .equipment-modal-skill > .responsive-table {
+    display: none;
+  }
+
+  .equipment-mobile-item-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .equipment-mobile-item-card,
+  .equipment-mobile-item-draft {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+  }
+
+  .equipment-mobile-item-index {
+    display: grid;
+    width: 28px;
+    height: 28px;
+    place-items: center;
+    color: var(--eiu-blue);
+    background: var(--eiu-cream);
+    border-radius: 999px;
+    font-weight: 800;
+  }
+
+  .equipment-mobile-item-card strong,
+  .equipment-mobile-item-draft > strong {
+    color: var(--ink-900);
+  }
+
+  .equipment-mobile-item-card p {
+    margin: 3px 0 0;
+    color: var(--ink-600);
+    font-size: 13px;
+  }
+
+  .equipment-mobile-item-card dl {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin: 10px 0 0;
+  }
+
+  .equipment-mobile-item-card dt {
+    color: var(--ink-600);
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .equipment-mobile-item-card dd {
+    margin: 2px 0 0;
+    overflow-wrap: anywhere;
+    font-size: 13px;
+  }
+
+  .equipment-mobile-item-draft {
+    grid-template-columns: 1fr;
+    background: #fffaf0;
+  }
+
+  .equipment-mobile-item-draft .searchable-combobox,
+  .equipment-mobile-item-draft input {
+    width: 100%;
+  }
+
+  .equipment-mobile-item-draft label {
+    display: grid;
+    gap: 5px;
+    color: var(--ink-700);
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .equipment-mobile-item-draft input {
+    min-height: 40px;
+    padding: 8px 10px;
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    background: #fff;
+  }
+
+  .equipment-mobile-item-draft-meta {
+    display: flex;
+    gap: 8px;
+    color: var(--ink-600);
+    font-size: 12px;
+  }
+
+  .equipment-modal-add-actions-persistent {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .equipment-modal-add-save-actions {
+    width: 100%;
+  }
+
+  .equipment-modal-add-save-actions .button,
+  .equipment-modal-add-button {
+    flex: 1;
+    min-height: 44px;
+  }
+}
+
 @media (max-width: 820px) {
   .skills-calendar-header-actions {
     display: none;
