@@ -30,10 +30,14 @@ test("MOB-01.2 mobile card shell uses consistent separate border context", () =>
   );
 });
 
-test("MOB-01.2 mobile expanded detail neutralizes staggered per-cell borders", () => {
+test("MOB-01.2 mobile expanded detail restores pre-03D 2-column layout", () => {
   assert.match(
     styles,
-    /@media \(max-width: 920px\)[\s\S]*\.equipment-request-detail-grid\.detail-list\s*>\s*div\s*\{[\s\S]*border-bottom:\s*0/,
+    /@media \(max-width: 920px\)[\s\S]*\.equipment-request-detail-grid\s*\{[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/,
+  );
+  assert.match(
+    styles,
+    /@media \(max-width: 920px\)[\s\S]*\.equipment-request-detail-grid\s*\{[\s\S]*gap:\s*8px\s+12px/,
   );
 });
 
@@ -65,19 +69,12 @@ test("MOB-01.2 renames visible expanded detail label to Danh sách TTB while pre
 });
 
 test("Global typography contract: Be Vietnam Pro is the only intentional UI font family", () => {
-  // Layout imports Be Vietnam Pro font weights
   assert.match(layoutSource, /@fontsource\/be-vietnam-pro\/400\.css/);
   assert.match(layoutSource, /@fontsource\/be-vietnam-pro\/700\.css/);
-
-  // No intentional SFMono, Consolas, Liberation Mono in globals.css font variables
   assert.doesNotMatch(styles, /--font-mono:\s*["']SFMono/);
   assert.doesNotMatch(styles, /--font-mono:\s*["']Consolas/);
   assert.match(styles, /--font-mono:\s*["']Be Vietnam Pro["']/);
-
-  // .mono class uses Be Vietnam Pro
   assert.match(styles, /\.mono\s*\{[\s\S]*font-family:\s*var\(--font-body\)/);
-
-  // Browser code tags and form controls inherit Be Vietnam Pro
   assert.match(
     styles,
     /code,\s*pre,\s*kbd,\s*samp\s*\{[\s\S]*font-family:\s*var\(--font-body\)/,
@@ -86,8 +83,6 @@ test("Global typography contract: Be Vietnam Pro is the only intentional UI font
     styles,
     /button,\s*input,\s*select,\s*textarea\s*\{[\s\S]*font-family:\s*var\(--font-body\)/,
   );
-
-  // UI Master records the global rule
   assert.match(
     masterDoc,
     /EIU MedLabs uses Be Vietnam Pro for all user-visible typography/,

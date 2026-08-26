@@ -12063,12 +12063,12 @@ body {
 
   .equipment-request-list-item {
     display: block;
-    margin-bottom: 12px;
+    margin-bottom: 10px;
     border: 1px solid var(--line);
     border-radius: var(--radius-card);
     overflow: hidden;
     background: var(--surface);
-    box-shadow: var(--shadow-card);
+    box-shadow: var(--shadow-sm);
   }
 
   .equipment-request-table .equipment-request-table-row > td,
@@ -12083,7 +12083,7 @@ body {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 4px 10px;
-    padding: 12px 14px;
+    padding: 12px;
     align-items: center;
   }
 
@@ -12186,51 +12186,27 @@ body {
     align-items: flex-end;
     text-align: right;
   }
+  .equipment-request-detail-row,
+  .equipment-request-detail-row > td {
+    display: block;
+  }
 
   .equipment-request-detail-row {
-    display: block;
     border-top: 1px solid var(--line);
   }
 
   .equipment-request-detail-row > td {
-    display: block;
     padding: 0 !important;
     border: 0;
   }
 
   .equipment-request-details {
-    padding: 14px;
+    padding: 12px;
   }
 
-  .equipment-request-detail-grid.detail-list {
-    display: grid;
+  .equipment-request-detail-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px 14px;
-    margin: 0;
-    border-top: 0;
-  }
-
-  .equipment-request-detail-grid.detail-list > div {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 2px;
-    padding: 6px 0;
-    border-bottom: 0;
-  }
-
-  .equipment-request-detail-grid.detail-list dt {
-    font-size: 11.5px;
-    font-weight: 600;
-    color: var(--ink-500);
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    white-space: normal;
-  }
-
-  .equipment-request-detail-grid.detail-list dd {
-    font-size: 13.5px;
-    font-weight: 600;
-    color: var(--ink-950);
+    gap: 8px 12px;
   }
 
   .equipment-request-code-detail,

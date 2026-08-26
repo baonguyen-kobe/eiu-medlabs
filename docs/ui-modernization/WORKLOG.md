@@ -570,3 +570,23 @@ MOB-01.2 correction Batch 03C is `VERIFY` pending user visual review.
 ### Task state
 
 MOB-01.2 correction Batch 03D is `VERIFY` pending user visual review.
+
+## 2026-08-26 — User Review Correction Batch 03E
+
+### Work
+
+- User review rejected Batch 03D mobile card/detail visual presentation.
+- Restored mobile expanded detail to pre-03D c068f61 presentation (`.equipment-request-details { padding: 12px; }`, `.equipment-request-detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; }`), removing 03D uppercase 11.5px / bold 13.5px overrides.
+- Redesigned request summary to visually match restored detail as a single continuous component: shared surface (`var(--surface)`), clean boundary (`1px solid var(--line)`), 12px padding, matching 13px label/value typography, single horizontal rule transition to detail (`border-top: 1px solid var(--line)`), eliminating floating-card and nested-card disjointness.
+- Preserved all approved technical enhancements: Global Font Contract (Be Vietnam Pro only, 0 non-Be UI fonts), desktop 145px detail label column, "Danh sách TTB", 14px/14px mobile item modal typography, 44x44px chevron touch target (TOUCH-01), single-expanded request behavior, and current user review scoping.
+
+### Verification
+
+- PASS: `npm.cmd run typecheck`, `npm.cmd run lint`, and `npx.cmd prettier --check <touched-files>`.
+- PASS: `tests/review-batch-03e.test.mjs` and `tests/review-batch-03d.test.mjs` verify restored detail layout, continuous shell, desktop label width, "Danh sách TTB", and global typography contract.
+- PASS: `node --test tests/review-batch-03a.test.mjs tests/review-batch-03b.test.mjs tests/review-batch-03d.test.mjs tests/review-batch-03e.test.mjs tests/review-batch-02b.test.mjs tests/staff-shifts-ui-contract.test.mjs` (31/31 tests pass).
+- PASS: Playwright rendered sweep across 375, 768, 1024, and 1440 for `/equipment/requests` and `/equipment/mine`.
+
+### Task state
+
+MOB-01.2 correction Batch 03E is `VERIFY` pending user visual review.
