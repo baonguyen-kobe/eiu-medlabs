@@ -138,11 +138,11 @@
 }
 
 .class-registration-table .class-registration-col-time {
-  width: 285px;
+  width: 240px;
 }
 
 .class-registration-table .class-registration-col-course-code {
-  width: 118px;
+  width: 160px;
 }
 
 .class-registration-table .class-registration-col-course-name {
@@ -5723,12 +5723,13 @@ select {
   }
 
   .confirm-dialog-actions {
-    display: grid;
+    display: flex;
     gap: 8px;
   }
 
   .confirm-dialog-actions .button {
-    width: 100%;
+    flex: 1 1 0;
+    width: auto;
   }
 }
 
@@ -9186,6 +9187,42 @@ body,
 }
 
 /* Staff shifts inherits the shared calendar and form families. */
+.staff-shift-mobile-list {
+  display: none;
+}
+
+.staff-shift-mobile-item,
+.staff-shift-mobile-empty {
+  padding: 12px 14px;
+  border: 1px solid var(--border, #d9dee5);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.staff-shift-mobile-item {
+  display: grid;
+  gap: 4px;
+}
+
+.staff-shift-mobile-item time,
+.staff-shift-mobile-item small {
+  color: var(--ink-600);
+  font-size: 13px;
+}
+.staff-shift-mobile-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.staff-shift-mobile-actions .button {
+  min-height: 40px;
+}
+.staff-shift-mobile-edit {
+  color: var(--eiu-blue);
+  border-color: var(--teal-300);
+  background: var(--teal-50);
+}
 .staff-shift-tabs {
   gap: 4px;
 }
@@ -9226,7 +9263,6 @@ body,
 .staff-shift-event-actions button {
   width: 24px;
 }
-
 .staff-shift-empty-action {
   width: 100%;
   gap: 4px;
@@ -9249,7 +9285,11 @@ body,
 }
 
 .staff-shift-empty-action:focus-visible {
+  color: var(--violet-700);
+  background: var(--violet-100);
   opacity: 1;
+  outline: 2px solid var(--eiu-blue);
+  outline-offset: -2px;
 }
 
 /* The calendar itself owns horizontal scrolling. Narrow and touch layouts
@@ -9391,6 +9431,15 @@ body,
   font-size: 14px;
   line-height: 1.5;
 }
+.staff-shift-cancel-reason {
+  padding: 10px 12px;
+  line-height: 1.5;
+}
+
+.basic-medical-inventory-form :where(input, select) {
+  min-height: 44px;
+  padding: 10px 12px;
+}
 
 @media (max-width: 1180px) {
   .staff-shift-registration-row-grid {
@@ -9408,6 +9457,14 @@ body,
   .staff-shift-registration-row-grid {
     grid-template-columns: 1fr;
     align-items: stretch;
+  }
+  .staff-shift-mobile-list {
+    display: grid;
+    gap: 8px;
+  }
+
+  .staff-shift-mobile-list + .calendar-card {
+    display: none;
   }
 }
 
@@ -11745,5 +11802,17 @@ time,
   .confirm-dialog-actions .button,
   .personnel-drawer > footer .button {
     flex: 1 1 140px;
+  }
+  .basic-medical-catalog-panel .equipment-catalog-mode-buttons {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    width: 100%;
+  }
+
+  .basic-medical-catalog-panel .equipment-catalog-mode-buttons .button {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
   }
 }

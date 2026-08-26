@@ -141,3 +141,15 @@ Remove the non-functional `Ghi nhớ đăng nhập` control. Retain the current 
 **Status:** ACCEPTED
 
 **Scope:** The fixed MEGA RUN A v2 queue only. Technical and rendered verification remain mandatory. User-visible tasks may reach `DONE` after those gates pass, while manual review is recorded as deferred by explicit user authorization for MEGA RUN A v2. No evidence may state user visual acceptance tonight. This exception does not alter the permanent review gate or authorize merging `ui-modernization` into `main`.
+
+## DEC-UI-017 — User Review Correction Batch 01 responsive overrides
+
+**Status:** ACCEPTED
+
+The user retains the approved Personnel mobile summary direction while requiring
+the dirty-discard dialog actions to remain in one row at 375px. Classes retain
+their shared mixed-table structure and local scroll, with a narrower time
+column and wider readable course-code column. Staff Shifts use an actionable
+desktop calendar but a list at widths through 920px. Basic Medical equipment
+uses a 2×2 catalog-action grid at 375px. These corrections preserve business
+and permission behavior and remain in `VERIFY` until the user completes review.

@@ -932,6 +932,8 @@ export function StaffShiftRoster({
           <button
             className="empty-shift-action staff-shift-empty-action"
             type="button"
+            aria-label={`Tạo ca trực ${slot === "MORNING" ? "buổi sáng" : "buổi chiều"} ngày ${formatBusinessDate(date)}`}
+            title="Tạo ca trực"
             onClick={() =>
               setQuickRegisterModal({
                 open: true,
@@ -945,7 +947,7 @@ export function StaffShiftRoster({
               })
             }
           >
-            <Plus size={13} /> {isAdmin ? "Thêm" : "Đăng ký"}
+            <Plus size={13} aria-hidden="true" />
           </button>
         )}
       </div>
@@ -1013,6 +1015,68 @@ export function StaffShiftRoster({
       {/* TAB 1: LỊCH TRỰC */}
       {tab === "roster" && (
         <div className="space-y-4">
+          <div
+            className="staff-shift-mobile-list"
+            aria-label="Danh sách lịch trực"
+          >
+            {shifts.length === 0 ? (
+              <p className="staff-shift-mobile-empty">
+                Chưa có ca trực trong kỳ này.
+              </p>
+            ) : (
+              [...shifts]
+                .sort((left, right) =>
+                  `${left.shift_date}${left.start_time}`.localeCompare(
+                    `${right.shift_date}${right.start_time}`,
+                  ),
+                )
+                .map((shift) => (
+                  <article className="staff-shift-mobile-item" key={shift.id}>
+                    <time>{formatBusinessDate(shift.shift_date)}</time>
+                    <strong>
+                      {shift.start_time.slice(0, 5)}–
+                      {shift.end_time.slice(0, 5)} ·{" "}
+                      {shift.shift_slot === "MORNING" ? "Ca sáng" : "Ca chiều"}
+                    </strong>
+                    <span>{shift.staffName}</span>
+                    <small>{shift.status}</small>
+                    {isAdmin || shift.staff_id === userId ? (
+                      <div className="staff-shift-mobile-actions">
+                        <button
+                          type="button"
+                          className="button staff-shift-mobile-edit"
+                          onClick={() =>
+                            setEditShiftModal({
+                              open: true,
+                              shift,
+                              startTime: shift.start_time.slice(0, 5),
+                              endTime: shift.end_time.slice(0, 5),
+                              note: shift.note ?? "",
+                              historicalReason: "",
+                            })
+                          }
+                        >
+                          Sửa
+                        </button>
+                        <button
+                          type="button"
+                          className="button button-danger"
+                          onClick={() =>
+                            setCancelShiftDialog({
+                              open: true,
+                              shift,
+                              historicalReason: "",
+                            })
+                          }
+                        >
+                          Hủy
+                        </button>
+                      </div>
+                    ) : null}
+                  </article>
+                ))
+            )}
+          </div>
           <div className="calendar-card">
             <div className="calendar-toolbar">
               <div className="calendar-title">
@@ -1993,7 +2057,7 @@ export function StaffShiftRoster({
                     prev ? { ...prev, historicalReason: e.target.value } : null,
                   )
                 }
-                className="input text-xs w-full"
+                className="input staff-shift-cancel-reason text-xs w-full"
                 required
               />
             </div>
@@ -2011,7 +2075,7 @@ export function StaffShiftRoster({
                     prev ? { ...prev, historicalReason: e.target.value } : null,
                   )
                 }
-                className="input text-xs w-full"
+                className="input staff-shift-cancel-reason text-xs w-full"
               />
             </div>
           )}

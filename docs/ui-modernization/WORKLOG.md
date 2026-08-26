@@ -368,3 +368,38 @@ MOB-01.6 is `DONE`; manual user review deferred by explicit authorization for ME
 - Replaced the unhandled RPC promise with explicit loading, success entries, empty, and error states plus keyboard-accessible retry.
 - The active guard prevents state writes after unmount; retry replaces rather than appends entries.
 - PASS: Prettier, targeted ESLint, TypeScript. Rendered request-history evidence remains pending local actionable request data.
+
+## 2026-08-26 — User Review Correction Batch 01
+
+### Work
+
+- Preserved the interrupted local correction worktree and applied the requested
+  narrow-screen refinements only.
+- Personnel dirty-discard actions remain one readable row at 375px.
+- Classes preserve their mixed-table/local-scroll contract while reserving
+  240px for time controls and 160px for course code.
+- Staff Shifts use a list through 920px and retain the desktop calendar;
+  invisible accessible quick-create controls remain keyboard-operable and open
+  the existing dialog. Cancellation-reason controls have explicit inset.
+- Basic Medical equipment catalog actions form a 2×2 375px grid and the
+  route-local inventory inputs/selects have corrected internal padding.
+
+### Verification
+
+- PASS: rendered authenticated sweep at 375/768/1024/1440 for the six affected
+  review routes; no page-level horizontal overflow observed.
+- PASS: Staff Shift desktop keyboard Enter and Space both open the existing
+  create-shift dialog. No shift event exists in the retained local dataset, so
+  event-click non-interference remains source-verified rather than rendered.
+- PASS: Personnel discard confirmation at 375px keeps `Quay lại` and
+  `Bỏ thay đổi` on one row without overflow.
+- PASS: touched-file Prettier, TypeScript, ESLint, `git diff --check`, and
+  `staff-shifts-ui-contract`.
+- BLOCKED(local test fixture): `npm test` relies on historical local accounts
+  whose passwords are intentionally not changed in this batch; its failures do
+  not exercise these UI corrections. A pre-existing ConfirmDialog source
+  expectation also fails against the current shared focus implementation.
+
+### Task state
+
+User Review Correction Batch 01 remains `VERIFY` pending user visual review.
