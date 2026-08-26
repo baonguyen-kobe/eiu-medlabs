@@ -67,3 +67,14 @@ test("/equipment/mine preserves user-scoped query for legitimate review data", (
     /\.or\(`registrant_id\.eq\.\$\{userId\},responsible_lecturer_id\.eq\.\$\{userId\}`\)/,
   );
 });
+
+test("MOB-01.2 mobile request chevron restores approved touch target of at least 40px", () => {
+  assert.match(
+    styles,
+    /@media \(max-width: 920px\)[\s\S]*\.equipment-request-chevron\s*\{[\s\S]*(?:width|min-width):\s*(?:4[0-9]|5[0-9])px/,
+  );
+  assert.match(
+    styles,
+    /@media \(max-width: 920px\)[\s\S]*\.equipment-request-chevron\s*\{[\s\S]*(?:height|min-height):\s*(?:4[0-9]|5[0-9])px/,
+  );
+});

@@ -12132,13 +12132,18 @@ body {
     grid-column: 1 / -1;
     grid-row: 5;
     justify-self: end;
-    margin-top: -6px;
+    margin-top: -8px;
+    margin-bottom: -2px;
+    margin-right: -4px;
   }
 
   .equipment-request-chevron {
-    width: 28px;
-    height: 28px;
-    font-size: 14px;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    border-radius: 10px;
+    font-size: 15px;
   }
 
   .equipment-request-status-stack,

@@ -529,3 +529,22 @@ MOB-01.2 is `VERIFY` pending user visual review.
 ### Task state
 
 MOB-01.2 correction Batch 03B is `VERIFY` pending user visual review.
+
+## 2026-08-26 — User Review Correction Batch 03C
+
+### Work
+
+- Restored mobile request chevron interactive hit target to 44x44px (`min-width: 44px; min-height: 44px; width: 44px; height: 44px; border-radius: 10px; font-size: 15px;`), resolving TOUCH-01 compact action touch-target reviewer finding.
+- Preserved subtle visual glyph appearance and compact summary geometry (`margin-top: -8px; margin-bottom: -2px; margin-right: -4px;`).
+- Maintained full desktop table geometry unchanged at 1024/1440.
+
+### Verification
+
+- PASS: `npm.cmd run typecheck` and `npx.cmd prettier --check <touched-files>`.
+- PASS: `tests/review-batch-03b.test.mjs` verifies mobile chevron touch target is >= 40px (44px) alongside all existing Batch 03B contracts.
+- PASS: `node --test tests/review-batch-03a.test.mjs tests/review-batch-03b.test.mjs tests/review-batch-02b.test.mjs tests/staff-shifts-ui-contract.test.mjs` (20/20 tests pass).
+- PASS: Playwright rendered sweep across 375, 768, 1024, 1440 confirms 44x44px button bounding box, subtle visual glyph, ~276px compact summary height at 375px, single-expansion behavior, and zero page overflow.
+
+### Task state
+
+MOB-01.2 correction Batch 03C is `VERIFY` pending user visual review.
