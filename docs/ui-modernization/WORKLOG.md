@@ -403,3 +403,43 @@ MOB-01.6 is `DONE`; manual user review deferred by explicit authorization for ME
 ### Task state
 
 User Review Correction Batch 01 remains `VERIFY` pending user visual review.
+
+## 2026-08-26 — User Review Correction Batch 02A
+
+### Review reconciliation
+
+- USER VISUAL PASS recorded for A11Y-03, TABLE-01, FORM-01, A11Y-04,
+  ARCH-01, A11Y-02.4, and STATE-02.
+- PILOT-01, MOB-01.1, MOB-01.5, and MOB-01.6 returned to `VERIFY` for
+  user-reported corrections. TOUCH-01 is `VERIFY`: the user requested a fix
+  without yet identifying the exact defect.
+- MOB-01.4 remains `DONE` with USER VISUAL PASS. A11Y-02.5 remains `VERIFY`
+  because no local Basic Medical session is legitimately actionable.
+
+### Work
+
+- Rebalanced Personnel mobile metadata into paired role/status columns and made
+  drawer Cancel/Save actions equal-height, equal-width mobile controls.
+- Reduced editable Classes time geometry to 205px with a 168px paired
+  `HH:mm` editor, increased course-code geometry to 190px, and normalized
+  editable control heights.
+- Replaced the Staff Shift narrow presentation with the existing Skills Lab
+  structured-list language through 920px; desktop calendar and its accessible
+  quick-create control remain unchanged.
+- Extended the shared `PageHeader` with a utility slot so the mobile header
+  grid keeps menu left, title/description center, and notification bell right
+  while preserving sticky desktop and page-action behavior.
+
+### Verification
+
+- PASS: rendered 375/768 list and 1024/1440 desktop-calendar Staff Shift
+  breakpoints; no page overflow.
+- PASS: Staff Shift existing calendar event does not open quick-create.
+- PASS: Personnel 375px paired metadata and equal 42px drawer actions.
+- PASS: TypeScript and Staff Shift UI contract.
+- BLOCKED(baseline): `ui-design-system-v2.test.mjs` still expects an obsolete
+  ConfirmDialog keyboard implementation unrelated to Batch 02A changes.
+
+### Task state
+
+User Review Correction Batch 02A remains `VERIFY` pending user visual review.

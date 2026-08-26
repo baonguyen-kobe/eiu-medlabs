@@ -26,35 +26,33 @@ Phase 2 — Shared accessibility and UI foundations
 
 ## Active task
 
-User Review Correction Batch 01
+User Review Correction Batch 02A
 
 **Status:** VERIFY
 
-**Starting commit:** `6f9b4f0`
+**Starting commit:** `b91fc98`
 
 ## Recently completed
 
 AUTH-01 — DONE
 
-A11Y-03 — DONE
+A11Y-03 — DONE — USER VISUAL PASS
 
-TABLE-01 — DONE
+TABLE-01 — DONE — USER VISUAL PASS
 
-FORM-01 — DONE
+FORM-01 — DONE — USER VISUAL PASS
 
-A11Y-04 — DONE
+A11Y-04 — DONE — USER VISUAL PASS
 
-TOUCH-01 — DONE
+ARCH-01 — DONE — USER VISUAL PASS
 
-PILOT-01 — DONE
+A11Y-02.4 — DONE — USER VISUAL PASS
 
-MOB-01.1 — DONE
+STATE-02 — DONE — USER VISUAL PASS
 
-MOB-01.4 — DONE
+MOB-01.4 — DONE — USER VISUAL PASS
 
-ARCH-01 — DONE
-
-PERF-01 — DONE
+PILOT-01, MOB-01.1, MOB-01.5, MOB-01.6, and TOUCH-01 — VERIFY
 
 ## Next batch task
 

@@ -1901,3 +1901,17 @@ If current local implementation conflicts with this MASTER, **MASTER wins**.
 
 Governance, classification, inheritance, and correction placement are
 canonical in Section 0; do not duplicate them in a page or component section.
+
+## User Review Correction Batch 02A
+
+- The shared authenticated `PageHeader` remains sticky. At narrow widths its
+  grid keeps menu left, title/description in the central column, and the
+  notification bell right; page actions may occupy a subsequent row.
+- Personnel Strategy E retains its existing summary/detail model. On mobile,
+  role and status use paired metadata columns, while drawer cancel/save actions
+  have equal-row geometry.
+- Editable Classes rows retain the shared table geometry and local scrolling;
+  a compact paired time editor is sized for `HH:mm` values, while course code
+  receives the additional column width.
+- Staff Shifts use the existing Skills Lab structured-list language at widths
+  through 920px. Desktop retains the approved accessible quick-create calendar.

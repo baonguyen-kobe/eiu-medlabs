@@ -642,12 +642,8 @@ export function WorkspaceShell({
           }
           title={title}
           description={description}
-          actions={
-            <>
-              <NotificationBell />
-              {actions}
-            </>
-          }
+          utility={<NotificationBell />}
+          actions={actions}
         />
         <div className="workspace-content page-container">{children}</div>
       </main>

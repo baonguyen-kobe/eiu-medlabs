@@ -138,11 +138,11 @@
 }
 
 .class-registration-table .class-registration-col-time {
-  width: 240px;
+  width: 205px;
 }
 
 .class-registration-table .class-registration-col-course-code {
-  width: 160px;
+  width: 190px;
 }
 
 .class-registration-table .class-registration-col-course-name {
@@ -7098,7 +7098,7 @@ body,
 }
 
 .inline-time-editor {
-  min-width: 245px;
+  min-width: 168px;
 }
 
 .inline-time-editor .time-picker {
@@ -9191,32 +9191,36 @@ body,
   display: none;
 }
 
-.staff-shift-mobile-item,
 .staff-shift-mobile-empty {
+  margin: 0;
   padding: 12px 14px;
   border: 1px solid var(--border, #d9dee5);
   border-radius: 10px;
   background: var(--surface);
 }
 
-.staff-shift-mobile-item {
-  display: grid;
-  gap: 4px;
+.staff-shift-mobile-day .day-slots {
+  grid-template-rows: none;
 }
 
-.staff-shift-mobile-item time,
-.staff-shift-mobile-item small {
-  color: var(--ink-600);
-  font-size: 13px;
+.staff-shift-mobile-day .schedule-slot {
+  grid-template-columns: 72px minmax(0, 1fr);
 }
+
+.staff-shift-mobile-slot .slot-event {
+  align-items: center;
+}
+
 .staff-shift-mobile-actions {
   display: flex;
+  flex: none;
   gap: 8px;
-  margin-top: 4px;
+  margin-left: auto;
 }
 
 .staff-shift-mobile-actions .button {
   min-height: 40px;
+  padding-inline: 10px;
 }
 .staff-shift-mobile-edit {
   color: var(--eiu-blue);
@@ -11814,5 +11818,124 @@ time,
     width: 100%;
     min-width: 0;
     min-height: 44px;
+  }
+}
+
+/* User Review Correction Batch 02A: shared header and narrow-screen edits. */
+.workspace-topbar.page-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+}
+
+.page-header-menu,
+.page-header-utility {
+  display: grid;
+  place-items: center;
+}
+
+.page-header-utility {
+  min-width: 40px;
+}
+
+.workspace-topbar.page-header .workspace-actions {
+  width: auto;
+  margin-left: 0;
+}
+
+.class-registration-table
+  .class-registration-mobile-editing
+  :is(input, select, .time-picker-control) {
+  min-height: 40px;
+}
+
+.class-registration-table
+  .class-registration-mobile-editing
+  .time-picker-input {
+  min-height: 38px;
+}
+
+@media (max-width: 820px) {
+  .workspace-topbar.page-header {
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
+    align-items: start;
+    gap: 8px 10px;
+    padding: 12px 16px;
+  }
+
+  .workspace-topbar.page-header .page-header-menu {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .workspace-topbar.page-header .page-header-copy {
+    grid-column: 2;
+    grid-row: 1;
+    min-width: 0;
+    padding-top: 2px;
+  }
+
+  .workspace-topbar.page-header .page-header-utility {
+    grid-column: 3;
+    grid-row: 1;
+    align-self: start;
+  }
+
+  .workspace-topbar.page-header .workspace-actions {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    width: 100%;
+    margin: 0;
+  }
+
+  .workspace-topbar.page-header p {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .personnel-drawer > footer {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .personnel-drawer > footer > span {
+    grid-column: 1 / -1;
+    margin: 0;
+  }
+
+  .personnel-drawer > footer .button {
+    width: 100%;
+    min-width: 0;
+    min-height: 42px;
+    padding-inline: 12px;
+  }
+
+  .personnel-mobile-meta {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 12px;
+  }
+
+  .personnel-mobile-meta > div {
+    display: grid;
+    align-content: start;
+    gap: 5px;
+    min-width: 0;
+  }
+
+  .personnel-mobile-label {
+    color: var(--ink-600);
+    font-size: 12px;
+    font-weight: 650;
+  }
+
+  .personnel-mobile-meta .personnel-badges {
+    align-items: flex-start;
+  }
+
+  .personnel-mobile-actions {
+    justify-content: flex-end;
   }
 }

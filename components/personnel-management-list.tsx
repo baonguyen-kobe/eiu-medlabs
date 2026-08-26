@@ -561,20 +561,28 @@ export function PersonnelManagementList({
                 <strong>{item.full_name}</strong>
                 <small>{item.title ?? item.email}</small>
               </span>
-              <span
-                className={`status-pill ${item.is_active ? "is-active" : ""}`}
-              >
-                {item.is_active ? "Hoạt động" : "Đã khóa"}
-              </span>
+            </div>
+            <div className="personnel-mobile-meta">
+              <div>
+                <span className="personnel-mobile-label">Vai trò</span>
+                <span className="personnel-badges">
+                  {item.roles.slice(0, 2).map((role) => (
+                    <span className="role-chip selected" key={role}>
+                      {roleLabels[role]}
+                    </span>
+                  ))}
+                </span>
+              </div>
+              <div>
+                <span className="personnel-mobile-label">Trạng thái</span>
+                <span
+                  className={`status-pill ${item.is_active ? "is-active" : ""}`}
+                >
+                  {item.is_active ? "Hoạt động" : "Đã khóa"}
+                </span>
+              </div>
             </div>
             <div className="personnel-mobile-actions">
-              <span className="personnel-badges">
-                {item.roles.slice(0, 2).map((role) => (
-                  <span className="role-chip selected" key={role}>
-                    {roleLabels[role]}
-                  </span>
-                ))}
-              </span>
               <button
                 className="button button-secondary"
                 type="button"

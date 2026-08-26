@@ -861,6 +861,28 @@ export function StaffShiftRoster({
     return map;
   }, [shifts]);
 
+  const mobileShiftDays = useMemo(() => {
+    const byDate = new Map<string, Shift[]>();
+    for (const shift of shifts) {
+      const entries = byDate.get(shift.shift_date) ?? [];
+      entries.push(shift);
+      byDate.set(shift.shift_date, entries);
+    }
+    return [...byDate.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(
+        ([date, entries]) =>
+          [
+            date,
+            [...entries].sort((left, right) =>
+              `${left.start_time}${left.staffName}`.localeCompare(
+                `${right.start_time}${right.staffName}`,
+              ),
+            ),
+          ] as const,
+      );
+  }, [shifts]);
+
   const monthWeeks = useMemo(
     () =>
       Array.from({ length: Math.ceil(days.length / 7) }, (_, index) =>
@@ -1016,65 +1038,82 @@ export function StaffShiftRoster({
       {tab === "roster" && (
         <div className="space-y-4">
           <div
-            className="staff-shift-mobile-list"
+            className="staff-shift-mobile-list structured-list"
             aria-label="Danh sách lịch trực"
           >
-            {shifts.length === 0 ? (
+            {mobileShiftDays.length === 0 ? (
               <p className="staff-shift-mobile-empty">
                 Chưa có ca trực trong kỳ này.
               </p>
             ) : (
-              [...shifts]
-                .sort((left, right) =>
-                  `${left.shift_date}${left.start_time}`.localeCompare(
-                    `${right.shift_date}${right.start_time}`,
-                  ),
-                )
-                .map((shift) => (
-                  <article className="staff-shift-mobile-item" key={shift.id}>
-                    <time>{formatBusinessDate(shift.shift_date)}</time>
-                    <strong>
-                      {shift.start_time.slice(0, 5)}–
-                      {shift.end_time.slice(0, 5)} ·{" "}
-                      {shift.shift_slot === "MORNING" ? "Ca sáng" : "Ca chiều"}
-                    </strong>
-                    <span>{shift.staffName}</span>
-                    <small>{shift.status}</small>
-                    {isAdmin || shift.staff_id === userId ? (
-                      <div className="staff-shift-mobile-actions">
-                        <button
-                          type="button"
-                          className="button staff-shift-mobile-edit"
-                          onClick={() =>
-                            setEditShiftModal({
-                              open: true,
-                              shift,
-                              startTime: shift.start_time.slice(0, 5),
-                              endTime: shift.end_time.slice(0, 5),
-                              note: shift.note ?? "",
-                              historicalReason: "",
-                            })
-                          }
-                        >
-                          Sửa
-                        </button>
-                        <button
-                          type="button"
-                          className="button button-danger"
-                          onClick={() =>
-                            setCancelShiftDialog({
-                              open: true,
-                              shift,
-                              historicalReason: "",
-                            })
-                          }
-                        >
-                          Hủy
-                        </button>
+              mobileShiftDays.map(([date, dayShifts]) => (
+                <article
+                  className="structured-day structured-day-list staff-shift-mobile-day"
+                  key={date}
+                >
+                  <header className="structured-day-heading">
+                    <span>{getDayOfWeekLabel(date)}</span>
+                    <strong>{date.slice(-2)}</strong>
+                  </header>
+                  <div className="day-slots">
+                    {dayShifts.map((shift) => (
+                      <div
+                        className="schedule-slot slot-shift staff-shift-mobile-slot"
+                        key={shift.id}
+                      >
+                        <span className="slot-label">
+                          {shift.shift_slot === "MORNING"
+                            ? "Ca sáng"
+                            : "Ca chiều"}
+                        </span>
+                        <article className="slot-event slot-event-shift">
+                          <div>
+                            <time>
+                              {shift.start_time.slice(0, 5)}–
+                              {shift.end_time.slice(0, 5)}
+                            </time>
+                            <strong>{shift.staffName}</strong>
+                            <small>{shift.status}</small>
+                          </div>
+                          {isAdmin || shift.staff_id === userId ? (
+                            <div className="staff-shift-mobile-actions">
+                              <button
+                                type="button"
+                                className="button staff-shift-mobile-edit"
+                                onClick={() =>
+                                  setEditShiftModal({
+                                    open: true,
+                                    shift,
+                                    startTime: shift.start_time.slice(0, 5),
+                                    endTime: shift.end_time.slice(0, 5),
+                                    note: shift.note ?? "",
+                                    historicalReason: "",
+                                  })
+                                }
+                              >
+                                Sửa
+                              </button>
+                              <button
+                                type="button"
+                                className="button button-danger"
+                                onClick={() =>
+                                  setCancelShiftDialog({
+                                    open: true,
+                                    shift,
+                                    historicalReason: "",
+                                  })
+                                }
+                              >
+                                Hủy
+                              </button>
+                            </div>
+                          ) : null}
+                        </article>
                       </div>
-                    ) : null}
-                  </article>
-                ))
+                    ))}
+                  </div>
+                </article>
+              ))
             )}
           </div>
           <div className="calendar-card">
