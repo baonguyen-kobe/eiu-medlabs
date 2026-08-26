@@ -506,3 +506,26 @@ reconciled in the tracker.
 ### Task state
 
 MOB-01.2 is `VERIFY` pending user visual review.
+
+## 2026-08-26 — User Review Correction Batch 03B
+
+### Work
+
+- Applied mobile request summary density correction: compact 2-column header (domain/status), full-width course code & name, date/time in row 3, room/item count in row 4, and subtle chevron toggle in row 5. Height reduced to ~269px at 375px.
+- Applied 2-column metadata grid for expanded details at <=920px with long identifier word wrapping (`word-break: break-word; overflow-wrap: anywhere`).
+- Hid phone field on mobile display (`display: none` at <=920px) while strictly preserving desktop detail phone field at 1024/1440.
+- Simplified mobile item cards in item modal: Line 1 = commercial name (fallback to item name), Line 2 = quantity + unit + note, subtle STT index badge. Removed bulky Type/Country/Manufacturer/Model clutter from mobile cards while preserving full desktop table with all columns intact at 1024/1440.
+- Preserved mobile item draft workflow (SearchableCombobox, quantity input, note, Save & Cancel buttons).
+- Generated legitimate local Nursing Skills review requests for `manager@medlabs.local`, `lecturer@medlabs.local`, and `staff@medlabs.local` using canonical authenticated RPC with schedule authority.
+
+### Verification
+
+- PASS: `npm.cmd run typecheck` and `npx.cmd prettier --check <touched-files>`.
+- PASS: `node --test tests/review-batch-03a.test.mjs tests/review-batch-03b.test.mjs tests/review-batch-02b.test.mjs tests/staff-shifts-ui-contract.test.mjs` (19/19 tests pass).
+- PASS: rendered Playwright verification across 375, 768, 1024, and 1440 for `/equipment/requests` and `/equipment/mine`.
+- PASS: row height ~269px at 375px, phone hidden on mobile, 2-column detail grid at 375/768, single-expanded request behavior preserved, item modal mobile cards simplified, add-item modal workflow functioning, desktop table parity at 1024/1440, no page overflow at any viewport.
+- PASS: review requests visible on `/equipment/mine` for `manager@medlabs.local` (6), `lecturer@medlabs.local` (2), `staff@medlabs.local` (5).
+
+### Task state
+
+MOB-01.2 correction Batch 03B is `VERIFY` pending user visual review.

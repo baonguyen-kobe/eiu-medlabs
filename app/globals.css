@@ -9039,19 +9039,6 @@ body,
     width: 100%;
   }
 
-  .equipment-request-table {
-    min-width: 1060px;
-  }
-
-  .equipment-request-detail-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .equipment-request-code-detail,
-  .equipment-note-detail-row {
-    grid-column: 1;
-  }
-
   .equipment-modal-layer {
     padding: 8px;
   }
@@ -12024,11 +12011,19 @@ body {
 }
 
 /* MOB-01.2 — Equipment request Strategy D and item-modal Strategy C. */
+.equipment-count-unit {
+  display: none;
+}
+
 .equipment-mobile-item-list {
   display: none;
 }
 
 @media (max-width: 920px) {
+  .equipment-count-unit {
+    display: inline;
+  }
+
   .equipment-request-list-panel .responsive-table {
     overflow: visible;
   }
@@ -12055,8 +12050,9 @@ body {
   .equipment-request-table-row {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    gap: 10px 12px;
-    padding: 14px;
+    gap: 4px 10px;
+    padding: 10px 12px;
+    align-items: center;
   }
 
   .equipment-request-table-row > td {
@@ -12066,49 +12062,83 @@ body {
     border: 0;
   }
 
-  .equipment-request-domain-cell,
-  .equipment-request-date-cell,
-  .equipment-request-room-cell,
-  .equipment-request-table-row > td:nth-child(4),
-  .equipment-request-table-row > td:nth-child(6) {
-    color: var(--ink-600);
-    font-size: 13px;
-  }
-
   .equipment-request-domain-cell {
     grid-column: 1;
     grid-row: 1;
+    justify-self: start;
   }
 
-  .equipment-request-table-row > td:nth-child(2) {
-    grid-column: 1;
+  .equipment-request-status-cell {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+  }
+
+  .equipment-request-course-cell {
+    grid-column: 1 / -1;
     grid-row: 2;
+  }
+
+  .equipment-request-course-button strong {
+    font-size: 14.5px;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .equipment-request-course-button span {
+    font-size: 12.5px;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    white-space: normal;
   }
 
   .equipment-request-date-cell {
     grid-column: 1;
     grid-row: 3;
+    color: var(--ink-600);
+    font-size: 12.5px;
+    line-height: 1.3;
   }
 
-  .equipment-request-table-row > td:nth-child(4) {
-    grid-column: 1;
-    grid-row: 4;
+  .equipment-request-time-cell {
+    grid-column: 2;
+    grid-row: 3;
+    justify-self: end;
+    color: var(--ink-600);
+    font-size: 12.5px;
+    line-height: 1.3;
   }
 
   .equipment-request-room-cell {
     grid-column: 1;
-    grid-row: 5;
+    grid-row: 4;
+    color: var(--ink-600);
+    font-size: 12.5px;
+    line-height: 1.3;
   }
 
-  .equipment-request-table-row > td:nth-child(6) {
-    grid-column: 1;
-    grid-row: 6;
-  }
-
-  .equipment-request-status-cell {
+  .equipment-request-count-cell {
     grid-column: 2;
-    grid-row: 1 / span 5;
-    align-self: start;
+    grid-row: 4;
+    justify-self: end;
+    color: var(--ink-600);
+    font-size: 12.5px;
+    line-height: 1.3;
+  }
+
+  .equipment-request-toggle-cell {
+    grid-column: 1 / -1;
+    grid-row: 5;
+    justify-self: end;
+    margin-top: -6px;
+  }
+
+  .equipment-request-chevron {
+    width: 28px;
+    height: 28px;
+    font-size: 14px;
   }
 
   .equipment-request-status-stack,
@@ -12127,17 +12157,6 @@ body {
     text-align: right;
   }
 
-  .equipment-request-toggle-cell {
-    grid-column: 2;
-    grid-row: 6;
-    align-self: end;
-  }
-
-  .equipment-request-chevron {
-    width: 44px;
-    height: 44px;
-  }
-
   .equipment-request-detail-row,
   .equipment-request-detail-row > td {
     display: block;
@@ -12149,24 +12168,51 @@ body {
   }
 
   .equipment-request-details {
-    padding: 14px;
+    padding: 12px;
+  }
+
+  .equipment-request-detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 12px;
+  }
+
+  .equipment-request-code-detail,
+  .equipment-note-detail-row {
+    grid-column: span 1;
+  }
+
+  .equipment-late-detail-row,
+  .equipment-list-detail-row {
+    grid-column: 1 / -1;
+  }
+
+  .equipment-request-detail-grid > .equipment-detail-phone {
+    display: none;
+  }
+
+  .equipment-request-detail-grid dd {
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   .equipment-modal-body > .equipment-modal-skill > .responsive-table {
     display: none;
   }
 
-  .equipment-mobile-item-list {
-    display: grid;
-    gap: 10px;
+  .equipment-modal-skill .responsive-table {
+    display: none;
   }
 
-  .equipment-mobile-item-card,
-  .equipment-mobile-item-draft {
+  .equipment-mobile-item-list {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .equipment-mobile-item-card {
+    display: flex;
+    align-items: center;
     gap: 10px;
-    padding: 12px;
+    padding: 10px 12px;
     border: 1px solid var(--line);
     border-radius: 10px;
     background: var(--surface);
@@ -12174,48 +12220,49 @@ body {
 
   .equipment-mobile-item-index {
     display: grid;
-    width: 28px;
-    height: 28px;
+    width: 24px;
+    height: 24px;
+    flex: none;
     place-items: center;
     color: var(--eiu-blue);
     background: var(--eiu-cream);
     border-radius: 999px;
+    font-size: 12px;
     font-weight: 800;
   }
 
-  .equipment-mobile-item-card strong,
-  .equipment-mobile-item-draft > strong {
-    color: var(--ink-900);
+  .equipment-mobile-item-content {
+    min-width: 0;
+    flex: 1;
   }
 
-  .equipment-mobile-item-card p {
-    margin: 3px 0 0;
-    color: var(--ink-600);
-    font-size: 13px;
-  }
-
-  .equipment-mobile-item-card dl {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-    margin: 10px 0 0;
-  }
-
-  .equipment-mobile-item-card dt {
-    color: var(--ink-600);
-    font-size: 11px;
-    font-weight: 700;
-  }
-
-  .equipment-mobile-item-card dd {
-    margin: 2px 0 0;
+  .equipment-mobile-item-content strong {
+    display: block;
+    color: var(--ink-950);
+    font-size: 14px;
+    line-height: 1.35;
     overflow-wrap: anywhere;
-    font-size: 13px;
+  }
+
+  .equipment-mobile-item-content p {
+    margin: 2px 0 0;
+    color: var(--ink-600);
+    font-size: 12.5px;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
   }
 
   .equipment-mobile-item-draft {
-    grid-template-columns: 1fr;
+    display: grid;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
     background: #fffaf0;
+  }
+
+  .equipment-mobile-item-draft strong {
+    color: var(--ink-900);
   }
 
   .equipment-mobile-item-draft .searchable-combobox,

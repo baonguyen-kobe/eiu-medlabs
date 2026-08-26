@@ -34,16 +34,12 @@ test("Skills Lab actions move from dashboard to class schedules without changing
 });
 
 test("narrow class pickers place the existing create link before the selector", () => {
-  const narrowPickerStyles = styles.slice(
-    styles.lastIndexOf("@media (max-width: 920px)"),
-  );
-
   assert.match(
-    narrowPickerStyles,
-    /\.class-picker-row\s*\{[\s\S]*flex-direction:\s*column/,
+    styles,
+    /@media \(max-width: 920px\)[\s\S]*\.class-picker-row\s*\{[\s\S]*flex-direction:\s*column/,
   );
   assert.match(
-    narrowPickerStyles,
-    /\.class-picker-row \.create-class-button\s*\{[\s\S]*order:\s*-1/,
+    styles,
+    /@media \(max-width: 920px\)[\s\S]*\.class-picker-row \.create-class-button\s*\{[\s\S]*order:\s*-1/,
   );
 });

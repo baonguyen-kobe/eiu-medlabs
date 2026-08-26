@@ -537,6 +537,8 @@ function EquipmentItemsModal({
                 <div className="equipment-mobile-item-list">
                   {items.map((item, index) => {
                     const catalogItem = catalogForRequest(request, item);
+                    const commercialName =
+                      catalogItem?.commercial_name || catalogItem?.item_name;
                     return (
                       <article
                         className="equipment-mobile-item-card"
@@ -547,34 +549,15 @@ function EquipmentItemsModal({
                         </span>
                         <div>
                           <strong>
-                            {catalogItem?.item_name ||
+                            {commercialName ||
                               "Danh mục thiết bị không còn khả dụng"}
                           </strong>
                           <p>
-                            {catalogItem?.commercial_name || "—"} ·{" "}
-                            {catalogItem?.unit || "—"} · SL {item.quantity}
+                            SL {item.quantity} · {catalogItem?.unit || "—"} ·{" "}
+                            {item.note
+                              ? `Ghi chú: ${item.note}`
+                              : "Không có ghi chú"}
                           </p>
-                          <dl>
-                            <div>
-                              <dt>Loại</dt>
-                              <dd>{catalogItem?.item_type || "—"}</dd>
-                            </div>
-                            <div>
-                              <dt>Nước SX</dt>
-                              <dd>{catalogItem?.country_of_origin || "—"}</dd>
-                            </div>
-                            <div>
-                              <dt>Hãng / Model</dt>
-                              <dd>
-                                {catalogItem?.manufacturer || "—"} /{" "}
-                                {catalogItem?.model || "—"}
-                              </dd>
-                            </div>
-                            <div>
-                              <dt>Ghi chú</dt>
-                              <dd>{item.note || "—"}</dd>
-                            </div>
-                          </dl>
                         </div>
                       </article>
                     );
@@ -1374,7 +1357,7 @@ export function EquipmentRequestList({
                         {domainLabel(request)}
                       </span>
                     </td>
-                    <td>
+                    <td className="equipment-request-course-cell">
                       <button
                         type="button"
                         className="equipment-request-summary equipment-request-course-button"
@@ -1393,7 +1376,7 @@ export function EquipmentRequestList({
                         {formatScheduleDate(schedule?.schedule_date)}
                       </strong>
                     </td>
-                    <td className="mono">
+                    <td className="equipment-request-time-cell mono">
                       {schedule?.start_time.slice(0, 5)}–
                       {schedule?.end_time.slice(0, 5)}
                     </td>
@@ -1402,7 +1385,10 @@ export function EquipmentRequestList({
                         {room?.room_code}.{room?.building_code}
                       </strong>
                     </td>
-                    <td>{request.equipment_request_items.length}</td>
+                    <td className="equipment-request-count-cell">
+                      <span>{request.equipment_request_items.length}</span>{" "}
+                      <span className="equipment-count-unit">thiết bị</span>
+                    </td>
                     <td className="equipment-request-status-cell">
                       <div className="equipment-request-status-stack">
                         {!isCancelled && lateApprovalStatus === "pending" ? (
@@ -1685,7 +1671,7 @@ export function EquipmentRequestList({
                               <dd>{request.note || "Không có ghi chú"}</dd>
                             </div>
                             {lateApprovalStatus !== "not_required" ? (
-                              <div className="equipment-note-detail-row">
+                              <div className="equipment-late-detail-row">
                                 <dt>Đăng ký trễ</dt>
                                 <dd>
                                   <strong>
@@ -1706,19 +1692,19 @@ export function EquipmentRequestList({
                                 </dd>
                               </div>
                             ) : null}
-                            <div>
+                            <div className="equipment-detail-registrant">
                               <dt>Người đăng ký</dt>
                               <dd>{request.profiles?.full_name}</dd>
                             </div>
-                            <div>
+                            <div className="equipment-detail-email">
                               <dt>Email</dt>
                               <dd>{request.email_snapshot}</dd>
                             </div>
-                            <div>
+                            <div className="equipment-detail-phone">
                               <dt>Số điện thoại</dt>
                               <dd>{request.phone_snapshot}</dd>
                             </div>
-                            <div>
+                            <div className="equipment-detail-responsible">
                               <dt>
                                 {request.request_domain === "basic_medical"
                                   ? "Giảng viên giảng dạy/hướng dẫn"
@@ -1726,28 +1712,28 @@ export function EquipmentRequestList({
                               </dt>
                               <dd>{request.responsible?.full_name}</dd>
                             </div>
-                            <div>
+                            <div className="equipment-detail-students">
                               <dt>Số sinh viên</dt>
                               <dd>{schedule?.student_count}</dd>
                             </div>
-                            <div>
+                            <div className="equipment-detail-room">
                               <dt>Phòng/Lab</dt>
                               <dd>
                                 {room?.room_code}.{room?.building_code}
                                 {room?.room_name ? ` — ${room.room_name}` : ""}
                               </dd>
                             </div>
-                            <div>
+                            <div className="equipment-detail-created">
+                              <dt>Ngày tạo phiếu</dt>
+                              <dd>{formatDateTime(request.created_at)}</dd>
+                            </div>
+                            <div className="equipment-detail-receive">
                               <dt>Thời gian nhận</dt>
                               <dd>{formatDateTime(request.receive_at)}</dd>
                             </div>
-                            <div>
+                            <div className="equipment-detail-return">
                               <dt>Thời gian trả</dt>
                               <dd>{formatDateTime(request.return_at)}</dd>
-                            </div>
-                            <div>
-                              <dt>Ngày tạo phiếu</dt>
-                              <dd>{formatDateTime(request.created_at)}</dd>
                             </div>
                             <div className="equipment-list-detail-row">
                               <dt>Danh sách trang thiết bị</dt>
