@@ -1,10 +1,5 @@
 import { addDays, endOfMonth, format, startOfMonth } from "date-fns";
-import {
-  CalendarDays,
-  GraduationCap,
-  PackageCheck,
-  Plus,
-} from "@/components/icons";
+import { CalendarDays, GraduationCap, PackageCheck } from "@/components/icons";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { WorkspaceShell } from "@/components/workspace-shell";
@@ -99,13 +94,6 @@ export default async function DashboardPage() {
       return !equipmentRequest || equipmentRequest.status === "cancelled";
     },
   );
-  const canImport = roles.some((role) =>
-    ["admin", "staff", "teaching_assistant"].includes(role),
-  );
-  const canCreate =
-    canImport ||
-    (roles.includes("lecturer") &&
-      roomTypes.some(({ id }) => id === NURSING_SKILLS_ROOM_TYPE_ID));
   const displayRole = roles.includes("admin")
     ? "admin"
     : roles.includes("staff")
@@ -128,23 +116,7 @@ export default async function DashboardPage() {
       canManageEmailNotifications={canManageEmailNotifications}
       title="Tổng quan"
       description={`Hôm nay ${formatBusinessDate(todayText)}`}
-      actions={
-        canCreate ? (
-          <>
-            {canImport ? (
-              <Link
-                className="button button-secondary"
-                href="/schedule-entry/import"
-              >
-                Import lịch Skills lab
-              </Link>
-            ) : null}
-            <Link className="button button-primary" href="/schedule-entry/new">
-              <Plus size={17} /> Tạo lịch
-            </Link>
-          </>
-        ) : undefined
-      }
+      actions={undefined}
     >
       <section className="kpi-grid" aria-label="Chỉ số tổng quan">
         <article className="kpi-card kpi-teal">

@@ -9462,13 +9462,48 @@ body,
     grid-template-columns: 1fr;
     align-items: stretch;
   }
+  .staff-shift-roster-content {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .staff-shift-roster-content > * {
+    margin-top: 0 !important;
+  }
+
   .staff-shift-mobile-list {
     display: grid;
     gap: 8px;
+    order: 2;
   }
 
   .staff-shift-mobile-list + .calendar-card {
+    display: block;
+    order: 1;
+  }
+
+  .staff-shift-mobile-list + .calendar-card > .period-calendar {
     display: none;
+  }
+
+  .staff-shift-mobile-list .staff-shift-empty-action {
+    min-height: 44px;
+    color: transparent;
+    background: transparent;
+    border-color: transparent;
+    opacity: 0;
+  }
+
+  .staff-shift-mobile-list .staff-shift-empty-action:focus-visible {
+    color: var(--violet-700);
+    background: var(--violet-100);
+    border-color: var(--violet-300);
+    opacity: 1;
+  }
+
+  .staff-shift-mobile-list + .calendar-card .calendar-options {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -11912,30 +11947,96 @@ time,
     padding-inline: 12px;
   }
 
-  .personnel-mobile-meta {
+  .personnel-mobile-actions {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px 12px;
+    grid-template-columns: 16px minmax(0, 1fr) auto;
+    align-items: center;
+    justify-content: normal;
+    gap: 12px;
   }
 
-  .personnel-mobile-meta > div {
-    display: grid;
-    align-content: start;
-    gap: 5px;
-    min-width: 0;
+  .personnel-mobile-action-spacer {
+    width: 16px;
+    visibility: hidden;
   }
 
-  .personnel-mobile-label {
-    color: var(--ink-600);
-    font-size: 12px;
-    font-weight: 650;
-  }
-
-  .personnel-mobile-meta .personnel-badges {
+  .personnel-mobile-actions .personnel-badges {
+    grid-column: 2;
     align-items: flex-start;
   }
 
-  .personnel-mobile-actions {
-    justify-content: flex-end;
+  .personnel-mobile-actions .button {
+    grid-column: 3;
+  }
+}
+
+/* Batch 02B: clip horizontal paint without creating a sticky scroll ancestor. */
+html,
+body {
+  overflow-x: clip;
+}
+
+#main-content,
+.app-shell,
+.workspace-main {
+  overflow-x: clip;
+}
+
+@media (max-width: 920px) {
+  .workspace-topbar.page-header h1 {
+    font-size: clamp(20px, 5.4vw, 24px);
+    line-height: 1.2;
+  }
+
+  .workspace-topbar.page-header p {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  .class-picker-row .create-class-button {
+    order: -1;
+  }
+}
+
+@media (max-width: 920px) {
+  .class-picker-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .class-picker-row .create-class-button {
+    order: -1;
+    width: 100%;
+  }
+}
+
+.skills-calendar-header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.skills-calendar-mobile-actions {
+  display: none;
+}
+
+@media (max-width: 820px) {
+  .skills-calendar-header-actions {
+    display: none;
+  }
+
+  .skills-calendar-mobile-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .skills-calendar-mobile-actions .button {
+    flex: 1 1 154px;
+    min-height: 40px;
   }
 }

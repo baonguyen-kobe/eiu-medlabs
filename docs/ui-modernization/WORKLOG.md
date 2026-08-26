@@ -443,3 +443,41 @@ User Review Correction Batch 01 remains `VERIFY` pending user visual review.
 ### Task state
 
 User Review Correction Batch 02A remains `VERIFY` pending user visual review.
+
+## 2026-08-26 — User Review Correction Batch 02B
+
+### Review reconciliation
+
+- USER VISUAL PASS CONFIRMED for MOB-01.1 and PILOT-01. Their formal status
+  remains `VERIFY` while TOUCH-01 remains `VERIFY` awaiting an exact defect.
+- MOB-01.5 and MOB-01.6 remain `VERIFY` pending review of the corrected
+  mobile presentations. A11Y-02.5 remains untouched and `VERIFY`.
+
+### Work
+
+- Restored the pre-02A Personnel summary sequence: identity, status, and role
+  chips now share the vertical content column while the action remains right.
+  The approved equal-size drawer controls are unchanged.
+- Staff Shift structured mobile days now derive from `days`, retaining every
+  week/month date and both Sáng/Chiều slots. The existing toolbar stays visible
+  while only the desktop grid hides at narrow widths.
+- Replaced shell horizontal `hidden` overflow with `clip`; rendered evidence
+  confirms the document scrolls while the shared header remains at viewport top.
+- Moved Skills Lab Import/Create actions from dashboard to class schedules with
+  dashboard-equivalent role/scope checks and existing hrefs. Mobile class-picker
+  create links now precede their selectors.
+
+### Verification
+
+- PASS: 375 mobile week 7 days/14 slots; month 42 days/84 slots; hidden empty
+  quick-create is keyboard-visible on focus and opens the existing dialog.
+- PASS: desktop event click remains isolated from quick-create.
+- PASS: long Basic Medical page scroll reports header `y=0`, two-line
+  description limit, and no page overflow.
+- PASS: 375 Personnel role/status left edges align; Cancel/Save remain equal.
+- PASS: TypeScript, ESLint, touched-file Prettier, diff check, Staff Shift
+  contract, and Batch 02B action relocation contract.
+
+### Task state
+
+User Review Correction Batch 02B remains `VERIFY` pending user visual review.

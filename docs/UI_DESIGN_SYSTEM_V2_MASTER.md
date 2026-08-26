@@ -1915,3 +1915,17 @@ canonical in Section 0; do not duplicate them in a page or component section.
   receives the additional column width.
 - Staff Shifts use the existing Skills Lab structured-list language at widths
   through 920px. Desktop retains the approved accessible quick-create calendar.
+
+## User Review Correction Batch 02B
+
+- Supersedes the Batch 02A Personnel paired-metadata override: Strategy E uses
+  identity, status, and roles in one vertical content column, with the action
+  independently aligned right.
+- Shared header horizontal clipping uses `overflow-x: clip` on shell ancestors
+  so the document remains the sticky vertical scroll context. Mobile title and
+  description remain compact, with description limited visually to two lines.
+- Mobile/tablet Staff Shifts render every URL-selected `days` entry in the
+  existing structured-list calendar language; only the desktop calendar grid
+  is hidden, not its period toolbar.
+- Narrow class pickers place their existing create link before the selector;
+  desktop order and all hrefs remain unchanged.
