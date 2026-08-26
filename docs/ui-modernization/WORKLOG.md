@@ -558,13 +558,14 @@ MOB-01.2 correction Batch 03C is `VERIFY` pending user visual review.
 - Aligned mobile item modal secondary line (`SL · Unit · Note`) typography to 14px (`font-size: 14px; font-weight: 400; color: var(--ink-600);`), matching the 14px font size of the primary commercial-name line.
 - Widened desktop expanded detail label column to 145px (`.equipment-request-detail-grid.detail-list > div { grid-template-columns: 145px minmax(0, 1fr); gap: 12px; }`), allowing standard labels ("Mã phiếu", "Người đăng ký", "Email", "Số điện thoại", "Giảng viên phụ trách", "Thời gian nhận", "Thời gian trả", "Danh sách TTB") to fit on a single line.
 - Renamed the visible expanded detail label from "Danh sách trang thiết bị" to "Danh sách TTB" in `components/equipment-request-list.tsx` while preserving full wording in accessibility `aria-label` and modal title.
+- Enforced Global Font Contract Addendum: eliminated all intentional non-Be-Vietnam-Pro font families (SFMono, Consolas, Liberation Mono, monospace) across `:root`, `.mono`, form controls (`button, input, select, textarea`), code tags (`code, pre, kbd, samp`), and component styles. Updated `docs/UI_DESIGN_SYSTEM_V2_MASTER.md` design authority.
 
 ### Verification
 
 - PASS: `npm.cmd run typecheck`, `npm.cmd run lint`, and `npx.cmd prettier --check <touched-files>`.
-- PASS: `tests/review-batch-03d.test.mjs` verifies mobile card shell, neutralized detail separators, 14px modal item typography, 145px desktop label column, and "Danh sách TTB" label.
-- PASS: `node --test tests/review-batch-03a.test.mjs tests/review-batch-03b.test.mjs tests/review-batch-03d.test.mjs tests/review-batch-02b.test.mjs tests/staff-shifts-ui-contract.test.mjs` (25/25 tests pass).
-- PASS: Playwright rendered sweep across 375, 768, 1024, and 1440 for `/equipment/requests` and `/equipment/mine`.
+- PASS: `tests/review-batch-03d.test.mjs` verifies mobile card shell, neutralized detail separators, 14px modal item typography, 145px desktop label column, "Danh sách TTB" label, and global typography contract.
+- PASS: `node --test tests/review-batch-03a.test.mjs tests/review-batch-03b.test.mjs tests/review-batch-03d.test.mjs tests/review-batch-02b.test.mjs tests/staff-shifts-ui-contract.test.mjs` (26/26 tests pass).
+- PASS: Playwright rendered typography audit across `/equipment/requests`, `/equipment/mine`, `/classes/open`, `/class-schedules`, `/staff-shifts`, `/admin/personnel`, `/basic-medical/equipment` confirms every element resolves with `"Be Vietnam Pro"`, including request code `260826194742`, form inputs, table headers/cells, and modal items.
 
 ### Task state
 

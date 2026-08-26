@@ -10,6 +10,14 @@ const styles = readFileSync(
   new URL("../app/globals.css", import.meta.url),
   "utf8",
 );
+const layoutSource = readFileSync(
+  new URL("../app/layout.tsx", import.meta.url),
+  "utf8",
+);
+const masterDoc = readFileSync(
+  new URL("../docs/UI_DESIGN_SYSTEM_V2_MASTER.md", import.meta.url),
+  "utf8",
+);
 
 test("MOB-01.2 mobile card shell uses consistent separate border context", () => {
   assert.match(
@@ -53,5 +61,35 @@ test("MOB-01.2 renames visible expanded detail label to Danh sách TTB while pre
   assert.match(
     requestList,
     /aria-label=\{`Danh sách trang thiết bị cho \$\{skillName\}`\}/,
+  );
+});
+
+test("Global typography contract: Be Vietnam Pro is the only intentional UI font family", () => {
+  // Layout imports Be Vietnam Pro font weights
+  assert.match(layoutSource, /@fontsource\/be-vietnam-pro\/400\.css/);
+  assert.match(layoutSource, /@fontsource\/be-vietnam-pro\/700\.css/);
+
+  // No intentional SFMono, Consolas, Liberation Mono in globals.css font variables
+  assert.doesNotMatch(styles, /--font-mono:\s*["']SFMono/);
+  assert.doesNotMatch(styles, /--font-mono:\s*["']Consolas/);
+  assert.match(styles, /--font-mono:\s*["']Be Vietnam Pro["']/);
+
+  // .mono class uses Be Vietnam Pro
+  assert.match(styles, /\.mono\s*\{[\s\S]*font-family:\s*var\(--font-body\)/);
+
+  // Browser code tags and form controls inherit Be Vietnam Pro
+  assert.match(
+    styles,
+    /code,\s*pre,\s*kbd,\s*samp\s*\{[\s\S]*font-family:\s*var\(--font-body\)/,
+  );
+  assert.match(
+    styles,
+    /button,\s*input,\s*select,\s*textarea\s*\{[\s\S]*font-family:\s*var\(--font-body\)/,
+  );
+
+  // UI Master records the global rule
+  assert.match(
+    masterDoc,
+    /EIU MedLabs uses Be Vietnam Pro for all user-visible typography/,
   );
 });

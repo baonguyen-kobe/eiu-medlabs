@@ -56,9 +56,10 @@ PILOT-01, MOB-01.1, MOB-01.4, MOB-01.5, MOB-01.6, and TOUCH-01 — DONE — USER
 
 ## Next batch task
 
-MOB-01.2 correction Batch 03D is technically rendered and verified across 375/768/1024/1440.
+MOB-01.2 correction Batch 03D + Global Font Contract Addendum is technically rendered and verified.
 It polishes mobile card borders/separators, aligns mobile item secondary text to 14px, widens
-desktop detail label column to 145px for single-line labels, and updates the label to "Danh sách TTB".
+desktop detail label column to 145px for single-line labels, updates the label to "Danh sách TTB",
+and strictly enforces Be Vietnam Pro as the sole intentional UI font family application-wide.
 It is awaiting user visual review. Do not resume the general queue until the user accepts
 or supplies new correction evidence.
 

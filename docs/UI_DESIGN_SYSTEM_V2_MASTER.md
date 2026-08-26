@@ -107,6 +107,20 @@ Fallback:
 "Be Vietnam Pro", "Segoe UI", system-ui, sans-serif
 ```
 
+### Global typography rule — Be Vietnam Pro only
+
+EIU MedLabs uses Be Vietnam Pro for all user-visible typography.
+No intentional secondary monospace, serif, or alternate UI font is allowed.
+
+This rule applies application-wide:
+
+- Body, headings, page titles, descriptions
+- Table headers, table cells, metadata, badges, status indicators
+- Request codes/IDs, timestamps, dates, room codes, numbers
+- Form controls (buttons, inputs, selects, textareas, placeholders)
+- Modal content, drawer content, calendar UI, print-oriented UI
+- Any element using the `.mono` helper class (which provides tabular numeral alignment and overflow wrapping without changing font family)
+
 ## Brand direction
 
 ```text

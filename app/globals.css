@@ -43,7 +43,7 @@
   --sidebar-width: 244px;
   --font-body: "Be Vietnam Pro", "Segoe UI", system-ui, sans-serif;
   --font-heading: "Be Vietnam Pro", "Segoe UI", system-ui, sans-serif;
-  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --font-mono: "Be Vietnam Pro", "Segoe UI", system-ui, sans-serif;
 }
 
 /* Room-type scopes and Y co so extensions */
@@ -192,6 +192,14 @@ input,
 select,
 textarea {
   font: inherit;
+  font-family: var(--font-body);
+}
+
+code,
+pre,
+kbd,
+samp {
+  font-family: var(--font-body);
 }
 
 button {
@@ -1070,7 +1078,7 @@ span.filter-control {
   max-width: 100%;
   overflow: hidden;
   color: var(--event-color);
-  font-family: var(--font-mono);
+  font-family: var(--font-body);
   font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1176,7 +1184,7 @@ span.filter-control {
   font-size: 9px;
 }
 .agenda-room {
-  font-family: var(--font-mono);
+  font-family: var(--font-body);
 }
 
 .structured-week,
@@ -1788,7 +1796,7 @@ span.filter-control {
 }
 
 .open-info b {
-  font-family: var(--font-mono);
+  font-family: var(--font-body);
   font-weight: 600;
 }
 
@@ -1927,7 +1935,7 @@ span.filter-control {
 
 .detail-drawer h2 {
   margin: 13px 0 5px;
-  font-family: var(--font-mono);
+  font-family: var(--font-heading);
   font-size: 22px;
 }
 
@@ -1959,7 +1967,7 @@ span.filter-control {
 }
 
 .mono {
-  font-family: var(--font-mono);
+  font-family: var(--font-body);
 }
 
 .drawer-actions {
