@@ -122,7 +122,7 @@ export default async function RoomsPage({
           aria-label="Danh sách Loại phòng"
           tabIndex={0}
         >
-          <table className="data-table catalog-data-table">
+          <table className="data-table catalog-data-table room-type-data-table">
             <thead>
               <tr>
                 <th>Tên</th>
@@ -134,12 +134,28 @@ export default async function RoomsPage({
             <tbody>
               {(roomTypes ?? []).map((roomType) => (
                 <tr key={roomType.id}>
-                  <td>
+                  <td
+                    className="room-type-name-cell"
+                    data-mobile-label="Tên Loại phòng"
+                  >
                     <strong>{roomType.name}</strong>
                   </td>
-                  <td className="mono">{roomType.code}</td>
-                  <td>{roomType.is_active ? "Đang dùng" : "Ngừng dùng"}</td>
-                  <td>
+                  <td
+                    className="room-type-code-cell mono"
+                    data-mobile-label="Mã"
+                  >
+                    {roomType.code}
+                  </td>
+                  <td
+                    className="room-type-status-cell"
+                    data-mobile-label="Trạng thái"
+                  >
+                    {roomType.is_active ? "Đang dùng" : "Ngừng dùng"}
+                  </td>
+                  <td
+                    className="room-type-action-cell"
+                    data-mobile-label="Thao tác"
+                  >
                     <form action={toggleRoomType}>
                       <input type="hidden" name="id" value={roomType.id} />
                       <input

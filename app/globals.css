@@ -12709,3 +12709,273 @@ body {
     min-height: 40px;
   }
 }
+/* MOB-01.7 / Batch 04A: Courses and rooms use shared catalog cards at narrow widths. */
+.catalog-mobile-row,
+.catalog-mobile-select-all {
+  display: none;
+}
+@media (max-width: 920px) {
+  .catalog-data-panel:has(.catalog-batch-data-table) .responsive-table,
+  .room-type-manager .responsive-table {
+    overflow: visible;
+  }
+
+  :is(.catalog-batch-data-table, .room-type-data-table) {
+    min-width: 0;
+    display: block;
+  }
+
+  :is(.catalog-batch-data-table, .room-type-data-table) thead {
+    display: none;
+  }
+
+  :is(.catalog-batch-data-table, .room-type-data-table) tbody {
+    display: block;
+  }
+
+  :is(.catalog-batch-data-table, .room-type-data-table) tbody > tr {
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+    gap: 8px 10px;
+    margin: 0 0 10px;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-card);
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
+  }
+
+  :is(.catalog-batch-data-table, .room-type-data-table) tbody > tr > td {
+    display: block;
+    min-width: 0;
+    height: auto;
+    padding: 0;
+    border: 0;
+  }
+
+  .catalog-selection-cell {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: center;
+  }
+
+  .catalog-code-cell {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: center;
+    color: var(--eiu-blue);
+    font-weight: 800;
+    overflow-wrap: anywhere;
+  }
+
+  .catalog-status-cell {
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: end;
+  }
+
+  .catalog-name-cell {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    color: var(--ink-950);
+    font-size: 14px;
+    font-weight: 650;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+  }
+
+  .catalog-type-cell {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    color: var(--ink-600);
+    font-size: 13px;
+    line-height: 1.35;
+  }
+
+  .catalog-batch-data-table
+    tbody
+    > tr:has(.catalog-capacity-cell)
+    .catalog-type-cell {
+    grid-column: 1 / 3;
+  }
+
+  .catalog-capacity-cell {
+    grid-column: 3;
+    grid-row: 3;
+    justify-self: end;
+    color: var(--ink-600);
+    font-size: 13px;
+    line-height: 1.35;
+  }
+
+  .catalog-row-actions {
+    grid-column: 1 / -1;
+    grid-row: 4;
+    display: flex !important;
+    justify-content: flex-start;
+    gap: 8px;
+    padding-top: 2px !important;
+  }
+
+  .catalog-row-actions .table-action {
+    min-height: 40px;
+    padding-inline: 12px;
+  }
+
+  .catalog-batch-data-table tbody > tr.is-editing {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .catalog-batch-data-table tbody > tr.is-editing .catalog-selection-cell {
+    display: none;
+  }
+
+  .catalog-batch-data-table
+    tbody
+    > tr.is-editing
+    > td:not(.catalog-selection-cell) {
+    grid-column: 1 / -1 !important;
+    grid-row: auto !important;
+  }
+
+  .catalog-batch-data-table
+    tbody
+    > tr.is-editing
+    td[data-mobile-label]::before {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--ink-500);
+    content: attr(data-mobile-label);
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .catalog-batch-data-table tbody > tr.is-editing :is(input, select) {
+    width: 100%;
+    min-height: 40px;
+  }
+
+  .catalog-batch-data-table tbody > tr.is-editing .catalog-inline-fields {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .catalog-data-panel > .equipment-catalog-toolbar {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    align-items: stretch;
+    padding: 12px;
+  }
+
+  .catalog-data-panel > .equipment-catalog-toolbar > span {
+    grid-column: 1;
+    align-self: center;
+  }
+
+  .catalog-mobile-select-all {
+    display: inline-flex;
+    grid-column: 2;
+    align-items: center;
+    justify-self: end;
+    gap: 6px;
+    color: var(--ink-600);
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .catalog-data-panel
+    > .equipment-catalog-toolbar.is-editing
+    .catalog-mobile-select-all {
+    display: none;
+  }
+
+  .catalog-data-panel
+    > .equipment-catalog-toolbar
+    .catalog-master-action-group {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    width: 100%;
+  }
+
+  .catalog-data-panel
+    > .equipment-catalog-toolbar
+    .catalog-master-action-group
+    .button,
+  .catalog-data-panel > .equipment-catalog-toolbar > .button {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+  }
+
+  .catalog-data-panel
+    > .equipment-catalog-toolbar.is-editing
+    .catalog-master-action-group
+    .button:not(:nth-child(2)) {
+    display: none;
+  }
+
+  .catalog-data-panel
+    > .equipment-catalog-toolbar.is-editing
+    .catalog-master-action-group {
+    grid-column: 1;
+  }
+
+  .catalog-data-panel > .equipment-catalog-toolbar.is-editing > .button {
+    grid-column: 2;
+  }
+
+  .room-type-data-table tbody > tr {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .room-type-name-cell {
+    grid-column: 1;
+    grid-row: 1;
+    color: var(--ink-950);
+  }
+
+  .room-type-code-cell {
+    grid-column: 1;
+    grid-row: 2;
+    color: var(--ink-600);
+    font-size: 13px;
+  }
+
+  .room-type-status-cell {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+    font-size: 13px;
+  }
+
+  .room-type-action-cell {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    padding-top: 2px !important;
+  }
+
+  .room-type-action-cell .table-action {
+    min-height: 40px;
+    padding-inline: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  :is(.catalog-batch-data-table, .room-type-data-table) tbody > tr {
+    padding: 10px;
+    gap: 7px 8px;
+  }
+
+  .catalog-name-cell {
+    font-size: 13.5px;
+  }
+
+  .catalog-data-panel > .equipment-catalog-toolbar {
+    padding: 10px;
+  }
+}

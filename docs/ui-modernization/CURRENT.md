@@ -22,17 +22,19 @@ Last updated: 2026-08-26
 
 ## Current phase
 
-Phase 2 — Shared accessibility and UI foundations
+Phase 5 — Remaining table-family mobile strategies
 
 ## Active task
 
-MOB-01.2
+MOB-01.7
 
-**Status:** VERIFY
+**Status:** IN_PROGRESS
 
-**Starting commit:** `1688f87`
+**Starting commit:** `9496a50`
 
 ## Recently completed
+
+MOB-01.2 — DONE — USER VISUAL PASS — Batch 03G + Addenda
 
 AUTH-01 — DONE
 
@@ -56,13 +58,10 @@ PILOT-01, MOB-01.1, MOB-01.4, MOB-01.5, MOB-01.6, and TOUCH-01 — DONE — USER
 
 ## Next batch task
 
-MOB-01.2 correction Batch 03G + Addenda is technically rendered and verified across 375/768/1024/1440.
-It makes the mobile summary status pill content-width (fit-content/999px radius), renders pending late-approval
-as "Chờ duyệt ĐK trễ", transforms expanded mobile status actions into a 2-equal-column grid (6 buttons),
-hides mobile PDF export, and left-aligns expanded mobile/tablet metadata, including the 2-line late-registration
-row (Line 1: label + status, Line 2: note), preserving all 03G detail/breakpoint fixes and the Global Font Contract.
-It is awaiting user visual review. Do not resume the general queue until the user accepts
-or supplies new correction evidence.
+MOB-01.7 / Catalog family Batch 04A is technically rendered across 375/768/1024/1440.
+Courses, Rooms, and Room Types use Strategy C mobile cards at <=920px while retaining shared
+selection, batch actions, inline edit state, confirmation dialogs, pagination, and desktop tables.
+MOB-01.7 remains IN_PROGRESS pending user visual review of this first sub-batch and its remaining families.
 
 ## Blocked tasks
 

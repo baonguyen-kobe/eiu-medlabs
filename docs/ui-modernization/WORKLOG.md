@@ -673,3 +673,31 @@ MOB-01.2 correction Batch 03G is `VERIFY` pending user visual review.
 ### Task state
 
 MOB-01.2 correction Batch 03G remains VERIFY pending user visual review.
+
+## 2026-08-27 — MOB-01.2 User Visual Approval
+
+### User acceptance
+
+PASS — user explicitly approved MOB-01.2 with “MOB-01.2 duyệt”.
+
+### Task state
+
+MOB-01.2 is DONE — USER VISUAL PASS — Batch 03G + Addenda.
+
+## 2026-08-27 — MOB-01.7 Catalog family Batch 04A
+
+### Work
+
+- Implemented Strategy C mobile cards for the shared Courses and Rooms CatalogBatchManager at <=920px, reusing selected, editing, drafts, beginEdit, updateDraft, save, cancelEdit, and ConfirmDialog state/handlers.
+- Added mobile select-all alongside selected count; grouped batch controls into a 2-column touch-safe grid and limited editing mode to save/cancel presentation.
+- Preserved the unmodified desktop catalog table at 1024/1440 and scoped card conversion to catalog-batch-data-table, leaving the separate EquipmentCatalogManager untouched.
+- Added room-type compact cards within the existing toggleRoomType form flow.
+
+### Verification
+
+- PASS: TypeScript, lint, touched-file Prettier, focused catalog contract test, and rendered 375/768/1024/1440 catalog sweep.
+- PASS: Courses and Rooms select all, multi-row edit/cancel, single-row edit/cancel, delete confirmation/cancel, and room-type toggle form surfaces rendered without mutation.
+
+### Task state
+
+MOB-01.7 is IN_PROGRESS — Catalog family Batch 04A awaiting user visual review; remaining families not started.

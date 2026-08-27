@@ -254,12 +254,24 @@ export function CatalogBatchManager({
   return (
     <div className="data-panel catalog-data-panel">
       <div
-        className="equipment-catalog-toolbar"
+        className={`equipment-catalog-toolbar${editing.length ? " is-editing" : ""}`}
         aria-label={
           editing.length ? "Chỉnh sửa nội tuyến" : "Thao tác danh mục"
         }
       >
         <span>{editing.length || selected.length} mục được chọn</span>
+        <label className="catalog-mobile-select-all">
+          <input
+            aria-label="Chọn tất cả mục đang xem"
+            type="checkbox"
+            checked={allSelected}
+            disabled={editing.length > 0 || pending}
+            onChange={() =>
+              setSelected(allSelected ? [] : items.map((item) => item.id))
+            }
+          />
+          Chọn tất cả
+        </label>
         <div className="catalog-master-action-group">
           <button
             className="button button-primary"
@@ -348,7 +360,7 @@ export function CatalogBatchManager({
         }
         tabIndex={0}
       >
-        <table className="data-table catalog-data-table">
+        <table className="data-table catalog-data-table catalog-batch-data-table">
           <thead>
             <tr>
               <th>
@@ -379,7 +391,7 @@ export function CatalogBatchManager({
                   key={item.id}
                   className={isEditing ? "is-editing" : undefined}
                 >
-                  <td>
+                  <td className="catalog-selection-cell">
                     <input
                       aria-label={`Chọn ${kind === "rooms" ? item.room_code : item.course_code}`}
                       type="checkbox"
@@ -388,7 +400,7 @@ export function CatalogBatchManager({
                       onChange={() => toggle(item.id)}
                     />
                   </td>
-                  <td className="mono">
+                  <td className="catalog-code-cell mono" data-mobile-label="Mã">
                     {isEditing ? (
                       kind === "rooms" ? (
                         <div className="catalog-inline-fields">
@@ -429,7 +441,7 @@ export function CatalogBatchManager({
                       item.course_code
                     )}
                   </td>
-                  <td>
+                  <td className="catalog-name-cell" data-mobile-label="Tên">
                     {isEditing ? (
                       <input
                         aria-label={
@@ -447,7 +459,7 @@ export function CatalogBatchManager({
                       item.course_name
                     )}
                   </td>
-                  <td>
+                  <td className="catalog-type-cell" data-mobile-label="Loại">
                     {isEditing ? (
                       <select
                         aria-label="Loại phòng"
@@ -469,7 +481,10 @@ export function CatalogBatchManager({
                     )}
                   </td>
                   {kind === "rooms" ? (
-                    <td>
+                    <td
+                      className="catalog-capacity-cell"
+                      data-mobile-label="Sức chứa"
+                    >
                       {isEditing ? (
                         <input
                           aria-label="Sức chứa"
@@ -486,14 +501,20 @@ export function CatalogBatchManager({
                       )}
                     </td>
                   ) : null}
-                  <td>
+                  <td
+                    className="catalog-status-cell"
+                    data-mobile-label="Trạng thái"
+                  >
                     <span
                       className={`status-pill ${item.is_active ? "is-active" : ""}`}
                     >
                       {item.is_active ? "Đang dùng" : "Ngừng dùng"}
                     </span>
                   </td>
-                  <td className="catalog-row-actions">
+                  <td
+                    className="catalog-row-actions"
+                    data-mobile-label="Thao tác"
+                  >
                     {isEditing ? (
                       <span className="field-note">Đang sửa</span>
                     ) : (
