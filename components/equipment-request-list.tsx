@@ -1345,6 +1345,107 @@ export function EquipmentRequestList({
                 (handoverSigned || warehouseHasReturned) &&
                 !returnSigned &&
                 !isCompleted;
+              const statusStack = (
+                <div className="equipment-request-status-stack">
+                  {!isCancelled && lateApprovalStatus === "pending" ? (
+                    <span className="request-late-approval request-late-approval-pending">
+                      Chờ duyệt đăng ký trễ
+                    </span>
+                  ) : !isCancelled && lateApprovalStatus === "rejected" ? (
+                    <span className="request-late-approval request-late-approval-rejected">
+                      Đã từ chối đăng ký trễ
+                    </span>
+                  ) : isCompleted ? (
+                    <StatusBadge status="completed" />
+                  ) : warehouseHasReturned && !returnSigned ? (
+                    canSignReturn ? (
+                      <button
+                        type="button"
+                        className="equipment-sign-status-button equipment-sign-return"
+                        disabled={isPending && updatingId === request.id}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setSignatureTarget({
+                            request,
+                            phase: "return",
+                          });
+                        }}
+                      >
+                        Ký xác nhận Đã trả
+                      </button>
+                    ) : (
+                      <>
+                        <StatusBadge status="returned" />
+                        <small className="equipment-confirmation-waiting">
+                          Chờ ký xác nhận Đã trả
+                        </small>
+                      </>
+                    )
+                  ) : warehouseHasHandedOver && !handoverSigned ? (
+                    canSignHandover ? (
+                      <button
+                        type="button"
+                        className="equipment-sign-status-button equipment-sign-handover"
+                        disabled={isPending && updatingId === request.id}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setSignatureTarget({
+                            request,
+                            phase: "handover",
+                          });
+                        }}
+                      >
+                        Ký xác nhận Đã giao
+                      </button>
+                    ) : (
+                      <>
+                        <StatusBadge status="handed_over" />
+                        <small className="equipment-confirmation-waiting">
+                          Chờ ký xác nhận Đã giao
+                        </small>
+                      </>
+                    )
+                  ) : warehouseHasHandedOver && returnSigned ? (
+                    <>
+                      <StatusBadge status="returned" />
+                      <small className="equipment-confirmation-waiting">
+                        Chờ kho xác nhận
+                      </small>
+                    </>
+                  ) : warehouseHasHandedOver && handoverSigned ? (
+                    <>
+                      <StatusBadge status="handed_over" />
+                      {canSignReturn ? (
+                        <button
+                          type="button"
+                          className="equipment-sign-status-button equipment-sign-return"
+                          disabled={isPending && updatingId === request.id}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setSignatureTarget({
+                              request,
+                              phase: "return",
+                            });
+                          }}
+                        >
+                          Ký xác nhận Đã trả
+                        </button>
+                      ) : (
+                        <small className="equipment-confirmation-waiting">
+                          Chờ ký xác nhận Đã trả
+                        </small>
+                      )}
+                    </>
+                  ) : (
+                    <StatusBadge status={warehouseStatus} />
+                  )}
+                  {lateApprovalStatus === "approved" ? (
+                    <small className="request-late-approval-approved">
+                      Đã duyệt đăng ký trễ
+                    </small>
+                  ) : null}
+                </div>
+              );
 
               return (
                 <tbody className="equipment-request-list-item" key={request.id}>
@@ -1391,108 +1492,7 @@ export function EquipmentRequestList({
                       <span className="equipment-count-unit">thiết bị</span>
                     </td>
                     <td className="equipment-request-status-cell">
-                      <div className="equipment-request-status-stack">
-                        {!isCancelled && lateApprovalStatus === "pending" ? (
-                          <span className="request-late-approval request-late-approval-pending">
-                            Chờ duyệt đăng ký trễ
-                          </span>
-                        ) : !isCancelled &&
-                          lateApprovalStatus === "rejected" ? (
-                          <span className="request-late-approval request-late-approval-rejected">
-                            Đã từ chối đăng ký trễ
-                          </span>
-                        ) : isCompleted ? (
-                          <StatusBadge status="completed" />
-                        ) : warehouseHasReturned && !returnSigned ? (
-                          canSignReturn ? (
-                            <button
-                              type="button"
-                              className="equipment-sign-status-button equipment-sign-return"
-                              disabled={isPending && updatingId === request.id}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                setSignatureTarget({
-                                  request,
-                                  phase: "return",
-                                });
-                              }}
-                            >
-                              Ký xác nhận Đã trả
-                            </button>
-                          ) : (
-                            <>
-                              <StatusBadge status="returned" />
-                              <small className="equipment-confirmation-waiting">
-                                Chờ ký xác nhận Đã trả
-                              </small>
-                            </>
-                          )
-                        ) : warehouseHasHandedOver && !handoverSigned ? (
-                          canSignHandover ? (
-                            <button
-                              type="button"
-                              className="equipment-sign-status-button equipment-sign-handover"
-                              disabled={isPending && updatingId === request.id}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                setSignatureTarget({
-                                  request,
-                                  phase: "handover",
-                                });
-                              }}
-                            >
-                              Ký xác nhận Đã giao
-                            </button>
-                          ) : (
-                            <>
-                              <StatusBadge status="handed_over" />
-                              <small className="equipment-confirmation-waiting">
-                                Chờ ký xác nhận Đã giao
-                              </small>
-                            </>
-                          )
-                        ) : warehouseHasHandedOver && returnSigned ? (
-                          <>
-                            <StatusBadge status="returned" />
-                            <small className="equipment-confirmation-waiting">
-                              Chờ kho xác nhận
-                            </small>
-                          </>
-                        ) : warehouseHasHandedOver && handoverSigned ? (
-                          <>
-                            <StatusBadge status="handed_over" />
-                            {canSignReturn ? (
-                              <button
-                                type="button"
-                                className="equipment-sign-status-button equipment-sign-return"
-                                disabled={
-                                  isPending && updatingId === request.id
-                                }
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  setSignatureTarget({
-                                    request,
-                                    phase: "return",
-                                  });
-                                }}
-                              >
-                                Ký xác nhận Đã trả
-                              </button>
-                            ) : (
-                              <small className="equipment-confirmation-waiting">
-                                Chờ ký xác nhận Đã trả
-                              </small>
-                            )}
-                          </>
-                        ) : (
-                          <StatusBadge status={warehouseStatus} />
-                        )}
-                        {lateApprovalStatus === "approved" ? (
-                          <small className="request-late-approval-approved">
-                            Đã duyệt đăng ký trễ
-                          </small>
-                        ) : null}
-                      </div>
+                      {statusStack}
                     </td>
                     <td className="equipment-request-toggle-cell">
                       <button
@@ -1563,115 +1563,7 @@ export function EquipmentRequestList({
                                 : "—"}
                             </strong>
                           </div>
-                          <div className="mobile-col-status">
-                            <div className="equipment-request-status-stack">
-                              {!isCancelled &&
-                              lateApprovalStatus === "pending" ? (
-                                <span className="request-late-approval request-late-approval-pending">
-                                  Chờ duyệt đăng ký trễ
-                                </span>
-                              ) : !isCancelled &&
-                                lateApprovalStatus === "rejected" ? (
-                                <span className="request-late-approval request-late-approval-rejected">
-                                  Đã từ chối đăng ký trễ
-                                </span>
-                              ) : isCompleted ? (
-                                <StatusBadge status="completed" />
-                              ) : warehouseHasReturned && !returnSigned ? (
-                                canSignReturn ? (
-                                  <button
-                                    type="button"
-                                    className="equipment-sign-status-button equipment-sign-return"
-                                    disabled={
-                                      isPending && updatingId === request.id
-                                    }
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      setSignatureTarget({
-                                        request,
-                                        phase: "return",
-                                      });
-                                    }}
-                                  >
-                                    Ký xác nhận Đã trả
-                                  </button>
-                                ) : (
-                                  <>
-                                    <StatusBadge status="returned" />
-                                    <small className="equipment-confirmation-waiting">
-                                      Chờ ký xác nhận Đã trả
-                                    </small>
-                                  </>
-                                )
-                              ) : warehouseHasHandedOver && !handoverSigned ? (
-                                canSignHandover ? (
-                                  <button
-                                    type="button"
-                                    className="equipment-sign-status-button equipment-sign-handover"
-                                    disabled={
-                                      isPending && updatingId === request.id
-                                    }
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      setSignatureTarget({
-                                        request,
-                                        phase: "handover",
-                                      });
-                                    }}
-                                  >
-                                    Ký xác nhận Đã giao
-                                  </button>
-                                ) : (
-                                  <>
-                                    <StatusBadge status="handed_over" />
-                                    <small className="equipment-confirmation-waiting">
-                                      Chờ ký xác nhận Đã giao
-                                    </small>
-                                  </>
-                                )
-                              ) : warehouseHasHandedOver && returnSigned ? (
-                                <>
-                                  <StatusBadge status="returned" />
-                                  <small className="equipment-confirmation-waiting">
-                                    Chờ kho xác nhận
-                                  </small>
-                                </>
-                              ) : warehouseHasHandedOver && handoverSigned ? (
-                                <>
-                                  <StatusBadge status="handed_over" />
-                                  {canSignReturn ? (
-                                    <button
-                                      type="button"
-                                      className="equipment-sign-status-button equipment-sign-return"
-                                      disabled={
-                                        isPending && updatingId === request.id
-                                      }
-                                      onClick={(event) => {
-                                        event.stopPropagation();
-                                        setSignatureTarget({
-                                          request,
-                                          phase: "return",
-                                        });
-                                      }}
-                                    >
-                                      Ký xác nhận Đã trả
-                                    </button>
-                                  ) : (
-                                    <small className="equipment-confirmation-waiting">
-                                      Chờ ký xác nhận Đã trả
-                                    </small>
-                                  )}
-                                </>
-                              ) : (
-                                <StatusBadge status={warehouseStatus} />
-                              )}
-                              {lateApprovalStatus === "approved" ? (
-                                <small className="request-late-approval-approved">
-                                  Đã duyệt đăng ký trễ
-                                </small>
-                              ) : null}
-                            </div>
-                          </div>
+                          <div className="mobile-col-status">{statusStack}</div>
                           <div className="mobile-col-chevron">
                             <button
                               type="button"
