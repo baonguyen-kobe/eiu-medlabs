@@ -590,3 +590,25 @@ MOB-01.2 correction Batch 03D is `VERIFY` pending user visual review.
 ### Task state
 
 MOB-01.2 correction Batch 03E is `VERIFY` pending user visual review.
+
+## 2026-08-26 — User Review Correction Batch 03F
+
+### Work
+
+- User reopened MOB-01.2 mobile request summary to adopt the production table visual language within a mobile card.
+- Implemented Two-Band mobile card summary:
+  - Band A (Header Strip): continuous cream header (`var(--eiu-cream)`) with EIU blue text (`var(--eiu-blue)`) containing `Môn học`, `Ngày`, `Phòng/Lab`, `Trạng thái`.
+  - Band B (Data Row): Col 1 Course (bold EIU blue code + muted course name ellipsis), Col 2 Date/Time (date + time range in same column), Col 3 Room (`room_code.building_code`), Col 4 Status (shared status badge/button stack + secondary late-approval/waiting text), and Col 5 Far-Right Chevron ($44\times44\text{px}$ touch target).
+- Hidden from mobile summary only: Domain and Equipment count (desktop 8-column layout completely preserved).
+- Preserved all frozen features: restored pre-03D expanded detail, desktop $145\text{px}$ label column, "Danh sách TTB", $14\text{px}/14\text{px}$ mobile item modal typography, Global Font Contract (Be Vietnam Pro only), and single-expanded request behavior.
+
+### Verification
+
+- PASS: `npm.cmd run typecheck`, `npm.cmd run lint`, `git diff --check`, and `npx.cmd prettier --check <touched-files>`.
+- PASS: `tests/review-batch-03f.test.mjs` verifies visible 4-column header strip, combined date/time, hidden domain/count on mobile summary, $44\times44\text{px}$ chevron, desktop $145\text{px}$ labels, "Danh sách TTB", and Global Font Contract.
+- PASS: `node --test tests/review-batch-03a.test.mjs tests/review-batch-03b.test.mjs tests/review-batch-03d.test.mjs tests/review-batch-03e.test.mjs tests/review-batch-03f.test.mjs tests/review-batch-02b.test.mjs tests/staff-shifts-ui-contract.test.mjs` (36/36 tests pass).
+- PASS: Playwright rendered sweep across 375, 768, 1024, and 1440 for `/equipment/requests` and `/equipment/mine`.
+
+### Task state
+
+MOB-01.2 correction Batch 03F is `VERIFY` pending user visual review.

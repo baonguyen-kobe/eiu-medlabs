@@ -56,10 +56,10 @@ PILOT-01, MOB-01.1, MOB-01.4, MOB-01.5, MOB-01.6, and TOUCH-01 — DONE — USER
 
 ## Next batch task
 
-MOB-01.2 correction Batch 03E is technically rendered and verified across 375/768/1024/1440.
-It restores the pre-03D expanded mobile detail presentation, aligns the summary visual language to detail
-as a continuous single component, and strictly preserves the Global Font Contract (Be Vietnam Pro only),
-desktop 145px label width, "Danh sách TTB", 14px item modal typography, and 44x44px chevron touch target.
+MOB-01.2 correction Batch 03F is technically rendered and verified across 375/768/1024/1440.
+It adapts the production Equipment Request table visual language into a 2-band mobile card (Band A
+header strip with Môn học/Ngày/Phòng-Lab/Trạng thái + Band B data row combining date/time in column 2,
+hiding Domain/Count on mobile summary, and placing 44x44px chevron at far right).
 It is awaiting user visual review. Do not resume the general queue until the user accepts
 or supplies new correction evidence.
 

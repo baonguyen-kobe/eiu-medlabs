@@ -1348,8 +1348,9 @@ export function EquipmentRequestList({
 
               return (
                 <tbody className="equipment-request-list-item" key={request.id}>
+                  {/* Desktop table row (active > 920px) */}
                   <tr
-                    className="equipment-request-table-row"
+                    className="equipment-request-table-row equipment-request-desktop-row"
                     onClick={() => toggleExpanded(request.id)}
                   >
                     <td className="equipment-request-domain-cell">
@@ -1510,6 +1511,187 @@ export function EquipmentRequestList({
                     </td>
                   </tr>
 
+                  {/* Mobile Two-Band Card Row (active <= 920px) */}
+                  <tr className="equipment-request-mobile-row">
+                    <td
+                      colSpan={8}
+                      className="equipment-request-mobile-card-cell"
+                    >
+                      <div className="equipment-request-mobile-card">
+                        {/* Band A: Header Strip */}
+                        <div
+                          className="equipment-request-mobile-header"
+                          aria-hidden="true"
+                        >
+                          <span className="mobile-col-course">Môn học</span>
+                          <span className="mobile-col-date">Ngày</span>
+                          <span className="mobile-col-room">Phòng/Lab</span>
+                          <span className="mobile-col-status">Trạng thái</span>
+                          <span className="mobile-col-chevron"></span>
+                        </div>
+                        {/* Band B: Data Row */}
+                        <div
+                          className="equipment-request-mobile-data"
+                          onClick={() => toggleExpanded(request.id)}
+                        >
+                          <div className="mobile-col-course">
+                            <strong>
+                              {schedule?.course_code_snapshot || "—"}
+                            </strong>
+                            <span
+                              title={
+                                schedule?.course_name_snapshot || undefined
+                              }
+                            >
+                              {schedule?.course_name_snapshot || "—"}
+                            </span>
+                          </div>
+                          <div className="mobile-col-date">
+                            <strong>
+                              {formatScheduleDate(schedule?.schedule_date)}
+                            </strong>
+                            <small className="mobile-time-range">
+                              {schedule?.start_time
+                                ? `${schedule.start_time.slice(0, 5)}–${schedule.end_time.slice(0, 5)}`
+                                : "—"}
+                            </small>
+                          </div>
+                          <div className="mobile-col-room">
+                            <strong>
+                              {room
+                                ? `${room.room_code}.${room.building_code}`
+                                : "—"}
+                            </strong>
+                          </div>
+                          <div className="mobile-col-status">
+                            <div className="equipment-request-status-stack">
+                              {!isCancelled &&
+                              lateApprovalStatus === "pending" ? (
+                                <span className="request-late-approval request-late-approval-pending">
+                                  Chờ duyệt đăng ký trễ
+                                </span>
+                              ) : !isCancelled &&
+                                lateApprovalStatus === "rejected" ? (
+                                <span className="request-late-approval request-late-approval-rejected">
+                                  Đã từ chối đăng ký trễ
+                                </span>
+                              ) : isCompleted ? (
+                                <StatusBadge status="completed" />
+                              ) : warehouseHasReturned && !returnSigned ? (
+                                canSignReturn ? (
+                                  <button
+                                    type="button"
+                                    className="equipment-sign-status-button equipment-sign-return"
+                                    disabled={
+                                      isPending && updatingId === request.id
+                                    }
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      setSignatureTarget({
+                                        request,
+                                        phase: "return",
+                                      });
+                                    }}
+                                  >
+                                    Ký xác nhận Đã trả
+                                  </button>
+                                ) : (
+                                  <>
+                                    <StatusBadge status="returned" />
+                                    <small className="equipment-confirmation-waiting">
+                                      Chờ ký xác nhận Đã trả
+                                    </small>
+                                  </>
+                                )
+                              ) : warehouseHasHandedOver && !handoverSigned ? (
+                                canSignHandover ? (
+                                  <button
+                                    type="button"
+                                    className="equipment-sign-status-button equipment-sign-handover"
+                                    disabled={
+                                      isPending && updatingId === request.id
+                                    }
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      setSignatureTarget({
+                                        request,
+                                        phase: "handover",
+                                      });
+                                    }}
+                                  >
+                                    Ký xác nhận Đã giao
+                                  </button>
+                                ) : (
+                                  <>
+                                    <StatusBadge status="handed_over" />
+                                    <small className="equipment-confirmation-waiting">
+                                      Chờ ký xác nhận Đã giao
+                                    </small>
+                                  </>
+                                )
+                              ) : warehouseHasHandedOver && returnSigned ? (
+                                <>
+                                  <StatusBadge status="returned" />
+                                  <small className="equipment-confirmation-waiting">
+                                    Chờ kho xác nhận
+                                  </small>
+                                </>
+                              ) : warehouseHasHandedOver && handoverSigned ? (
+                                <>
+                                  <StatusBadge status="handed_over" />
+                                  {canSignReturn ? (
+                                    <button
+                                      type="button"
+                                      className="equipment-sign-status-button equipment-sign-return"
+                                      disabled={
+                                        isPending && updatingId === request.id
+                                      }
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        setSignatureTarget({
+                                          request,
+                                          phase: "return",
+                                        });
+                                      }}
+                                    >
+                                      Ký xác nhận Đã trả
+                                    </button>
+                                  ) : (
+                                    <small className="equipment-confirmation-waiting">
+                                      Chờ ký xác nhận Đã trả
+                                    </small>
+                                  )}
+                                </>
+                              ) : (
+                                <StatusBadge status={warehouseStatus} />
+                              )}
+                              {lateApprovalStatus === "approved" ? (
+                                <small className="request-late-approval-approved">
+                                  Đã duyệt đăng ký trễ
+                                </small>
+                              ) : null}
+                            </div>
+                          </div>
+                          <div className="mobile-col-chevron">
+                            <button
+                              type="button"
+                              className="equipment-request-chevron"
+                              aria-label={
+                                expanded ? "Thu gọn phiếu" : "Mở chi tiết phiếu"
+                              }
+                              aria-expanded={expanded}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                toggleExpanded(request.id);
+                              }}
+                            >
+                              {expanded ? "⌃" : "⌄"}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
                   {expanded ? (
                     <tr className="equipment-request-detail-row">
                       <td colSpan={8}>

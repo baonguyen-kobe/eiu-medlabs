@@ -15,22 +15,19 @@ const styles = readFileSync(
   "utf8",
 );
 
-test("MOB-01.2 mobile request summary is denser with structured columns", () => {
+test("MOB-01.2 preserves desktop table structure while isolating mobile card row", () => {
+  assert.match(
+    requestList,
+    /<tr\s+className="equipment-request-table-row equipment-request-desktop-row"/,
+  );
+  assert.match(requestList, /<tr className="equipment-request-mobile-row">/);
   assert.match(
     styles,
-    /\.equipment-request-table-row\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s*auto/,
+    /\.equipment-request-mobile-row\s*\{[\s\S]*display:\s*none\s*!important/,
   );
   assert.match(
     styles,
-    /\.equipment-request-domain-cell\s*\{[\s\S]*grid-row:\s*1/,
-  );
-  assert.match(
-    styles,
-    /\.equipment-request-status-cell\s*\{[\s\S]*grid-row:\s*1/,
-  );
-  assert.match(
-    styles,
-    /\.equipment-request-course-cell\s*\{[\s\S]*grid-column:\s*1\s*\/\s*-1/,
+    /@media \(max-width: 920px\)[\s\S]*\.equipment-request-desktop-row\s*\{[\s\S]*display:\s*none\s*!important/,
   );
 });
 
