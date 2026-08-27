@@ -13715,7 +13715,8 @@ body {
   }
 
   .basic-medical-condition-table {
-    min-width: 0;
+    min-width: 0 !important;
+    width: 100%;
     display: block;
     border: none;
     background: transparent;

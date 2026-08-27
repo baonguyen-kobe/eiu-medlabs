@@ -112,4 +112,9 @@ test("MOB-01.7 Batch 04C: responsive CSS rules enforce touch targets and desktop
     cssSource,
     /\.equipment-request-detail-grid dl dd\.mono\s*\{[\s\S]*?overflow-wrap:\s*anywhere;/i,
   );
+  // Basic medical condition table resets min-width
+  assert.match(
+    cssSource,
+    /\.basic-medical-condition-table\s*\{[\s\S]*?min-width:\s*0\s*!important;/i,
+  );
 });
