@@ -22,22 +22,22 @@ Last updated: 2026-08-26
 
 ## Current phase
 
-Phase 5 — Remaining table-family mobile strategies
+Phase 2 — Shared accessibility and UI foundations
 
 ## Active task
 
-MOB-01.7
+A11Y-02.5
 
-**Status:** IN_PROGRESS
+**Status:** VERIFY
 
-**Starting commit:** `9496a50`
+**Starting commit:** `5793765`
 
 ## Recently completed
 
-MOB-01.7 / Email Notifications — USER VISUAL PASS — Batch 04B
+MOB-01.7 — DONE — USER VISUAL PASS (04A Catalogs, 04B Email, 04C Imports/Audit/Dashboard/Evidence)
 
-MOB-01.7 / Catalog family (Courses, Rooms, Room Types) — USER VISUAL PASS — Batch 04A
 MOB-01.2 — DONE — USER VISUAL PASS — Batch 03G + Addenda
+
 AUTH-01 — DONE
 
 A11Y-03 — DONE — USER VISUAL PASS
@@ -60,11 +60,12 @@ PILOT-01, MOB-01.1, MOB-01.4, MOB-01.5, MOB-01.6, and TOUCH-01 — DONE — USER
 
 ## Next batch task
 
-MOB-01.7 / Batch 04C Large Rollout: Imports (/imports Strategy D), Audit (/admin/audit Strategy C),
-Dashboard 7-day schedule (/dashboard Strategy F), and Basic Medical confirmation equipment condition evidence
-(/basic-medical/registrations/confirmations/[id]) at <=920px, preserving all business rules, technical IDs,
-actions, and full desktop table parity at 1024/1440.
-MOB-01.7 remains IN_PROGRESS across the remaining table families.
+A11Y-02.5 / Basic Medical confirmation modal focus contract:
+Create isolated legitimate local-only review session meeting all real conditions
+(current teaching lecturer, valid course/room, valid time window, unconfirmed).
+Verify rendered initial focus, Tab/Shift+Tab containment, Escape, backdrop,
+condition-to-signature step transition, and mobile responsive behavior.
+MOB-01.3 remains in BACKLOG awaiting A11Y-02.5 completion.
 
 ## Blocked tasks
 

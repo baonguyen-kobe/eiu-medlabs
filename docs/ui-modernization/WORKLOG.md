@@ -725,6 +725,7 @@ MOB-01.7 remains IN_PROGRESS across remaining table families.
 
 Email Notifications Batch 04B: USER VISUAL PASS.
 MOB-01.7 remains IN_PROGRESS — Batch 04C Large Rollout launched.
+
 ## 2026-08-27 — MOB-01.7 Batch 04C Large Rollout (Imports + Audit + Dashboard + Evidence)
 
 ### Work
@@ -744,4 +745,32 @@ MOB-01.7 remains IN_PROGRESS — Batch 04C Large Rollout launched.
 
 ### Task state
 
-MOB-01.7 is IN_PROGRESS — Batch 04C awaiting user visual review.
+Batch 04C: USER VISUAL PASS.
+MOB-01.7 is DONE — USER VISUAL PASS (04A Catalogs, 04B Email, 04C Imports/Audit/Dashboard/Evidence).
+A11Y-02.5 activated next.
+
+## 2026-08-27 — A11Y-02.5 Basic Medical Confirmation Modal Focus & Local Review Data
+
+### Work
+
+- Seeded legitimate isolated local review registration `YC-260827-000055` (`8fbec97b-0ba9-4ef2-8fab-acf715a76834`) for active Basic Medical course `YCS-7333fad1` in room `M2B-cb9ad64a` via official `save_basic_medical_registration` RPC.
+- Assigned teaching lecturer `Nguyễn Ngọc Diễm` (`giangvien@campus.local`, eligible Basic Medical instructor) for session `A11Y-02.5 Modal Focus Review` on `2026-08-27` from `16:00:00` to `18:00:00`.
+- Session satisfies all real confirmation rules: unconfirmed, not cancelled, current time within confirmation window (`>= end_time - 1 hour`), and viewer is exact teaching lecturer. The "Xác nhận" button is enabled without any UI bypass.
+- Preserved reserved review session unconfirmed for user visual inspection.
+
+### Verification
+
+- PASS: Playwright rendered focus verification on `http://localhost:4000/basic-medical/registrations`:
+  - Open: modal opens with `role="dialog"`, `aria-modal="true"`, `aria-labelledby`, and initial focus lands on close button (`.equipment-modal-close`).
+  - Focus containment: Tab and Shift+Tab strictly cycle inside the dialog.
+  - Escape: closes modal, restores body scroll lock, and returns focus to the exact "Xác nhận" opener button.
+  - Backdrop: clicking backdrop closes modal and returns focus to the opener.
+  - Step transitions: transition from condition step to signature step ("Tiếp tục ký") keeps focus in modal; "Thay đổi tình trạng thiết bị phòng" returns to condition step cleanly.
+  - Responsive: tested at 375, 768, 1024, 1440 viewports; zero horizontal page overflow, modal fits viewport, close button reachable.
+- PASS: `tests/a11y-02-5-confirmation-modal.test.mjs` (5/5 tests pass).
+- PASS: Full repository regression suite (62/62 tests pass).
+- PASS: TypeScript (`tsc --noEmit`), ESLint (`npm run lint`), Prettier, and git diff check.
+
+### Task state
+
+A11Y-02.5 is VERIFY — awaiting user visual review. A11Y-02 parent remains IN_PROGRESS; MOB-01.3 remains in BACKLOG.
