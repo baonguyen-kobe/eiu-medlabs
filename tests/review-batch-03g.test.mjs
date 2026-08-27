@@ -127,11 +127,12 @@ test("MOB-01.2 Batch 03G: hides confirmation progress only at <=920px while pres
   );
 });
 
-test("MOB-01.2 Batch 03G: late registration detail row uses 2-line layout at mobile/tablet", () => {
+test("MOB-01.2 Batch 03G: late registration detail row uses 2-line left-aligned layout at mobile/tablet", () => {
   assert.match(
     requestList,
     /<div className="equipment-late-detail-row">\s*<dt>Đăng ký trễ<\/dt>\s*<dd>\s*<strong className="equipment-late-status-label">/,
   );
+  assert.match(requestList, /<span className="equipment-late-detail-note">/);
   assert.match(
     styles,
     /@media \(max-width: 920px\)[\s\S]*\.equipment-late-detail-row\s*\{[\s\S]*display:\s*grid\s*!important;[\s\S]*grid-template-columns:\s*auto\s+1fr/,
@@ -142,11 +143,15 @@ test("MOB-01.2 Batch 03G: late registration detail row uses 2-line layout at mob
   );
   assert.match(
     styles,
-    /@media \(max-width: 920px\)[\s\S]*\.equipment-late-status-label\s*\{[\s\S]*grid-column:\s*2;[\s\S]*grid-row:\s*1/,
+    /@media \(max-width: 920px\)[\s\S]*\.equipment-late-status-label\s*\{[\s\S]*grid-column:\s*2;[\s\S]*grid-row:\s*1[\s\S]*text-align:\s*left/,
   );
   assert.match(
     styles,
-    /@media \(max-width: 920px\)[\s\S]*\.equipment-late-detail-note\s*\{[\s\S]*grid-column:\s*1\s*\/\s*-1;[\s\S]*grid-row:\s*2/,
+    /@media \(max-width: 920px\)[\s\S]*\.equipment-late-detail-note\s*\{[\s\S]*grid-column:\s*1\s*\/\s*-1;[\s\S]*grid-row:\s*2[\s\S]*text-align:\s*left/,
+  );
+  assert.match(
+    styles,
+    /@media \(max-width: 920px\)[\s\S]*\.equipment-request-detail-grid\.detail-list > div\s*\{[\s\S]*text-align:\s*left/,
   );
 });
 

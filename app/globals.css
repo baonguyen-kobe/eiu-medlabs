@@ -12359,6 +12359,19 @@ body {
     gap: 8px 12px;
   }
 
+  .equipment-request-detail-grid.detail-list > div {
+    align-items: start;
+    justify-items: start;
+    text-align: left;
+  }
+
+  .equipment-request-detail-grid.detail-list dt,
+  .equipment-request-detail-grid.detail-list dd {
+    justify-self: start;
+    width: 100%;
+    text-align: left;
+  }
+
   .equipment-request-code-detail,
   .equipment-note-detail-row {
     grid-column: span 1;
@@ -12393,11 +12406,11 @@ body {
   .equipment-late-status-label {
     grid-column: 2;
     grid-row: 1;
-    justify-self: end;
+    justify-self: start;
     font-size: 13px;
     font-weight: 700;
     white-space: nowrap;
-    text-align: right;
+    text-align: left;
     align-self: center;
   }
 
@@ -12409,6 +12422,7 @@ body {
     color: var(--ink-700);
     line-height: 1.35;
     margin: 0;
+    text-align: left;
     overflow-wrap: normal;
     word-break: normal;
   }
@@ -12626,10 +12640,12 @@ body {
   .equipment-request-detail-grid.detail-list > div {
     display: flex;
     flex-direction: column;
+    align-items: flex-start;
     gap: 2px;
     min-width: 0;
     padding: 4px 0;
     border-bottom: 1px solid var(--line);
+    text-align: left;
   }
 
   .equipment-request-detail-grid.detail-list dt {
@@ -12639,6 +12655,7 @@ body {
     white-space: normal;
     min-width: 0;
     line-height: 1.25;
+    text-align: left;
   }
 
   .equipment-request-detail-grid.detail-list dd {
@@ -12649,6 +12666,7 @@ body {
     line-height: 1.35;
     overflow-wrap: anywhere;
     word-break: break-word;
+    text-align: left;
   }
 
   .equipment-late-detail-row {

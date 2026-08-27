@@ -655,3 +655,21 @@ MOB-01.2 correction Batch 03G is `VERIFY` pending user visual review.
 ### Task state
 
 MOB-01.2 correction Batch 03G is `VERIFY` pending user visual review.
+
+## 2026-08-27 — User Review Correction Batch 03G Alignment Addendum
+
+### Work
+
+- Left-aligned expanded Equipment Request detail field blocks at <=920px using text-align: left, justify-items: start, and align-items: start without changing desktop geometry.
+- Left-aligned mobile/tablet metadata labels, values, and wrapped detail text.
+- Preserved the 2-line late-registration layout while changing its status and note from right/mixed alignment to left alignment.
+
+### Verification
+
+- PASS: typecheck, lint, diff check, and touched-file Prettier check.
+- PASS: review-batch-03g contract covers direct late-row dt/dd structure, scoped mobile grid rows, and left alignment.
+- PASS: rendered 375/768 assertions confirm all sampled metadata labels/values and late-row label/status/note use left alignment, retain two late-detail lines, and stay inside the card. Desktop 1024/1440 remains overflow-free with confirmation progress visible.
+
+### Task state
+
+MOB-01.2 correction Batch 03G remains VERIFY pending user visual review.
