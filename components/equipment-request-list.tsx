@@ -1765,21 +1765,27 @@ export function EquipmentRequestList({
                               <div className="equipment-late-detail-row">
                                 <dt>Đăng ký trễ</dt>
                                 <dd>
-                                  <strong>
+                                  <strong className="equipment-late-status-label">
                                     {lateApprovalStatus === "pending"
                                       ? "Chờ duyệt đăng ký trễ"
                                       : lateApprovalStatus === "approved"
                                         ? "Đã duyệt đăng ký trễ"
                                         : "Đã từ chối đăng ký trễ"}
                                   </strong>
-                                  {lateRegistrationReason
-                                    ? ` — ${lateRegistrationReason}`
-                                    : ""}
-                                  {confirmation?.late_review_note
-                                    ? ` — Ghi chú: ${confirmation.late_review_note}`
-                                    : request.late_review_note
-                                      ? ` — Ghi chú: ${request.late_review_note}`
-                                      : ""}
+                                  {lateRegistrationReason ||
+                                  confirmation?.late_review_note ||
+                                  request.late_review_note ? (
+                                    <span className="equipment-late-detail-note">
+                                      {lateRegistrationReason
+                                        ? ` — ${lateRegistrationReason}`
+                                        : ""}
+                                      {confirmation?.late_review_note
+                                        ? ` — Ghi chú: ${confirmation.late_review_note}`
+                                        : request.late_review_note
+                                          ? ` — Ghi chú: ${request.late_review_note}`
+                                          : ""}
+                                    </span>
+                                  ) : null}
                                 </dd>
                               </div>
                             ) : null}
