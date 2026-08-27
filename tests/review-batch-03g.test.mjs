@@ -71,6 +71,14 @@ test("MOB-01.2 Batch 03G: mobile summary status pill hugs content with fit-conte
     /@media \(max-width: 920px\)[\s\S]*\.mobile-col-status\s+\.request-late-approval[\s\S]*border-radius:\s*999px\s*!important/,
   );
   assert.match(
+    styles,
+    /@media \(max-width: 920px\)[\s\S]*\.equipment-sign-status-button[\s\S]*text-overflow:\s*ellipsis/,
+  );
+  assert.match(
+    styles,
+    /@media \(max-width: 920px\)[\s\S]*\.equipment-sign-status-button[\s\S]*width:\s*auto\s*!important/,
+  );
+  assert.match(
     requestList,
     /<span className="late-approval-short" aria-hidden="true">\s*Chờ duyệt ĐK trễ\s*<\/span>/,
   );

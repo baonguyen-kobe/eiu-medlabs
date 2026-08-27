@@ -12245,9 +12245,6 @@ body {
   }
 
   .equipment-request-mobile-data .mobile-col-status .request-status,
-  .equipment-request-mobile-data
-    .mobile-col-status
-    .equipment-sign-status-button,
   .equipment-request-mobile-data .mobile-col-status .request-late-approval {
     width: fit-content !important;
     min-width: 0 !important;
@@ -12261,10 +12258,7 @@ body {
     box-sizing: border-box;
   }
 
-  .equipment-request-mobile-data .mobile-col-status .request-status,
-  .equipment-request-mobile-data
-    .mobile-col-status
-    .equipment-sign-status-button {
+  .equipment-request-mobile-data .mobile-col-status .request-status {
     white-space: nowrap;
   }
 
@@ -12273,6 +12267,22 @@ body {
     overflow-wrap: normal !important;
     word-break: normal !important;
     line-height: 1.15;
+  }
+
+  .equipment-request-status-stack .equipment-sign-status-button,
+  .equipment-request-mobile-data
+    .mobile-col-status
+    .equipment-sign-status-button {
+    padding: 3px 6px;
+    font-size: 10.5px;
+    min-height: 22px;
+    line-height: 1.2;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
   }
 
   .equipment-request-mobile-data
@@ -12525,9 +12535,6 @@ body {
   }
 
   .equipment-request-mobile-data .mobile-col-status .request-status,
-  .equipment-request-mobile-data
-    .mobile-col-status
-    .equipment-sign-status-button,
   .equipment-request-mobile-data .mobile-col-status .request-late-approval {
     padding: 2px 6px;
     font-size: 9.5px;
@@ -12536,6 +12543,13 @@ body {
     min-width: 0 !important;
     max-width: 100% !important;
     border-radius: 999px !important;
+  }
+  .equipment-request-mobile-data
+    .mobile-col-status
+    .equipment-sign-status-button {
+    padding: 2px 5px;
+    font-size: 9.5px;
+    min-height: 20px;
   }
 
   .equipment-request-mobile-data
