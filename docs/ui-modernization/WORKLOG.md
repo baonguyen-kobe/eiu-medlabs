@@ -700,4 +700,27 @@ MOB-01.2 is DONE — USER VISUAL PASS — Batch 03G + Addenda.
 
 ### Task state
 
-MOB-01.7 is IN_PROGRESS — Catalog family Batch 04A awaiting user visual review; remaining families not started.
+Catalog family Batch 04A (`admin courses`, `admin rooms`, room types): USER VISUAL PASS.
+MOB-01.7 remains IN_PROGRESS across remaining table families.
+
+## 2026-08-27 — MOB-01.7 Email Notifications Batch 04B
+
+### Work
+
+- Implemented Strategy D mobile cards for `/email-notifications` at <=920px: compact summary with timestamp, status pill, subject, recipient, and 44x44px chevron toggle.
+- Added expandable secondary detail exposing notification type, attempt count, last error (formatted monospace in error container), and sent timestamp if present.
+- Preserved existing retry form action `retryFailedEmail` when `item.status === 'failed' && deliveryMode !== 'off' && canRetry`.
+- Maintained admin selection on mobile: individual card checkbox, mobile "Chọn tất cả" toolbar control, "Đã chọn X email" count, and `ConfirmSubmitButton` for `deleteSelectedEmailNotifications`.
+- Reflowed `.email-delivery-mode-panel` at <=920px and <=480px with full-width, touch-friendly 40px action buttons and zero page overflow.
+- Preserved unmodified desktop table with all 8 columns at 1024/1440.
+
+### Verification
+
+- PASS: Prettier check on touched files, TypeScript compilation (`tsc --noEmit`), ESLint (`npm run lint`), and git diff check.
+- PASS: `node --test tests/mob-01-7-email-mobile.test.mjs` (4/4 tests pass).
+- PASS: Full test suite (52/52 tests pass).
+- PASS: Playwright rendered sweep across 375/768/1024/1440 confirms zero page overflow, 44x44px chevron touch target, card expand/collapse, individual select, select-all, and retry button rendering on failed items.
+
+### Task state
+
+MOB-01.7 is IN_PROGRESS — Batch 04B Email Notifications awaiting user visual review; remaining families not started.

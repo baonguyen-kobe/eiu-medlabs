@@ -8038,6 +8038,16 @@ body,
   font-size: 13px;
   font-weight: 700;
 }
+.email-notification-bulk-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.email-notification-mobile-row,
+.email-mobile-select-all {
+  display: none;
+}
 
 .email-notification-select-column {
   width: 52px;
@@ -8090,19 +8100,33 @@ body,
   accent-color: var(--eiu-blue);
 }
 
-@media (max-width: 720px) {
+@media (max-width: 920px) {
   .email-delivery-mode-panel {
     align-items: stretch;
     flex-direction: column;
+    gap: 12px;
   }
 
-  .email-delivery-mode-panel .button {
+  .email-delivery-mode-actions {
     width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
   }
 
-  .email-delivery-mode-actions,
   .email-delivery-mode-actions form {
+    flex: 1 1 140px;
+  }
+
+  .email-delivery-mode-actions .button {
     width: 100%;
+    min-height: 40px;
+  }
+}
+
+@media (max-width: 480px) {
+  .email-delivery-mode-actions form {
+    flex: 1 1 100%;
   }
 }
 
@@ -12977,5 +13001,272 @@ body {
 
   .catalog-data-panel > .equipment-catalog-toolbar {
     padding: 10px;
+  }
+}
+/* MOB-01.7 / Batch 04B: Email Notifications mobile Strategy D */
+@media (max-width: 920px) {
+  .catalog-data-panel:has(.email-notification-table) .responsive-table {
+    overflow: visible;
+    border: none;
+    background: transparent;
+    padding: 0;
+  }
+
+  .email-notification-table {
+    min-width: 0;
+    display: block;
+    border: none;
+    background: transparent;
+  }
+
+  .email-notification-table colgroup,
+  .email-notification-table thead,
+  .email-notification-desktop-row {
+    display: none;
+  }
+
+  .email-notification-table tbody {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .email-notification-mobile-row {
+    display: block;
+    border: none;
+  }
+
+  .email-notification-mobile-cell {
+    display: block;
+    padding: 0;
+    border: none;
+    background: transparent;
+  }
+
+  .email-notification-card {
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+  }
+
+  .email-notification-card-summary {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 14px;
+    cursor: pointer;
+    background: var(--surface);
+    transition: background 0.15s ease;
+  }
+
+  .email-notification-card-summary:hover {
+    background: var(--surface-hover);
+  }
+
+  .email-notification-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .email-notification-card-identity {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .email-notification-card-checkbox {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    accent-color: var(--eiu-blue);
+    cursor: pointer;
+  }
+
+  .email-notification-card-time {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--ink-700);
+    white-space: nowrap;
+  }
+
+  .email-notification-card-status {
+    flex-shrink: 0;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 999px;
+    white-space: normal;
+    text-align: right;
+    line-height: 1.3;
+  }
+
+  .email-notification-card-subject {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--ink-900);
+    line-height: 1.4;
+    word-break: break-word;
+  }
+
+  .email-notification-card-bottom {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .email-notification-card-recipient {
+    font-size: 13px;
+    color: var(--ink-500);
+    overflow-wrap: anywhere;
+    word-break: break-all;
+    min-width: 0;
+    line-height: 1.35;
+  }
+
+  .email-notification-chevron-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    flex-shrink: 0;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--ink-500);
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .email-notification-chevron-icon {
+    transition: transform 0.2s ease;
+  }
+
+  .email-notification-chevron-icon.is-expanded {
+    transform: rotate(180deg);
+  }
+
+  /* Expanded Detail Section */
+  .email-notification-card-detail {
+    border-top: 1px solid var(--line);
+    padding: 12px 14px;
+    background: var(--surface-subtle);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .email-notification-detail-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+  }
+
+  .email-notification-detail-row {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    gap: 8px;
+    align-items: baseline;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+
+  .email-notification-detail-row dt {
+    color: var(--ink-500);
+    font-weight: 600;
+  }
+
+  .email-notification-detail-row dd {
+    margin: 0;
+    color: var(--ink-800);
+    word-break: break-word;
+  }
+
+  .email-notification-error-text {
+    font-family: var(--font-mono, monospace);
+    font-size: 12px;
+    color: var(--danger, #c02626);
+    background: rgb(239 68 68 / 8%);
+    padding: 4px 6px;
+    border-radius: 4px;
+  }
+
+  .email-notification-card-action {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 4px;
+  }
+
+  .email-notification-card-action .button {
+    min-height: 40px;
+    padding-inline: 16px;
+  }
+
+  /* Bulk actions toolbar mobile */
+  .email-notification-bulk-actions {
+    min-height: auto;
+    padding: 10px 12px;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .email-mobile-select-all {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--ink-700);
+    cursor: pointer;
+  }
+
+  .email-mobile-select-all input {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--eiu-blue);
+  }
+
+  .email-notification-selected-count {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink-500);
+  }
+
+  .email-notification-delete-btn {
+    min-height: 40px;
+    padding-inline: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .email-notification-bulk-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .email-notification-bulk-left {
+    justify-content: space-between;
+  }
+
+  .email-notification-delete-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .email-notification-detail-row {
+    grid-template-columns: 1fr;
+    gap: 2px;
   }
 }
