@@ -12096,10 +12096,10 @@ body {
   .equipment-request-mobile-header {
     display: grid;
     grid-template-columns:
-      minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 0.65fr)
+      minmax(0, 1.25fr) minmax(0, 0.75fr) minmax(0, 0.9fr)
       minmax(0, 1.05fr) 44px;
-    gap: 6px;
-    padding: 8px 10px;
+    gap: 8px;
+    padding: 8px 12px;
     background: var(--eiu-cream);
     border-bottom: 1px solid var(--line);
     color: var(--eiu-blue);
@@ -12119,10 +12119,10 @@ body {
   .equipment-request-mobile-data {
     display: grid;
     grid-template-columns:
-      minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 0.65fr)
+      minmax(0, 1.25fr) minmax(0, 0.75fr) minmax(0, 0.9fr)
       minmax(0, 1.05fr) 44px;
-    gap: 6px;
-    padding: 10px;
+    gap: 8px;
+    padding: 10px 12px;
     align-items: center;
     background: var(--surface);
     cursor: pointer;
@@ -12201,7 +12201,7 @@ body {
     text-align: left;
     max-width: 100%;
     min-height: 0;
-    width: 100%;
+    width: auto;
   }
 
   .equipment-request-mobile-data .mobile-col-chevron {
@@ -12228,6 +12228,49 @@ body {
   .equipment-request-mobile-data .equipment-request-chevron:hover {
     color: var(--eiu-blue);
     background: var(--eiu-cream);
+  }
+
+  .equipment-request-mobile-data .mobile-col-status .request-status,
+  .equipment-request-mobile-data
+    .mobile-col-status
+    .equipment-sign-status-button {
+    padding: 4px 8px;
+    font-size: 11px;
+    min-height: 24px;
+    max-width: 112px;
+    line-height: 1.2;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+  }
+
+  .equipment-request-mobile-data
+    .mobile-col-status
+    .equipment-confirmation-waiting,
+  .equipment-request-mobile-data .mobile-col-status .request-late-approval,
+  .equipment-request-mobile-data
+    .mobile-col-status
+    .request-late-approval-approved {
+    font-size: 10px;
+    line-height: 1.2;
+    margin-top: 2px;
+    max-width: 112px;
+    border-radius: 4px;
+    white-space: normal;
+    overflow-wrap: break-word;
+  }
+
+  .equipment-confirmation-progress {
+    display: none;
+  }
+
+  .equipment-status-actions .equipment-request-delete {
+    min-height: 30px;
+    padding: 5px 11px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 800;
+    gap: 4px;
   }
 
   .equipment-request-status-stack .request-status,
@@ -12409,6 +12452,113 @@ body {
   .equipment-modal-add-button {
     flex: 1;
     min-height: 44px;
+  }
+}
+
+/* MOB-01.2: Dedicated <=480px narrow phone breakpoint */
+@media (max-width: 480px) {
+  .equipment-request-mobile-header {
+    grid-template-columns:
+      minmax(0, 1.2fr) minmax(0, 0.85fr) minmax(0, 0.75fr)
+      minmax(0, 1.05fr) 44px;
+    gap: 4px;
+    padding: 6px 8px;
+    font-size: 10px;
+  }
+
+  .equipment-request-mobile-data {
+    grid-template-columns:
+      minmax(0, 1.2fr) minmax(0, 0.85fr) minmax(0, 0.75fr)
+      minmax(0, 1.05fr) 44px;
+    gap: 4px;
+    padding: 8px;
+  }
+
+  .equipment-request-mobile-data .mobile-col-course strong {
+    font-size: 12px;
+  }
+
+  .equipment-request-mobile-data .mobile-col-course span {
+    font-size: 10px;
+  }
+
+  .equipment-request-mobile-data .mobile-col-date strong {
+    font-size: 10.5px;
+  }
+
+  .equipment-request-mobile-data .mobile-col-date .mobile-time-range {
+    font-size: 9.5px;
+  }
+
+  .equipment-request-mobile-data .mobile-col-room strong {
+    font-size: 10.5px;
+  }
+
+  .equipment-request-mobile-data .mobile-col-status .request-status,
+  .equipment-request-mobile-data
+    .mobile-col-status
+    .equipment-sign-status-button {
+    padding: 2px 5px;
+    font-size: 9.5px;
+    min-height: 20px;
+  }
+
+  .equipment-request-mobile-data
+    .mobile-col-status
+    .equipment-confirmation-waiting,
+  .equipment-request-mobile-data .mobile-col-status .request-late-approval,
+  .equipment-request-mobile-data
+    .mobile-col-status
+    .request-late-approval-approved {
+    font-size: 8.5px;
+    line-height: 1.15;
+  }
+
+  .equipment-request-mobile-data .equipment-request-chevron {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    font-size: 13px;
+  }
+
+  /* 375px Expanded Detail: 1 Row = 2 Fields (label stacked above value in each field) */
+  .equipment-request-detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 10px;
+  }
+
+  .equipment-request-detail-grid.detail-list > div {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .equipment-request-detail-grid.detail-list dt {
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--ink-500);
+    white-space: normal;
+    min-width: 0;
+    line-height: 1.25;
+  }
+
+  .equipment-request-detail-grid.detail-list dd {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--ink-950);
+    min-width: 0;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .equipment-late-detail-row,
+  .equipment-list-detail-row {
+    grid-column: 1 / -1;
   }
 }
 

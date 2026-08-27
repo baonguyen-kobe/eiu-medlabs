@@ -56,10 +56,10 @@ PILOT-01, MOB-01.1, MOB-01.4, MOB-01.5, MOB-01.6, and TOUCH-01 — DONE — USER
 
 ## Next batch task
 
-MOB-01.2 correction Batch 03F is technically rendered and verified across 375/768/1024/1440.
-It adapts the production Equipment Request table visual language into a 2-band mobile card (Band A
-header strip with Môn học/Ngày/Phòng-Lab/Trạng thái + Band B data row combining date/time in column 2,
-hiding Domain/Count on mobile summary, and placing 44x44px chevron at far right).
+MOB-01.2 correction Batch 03G is technically rendered and verified across 375/768/1024/1440.
+It corrects 768px summary tracks (Date 0.75fr, Room 0.90fr, compact status), hides confirmation progress
+boxes at <=920px, moves delete action into status toolbar as compact pill, implements <=480px dense summary
+breakpoint with 44x44px chevron, and stacks 375px inner detail fields (1 row = 2 fields, label over value).
 It is awaiting user visual review. Do not resume the general queue until the user accepts
 or supplies new correction evidence.
 

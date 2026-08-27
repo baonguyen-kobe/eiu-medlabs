@@ -1676,31 +1676,32 @@ export function EquipmentRequestList({
                                       </button>
                                     ),
                                   )}
+                                  {!isCancelled ? (
+                                    <button
+                                      type="button"
+                                      className="button button-danger equipment-request-delete"
+                                      disabled={isPending}
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        setRequestToDelete(request);
+                                      }}
+                                    >
+                                      <Trash2 size={14} aria-hidden="true" />
+                                      {request.request_domain ===
+                                      "basic_medical"
+                                        ? "Hủy phiếu"
+                                        : "Xóa phiếu"}
+                                    </button>
+                                  ) : null}
                                 </div>
                                 <a
                                   className="button button-secondary equipment-handover-export"
                                   href={`/api/equipment-requests/${request.id}/handover`}
                                   onClick={(event) => event.stopPropagation()}
                                 >
-                                  <Download size={17} aria-hidden="true" />
+                                  <Download size={16} aria-hidden="true" />
                                   Xuất phiếu PDF
                                 </a>
-                                {!isCancelled ? (
-                                  <button
-                                    type="button"
-                                    className="button button-danger equipment-request-delete"
-                                    disabled={isPending}
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      setRequestToDelete(request);
-                                    }}
-                                  >
-                                    <Trash2 size={17} aria-hidden="true" />
-                                    {request.request_domain === "basic_medical"
-                                      ? "Hủy phiếu"
-                                      : "Xóa phiếu"}
-                                  </button>
-                                ) : null}
                               </div>
                               <div className="equipment-confirmation-progress">
                                 <span>

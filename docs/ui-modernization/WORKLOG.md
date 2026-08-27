@@ -612,3 +612,25 @@ MOB-01.2 correction Batch 03E is `VERIFY` pending user visual review.
 ### Task state
 
 MOB-01.2 correction Batch 03F is `VERIFY` pending user visual review.
+
+## 2026-08-26 — User Review Correction Batch 03G
+
+### Work
+
+- Corrected 768px summary tracks: Date narrowed to 0.75fr, Room expanded to 0.90fr (Date+Room = 1.65fr constant), Course 1.25fr and Status 1.05fr stable.
+- Compacted summary status styling (~112px max width matching "Hoàn Thành" button, preventing balloon/circle shape on late-approval text).
+- Hidden `.equipment-confirmation-progress` four-box group at <=920px (preserved on desktop).
+- Moved `equipment-request-delete` (Hủy phiếu / Xóa phiếu) into `.equipment-status-actions` toolbar as a compact status pill (`min-height: 30px; padding: 5px 11px; border-radius: 999px; font-size: 12px; font-weight: 800;`).
+- Implemented dedicated `<=480px` narrow summary breakpoint: dense typography (header 10px, course code 12px, course name 10px, date 10.5px, time 9.5px, room 10.5px, status 9.5px, gap 4px, padding 8px) with 44x44px chevron touch target (TOUCH-01).
+- Corrected 375px expanded detail inner field stacking: outer grid remains 2 columns (`repeat(2, minmax(0, 1fr))`), inner fields stack label above value (`display: flex; flex-direction: column; gap: 2px; min-width: 0;`), allowing request code and email to render horizontally without vertical letter collapse.
+
+### Verification
+
+- PASS: `npm.cmd run typecheck`, `npm.cmd run lint`, `git diff --check`, and `npx.cmd prettier --check <touched-files>`.
+- PASS: `tests/review-batch-03g.test.mjs` verifies shared statusStack, 768px track rebalance, compact status, hidden confirmation progress, <=480px dense summary, and 375px stacked detail fields.
+- PASS: `node --test tests/review-batch-03a.test.mjs tests/review-batch-03b.test.mjs tests/review-batch-03d.test.mjs tests/review-batch-03e.test.mjs tests/review-batch-03f.test.mjs tests/review-batch-03g.test.mjs tests/review-batch-02b.test.mjs tests/staff-shifts-ui-contract.test.mjs` (42/42 tests pass).
+- PASS: Playwright rendered sweep across 375, 768, 1024, and 1440 for `/equipment/requests` and `/equipment/mine`.
+
+### Task state
+
+MOB-01.2 correction Batch 03G is `VERIFY` pending user visual review.
