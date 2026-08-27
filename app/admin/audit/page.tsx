@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { AdminShell } from "@/components/admin-shell";
 import { requireAdmin } from "@/lib/admin";
 import { CatalogTabs } from "@/components/catalog-tabs";
@@ -54,7 +55,7 @@ export default async function AuditPage({
           aria-label="Lịch sử thay đổi; vuốt ngang để xem đầy đủ"
           tabIndex={0}
         >
-          <table className="data-table catalog-data-table">
+          <table className="data-table catalog-data-table audit-log-table">
             <thead>
               <tr>
                 <th>Thời gian</th>
@@ -70,27 +71,65 @@ export default async function AuditPage({
                   full_name: string;
                   email: string;
                 } | null;
+                const formattedTime = new Intl.DateTimeFormat("vi-VN", {
+                  dateStyle: "short",
+                  timeStyle: "medium",
+                  timeZone: "Asia/Ho_Chi_Minh",
+                }).format(new Date(log.created_at));
+                const actionText = actionLabels[log.action] ?? log.action;
+
                 return (
-                  <tr key={log.id}>
-                    <td>
-                      {new Intl.DateTimeFormat("vi-VN", {
-                        dateStyle: "short",
-                        timeStyle: "medium",
-                        timeZone: "Asia/Ho_Chi_Minh",
-                      }).format(new Date(log.created_at))}
-                    </td>
-                    <td>
-                      {actor?.full_name ?? "Hệ thống"}
-                      <small>{actor?.email}</small>
-                    </td>
-                    <td>
-                      <strong>{actionLabels[log.action] ?? log.action}</strong>
-                    </td>
-                    <td className="mono">{log.entity_type}</td>
-                    <td className="mono">
-                      {log.entity_id?.slice(0, 8) ?? "—"}
-                    </td>
-                  </tr>
+                  <Fragment key={log.id}>
+                    {/* Desktop Table Row (active > 920px) */}
+                    <tr className="audit-desktop-row">
+                      <td>{formattedTime}</td>
+                      <td>
+                        {actor?.full_name ?? "Hệ thống"}
+                        <small>{actor?.email}</small>
+                      </td>
+                      <td>
+                        <strong>{actionText}</strong>
+                      </td>
+                      <td className="mono">{log.entity_type}</td>
+                      <td className="mono">
+                        {log.entity_id?.slice(0, 8) ?? "—"}
+                      </td>
+                    </tr>
+
+                    {/* Mobile Strategy C Card Row (active <= 920px) */}
+                    <tr className="audit-mobile-row">
+                      <td colSpan={5} className="audit-mobile-cell">
+                        <article className="audit-card">
+                          <div className="audit-card-header">
+                            <time className="audit-card-time">
+                              {formattedTime}
+                            </time>
+                            <span className="audit-card-action">
+                              <strong>{actionText}</strong>
+                            </span>
+                          </div>
+                          <div className="audit-card-actor">
+                            <span className="audit-actor-name">
+                              {actor?.full_name ?? "Hệ thống"}
+                            </span>
+                            {actor?.email ? (
+                              <small className="audit-actor-email">
+                                {actor.email}
+                              </small>
+                            ) : null}
+                          </div>
+                          <div className="audit-card-footer">
+                            <span className="audit-entity-type mono">
+                              {log.entity_type}
+                            </span>
+                            <span className="audit-entity-id mono">
+                              {log.entity_id?.slice(0, 8) ?? "—"}
+                            </span>
+                          </div>
+                        </article>
+                      </td>
+                    </tr>
+                  </Fragment>
                 );
               })}
             </tbody>

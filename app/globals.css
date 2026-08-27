@@ -8045,7 +8045,11 @@ body,
 }
 
 .email-notification-mobile-row,
-.email-mobile-select-all {
+.email-mobile-select-all,
+.import-history-mobile-row,
+.audit-mobile-row,
+.overview-schedule-mobile-row,
+.condition-mobile-row {
   display: none;
 }
 
@@ -13269,4 +13273,606 @@ body {
     grid-template-columns: 1fr;
     gap: 2px;
   }
+}
+/* MOB-01.7 / Batch 04C: Imports mobile Strategy D */
+@media (max-width: 920px) {
+  .responsive-table:has(.import-history-table) {
+    overflow: visible;
+    border: none;
+    background: transparent;
+    padding: 0;
+  }
+
+  .import-history-table {
+    min-width: 0;
+    display: block;
+    border: none;
+    background: transparent;
+  }
+
+  .import-history-table thead,
+  .import-history-desktop-row {
+    display: none;
+  }
+
+  .import-history-table tbody {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .import-history-mobile-row {
+    display: block;
+    border: none;
+  }
+
+  .import-history-mobile-cell {
+    display: block;
+    padding: 0;
+    border: none;
+    background: transparent;
+  }
+
+  .import-history-card {
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+  }
+
+  .import-history-card-summary {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 14px;
+    cursor: pointer;
+    background: var(--surface);
+    transition: background 0.15s ease;
+  }
+
+  .import-history-card-summary:hover {
+    background: var(--surface-hover);
+  }
+
+  .import-history-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .import-history-card-time {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--ink-700);
+  }
+
+  .import-history-card-status {
+    flex-shrink: 0;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 999px;
+    white-space: normal;
+    text-align: right;
+  }
+
+  .import-history-card-file {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--ink-900);
+    font-size: 14px;
+    line-height: 1.4;
+  }
+
+  .import-history-file-name {
+    overflow-wrap: anywhere;
+    word-break: break-all;
+  }
+
+  .import-history-card-bottom {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .import-history-card-scope {
+    font-size: 13px;
+    color: var(--ink-600);
+    font-weight: 600;
+  }
+
+  .import-history-chevron-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    flex-shrink: 0;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--ink-500);
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .import-history-chevron-icon {
+    transition: transform 0.2s ease;
+  }
+
+  .import-history-chevron-icon.is-expanded {
+    transform: rotate(180deg);
+  }
+
+  /* Expanded Detail Section */
+  .import-history-card-detail {
+    border-top: 1px solid var(--line);
+    padding: 12px 14px;
+    background: var(--surface-subtle);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .import-history-detail-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+  }
+
+  .import-history-detail-row {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    gap: 8px;
+    align-items: baseline;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+
+  .import-history-detail-row dt {
+    color: var(--ink-500);
+    font-weight: 600;
+  }
+
+  .import-history-detail-row dd {
+    margin: 0;
+    color: var(--ink-800);
+    font-weight: 600;
+  }
+
+  .import-stat-success {
+    color: var(--teal-700) !important;
+  }
+
+  .import-stat-error {
+    color: var(--danger, #c02626) !important;
+  }
+
+  .import-batch-id {
+    font-size: 12px;
+    color: var(--ink-500);
+    overflow-wrap: anywhere;
+    word-break: break-all;
+    font-weight: normal;
+  }
+}
+
+@media (max-width: 480px) {
+  .import-history-detail-row {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}
+
+/* MOB-01.7 / Batch 04C: Audit log mobile Strategy C */
+@media (max-width: 920px) {
+  .catalog-data-panel:has(.audit-log-table) .responsive-table {
+    overflow: visible;
+    border: none;
+    background: transparent;
+    padding: 0;
+  }
+
+  .audit-log-table {
+    min-width: 0;
+    display: block;
+    border: none;
+    background: transparent;
+  }
+
+  .audit-log-table thead,
+  .audit-desktop-row {
+    display: none;
+  }
+
+  .audit-log-table tbody {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .audit-mobile-row {
+    display: block;
+    border: none;
+  }
+
+  .audit-mobile-cell {
+    display: block;
+    padding: 0;
+    border: none;
+    background: transparent;
+  }
+
+  .audit-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-sm);
+    padding: 12px 14px;
+  }
+
+  .audit-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .audit-card-time {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--ink-700);
+  }
+
+  .audit-card-action {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--ink-900);
+    text-align: right;
+  }
+
+  .audit-card-actor {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 13px;
+  }
+
+  .audit-actor-name {
+    color: var(--ink-900);
+    font-weight: 600;
+  }
+
+  .audit-actor-email {
+    color: var(--ink-500);
+    overflow-wrap: anywhere;
+    word-break: break-all;
+    font-size: 12px;
+  }
+
+  .audit-card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--ink-500);
+    border-top: 1px dashed var(--line);
+    padding-top: 6px;
+  }
+
+  .audit-entity-type {
+    color: var(--ink-600);
+    font-weight: 600;
+  }
+
+  .audit-entity-id {
+    color: var(--ink-400);
+    overflow-wrap: anywhere;
+    word-break: break-all;
+  }
+}
+
+/* MOB-01.7 / Batch 04C: Dashboard 7-day schedule mobile Strategy F */
+@media (max-width: 920px) {
+  .overview-schedule-panel .responsive-table {
+    overflow: visible;
+    border: none;
+    background: transparent;
+    padding: 0;
+  }
+
+  .overview-schedule-table {
+    min-width: 0;
+    display: block;
+    border: none;
+    background: transparent;
+  }
+
+  .overview-schedule-table thead,
+  .overview-schedule-desktop-row {
+    display: none;
+  }
+
+  .overview-schedule-table tbody {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .overview-schedule-mobile-row {
+    display: block;
+    border: none;
+  }
+
+  .overview-schedule-mobile-cell {
+    display: block;
+    padding: 0;
+    border: none;
+    background: transparent;
+  }
+
+  .overview-schedule-item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    padding: 10px 12px;
+  }
+
+  .overview-schedule-item-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .overview-schedule-date-time {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--ink-800);
+    flex-wrap: wrap;
+  }
+
+  .overview-schedule-time {
+    font-size: 12px;
+    color: var(--ink-500);
+  }
+
+  .overview-schedule-room {
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--eiu-blue);
+    flex-shrink: 0;
+  }
+
+  .overview-schedule-course {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    font-size: 13.5px;
+    line-height: 1.35;
+    flex-wrap: wrap;
+  }
+
+  .overview-schedule-course-code {
+    color: var(--ink-950);
+  }
+
+  .overview-schedule-course-name {
+    color: var(--ink-700);
+  }
+
+  .overview-schedule-lecturer {
+    font-size: 12px;
+    color: var(--ink-500);
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+
+  .overview-schedule-lecturer-label {
+    color: var(--ink-400);
+  }
+
+  .overview-schedule-lecturer-names {
+    color: var(--ink-700);
+    font-weight: 600;
+  }
+
+  .overview-schedule-no-lecturer {
+    color: var(--ink-400);
+    font-style: italic;
+  }
+}
+
+/* MOB-01.7 / Batch 04C: Basic Medical confirmation equipment condition mobile evidence & technical IDs */
+@media (max-width: 920px) {
+  .responsive-table:has(.basic-medical-condition-table) {
+    overflow: visible;
+    border: none;
+    background: transparent;
+    padding: 0;
+  }
+
+  .basic-medical-condition-table {
+    min-width: 0;
+    display: block;
+    border: none;
+    background: transparent;
+  }
+
+  .basic-medical-condition-table thead,
+  .condition-desktop-row {
+    display: none;
+  }
+
+  .basic-medical-condition-table tbody {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .condition-mobile-row {
+    display: block;
+    border: none;
+  }
+
+  .condition-mobile-cell {
+    display: block;
+    padding: 0;
+    border: none;
+    background: transparent;
+  }
+
+  .condition-evidence-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-sm);
+    padding: 12px 14px;
+  }
+
+  .condition-evidence-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .condition-evidence-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .condition-device-name {
+    font-size: 14px;
+    color: var(--ink-900);
+    line-height: 1.35;
+    word-break: break-word;
+  }
+
+  .condition-commercial-name {
+    font-size: 12.5px;
+    color: var(--ink-500);
+    word-break: break-word;
+  }
+
+  .condition-unit-badge {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--ink-600);
+    background: var(--surface-subtle);
+    border: 1px solid var(--line);
+    padding: 2px 8px;
+    border-radius: 999px;
+    flex-shrink: 0;
+  }
+
+  .condition-comparison-grid {
+    display: grid;
+    grid-template-columns: 1fr 68px 1fr;
+    gap: 8px;
+    background: var(--surface-subtle);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    padding: 8px 10px;
+    align-items: center;
+    text-align: center;
+  }
+
+  .condition-col {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    align-items: center;
+  }
+
+  .condition-col-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--ink-500);
+  }
+
+  .condition-counts {
+    font-size: 12.5px;
+    font-family: var(--font-mono, monospace);
+    font-weight: 700;
+    color: var(--ink-800);
+    white-space: nowrap;
+  }
+
+  .count-good {
+    color: var(--teal-700);
+  }
+
+  .count-sep {
+    color: var(--ink-300);
+    margin-inline: 1px;
+  }
+
+  .count-damaged {
+    color: var(--danger, #c02626);
+  }
+
+  .count-new-damaged {
+    font-size: 14px;
+    font-weight: 800;
+    color: var(--danger, #c02626);
+    font-family: var(--font-mono, monospace);
+  }
+
+  .condition-col-legend {
+    font-size: 9.5px;
+    color: var(--ink-400);
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 480px) {
+  .condition-comparison-grid {
+    grid-template-columns: 1fr 58px 1fr;
+    gap: 4px;
+    padding: 6px 8px;
+  }
+
+  .condition-counts {
+    font-size: 11.5px;
+  }
+
+  .condition-col-legend {
+    font-size: 9px;
+  }
+}
+
+/* Technical IDs safe wrapping on mobile */
+.equipment-request-detail-grid dl dd.mono {
+  overflow-wrap: anywhere;
+  word-break: break-all;
 }

@@ -723,4 +723,25 @@ MOB-01.7 remains IN_PROGRESS across remaining table families.
 
 ### Task state
 
-MOB-01.7 is IN_PROGRESS — Batch 04B Email Notifications awaiting user visual review; remaining families not started.
+Email Notifications Batch 04B: USER VISUAL PASS.
+MOB-01.7 remains IN_PROGRESS — Batch 04C Large Rollout launched.
+## 2026-08-27 — MOB-01.7 Batch 04C Large Rollout (Imports + Audit + Dashboard + Evidence)
+
+### Work
+
+- **Imports (`/imports`)**: Extracted `ImportHistoryTable` client component implementing Strategy D at <=920px (compact summary card with file name, formatted time, status pill, scope, and 44x44px chevron toggle; expandable secondary detail exposing total, imported, warning, error, duplicate, conflict counts, and batch ID; one-open-at-a-time collapse). Preserved 10-column desktop table at 1024/1440.
+- **Audit Log (`/admin/audit`)**: Implemented Strategy C compact cards at <=920px (`audit-card` displaying time, action badge, actor full name, actor email, entity type, and entity ID) while preserving the full desktop data table at 1024/1440.
+- **Dashboard (`/dashboard`)**: Implemented Strategy F dense mobile rows at <=920px for "LỊCH HỌC 7 NGÀY TỚI" (`overview-schedule-item` displaying date, time range, room code, course code, course name, and lecturer names without omitting any metadata). Left KPI cards and desktop schedule table intact.
+- **Basic Medical Confirmation Evidence (`/basic-medical/registrations/confirmations/[id]`)**: Implemented compact comparison evidence cards at <=920px for the equipment condition table (`condition-evidence-card` featuring device name, commercial name, unit badge, and a 3-column Trước / Hư mới / Sau comparison grid with visual counts and legends). Enforced safe wrapping for technical IDs on mobile (`overflow-wrap: anywhere; word-break: break-all;`).
+- Added scoped responsive CSS rules in `app/globals.css` with desktop `display: none` defaults for all mobile rows and viewports down to 375px with zero horizontal page overflow.
+
+### Verification
+
+- PASS: Prettier check on all touched files, TypeScript compilation (`tsc --noEmit`), ESLint (`npm run lint`), and git diff check.
+- PASS: `node --test tests/mob-01-7-batch-04c.test.mjs` (5/5 tests pass).
+- PASS: Full regression suite across all batches (57/57 tests pass).
+- PASS: Playwright rendered sweep across `/dashboard`, `/admin/audit`, and `/imports` at 375/768/1024/1440 confirms zero page overflow, 44x44px chevron touch targets, and full desktop table parity.
+
+### Task state
+
+MOB-01.7 is IN_PROGRESS — Batch 04C awaiting user visual review.

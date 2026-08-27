@@ -60,7 +60,7 @@ test("MOB-01.7 Batch 04B: responsive CSS enforces touch targets, card layout, an
   // Desktop defaults hide mobile elements
   assert.match(
     cssSource,
-    /\.email-notification-mobile-row,\s*\.email-mobile-select-all\s*\{\s*display:\s*none;/,
+    /\.email-notification-mobile-row[\s\S]*?\.email-mobile-select-all[\s\S]*?display:\s*none;/,
   );
 
   // 920px breakpoint hides desktop rows and displays mobile cards

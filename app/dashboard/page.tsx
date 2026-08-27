@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { addDays, endOfMonth, format, startOfMonth } from "date-fns";
 import { CalendarDays, GraduationCap, PackageCheck } from "@/components/icons";
 import Link from "next/link";
@@ -178,38 +179,92 @@ export default async function DashboardPage() {
                     room_code: string;
                     building_code: string;
                   } | null;
+                  const timeRange = `${schedule.start_time.slice(0, 5)}–${schedule.end_time.slice(0, 5)}`;
+                  const roomText = room
+                    ? `${room.room_code} · ${room.building_code}`
+                    : "Chưa có phòng";
+                  const lecturerIds = [
+                    schedule.lecturer_id,
+                    schedule.lecturer_2_id,
+                  ].filter(Boolean) as string[];
+
                   return (
-                    <tr key={schedule.id}>
-                      <td>{formatBusinessDate(schedule.schedule_date)}</td>
-                      <td className="mono">
-                        {schedule.start_time.slice(0, 5)}–
-                        {schedule.end_time.slice(0, 5)}
-                      </td>
-                      <td>
-                        <strong>{schedule.course_code_snapshot}</strong>
-                      </td>
-                      <td>{schedule.course_name_snapshot}</td>
-                      <td>
-                        {room
-                          ? `${room.room_code} · ${room.building_code}`
-                          : "Chưa có phòng"}
-                      </td>
-                      <td className="lecturer-name">
-                        {schedule.lecturer_id || schedule.lecturer_2_id ? (
-                          <span className="lecturer-name-list">
-                            {[schedule.lecturer_id, schedule.lecturer_2_id]
-                              .filter(Boolean)
-                              .map((id) => (
-                                <strong key={id as string}>
-                                  {peopleById.get(id as string) ?? "Giảng viên"}
+                    <Fragment key={schedule.id}>
+                      {/* Desktop Table Row (active > 920px) */}
+                      <tr className="overview-schedule-desktop-row">
+                        <td>{formatBusinessDate(schedule.schedule_date)}</td>
+                        <td className="mono">{timeRange}</td>
+                        <td>
+                          <strong>{schedule.course_code_snapshot}</strong>
+                        </td>
+                        <td>{schedule.course_name_snapshot}</td>
+                        <td>{roomText}</td>
+                        <td className="lecturer-name">
+                          {lecturerIds.length ? (
+                            <span className="lecturer-name-list">
+                              {lecturerIds.map((id) => (
+                                <strong key={id}>
+                                  {peopleById.get(id) ?? "Giảng viên"}
                                 </strong>
                               ))}
-                          </span>
-                        ) : (
-                          <strong>Chưa có giảng viên</strong>
-                        )}
-                      </td>
-                    </tr>
+                            </span>
+                          ) : (
+                            <strong>Chưa có giảng viên</strong>
+                          )}
+                        </td>
+                      </tr>
+
+                      {/* Mobile Strategy F Dense Row (active <= 920px) */}
+                      <tr className="overview-schedule-mobile-row">
+                        <td
+                          colSpan={6}
+                          className="overview-schedule-mobile-cell"
+                        >
+                          <div className="overview-schedule-item">
+                            <div className="overview-schedule-item-header">
+                              <span className="overview-schedule-date-time">
+                                <strong>
+                                  {formatBusinessDate(schedule.schedule_date)}
+                                </strong>
+                                <span className="mono overview-schedule-time">
+                                  {timeRange}
+                                </span>
+                              </span>
+                              <span className="overview-schedule-room">
+                                {roomText}
+                              </span>
+                            </div>
+                            <div className="overview-schedule-course">
+                              <strong className="overview-schedule-course-code mono">
+                                {schedule.course_code_snapshot}
+                              </strong>
+                              <span className="overview-schedule-course-name">
+                                {schedule.course_name_snapshot}
+                              </span>
+                            </div>
+                            <div className="overview-schedule-lecturer">
+                              <span className="overview-schedule-lecturer-label">
+                                Giảng viên:
+                              </span>{" "}
+                              {lecturerIds.length ? (
+                                <span className="overview-schedule-lecturer-names">
+                                  {lecturerIds
+                                    .map(
+                                      (id) =>
+                                        peopleById.get(id) ?? "Giảng viên",
+                                    )
+                                    .join(", ")}
+                                </span>
+                              ) : (
+                                <span className="overview-schedule-no-lecturer">
+                                  Chưa có giảng viên
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    </Fragment>
                   );
                 })}
               </tbody>
