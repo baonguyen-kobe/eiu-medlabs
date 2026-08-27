@@ -650,7 +650,7 @@ MOB-01.2 correction Batch 03G is `VERIFY` pending user visual review.
 - PASS: `npm.cmd run typecheck`, `npm.cmd run lint`, `git diff --check`, and `npx.cmd prettier --check <touched-files>`.
 - PASS: `tests/review-batch-03g.test.mjs` verifies shared statusStack, 768px track rebalance, content-width status pill, 2-column status grid, hidden mobile PDF export, 2-line mobile late-registration layout, hidden confirmation progress, <=480px dense summary, and 375px stacked detail fields.
 - PASS: `node --test tests/review-batch-03a.test.mjs tests/review-batch-03b.test.mjs tests/review-batch-03d.test.mjs tests/review-batch-03e.test.mjs tests/review-batch-03f.test.mjs tests/review-batch-03g.test.mjs tests/review-batch-02b.test.mjs tests/staff-shifts-ui-contract.test.mjs` (44/44 tests pass).
-- PASS: Playwright rendered sweep across 375, 768, 1024, and 1440 for `/equipment/requests` and `/equipment/mine`.
+- PASS: Playwright rendered sweep across 375, 768, 1024, and 1440 for `/equipment/requests`; source query and shared component contract preserved for `/equipment/mine`.
 
 ### Task state
 
