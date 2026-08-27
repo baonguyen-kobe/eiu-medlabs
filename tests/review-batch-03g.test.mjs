@@ -45,10 +45,42 @@ test("MOB-01.2 Batch 03G: 768 summary grid rebalances Date and Room with stable 
   );
 });
 
-test("MOB-01.2 Batch 03G: mobile summary status has scoped compact rule", () => {
+test("MOB-01.2 Batch 03G: mobile summary status pill hugs content with fit-content and 999px radius", () => {
   assert.match(
     styles,
-    /@media \(max-width: 920px\)[\s\S]*\.mobile-col-status\s+\.request-status[\s\S]*max-width:\s*112px/,
+    /@media \(max-width: 920px\)[\s\S]*\.mobile-col-status\s+\.request-status[\s\S]*width:\s*fit-content\s*!important/,
+  );
+  assert.match(
+    styles,
+    /@media \(max-width: 920px\)[\s\S]*\.mobile-col-status\s+\.request-status[\s\S]*min-width:\s*0\s*!important/,
+  );
+  assert.match(
+    styles,
+    /@media \(max-width: 920px\)[\s\S]*\.mobile-col-status\s+\.request-late-approval[\s\S]*border-radius:\s*999px\s*!important/,
+  );
+  assert.match(
+    requestList,
+    /<span className="late-approval-short" aria-hidden="true">\s*Chờ duyệt ĐK trễ\s*<\/span>/,
+  );
+});
+
+test("MOB-01.2 Batch 03G: expanded status actions use 2 equal columns and hide PDF export on mobile", () => {
+  assert.match(
+    styles,
+    /@media \(max-width: 920px\)[\s\S]*\.equipment-status-actions\s*\{[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/,
+  );
+  assert.match(
+    styles,
+    /@media \(max-width: 920px\)[\s\S]*\.equipment-status-actions\s+\.request-status-button[\s\S]*width:\s*100%\s*!important/,
+  );
+  assert.match(
+    styles,
+    /@media \(max-width: 920px\)[\s\S]*\.equipment-handover-export\s*\{\s*display:\s*none\s*!important;\s*\}/,
+  );
+  // Desktop PDF export source remains present
+  assert.match(
+    requestList,
+    /className="button button-secondary equipment-handover-export"/,
   );
 });
 

@@ -7705,6 +7705,13 @@ body,
   font-weight: 800;
   text-align: center;
 }
+.late-approval-short {
+  display: none;
+}
+
+.late-approval-full {
+  display: inline;
+}
 
 .equipment-sign-status-button {
   display: block;
@@ -12229,74 +12236,90 @@ body {
     color: var(--eiu-blue);
     background: var(--eiu-cream);
   }
+  .equipment-request-mobile-data .late-approval-full {
+    display: none;
+  }
+
+  .equipment-request-mobile-data .late-approval-short {
+    display: inline;
+  }
 
   .equipment-request-mobile-data .mobile-col-status .request-status,
   .equipment-request-mobile-data
     .mobile-col-status
-    .equipment-sign-status-button {
-    padding: 4px 8px;
-    font-size: 11px;
-    min-height: 24px;
-    max-width: 112px;
-    line-height: 1.2;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    overflow: hidden;
-  }
-
+    .equipment-sign-status-button,
+  .equipment-request-mobile-data .mobile-col-status .request-late-approval,
   .equipment-request-mobile-data
     .mobile-col-status
-    .equipment-confirmation-waiting,
+    .request-late-approval-approved,
+  .equipment-request-mobile-data
+    .mobile-col-status
+    .equipment-confirmation-waiting {
+    width: fit-content !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    border-radius: 999px !important;
+    padding: 3px 8px;
+    font-size: 11px;
+    min-height: 22px;
+    line-height: 1.2;
+    text-align: center;
+    box-sizing: border-box;
+  }
+
+  .equipment-request-mobile-data .mobile-col-status .request-status,
+  .equipment-request-mobile-data
+    .mobile-col-status
+    .equipment-sign-status-button,
+  .equipment-request-mobile-data
+    .mobile-col-status
+    .equipment-confirmation-waiting {
+    white-space: nowrap;
+  }
+
   .equipment-request-mobile-data .mobile-col-status .request-late-approval,
   .equipment-request-mobile-data
     .mobile-col-status
     .request-late-approval-approved {
-    font-size: 10px;
-    line-height: 1.2;
-    margin-top: 2px;
-    max-width: 112px;
-    border-radius: 4px;
-    white-space: normal;
-    overflow-wrap: break-word;
+    white-space: normal !important;
+    overflow-wrap: normal !important;
+    word-break: normal !important;
+    line-height: 1.15;
+  }
+
+  .equipment-status-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    width: 100%;
+  }
+
+  .equipment-status-actions .request-status-button,
+  .equipment-status-actions .equipment-request-delete {
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 32px !important;
+    height: 32px;
+    padding: 5px 10px;
+    border-radius: 999px !important;
+    font-size: 12px !important;
+    font-weight: 800;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    white-space: nowrap;
+    text-align: center;
+    gap: 4px;
+  }
+
+  .equipment-handover-export {
+    display: none !important;
   }
 
   .equipment-confirmation-progress {
     display: none;
   }
-
-  .equipment-status-actions .equipment-request-delete {
-    min-height: 30px;
-    padding: 5px 11px;
-    border-radius: 999px;
-    font-size: 12px;
-    font-weight: 800;
-    gap: 4px;
-  }
-
-  .equipment-request-status-stack .request-status,
-  .equipment-request-status-stack .equipment-sign-status-button {
-    padding: 3px 6px;
-    font-size: 10.5px;
-    min-height: 22px;
-    line-height: 1.2;
-    width: auto;
-    max-width: 100%;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    overflow: hidden;
-  }
-
-  .equipment-request-status-stack .equipment-confirmation-waiting,
-  .equipment-request-status-stack .request-late-approval,
-  .equipment-request-status-stack .request-late-approval-approved {
-    font-size: 9.5px;
-    line-height: 1.2;
-    margin-top: 2px;
-    width: auto;
-    max-width: 100%;
-    overflow-wrap: anywhere;
-  }
-
   .equipment-request-detail-row,
   .equipment-request-detail-row > td {
     display: block;
@@ -12497,23 +12520,22 @@ body {
   .equipment-request-mobile-data .mobile-col-status .request-status,
   .equipment-request-mobile-data
     .mobile-col-status
-    .equipment-sign-status-button {
-    padding: 2px 5px;
-    font-size: 9.5px;
-    min-height: 20px;
-  }
-
-  .equipment-request-mobile-data
-    .mobile-col-status
-    .equipment-confirmation-waiting,
+    .equipment-sign-status-button,
   .equipment-request-mobile-data .mobile-col-status .request-late-approval,
   .equipment-request-mobile-data
     .mobile-col-status
-    .request-late-approval-approved {
-    font-size: 8.5px;
-    line-height: 1.15;
+    .request-late-approval-approved,
+  .equipment-request-mobile-data
+    .mobile-col-status
+    .equipment-confirmation-waiting {
+    padding: 2px 6px;
+    font-size: 9.5px;
+    min-height: 20px;
+    width: fit-content !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    border-radius: 999px !important;
   }
-
   .equipment-request-mobile-data .equipment-request-chevron {
     width: 44px;
     height: 44px;

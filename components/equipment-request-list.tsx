@@ -1348,12 +1348,28 @@ export function EquipmentRequestList({
               const statusStack = (
                 <div className="equipment-request-status-stack">
                   {!isCancelled && lateApprovalStatus === "pending" ? (
-                    <span className="request-late-approval request-late-approval-pending">
-                      Chờ duyệt đăng ký trễ
+                    <span
+                      className="request-late-approval request-late-approval-pending"
+                      aria-label="Chờ duyệt đăng ký trễ"
+                    >
+                      <span className="late-approval-full">
+                        Chờ duyệt đăng ký trễ
+                      </span>
+                      <span className="late-approval-short" aria-hidden="true">
+                        Chờ duyệt ĐK trễ
+                      </span>
                     </span>
                   ) : !isCancelled && lateApprovalStatus === "rejected" ? (
-                    <span className="request-late-approval request-late-approval-rejected">
-                      Đã từ chối đăng ký trễ
+                    <span
+                      className="request-late-approval request-late-approval-rejected"
+                      aria-label="Đã từ chối đăng ký trễ"
+                    >
+                      <span className="late-approval-full">
+                        Đã từ chối đăng ký trễ
+                      </span>
+                      <span className="late-approval-short" aria-hidden="true">
+                        Đã từ chối ĐK trễ
+                      </span>
                     </span>
                   ) : isCompleted ? (
                     <StatusBadge status="completed" />
