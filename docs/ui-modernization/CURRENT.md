@@ -56,10 +56,11 @@ PILOT-01, MOB-01.1, MOB-01.4, MOB-01.5, MOB-01.6, and TOUCH-01 — DONE — USER
 
 ## Next batch task
 
-MOB-01.2 correction Batch 03G + Addendum is technically rendered and verified across 375/768/1024/1440.
+MOB-01.2 correction Batch 03G + Addenda is technically rendered and verified across 375/768/1024/1440.
 It makes the mobile summary status pill content-width (fit-content/999px radius), renders pending late-approval
 as "Chờ duyệt ĐK trễ", transforms expanded mobile status actions into a 2-equal-column grid (6 buttons),
-hides mobile PDF export, and preserves all 03G detail/breakpoint fixes and the Global Font Contract.
+hides mobile PDF export, simplifies expanded mobile late-registration detail to a clean 2-line layout
+(Line 1: label + status, Line 2: note), and preserves all 03G detail/breakpoint fixes and the Global Font Contract.
 It is awaiting user visual review. Do not resume the general queue until the user accepts
 or supplies new correction evidence.
 

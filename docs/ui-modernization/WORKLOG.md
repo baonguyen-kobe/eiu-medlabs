@@ -625,12 +625,13 @@ MOB-01.2 correction Batch 03F is `VERIFY` pending user visual review.
 - Hidden mobile PDF export (`.equipment-handover-export { display: none !important; }` at <=920px, preserved on desktop).
 - Implemented dedicated `<=480px` narrow summary breakpoint: dense typography (header 10px, course code 12px, course name 10px, date 10.5px, time 9.5px, room 10.5px, status 9.5px, gap 4px, padding 8px) with 44x44px chevron touch target (TOUCH-01).
 - Corrected 375px expanded detail inner field stacking: outer grid remains 2 columns (`repeat(2, minmax(0, 1fr))`), inner fields stack label above value (`display: flex; flex-direction: column; gap: 2px; min-width: 0;`), allowing request code and email to render horizontally without vertical letter collapse.
+- Simplified expanded mobile late-registration detail row to a clean 2-line layout at <=920px (Line 1: label "Đăng ký trễ" + primary status on same line via grid/display:contents; Line 2: supporting note text below starting with "—"). Preserved desktop 145px layout without global overrides.
 
 ### Verification
 
 - PASS: `npm.cmd run typecheck`, `npm.cmd run lint`, `git diff --check`, and `npx.cmd prettier --check <touched-files>`.
-- PASS: `tests/review-batch-03g.test.mjs` verifies shared statusStack, 768px track rebalance, content-width status pill, 2-column status grid, hidden mobile PDF export, hidden confirmation progress, <=480px dense summary, and 375px stacked detail fields.
-- PASS: `node --test tests/review-batch-03a.test.mjs tests/review-batch-03b.test.mjs tests/review-batch-03d.test.mjs tests/review-batch-03e.test.mjs tests/review-batch-03f.test.mjs tests/review-batch-03g.test.mjs tests/review-batch-02b.test.mjs tests/staff-shifts-ui-contract.test.mjs` (42/42 tests pass).
+- PASS: `tests/review-batch-03g.test.mjs` verifies shared statusStack, 768px track rebalance, content-width status pill, 2-column status grid, hidden mobile PDF export, 2-line mobile late-registration layout, hidden confirmation progress, <=480px dense summary, and 375px stacked detail fields.
+- PASS: `node --test tests/review-batch-03a.test.mjs tests/review-batch-03b.test.mjs tests/review-batch-03d.test.mjs tests/review-batch-03e.test.mjs tests/review-batch-03f.test.mjs tests/review-batch-03g.test.mjs tests/review-batch-02b.test.mjs tests/staff-shifts-ui-contract.test.mjs` (44/44 tests pass).
 - PASS: Playwright rendered sweep across 375, 768, 1024, and 1440 for `/equipment/requests` and `/equipment/mine`.
 
 ### Task state

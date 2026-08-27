@@ -127,6 +127,29 @@ test("MOB-01.2 Batch 03G: hides confirmation progress only at <=920px while pres
   );
 });
 
+test("MOB-01.2 Batch 03G: late registration detail row uses 2-line layout at mobile/tablet", () => {
+  assert.match(
+    requestList,
+    /<div className="equipment-late-detail-row">\s*<dt>Đăng ký trễ<\/dt>\s*<dd>\s*<strong className="equipment-late-status-label">/,
+  );
+  assert.match(
+    styles,
+    /@media \(max-width: 920px\)[\s\S]*\.equipment-late-detail-row\s*\{[\s\S]*display:\s*grid\s*!important;[\s\S]*grid-template-columns:\s*auto\s+1fr/,
+  );
+  assert.match(
+    styles,
+    /@media \(max-width: 920px\)[\s\S]*\.equipment-late-detail-row\s+dd\s*\{\s*display:\s*contents;\s*\}/,
+  );
+  assert.match(
+    styles,
+    /@media \(max-width: 920px\)[\s\S]*\.equipment-late-status-label\s*\{[\s\S]*grid-column:\s*2;[\s\S]*grid-row:\s*1/,
+  );
+  assert.match(
+    styles,
+    /@media \(max-width: 920px\)[\s\S]*\.equipment-late-detail-note\s*\{[\s\S]*grid-column:\s*1\s*\/\s*-1;[\s\S]*grid-row:\s*2/,
+  );
+});
+
 test("MOB-01.2 Batch 03G: <=480px narrow breakpoint provides summary density and stacks inner detail fields", () => {
   assert.match(styles, /@media \(max-width: 480px\)/);
   assert.match(
