@@ -56,6 +56,18 @@ test("MOB-01.2 Batch 03G: mobile summary status pill hugs content with fit-conte
   );
   assert.match(
     styles,
+    /@media \(max-width: 920px\)[\s\S]*\.mobile-col-status\s+\.request-late-approval[\s\S]*width:\s*fit-content\s*!important/,
+  );
+  assert.match(
+    styles,
+    /@media \(max-width: 920px\)[\s\S]*\.mobile-col-status\s+\.request-late-approval[\s\S]*min-width:\s*0\s*!important/,
+  );
+  assert.match(
+    styles,
+    /@media \(max-width: 920px\)[\s\S]*\.mobile-col-status\s+\.request-late-approval[\s\S]*max-width:\s*100%\s*!important/,
+  );
+  assert.match(
+    styles,
     /@media \(max-width: 920px\)[\s\S]*\.mobile-col-status\s+\.request-late-approval[\s\S]*border-radius:\s*999px\s*!important/,
   );
   assert.match(
@@ -72,6 +84,18 @@ test("MOB-01.2 Batch 03G: expanded status actions use 2 equal columns and hide P
   assert.match(
     styles,
     /@media \(max-width: 920px\)[\s\S]*\.equipment-status-actions\s+\.request-status-button[\s\S]*width:\s*100%\s*!important/,
+  );
+  assert.match(
+    styles,
+    /@media \(max-width: 920px\)[\s\S]*\.equipment-status-actions\s+\.request-status-button[\s\S]*min-width:\s*0\s*!important/,
+  );
+  assert.match(
+    styles,
+    /@media \(max-width: 920px\)[\s\S]*\.equipment-status-actions\s+\.equipment-request-delete[\s\S]*width:\s*100%\s*!important/,
+  );
+  assert.match(
+    styles,
+    /@media \(max-width: 920px\)[\s\S]*\.equipment-status-actions\s+\.equipment-request-delete[\s\S]*min-width:\s*0\s*!important/,
   );
   assert.match(
     styles,

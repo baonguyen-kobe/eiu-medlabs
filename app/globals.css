@@ -12248,13 +12248,7 @@ body {
   .equipment-request-mobile-data
     .mobile-col-status
     .equipment-sign-status-button,
-  .equipment-request-mobile-data .mobile-col-status .request-late-approval,
-  .equipment-request-mobile-data
-    .mobile-col-status
-    .request-late-approval-approved,
-  .equipment-request-mobile-data
-    .mobile-col-status
-    .equipment-confirmation-waiting {
+  .equipment-request-mobile-data .mobile-col-status .request-late-approval {
     width: fit-content !important;
     min-width: 0 !important;
     max-width: 100% !important;
@@ -12270,21 +12264,34 @@ body {
   .equipment-request-mobile-data .mobile-col-status .request-status,
   .equipment-request-mobile-data
     .mobile-col-status
-    .equipment-sign-status-button,
-  .equipment-request-mobile-data
-    .mobile-col-status
-    .equipment-confirmation-waiting {
+    .equipment-sign-status-button {
     white-space: nowrap;
   }
 
-  .equipment-request-mobile-data .mobile-col-status .request-late-approval,
-  .equipment-request-mobile-data
-    .mobile-col-status
-    .request-late-approval-approved {
+  .equipment-request-mobile-data .mobile-col-status .request-late-approval {
     white-space: normal !important;
     overflow-wrap: normal !important;
     word-break: normal !important;
     line-height: 1.15;
+  }
+
+  .equipment-request-mobile-data
+    .mobile-col-status
+    .equipment-confirmation-waiting,
+  .equipment-request-mobile-data
+    .mobile-col-status
+    .request-late-approval-approved {
+    font-size: 10px;
+    line-height: 1.2;
+    margin-top: 2px;
+    width: auto;
+    max-width: 100%;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    white-space: normal;
+    overflow-wrap: break-word;
+    text-align: left;
   }
 
   .equipment-status-actions {
@@ -12521,13 +12528,7 @@ body {
   .equipment-request-mobile-data
     .mobile-col-status
     .equipment-sign-status-button,
-  .equipment-request-mobile-data .mobile-col-status .request-late-approval,
-  .equipment-request-mobile-data
-    .mobile-col-status
-    .request-late-approval-approved,
-  .equipment-request-mobile-data
-    .mobile-col-status
-    .equipment-confirmation-waiting {
+  .equipment-request-mobile-data .mobile-col-status .request-late-approval {
     padding: 2px 6px;
     font-size: 9.5px;
     min-height: 20px;
@@ -12536,6 +12537,17 @@ body {
     max-width: 100% !important;
     border-radius: 999px !important;
   }
+
+  .equipment-request-mobile-data
+    .mobile-col-status
+    .equipment-confirmation-waiting,
+  .equipment-request-mobile-data
+    .mobile-col-status
+    .request-late-approval-approved {
+    font-size: 8.5px;
+    line-height: 1.15;
+  }
+
   .equipment-request-mobile-data .equipment-request-chevron {
     width: 44px;
     height: 44px;
