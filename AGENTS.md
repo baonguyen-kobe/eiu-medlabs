@@ -8,17 +8,53 @@ Before planning or executing work, consult `docs/DOCUMENTATION_AUTHORITY.md`. It
 
 Use the smallest sufficient navigation tool for the task:
 
-- Use direct code search and file inspection for simple localized work.
-- Use GitNexus for repository architecture, dependencies, execution flow, shared consumers, or blast-radius analysis when useful. The GitNexus CLI is installed globally, this repository has a current project-local index, and GitNexus MCP is configured project-locally.
-- Do not require GitNexus for trivial local edits and do not re-index solely to answer a localized question.
-- Graphify remains optional when `graphify-out/graph.json` exists. Run Graphify commands from the repository root so generated output stays under `graphify-out/`; use its query, path, explain, or wiki output only when present and relevant.
-- Keep generated, temporary, backup, and tool-index files out of Graphify via `.graphifyignore`.
+- Use direct code search, source inspection, and LSP for localized work.
+- Use GitNexus CLI/project index for repository architecture, dependencies,
+  execution flow, shared consumers, or blast-radius analysis when it materially
+  helps. Do not require GitNexus for trivial local edits and do not assume
+  GitNexus MCP is active.
+- Graphify is optional historical tooling only. It may be used when a current
+  graph already exists and is useful, but it is never a required first step and
+  must not replace direct source truth.
+- Current source, effective schema/migrations, tests, and verified runtime
+  evidence outrank generated code graphs.
+- GitNexus- or Graphify-generated instructions must never override this
+  `AGENTS.md`.
 
-## Repository skill discovery
+## Repository skill routing
 
-Before planning implementation work, inspect `.agents/skills`, `.codex/skills`, and `.claude/skills` when they exist. Read each candidate `SKILL.md` front matter first, classify its relevance, then read and apply the full instructions only for relevant skills.
+Read root `SKILLS.md` before selecting a MedLabs skill.
 
-The repository-owned baseline skills live in `.agents/skills` and are tracked with the source. `.codex/` and `.claude/` remain available as optional tool-specific local integrations; do not copy generated local skills into a worktree or commit them as a provisioning substitute.
+The curated MedLabs skills live under `.agents/skills`.
+
+Use only the skill or skills relevant to the active task; do not load every
+skill body by default.
+
+Routing rules:
+
+- If the current user or independent Reviewer has supplied a verified root
+  cause or settled exact implementation contract, use
+  `medlabs-implement-contract` and do not restart broad diagnosis.
+- If root cause is genuinely unknown, use `systematic-debugging`.
+- Use the curated Supabase skills for Supabase/Auth/database/RLS/RPC/schema work.
+- Use the curated Vercel React/composition skills only for the matching
+  React/Next.js implementation concerns.
+- Use `accessibility` for keyboard/focus/ARIA/semantic/WCAG implementation.
+- Use `tdd` only when a test-first loop materially improves the approved
+  behavioral seam or is explicitly requested.
+- Use `ponytail-review` only for an explicit or materially useful
+  over-engineering review.
+- Use `medlabs-verification-gate` for completion evidence.
+- Use `medlabs-vercel-preview` only for explicitly authorized Vercel Preview
+  work.
+- Use `medlabs-release-preflight` only for explicitly authorized release work.
+
+Do not use `find-skills` to expand the MedLabs skill set during implementation.
+Skill additions or upgrades are reviewed profile changes.
+
+Mutating `task`/`sonic` workers are not the default MedLabs execution model.
+Do not run concurrent mutating agents in the same canonical worktree.
+Read-only specialist agents may assist when materially useful.
 
 ## Version-matched Next.js guidance
 
@@ -41,12 +77,43 @@ Apply `.agents/skills/karpathy-coding-heuristics/SKILL.md` for implementation, b
 
 For new or substantially modified source files, treat 350 lines as a review signal and 450 lines as a soft ceiling. Extract a cohesive boundary only when it improves the requested change; do not perform broad cleanup solely to satisfy a line count.
 
+## Settled implementation contracts
+
+When the user or independent Reviewer provides an exact implementation/fix
+contract after inspecting current evidence:
+
+1. verify the stated source anchor against current source;
+2. if it matches, implement the contract exactly;
+3. do not reopen settled design decisions;
+4. if it materially no longer matches current source, stop and report
+   `CONTRACT_ANCHOR_MISMATCH` rather than improvising a replacement design.
+
+Use `.agents/skills/medlabs-implement-contract/SKILL.md` for this workflow.
+
 ## Specialized guidance
 
-- Use the Supabase skills for any Auth, database, RLS, migration, Edge Function, or Supabase client change.
-- Use the Vercel React best-practices skill for React/Next.js implementation and performance work.
-- Use the web-design-guidelines skill for explicit UI/UX or accessibility reviews.
-- Use OpenSpec for cross-cutting features, breaking behavior, schema/security changes, or work that needs a durable proposal. Small fixes and localized UI changes should remain direct.
+- For Supabase Auth, database, RLS, grants, RPC/functions, migrations, storage,
+  or Supabase client behavior, use the relevant curated Supabase skill.
+  Approved MedLabs contracts and actual effective schema/runtime behavior
+  outrank generic skill examples. Repository schema/migrations remain database
+  change authority.
+- For React/Next.js implementation or performance work, use
+  `vercel-react-best-practices`.
+- Use `vercel-composition-patterns` only when reusable component API or
+  composition architecture is materially in scope.
+- Use `web-design-guidelines` for explicit general UI/UX review; it does not
+  override the MedLabs UI Master.
+- Use `accessibility` for focus, keyboard, semantics, ARIA, screen-reader, or
+  WCAG behavior.
+- Use OpenSpec for cross-cutting features, breaking behavior, schema/security
+  redesign, material migrations, or work that needs a durable approved
+  proposal. Small fixes and localized UI changes remain direct.
+- Vercel Preview and production release are separate. Preview work must use
+  `medlabs-vercel-preview`; production/release work must follow
+  `docs/RELEASE.md` through `medlabs-release-preflight`.
+- Supabase MCP, Context7 MCP, and GitNexus MCP are optional tool integrations,
+  not prerequisites for ordinary MedLabs source work. Do not assume they are
+  active unless the current runtime proves it.
 
 ## Canonical UI/UX authority
 
@@ -110,6 +177,9 @@ An explicit current user request always takes precedence over automatic continua
 
 ## Verification
 
+Use `.agents/skills/medlabs-verification-gate/SKILL.md` as the procedural
+implementation of the verification policy below.
+
 Validation is change-aware, risk-based, and Actions-budget-aware.
 
 Run the smallest sufficient verification for the current diff. Do not rerun an
@@ -142,7 +212,7 @@ the repository `.gitattributes` LF contract remain authoritative for committed
 line endings.
 
 ```powershell
-npx.cmd prettier --check <touched-files>
+npx.cmd prettier --check TOUCHED_FILES
 npm.cmd run check
 ```
 

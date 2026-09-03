@@ -6,5 +6,5 @@ Read and follow `AGENTS.md` and `docs/DOCUMENTATION_AUTHORITY.md`. `AGENTS.md` i
 - Read `NEXTJS_AGENTS.md` before changing Next.js behavior.
 - Apply the specialized Supabase, React, UI design system (`docs/UI_DESIGN_SYSTEM_V2_MASTER.md`), or OpenSpec guidance named in `AGENTS.md` when relevant.
 - Follow the UI modernization continuity system under `docs/ui-modernization/` (`CURRENT.md`, `TRACKER.md`, `DECISIONS.md`) for active UI tasks.
-- Preserve unrelated work and run fresh verification checks appropriate to the touched scope before claiming completion.
+- Preserve unrelated work and follow `medlabs-verification-gate` for change-aware completion evidence; prior PASS evidence may be reused only when the relevant impact is demonstrably unchanged.
 - `CLAUDE.md` is a thin entry point and must not introduce competing repository policy or secondary navigation requirements.

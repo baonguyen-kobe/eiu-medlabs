@@ -12,7 +12,10 @@ Use these guardrails without adding ceremony to a small task.
 1. Restate the requested outcome and observable success criteria.
 2. Inspect the relevant code, tests, and current behavior before proposing a fix.
 3. State assumptions that materially affect behavior. Ask only when a wrong assumption would be costly or irreversible.
-4. Check the project instructions and use Graphify first for codebase relationships.
+4. Use the smallest sufficient navigation method:
+   - use direct source inspection and LSP for localized work;
+   - use GitNexus CLI/project index when architecture, dependency, execution-flow, shared-consumer, or blast-radius analysis materially helps;
+   - Graphify is optional historical tooling and is never required for ordinary MedLabs work.
 
 ## While editing
 
@@ -25,12 +28,12 @@ Use these guardrails without adding ceremony to a small task.
 ## Verify the outcome
 
 1. Test the behavior through the same surface the user will use when practical.
-2. Run the smallest relevant checks first, then the project verification commands required by risk.
+2. Use `medlabs-verification-gate` to select and report the applicable verification evidence.
 3. Compare results with the original success criteria, not merely with compilation success.
 4. Report what changed, what was verified, and any remaining limitation or assumption.
 
 ## Stop conditions
 
 - Stop and ask before destructive operations or material scope expansion.
-- Do not conceal a failing check by weakening tests, validation, types, or lint rules.
-- Do not claim completion when the requested user path has not been exercised or otherwise verified.
+- Do not conceal a failing check by weakening tests, validation, types, lint rules, authorization, RLS, or security controls.
+- Do not claim completion when the requested behavior lacks applicable verification evidence.
