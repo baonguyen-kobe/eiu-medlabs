@@ -38,6 +38,103 @@ test("CI uses GitHub-hosted Ubuntu and skips docs-only automatic runs", () => {
   );
 });
 
+test("CI workflow implements conservative selective routing v1 architecture", () => {
+  const workflow = readWorkflow("ci.yml");
+
+  // 1. plan job exists
+  assert.match(workflow, /^jobs:\n  plan:\n/m);
+
+  // 2. checkout in plan uses fetch-depth 0
+  assert.match(
+    workflow,
+    /- uses: actions\/checkout@v7\n\s+with:\n\s+fetch-depth: 0/,
+  );
+
+  // 3. planner uses pull request base SHA
+  assert.match(
+    workflow,
+    /CI_BASE_SHA:\s+\$\{\{\s*github\.event\.pull_request\.base\.sha\s*\}\}/,
+  );
+
+  // 4. planner uses pull request head SHA
+  assert.match(
+    workflow,
+    /CI_HEAD_SHA:\s+\$\{\{\s*github\.event\.pull_request\.head\.sha\s*\}\}/,
+  );
+
+  // 5. verify depends on plan
+  assert.match(workflow, /verify:\n\s+needs:\s+plan/);
+
+  // 6. verify remains runs-on ubuntu-latest
+  assert.match(workflow, /verify:[\s\S]*?runs-on:\s+ubuntu-latest/);
+
+  // 7, 8, 9. ci_contract_only, node_test_only, broad lanes exist
+  assert.match(workflow, /needs\.plan\.outputs\.lane == 'ci_contract_only'/);
+  assert.match(workflow, /needs\.plan\.outputs\.lane == 'node_test_only'/);
+  assert.match(workflow, /needs\.plan\.outputs\.lane == 'broad'/);
+
+  // 10. Supabase start is broad-only
+  assert.match(
+    workflow,
+    /- name: Start isolated CI Supabase\n\s+if: \$\{\{ needs\.plan\.outputs\.lane == 'broad' \}\}/,
+  );
+
+  // 11. DB reset is broad-only
+  assert.match(
+    workflow,
+    /- name: Reset schema from migrations\n\s+if: \$\{\{ needs\.plan\.outputs\.lane == 'broad' \}\}/,
+  );
+
+  // 12. pgTAP is broad-only
+  assert.match(
+    workflow,
+    /- name: Run database history tests\n\s+if: \$\{\{ needs\.plan\.outputs\.lane == 'broad' \}\}/,
+  );
+
+  // 13. Playwright install is broad-only
+  assert.match(
+    workflow,
+    /- name: Install Chromium for end-to-end tests\n\s+if: \$\{\{ needs\.plan\.outputs\.lane == 'broad' \}\}/,
+  );
+
+  // 14. build is broad-only
+  assert.match(
+    workflow,
+    /- name: Build production bundle\n\s+if: \$\{\{ needs\.plan\.outputs\.lane == 'broad' \}\}/,
+  );
+
+  // 15. production smoke is broad-only
+  assert.match(
+    workflow,
+    /- name: Smoke-test production bundle\n\s+if: \$\{\{ needs\.plan\.outputs\.lane == 'broad' \}\}/,
+  );
+
+  // 16. cleanup is broad-only
+  assert.match(
+    workflow,
+    /- name: Clean up isolated CI Supabase runtime\n\s+if: \$\{\{ always\(\) && needs\.plan\.outputs\.lane == 'broad' \}\}/,
+  );
+
+  // 17. npm audit is broad-only
+  assert.match(
+    workflow,
+    /- name: Audit dependencies\n\s+if: \$\{\{ needs\.plan\.outputs\.lane == 'broad' \}\}/,
+  );
+
+  // 18. workflow_call full behavior remains intact
+  assert.match(
+    workflow,
+    /workflow_call:\n\s+inputs:\n\s+e2e_mode:\n\s+default: required/,
+  );
+
+  // 19. push main still routes broad through non-PR behavior (planner passes event name)
+  assert.match(workflow, /CI_EVENT_NAME:\s+\$\{\{\s*github\.event_name\s*\}\}/);
+
+  // 20. no self-hosted runner label reappears
+  assert.doesNotMatch(workflow, /self-hosted/);
+  assert.doesNotMatch(workflow, /eiu-medlabs-ci/);
+});
+
 test("CI creates an isolated Supabase workdir without mutating local preview config", () => {
   const previewConfigPath = new URL("../supabase/config.toml", import.meta.url);
   const previewConfig = readFileSync(previewConfigPath, "utf8");
@@ -136,7 +233,7 @@ test("CI retires only its stale Supabase runtime and always cleans it up", () =>
   );
   assert.match(
     workflow,
-    /- name: Clean up isolated CI Supabase runtime\n        if: always\(\)/,
+    /- name: Clean up isolated CI Supabase runtime\n\s+if: \$\{\{ always\(\) && needs\.plan\.outputs\.lane == 'broad' \}\}/,
   );
   assert.match(
     workflow,
@@ -166,20 +263,20 @@ test("PR mode runs only the required browser gates and builds once", () => {
   );
   assert.match(
     workflow,
-    /- name: Run required stable end-to-end suite\n        if: \$\{\{ inputs\.e2e_mode != 'full' \}\}\n        run: npm run test:e2e:required/,
+    /- name: Run required stable end-to-end suite\n\s+if: \$\{\{ needs\.plan\.outputs\.lane == 'broad' && inputs\.e2e_mode != 'full' \}\}\n\s+run: npm run test:e2e:required/,
   );
   assert.doesNotMatch(workflow, /npm run test:e2e:critical/);
   assert.match(
     workflow,
-    /- name: Verify Basic Medical evidence flag-off behavior\n        run: npm run test:e2e:evidence-off/,
+    /- name: Verify Basic Medical evidence flag-off behavior\n\s+if: \$\{\{ needs\.plan\.outputs\.lane == 'broad' \}\}\n\s+run: npm run test:e2e:evidence-off/,
   );
   assert.match(
     workflow,
-    /- name: Build production bundle\n        run: npm run build/,
+    /- name: Build production bundle\n\s+if: \$\{\{ needs\.plan\.outputs\.lane == 'broad' \}\}\n\s+run: npm run build/,
   );
   assert.match(
     workflow,
-    /- name: Smoke-test production bundle\n        run: npm run test:e2e:production-smoke:run/,
+    /- name: Smoke-test production bundle\n\s+if: \$\{\{ needs\.plan\.outputs\.lane == 'broad' \}\}\n\s+run: npm run test:e2e:production-smoke:run/,
   );
   assert.equal(
     (workflow.match(/run: npm run build/g) ?? []).length,
@@ -216,11 +313,11 @@ test("Full E2E is manual-only and reuses the isolated CI workflow", () => {
   );
   assert.match(
     ciWorkflow,
-    /- name: Run full local end-to-end suite\n        if: \$\{\{ inputs\.e2e_mode == 'full' \}\}\n        run: npm run test:e2e:full-local/,
+    /- name: Run full local end-to-end suite\n\s+if: \$\{\{ needs\.plan\.outputs\.lane == 'broad' && inputs\.e2e_mode == 'full' \}\}\n\s+run: npm run test:e2e:full-local/,
   );
   assert.match(
     ciWorkflow,
-    /- name: Upload Full E2E failure artifacts\n        if: \$\{\{ failure\(\) && inputs\.e2e_mode == 'full' \}\}/,
+    /- name: Upload Full E2E failure artifacts\n\s+if: \$\{\{ failure\(\) && needs\.plan\.outputs\.lane == 'broad' && inputs\.e2e_mode == 'full' \}\}/,
   );
   assert.match(
     ciWorkflow,
@@ -229,7 +326,7 @@ test("Full E2E is manual-only and reuses the isolated CI workflow", () => {
   assert.match(ciWorkflow, /retention-days: 7/);
   assert.match(
     ciWorkflow,
-    /- name: Clean up isolated CI Supabase runtime\n        if: always\(\)/,
+    /- name: Clean up isolated CI Supabase runtime\n\s+if: \$\{\{ always\(\) && needs\.plan\.outputs\.lane == 'broad' \}\}/,
   );
   assert.doesNotMatch(fullWorkflow, /(?:preview|production|vercel\.app)/i);
 });

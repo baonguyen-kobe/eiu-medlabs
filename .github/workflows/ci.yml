@@ -25,7 +25,36 @@ permissions:
   contents: read
 
 jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      lane: ${{ steps.impact.outputs.lane }}
+      node_tests: ${{ steps.impact.outputs.node_tests }}
+      reason: ${{ steps.impact.outputs.reason }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Classify changed files and determine CI lane
+        id: impact
+        env:
+          CI_EVENT_NAME: ${{ github.event_name }}
+          CI_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          CI_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          node scripts/ci-impact.mjs \
+            --event "$CI_EVENT_NAME" \
+            --base "$CI_BASE_SHA" \
+            --head "$CI_HEAD_SHA" \
+            --github-output "$GITHUB_OUTPUT"
+
   verify:
+    needs: plan
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.e2e_mode == 'full' && 90 || 30 }}
 
@@ -43,18 +72,51 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Check formatting (CI contract)
+        if: ${{ needs.plan.outputs.lane == 'ci_contract_only' }}
+        run: npm run format:check
+
+      - name: Run CI contract tests
+        if: ${{ needs.plan.outputs.lane == 'ci_contract_only' }}
+        run: |
+          node --test \
+            tests/ci-supabase-isolation-workflow.test.mjs \
+            tests/supabase-sql-line-ending-contract.test.mjs
+
+      - name: Check formatting on changed Node tests
+        if: ${{ needs.plan.outputs.lane == 'node_test_only' }}
+        env:
+          NODE_TEST_PATHS: ${{ needs.plan.outputs.node_tests }}
+        run: npx prettier --check --ignore-unknown $NODE_TEST_PATHS
+
+      - name: Lint changed Node tests
+        if: ${{ needs.plan.outputs.lane == 'node_test_only' }}
+        env:
+          NODE_TEST_PATHS: ${{ needs.plan.outputs.node_tests }}
+        run: npx eslint $NODE_TEST_PATHS
+
+      - name: Run changed Node tests
+        if: ${{ needs.plan.outputs.lane == 'node_test_only' }}
+        env:
+          NODE_TEST_PATHS: ${{ needs.plan.outputs.node_tests }}
+        run: node --test $NODE_TEST_PATHS
+
       - name: Check formatting
+        if: ${{ needs.plan.outputs.lane == 'broad' }}
         run: npm run format:check
 
       - name: Audit dependencies
+        if: ${{ needs.plan.outputs.lane == 'broad' }}
         run: npm audit
 
       - name: Retire stale CI Supabase runtime
+        if: ${{ needs.plan.outputs.lane == 'broad' }}
         shell: bash
         run: |
           npx --no-install supabase stop --project-id lich-truc-app-ci --no-backup || true
 
       - name: Prepare isolated CI Supabase workdir
+        if: ${{ needs.plan.outputs.lane == 'broad' }}
         shell: bash
         run: |
           CI_SUPABASE_WORKDIR="$(mktemp -d "$RUNNER_TEMP/lich-truc-app-ci.XXXXXX")"
@@ -66,12 +128,15 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Start isolated CI Supabase
+        if: ${{ needs.plan.outputs.lane == 'broad' }}
         run: npx --no-install supabase start --workdir "$CI_SUPABASE_WORKDIR"
 
       - name: Reset schema from migrations
+        if: ${{ needs.plan.outputs.lane == 'broad' }}
         run: npx --no-install supabase db reset --workdir "$CI_SUPABASE_WORKDIR"
 
       - name: Create local test environment
+        if: ${{ needs.plan.outputs.lane == 'broad' }}
         shell: bash
         run: |
           eval "$(npx --no-install supabase status --workdir "$CI_SUPABASE_WORKDIR" -o env)"
@@ -85,50 +150,61 @@ jobs:
           } > .env.local
 
       - name: Seed isolated test users and fixtures
+        if: ${{ needs.plan.outputs.lane == 'broad' }}
         shell: pwsh
         run: ./scripts/seed-local-users.ps1 -SupabaseWorkdir "$env:CI_SUPABASE_WORKDIR"
 
       - name: Lint database
+        if: ${{ needs.plan.outputs.lane == 'broad' }}
         run: npx --no-install supabase db lint --workdir "$CI_SUPABASE_WORKDIR" --local --level error
 
       - name: Lint application
+        if: ${{ needs.plan.outputs.lane == 'broad' }}
         run: npm run lint
 
       - name: Typecheck
+        if: ${{ needs.plan.outputs.lane == 'broad' }}
         run: npm run typecheck
 
       - name: Run unit and database tests
+        if: ${{ needs.plan.outputs.lane == 'broad' }}
         run: npm test
 
       - name: Run database history tests
+        if: ${{ needs.plan.outputs.lane == 'broad' }}
         run: npx --no-install supabase test db --workdir "$CI_SUPABASE_WORKDIR"
 
       - name: Restore E2E fixtures after database tests
+        if: ${{ needs.plan.outputs.lane == 'broad' }}
         shell: pwsh
         run: ./scripts/seed-local-users.ps1 -SupabaseWorkdir "$env:CI_SUPABASE_WORKDIR"
 
       - name: Install Chromium for end-to-end tests
+        if: ${{ needs.plan.outputs.lane == 'broad' }}
         run: npx playwright install chromium
 
       - name: Run required stable end-to-end suite
-        if: ${{ inputs.e2e_mode != 'full' }}
+        if: ${{ needs.plan.outputs.lane == 'broad' && inputs.e2e_mode != 'full' }}
         run: npm run test:e2e:required
 
       - name: Run full local end-to-end suite
-        if: ${{ inputs.e2e_mode == 'full' }}
+        if: ${{ needs.plan.outputs.lane == 'broad' && inputs.e2e_mode == 'full' }}
         run: npm run test:e2e:full-local
 
       - name: Verify Basic Medical evidence flag-off behavior
+        if: ${{ needs.plan.outputs.lane == 'broad' }}
         run: npm run test:e2e:evidence-off
 
       - name: Build production bundle
+        if: ${{ needs.plan.outputs.lane == 'broad' }}
         run: npm run build
 
       - name: Smoke-test production bundle
+        if: ${{ needs.plan.outputs.lane == 'broad' }}
         run: npm run test:e2e:production-smoke:run
 
       - name: Upload Full E2E failure artifacts
-        if: ${{ failure() && inputs.e2e_mode == 'full' }}
+        if: ${{ failure() && needs.plan.outputs.lane == 'broad' && inputs.e2e_mode == 'full' }}
         uses: actions/upload-artifact@v4
         with:
           name: full-e2e-playwright-artifacts-${{ github.run_id }}
@@ -137,7 +213,7 @@ jobs:
           retention-days: 7
 
       - name: Clean up isolated CI Supabase runtime
-        if: always()
+        if: ${{ always() && needs.plan.outputs.lane == 'broad' }}
         shell: bash
         run: |
           npx --no-install supabase stop --project-id lich-truc-app-ci --no-backup || true

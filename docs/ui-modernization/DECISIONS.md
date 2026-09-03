@@ -209,3 +209,37 @@ the normal full CI workflow.
 This decision supersedes DEC-UI-009 only for verification authority and runner
 strategy. Its local preview isolation and infrastructure-restraint principles
 remain in force.
+
+## DEC-UI-020 — Conservative selective CI routing v1
+
+**Status:** ACCEPTED
+
+**Decision:** Selective CI Routing v1 narrows automated validation only when
+the repository can prove that runtime behavior is unchanged.
+
+Documentation-only changes remain excluded from automatic CI.
+
+A pull request changing only existing, previously classified non-runtime Node
+test files may use the `node_test_only` lane.
+
+A pull request changing only the approved repository formatting/line-ending
+contract files may use the `ci_contract_only` lane.
+
+All application source, shared libraries, dependencies, workflow runtime,
+database/schema, newly added tests, deleted tests, renamed tests, multi-surface
+changes, and unknown paths fall back to the broad required CI lane.
+
+Pushes to `main` and reusable workflow invocations always use the broad lane.
+
+Domain-focused source routing is intentionally deferred. Current MedLabs domain
+boundaries still share infrastructure and business helpers; for example Basic
+Medical consumes shared equipment request helpers. A narrow source-domain lane
+must not be introduced until its blast radius is separately proven.
+
+The classifier is fail-closed: ambiguity or classifier failure must never
+select a narrower lane.
+
+**Reason:** Hosted CI evidence shows Supabase lifecycle work dominates normal
+CI runtime. V1 therefore removes that cost only for changes where database and
+application runtime behavior are demonstrably unchanged, while preserving the
+existing broad gate for source and infrastructure changes.
