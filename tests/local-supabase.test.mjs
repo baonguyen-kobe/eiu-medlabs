@@ -2193,6 +2193,8 @@ test("TA preserves historical Skills responsible lecturer but cannot assign a ne
   const catalogItemId = crypto.randomUUID();
   const requestId = crypto.randomUUID();
   let originalRootAdminId = null;
+  let historicalAdminRoleAdded = false;
+  let rootWasReassigned = false;
 
   try {
     await configurePersonnelFixture(
@@ -2353,11 +2355,22 @@ test("TA preserves historical Skills responsible lecturer but cannot assign a ne
     assert.ifError(principalReadError);
     originalRootAdminId = principalRow.root_admin_id;
 
+    const { error: addHistoricalAdminError } = await service
+      .from("user_roles")
+      .insert({
+        user_id: historicalLecturer.id,
+        role: "admin",
+        created_by: admin.user.id,
+      });
+    assert.ifError(addHistoricalAdminError);
+    historicalAdminRoleAdded = true;
+
     const { error: setRootError } = await service
       .from("system_security_principals")
       .update({ root_admin_id: historicalLecturer.id })
       .eq("singleton", true);
     assert.ifError(setRootError);
+    rootWasReassigned = true;
 
     const { error: rootPreserveError } = await ta.supabase.rpc(
       "update_equipment_request_content",
@@ -2386,11 +2399,24 @@ test("TA preserves historical Skills responsible lecturer but cannot assign a ne
       /ROOT_ADMIN_OPERATIONAL_ASSIGNMENT_FORBIDDEN/,
     );
   } finally {
-    if (originalRootAdminId) {
-      await service
+    if (rootWasReassigned && originalRootAdminId) {
+      const { error: restoreRootError } = await service
         .from("system_security_principals")
         .update({ root_admin_id: originalRootAdminId })
         .eq("singleton", true);
+
+      assert.ifError(restoreRootError);
+      rootWasReassigned = false;
+    }
+    if (historicalAdminRoleAdded) {
+      const { error: removeHistoricalAdminError } = await service
+        .from("user_roles")
+        .delete()
+        .eq("user_id", historicalLecturer.id)
+        .eq("role", "admin");
+
+      assert.ifError(removeHistoricalAdminError);
+      historicalAdminRoleAdded = false;
     }
     await service
       .from("equipment_request_items")

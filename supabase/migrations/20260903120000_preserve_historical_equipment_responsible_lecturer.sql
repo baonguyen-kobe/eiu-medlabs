@@ -11,6 +11,8 @@ set search_path = ''
 as $$
 begin
   if tg_op = 'UPDATE'
+    and new.request_domain = 'nursing_skills'
+    and old.request_domain = 'nursing_skills'
     and new.responsible_lecturer_id is not distinct from old.responsible_lecturer_id then
 
     if exists (
