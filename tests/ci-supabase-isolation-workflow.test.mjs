@@ -14,6 +14,30 @@ function readWorkflow(name) {
   );
 }
 
+test("CI uses GitHub-hosted Ubuntu and skips docs-only automatic runs", () => {
+  const workflow = readWorkflow("ci.yml");
+
+  assert.match(workflow, /runs-on: ubuntu-latest/);
+  assert.doesNotMatch(workflow, /self-hosted/);
+  assert.doesNotMatch(workflow, /eiu-medlabs-ci/);
+
+  assert.equal(
+    (workflow.match(/paths-ignore:/g) ?? []).length,
+    2,
+    "pull_request and main push must both skip docs-only changes",
+  );
+  assert.equal(
+    (workflow.match(/- "docs\/\*\*"/g) ?? []).length,
+    2,
+    "docs/** must be ignored for both automatic triggers",
+  );
+  assert.equal(
+    (workflow.match(/- "\*\*\/\*\.md"/g) ?? []).length,
+    2,
+    "**/*.md must be ignored for both automatic triggers",
+  );
+});
+
 test("CI creates an isolated Supabase workdir without mutating local preview config", () => {
   const previewConfigPath = new URL("../supabase/config.toml", import.meta.url);
   const previewConfig = readFileSync(previewConfigPath, "utf8");
@@ -173,12 +197,13 @@ test("PR mode runs only the required browser gates and builds once", () => {
   assert.equal(packageJson.scripts["test:e2e:critical"], undefined);
 });
 
-test("Full E2E is scheduled or manual and reuses the isolated CI workflow", () => {
+test("Full E2E is manual-only and reuses the isolated CI workflow", () => {
   const ciWorkflow = readWorkflow("ci.yml");
   const fullWorkflow = readWorkflow("full-e2e.yml");
 
-  assert.match(fullWorkflow, /^on:\n  workflow_dispatch:\n  schedule:/m);
-  assert.match(fullWorkflow, /cron: "0 18 \* \* \*"/);
+  assert.match(fullWorkflow, /^on:\n  workflow_dispatch:\n/m);
+  assert.doesNotMatch(fullWorkflow, /^  schedule:/m);
+  assert.doesNotMatch(fullWorkflow, /cron:/);
   assert.doesNotMatch(fullWorkflow, /^  pull_request:/m);
   assert.doesNotMatch(fullWorkflow, /^  push:/m);
   assert.match(

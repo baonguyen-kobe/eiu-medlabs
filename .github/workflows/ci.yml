@@ -2,8 +2,14 @@ name: CI
 
 on:
   pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
   push:
     branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
   workflow_call:
     inputs:
       e2e_mode:
@@ -20,11 +26,7 @@ permissions:
 
 jobs:
   verify:
-    runs-on:
-      - self-hosted
-      - linux
-      - x64
-      - eiu-medlabs-ci
+    runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.e2e_mode == 'full' && 90 || 30 }}
 
     steps:

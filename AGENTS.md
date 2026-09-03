@@ -110,11 +110,38 @@ An explicit current user request always takes precedence over automatic continua
 
 ## Verification
 
-Run the smallest relevant check first, then expand according to risk. Check formatting on touched files; the repository-wide Prettier baseline is tracked separately and must not trigger an unrelated bulk rewrite.
+Validation is change-aware, risk-based, and Actions-budget-aware.
+
+Run the smallest sufficient verification for the current diff. Do not rerun an
+already-passing suite when its covered behavior and all relevant shared or
+transitive dependencies remain unchanged and the prior PASS evidence is still
+applicable.
+
+Increase scope when changes affect shared infrastructure, authorization,
+schema/RLS/RPC behavior, dependencies, runtime configuration, common
+components, or other cross-cutting contracts. When blast radius is uncertain,
+inspect first rather than mechanically choosing the largest suite.
+
+For validation reports, distinguish explicitly between:
+
+- `RUN AND PASS` — executed against the current relevant change;
+- `REUSED PRIOR PASS — UNCHANGED IMPACT` — not rerun because prior evidence
+  remains applicable;
+- `NOT RUN — NOT REQUIRED FOR CURRENT IMPACT` — outside the verified blast
+  radius.
+
+Full E2E is a major-integration/release gate, not the default check for every
+commit. Run it only for a release candidate, major integration, broad
+cross-cutting change, unresolved impact uncertainty, or explicit reviewer/user
+request.
+
+For local feedback, check formatting on touched files first. On a Windows
+checkout that still contains CRLF from an older checkout, `--end-of-line auto`
+may be used only for local touched-file style validation; GitHub-hosted CI and
+the repository `.gitattributes` LF contract remain authoritative for committed
+line endings.
 
 ```powershell
 npx.cmd prettier --check <touched-files>
 npm.cmd run check
 ```
-
-Use `npm.cmd run react-doctor:audit` as an advisory audit after meaningful React work. Do not weaken tests, types, lint rules, or security controls to make checks pass.

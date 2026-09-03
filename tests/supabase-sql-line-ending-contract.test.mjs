@@ -71,6 +71,32 @@ function extractFunction(source, name) {
   return source.slice(start, end + "\n$$;".length);
 }
 
+test("Repository text checkout contract is LF across platforms", () => {
+  const relativeFiles = [
+    "README.md",
+    "AGENTS.md",
+    "app/globals.css",
+    "components/workspace-shell.tsx",
+  ];
+  const attributes = execFileSync(
+    "git",
+    ["check-attr", "text", "eol", "--", ...relativeFiles],
+    { cwd: repoRoot, encoding: "utf8" },
+  );
+  const lines = new Set(attributes.trim().split(/\r?\n/));
+
+  for (const relativeFile of relativeFiles) {
+    assert.ok(
+      lines.has(`${relativeFile}: text: auto`),
+      `${relativeFile} must use automatic text detection`,
+    );
+    assert.ok(
+      lines.has(`${relativeFile}: eol: lf`),
+      `${relativeFile} must checkout as LF`,
+    );
+  }
+});
+
 test("Supabase SQL checkout contract is LF on every platform", () => {
   const relativeFiles = Object.values(paths).map((filePath) =>
     path.relative(repoRoot, filePath).replaceAll(path.sep, "/"),

@@ -72,6 +72,7 @@
   },
   "overrides": {
     "@babel/core": "7.29.7",
+    "fast-uri": "3.1.6",
     "js-yaml": "5.2.2",
     "minimatch@3.1.5": {
       "brace-expansion": "1.1.18"

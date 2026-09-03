@@ -182,3 +182,30 @@ workspace. After modernization stabilization and documentation-authority
 normalization, development and release preparation return to the original
 canonical repository so source review, production migration review, and Vercel
 deployment share one canonical history.
+
+## DEC-UI-019 — GitHub-hosted change-aware validation
+
+**Status:** ACCEPTED
+
+**Decision:** Effective 2026-09-03, GitHub-hosted Actions on `ubuntu-latest`
+is the primary automated technical gate for canonical MedLabs integration and
+release preparation.
+
+Local validation remains appropriate for fast focused feedback,
+localhost/rendered review, and reproduction of failures, but a self-hosted
+runner or routine full WSL suite is no longer the default CI path.
+
+Validation is change-aware and risk-based. Reuse prior PASS evidence when the
+covered behavior and relevant shared/transitive dependencies are unchanged.
+Run the smallest sufficient validation for the current diff, and broaden only
+when the blast radius requires it.
+
+Full E2E is manual and reserved for major integration, release-candidate,
+broad cross-cutting, unresolved-impact, or explicitly requested validation.
+
+Automatic documentation-only pull requests and `main` pushes do not consume
+the normal full CI workflow.
+
+This decision supersedes DEC-UI-009 only for verification authority and runner
+strategy. Its local preview isolation and infrastructure-restraint principles
+remain in force.

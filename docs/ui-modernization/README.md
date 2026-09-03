@@ -231,12 +231,26 @@ Implementation, verification evidence, and tracking updates for the same task sh
 
 ## Infrastructure and verification policy
 
-- Local-first verification is authoritative for current UI modernization work.
-- For manual UI verification, use `localhost` port `4000`; if occupied, select the next free port from `4001`, `4002`, `4003`, and onward. Do not change `package.json` merely to enforce a port.
-- Before requesting or creating infrastructure: **DISCOVER → VERIFY → REUSE → CREATE only if needed**.
+- GitHub-hosted Actions on `ubuntu-latest` are the primary automated technical
+  gate when broader automated validation is required.
+- Validation is change-aware and risk-based. Run the smallest sufficient
+  checks for the current diff and reuse prior PASS evidence when the covered
+  behavior and relevant shared/transitive dependencies are unchanged.
+- Full E2E is manual-only and reserved for major integration,
+  release-candidate, broad cross-cutting, unresolved-impact, or explicitly
+  requested validation.
+- Local verification remains appropriate for fast focused checks,
+  localhost/rendered UI review, and failure reproduction.
+- Routine full WSL validation and the historical self-hosted CI runner are not
+  the default verification path.
+- For manual UI verification, use `localhost` port `4000`; if occupied, select
+  the next free port from `4001`, `4002`, `4003`, and onward. Do not change
+  `package.json` merely to enforce a port.
+- Before requesting or creating infrastructure:
+  **DISCOVER → VERIFY → REUSE → CREATE only if needed**.
 - Inspect and reuse existing automated test infrastructure first.
-- Workflow YAML does not require UI modernization to use, change, or trigger GitHub Actions.
-- Do not configure or reuse a self-hosted runner unless separately approved and explicitly required.
+- Automatic documentation-only changes should not consume the normal full CI
+  workflow.
 
 ## Key files
 
