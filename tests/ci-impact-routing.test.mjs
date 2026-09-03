@@ -4,10 +4,55 @@ import {
   classifyChanges,
   parseNameStatusOutput,
   runCli,
+  SAFE_NODE_TEST_ALLOWLIST,
 } from "../scripts/ci-impact.mjs";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+test("SAFE_NODE_TEST_ALLOWLIST contains exactly 65 reviewed safe tests", () => {
+  assert.equal(SAFE_NODE_TEST_ALLOWLIST.size, 65);
+
+  assert.ok(
+    SAFE_NODE_TEST_ALLOWLIST.has("tests/time-picker.test.mjs"),
+    "must contain time-picker",
+  );
+  assert.ok(
+    SAFE_NODE_TEST_ALLOWLIST.has("tests/sidebar-navigation-structure.test.mjs"),
+    "must contain sidebar-navigation-structure",
+  );
+  assert.ok(
+    SAFE_NODE_TEST_ALLOWLIST.has(
+      "tests/basic-medical-confirmation-eligibility.test.mjs",
+    ),
+    "must contain basic-medical-confirmation-eligibility",
+  );
+
+  assert.equal(
+    SAFE_NODE_TEST_ALLOWLIST.has("tests/local-supabase.test.mjs"),
+    false,
+    "must NOT contain local-supabase",
+  );
+  assert.equal(
+    SAFE_NODE_TEST_ALLOWLIST.has("tests/staff-shifts-v2.test.mjs"),
+    false,
+    "must NOT contain staff-shifts-v2",
+  );
+  assert.equal(
+    SAFE_NODE_TEST_ALLOWLIST.has("tests/deploy-production-script.test.mjs"),
+    false,
+    "must NOT contain deploy-production-script",
+  );
+});
+
+test("unknown future Node test fails closed to broad", () => {
+  const result = classifyChanges([
+    { status: "M", path: "tests/future-unclassified-runtime.test.mjs" },
+  ]);
+  assert.equal(result.lane, "broad");
+  assert.deepEqual(result.nodeTests, []);
+  assert.equal(result.reason, "source_or_unclassified_paths");
+});
 
 test("CASE 1: modified safe static Node test -> node_test_only", () => {
   const result = classifyChanges([
