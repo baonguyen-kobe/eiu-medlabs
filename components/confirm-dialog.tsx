@@ -1,14 +1,9 @@
 "use client";
 
-import {
-  type ReactNode,
-  useEffect,
-  useId,
-  useRef,
-  useSyncExternalStore,
-} from "react";
+import { type ReactNode, useId, useRef, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { AlertTriangle } from "@/components/icons";
+import { useOverlayFocus } from "@/components/use-overlay-focus";
 
 function emptySubscribe() {
   return () => {};
@@ -54,64 +49,13 @@ export function ConfirmDialog({
   const descriptionId = useId();
   const cancelRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
-  const onCancelRef = useRef(onCancel);
-  const pendingRef = useRef(pending);
-
-  useEffect(() => {
-    onCancelRef.current = onCancel;
-  }, [onCancel]);
-
-  useEffect(() => {
-    pendingRef.current = pending;
-  }, [pending]);
-
-  useEffect(() => {
-    if (!open) return;
-    const previousActiveElement = document.activeElement as HTMLElement | null;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    cancelRef.current?.focus();
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape" && !pendingRef.current) {
-        onCancelRef.current?.();
-        return;
-      }
-
-      if (event.key !== "Tab") return;
-      const dialog = dialogRef.current;
-      if (!dialog) return;
-      const focusable = Array.from(
-        dialog.querySelectorAll<HTMLElement>(
-          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-        ),
-      ).filter((element) => !element.hasAttribute("hidden"));
-      if (focusable.length === 0) {
-        event.preventDefault();
-        return;
-      }
-
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      const active = document.activeElement;
-      if (event.shiftKey) {
-        if (active === first || !dialog.contains(active)) {
-          event.preventDefault();
-          last.focus();
-        }
-      } else if (active === last || !dialog.contains(active)) {
-        event.preventDefault();
-        first.focus();
-      }
-    }
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = previousOverflow;
-      previousActiveElement?.focus();
-    };
-  }, [open]);
+  useOverlayFocus({
+    open,
+    containerRef: dialogRef,
+    initialFocusRef: cancelRef,
+    pending,
+    onDismiss: onCancel,
+  });
 
   if (!open || !mounted) return null;
 
@@ -126,6 +70,7 @@ export function ConfirmDialog({
       />
       <section
         ref={dialogRef}
+        data-overlay-focus-root="true"
         className={`confirm-dialog${className ? ` ${className}` : ""}`}
         role="dialog"
         aria-modal="true"

@@ -31,7 +31,7 @@ import {
   normalizeEquipmentStatus,
 } from "@/lib/equipment-import-values";
 import { formatImportDate, normalizeImportTime } from "@/lib/import-values";
-import { PaginationControls } from "@/components/pagination-controls";
+import { ImportPreviewViewport } from "@/components/import-preview-viewport";
 import { TABLE_PAGE_SIZE, totalPagesFor } from "@/lib/pagination";
 
 type Row = Record<string, unknown>;
@@ -118,62 +118,55 @@ function EquipmentImportTable({
     safePage * TABLE_PAGE_SIZE,
   );
   return (
-    <div>
-      <div
-        className="preview-table-wrap"
-        role="region"
-        aria-label="Dữ liệu phiếu thiết bị; vuốt ngang để xem đầy đủ"
-        tabIndex={0}
-      >
-        <table className="preview-table">
-          <thead>
-            <tr>
-              <th>Dòng</th>
-              {visibleHeaders.map((header) => (
-                <th key={header}>{equipmentImportHeaderLabels[header]}</th>
-              ))}
-              {showValidation ? <th>Kiểm tra</th> : null}
-            </tr>
-          </thead>
-          <tbody>
-            {pageIndexes.map((index) => {
-              const review = validationByRow?.get(index + 2);
-              const invalid =
-                review?.status === "error" || review?.status === "duplicate";
-              return (
-                <tr className={invalid ? "row-error" : ""} key={index}>
-                  <td>{index + 2}</td>
-                  {visibleHeaders.map((header) => (
-                    <td key={header}>{displayValue(rows[index], header)}</td>
-                  ))}
-                  {showValidation ? (
-                    <td className="preview-status-cell">
-                      {review ? (
-                        <>
-                          <span
-                            className={`preview-status preview-status-${review.status}`}
-                          >
-                            {statusLabel(review.status)}
-                          </span>
-                          <small>{validationMessage(review)}</small>
-                        </>
-                      ) : (
-                        "Chưa có kết quả"
-                      )}
-                    </td>
-                  ) : null}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-      <PaginationControls
-        currentPage={safePage}
-        totalItems={indexes.length}
-        onPageChange={setCurrentPage}
-      />
-    </div>
+    <ImportPreviewViewport
+      currentPage={safePage}
+      label="Dữ liệu phiếu thiết bị; vuốt ngang để xem đầy đủ"
+      totalItems={indexes.length}
+      onPageChange={setCurrentPage}
+    >
+      <table className="preview-table">
+        <thead>
+          <tr>
+            <th>Dòng</th>
+            {visibleHeaders.map((header) => (
+              <th key={header}>{equipmentImportHeaderLabels[header]}</th>
+            ))}
+            {showValidation ? <th>Kiểm tra</th> : null}
+          </tr>
+        </thead>
+        <tbody>
+          {pageIndexes.map((index) => {
+            const review = validationByRow?.get(index + 2);
+            const invalid =
+              review?.status === "error" || review?.status === "duplicate";
+            return (
+              <tr className={invalid ? "row-error" : ""} key={index}>
+                <td>{index + 2}</td>
+                {visibleHeaders.map((header) => (
+                  <td key={header}>{displayValue(rows[index], header)}</td>
+                ))}
+                {showValidation ? (
+                  <td className="preview-status-cell">
+                    {review ? (
+                      <>
+                        <span
+                          className={`preview-status preview-status-${review.status}`}
+                        >
+                          {statusLabel(review.status)}
+                        </span>
+                        <small>{validationMessage(review)}</small>
+                      </>
+                    ) : (
+                      "Chưa có kết quả"
+                    )}
+                  </td>
+                ) : null}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </ImportPreviewViewport>
   );
 }
 

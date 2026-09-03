@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import {
   changePersonnelPasswordByRoot,
   reconcilePersonnelPasswordOperation,
@@ -11,6 +11,7 @@ import {
 } from "@/app/admin/actions";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { getNameInitials } from "@/lib/person-name";
+import { useOverlayFocus } from "@/components/use-overlay-focus";
 import type { AppRole } from "@/lib/viewer";
 import { BASIC_MEDICAL_ROOM_TYPE_ID } from "@/lib/room-types";
 
@@ -93,6 +94,9 @@ export function PersonnelManagementList({
   const [confirmation, setConfirmation] =
     useState<PersonnelConfirmation | null>(null);
   const [pending, startTransition] = useTransition();
+  const drawerRef = useRef<HTMLElement>(null);
+  const drawerCloseRef = useRef<HTMLButtonElement>(null);
+  const drawerTriggerRef = useRef<HTMLElement>(null);
   const dirty = useMemo(
     () =>
       Boolean(
@@ -110,6 +114,7 @@ export function PersonnelManagementList({
   );
 
   function open(item: PersonnelListItem) {
+    drawerTriggerRef.current = document.activeElement as HTMLElement | null;
     setOriginal(clone(item));
     setDraft(clone(item));
     setEmailCapability(Boolean(item.can_manage_email_notifications));
@@ -132,6 +137,15 @@ export function PersonnelManagementList({
     }
     closeDrawer();
   }
+
+  useOverlayFocus({
+    open: Boolean(draft),
+    containerRef: drawerRef,
+    initialFocusRef: drawerCloseRef,
+    returnFocusRef: drawerTriggerRef,
+    pending,
+    onDismiss: close,
+  });
 
   function reconcilePasswordOperation(operationId: string) {
     setResult(null);
@@ -486,7 +500,12 @@ export function PersonnelManagementList({
       {viewerIsRoot && passwordReconciliationItems.length ? (
         <section className="data-panel" aria-label="Đối soát mật khẩu">
           <h2>Thao tác mật khẩu cần đối soát</h2>
-          <div className="responsive-table">
+          <div
+            className="responsive-table"
+            role="region"
+            aria-label="Thao tác mật khẩu cần đối soát"
+            tabIndex={0}
+          >
             <table className="data-table">
               <thead>
                 <tr>
@@ -531,6 +550,48 @@ export function PersonnelManagementList({
           </div>
         </section>
       ) : null}
+      <div className="personnel-mobile-list" aria-label="Danh sách nhân sự">
+        {items.map((item) => (
+          <article className="personnel-mobile-card" key={item.id}>
+            <div className="personnel-mobile-summary">
+              <span className="personnel-code mono">
+                {getNameInitials(item.full_name)}
+              </span>
+              <span className="personnel-name">
+                <strong>{item.full_name}</strong>
+                <small>{item.title ?? item.email}</small>
+              </span>
+              <span
+                className={`status-pill ${item.is_active ? "is-active" : ""}`}
+              >
+                {item.is_active ? "Hoạt động" : "Đã khóa"}
+              </span>
+            </div>
+            <div className="personnel-mobile-actions">
+              <span
+                aria-hidden="true"
+                className="personnel-mobile-action-spacer mono"
+              >
+                {getNameInitials(item.full_name)}
+              </span>
+              <span className="personnel-badges">
+                {item.roles.slice(0, 2).map((role) => (
+                  <span className="role-chip selected" key={role}>
+                    {roleLabels[role]}
+                  </span>
+                ))}
+              </span>
+              <button
+                className="button button-secondary"
+                type="button"
+                onClick={() => open(item)}
+              >
+                {item.can_edit_security ? "Sửa" : "Xem"}
+              </button>
+            </div>
+          </article>
+        ))}
+      </div>
       <div className="personnel-table-wrap">
         <table className="personnel-table">
           <thead>
@@ -632,6 +693,8 @@ export function PersonnelManagementList({
           }
         >
           <section
+            ref={drawerRef}
+            data-overlay-focus-root="true"
             className="personnel-drawer"
             role="dialog"
             aria-modal="true"
@@ -643,6 +706,7 @@ export function PersonnelManagementList({
                 <p>{draft.email}</p>
               </div>
               <button
+                ref={drawerCloseRef}
                 aria-label="Đóng"
                 className="button button-secondary"
                 type="button"

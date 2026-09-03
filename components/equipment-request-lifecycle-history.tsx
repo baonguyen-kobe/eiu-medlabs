@@ -46,32 +46,59 @@ export function EquipmentRequestLifecycleHistory({
   requestId: string;
 }) {
   const [entries, setEntries] = useState<LifecycleAuditEntry[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  const [state, setState] = useState<"loading" | "success" | "error">(
+    "loading",
+  );
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     const supabase = createClient();
     let active = true;
-    void supabase
-      .rpc("list_equipment_request_lifecycle_audit", {
-        target_request_id: requestId,
-      })
-      .then(({ data }) => {
-        if (active) {
-          setEntries((data ?? []) as LifecycleAuditEntry[]);
-          setLoaded(true);
-        }
-      });
+
+    async function loadHistory() {
+      setState("loading");
+      const { data, error } = await supabase.rpc(
+        "list_equipment_request_lifecycle_audit",
+        {
+          target_request_id: requestId,
+        },
+      );
+      if (!active) return;
+      if (error) {
+        setEntries([]);
+        setState("error");
+        return;
+      }
+      setEntries((data ?? []) as LifecycleAuditEntry[]);
+      setState("success");
+    }
+
+    void loadHistory();
     return () => {
       active = false;
     };
-  }, [requestId]);
+  }, [requestId, retryKey]);
 
   return (
     <section className="equipment-lifecycle-history" aria-label="Lịch sử xử lý">
       <h3>Lịch sử xử lý</h3>
-      {!loaded ? <p>Đang tải lịch sử…</p> : null}
-      {loaded && !entries.length ? <p>Chưa có thao tác xử lý.</p> : null}
-      {entries.length ? (
+      {state === "loading" ? <p role="status">Đang tải lịch sử…</p> : null}
+      {state === "error" ? (
+        <div className="equipment-lifecycle-error" role="alert">
+          <p>Không thể tải lịch sử xử lý. Vui lòng thử lại.</p>
+          <button
+            className="button button-secondary"
+            type="button"
+            onClick={() => setRetryKey((current) => current + 1)}
+          >
+            Thử lại
+          </button>
+        </div>
+      ) : null}
+      {state === "success" && !entries.length ? (
+        <p>Chưa có thao tác xử lý.</p>
+      ) : null}
+      {state === "success" && entries.length ? (
         <ol>
           {entries.map((entry, index) => {
             const transition =

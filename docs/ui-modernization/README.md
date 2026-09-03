@@ -4,38 +4,57 @@ This directory is the authoritative, Git-tracked continuity system for the EIU M
 
 The system is agent/model-independent. Any agent that can read the repository can resume by reading:
 
-1. `docs/ui-modernization/README.md`
-2. `docs/ui-modernization/CURRENT.md`
-3. `docs/ui-modernization/TRACKER.md`
-4. `docs/ui-modernization/DECISIONS.md`
+1. `docs/DOCUMENTATION_AUTHORITY.md`
+2. `docs/ui-modernization/README.md`
+3. `docs/ui-modernization/CURRENT.md`
+4. `docs/ui-modernization/TRACKER.md`
+5. `docs/ui-modernization/DECISIONS.md`
 
 Git-tracked project state is authoritative. Continuity must not depend on a ChatGPT account, Codex session, OMP model, GPT-5.6 Sol/Terra, Gemini, terminal lifetime, or chat memory.
 
 ## Source-of-truth hierarchy
 
-Highest to lowest:
+For UI modernization, first apply the authority model in
+`docs/DOCUMENTATION_AUTHORITY.md`.
 
-1. Explicit current user instruction
-2. Repository business/security instructions
-3. `docs/ui-modernization/DECISIONS.md`
-4. `docs/ui-modernization/CURRENT.md`
-5. `docs/ui-modernization/TRACKER.md`
-6. `docs/ui-modernization/MASTER-PLAN.md`
-7. Audit evidence in `docs/ui-modernization/audits/`
+Within the UI-modernization domain, use:
 
-When two sources disagree, follow the higher-authority source. Do not silently rewrite history. Record deliberate changes in `DECISIONS.md` or append them to `WORKLOG.md`.
+1. Explicit current user instruction.
+2. Approved current business/security/product contracts.
+3. Effective current source when determining what the implementation actually
+   does.
+4. `docs/UI_DESIGN_SYSTEM_V2_MASTER.md` for canonical visual/design-system
+   rules.
+5. `docs/ui-modernization/DECISIONS.md` for durable modernization decisions.
+6. `docs/ui-modernization/CURRENT.md` for the active checkpoint.
+7. `docs/ui-modernization/TRACKER.md` for task status and dependencies.
+8. `docs/ui-modernization/MASTER-PLAN.md` for planned sequencing.
+9. Audit evidence in `docs/ui-modernization/audits/` for historical evidence.
+
+`docs/UI_LAYOUT_SPEC.md` and `docs/UI_REVIEW_GUIDE.md` are supplemental
+references only. They cannot override the UI Master, approved current product
+contracts, effective source, or modernization continuity state.
+
+Do not treat an implementation defect as a new design decision merely because
+it exists in source. Conversely, do not claim current implementation behavior
+from documentation alone when the source can be inspected.
+
+Record deliberate modernization decision changes in `DECISIONS.md`.
+Use `WORKLOG.md` for historical execution evidence rather than as an authority
+over current state.
 
 ## Session startup protocol
 
 For any new Codex, Gemini, OMP, Orca, IDE-agent, or other coding-agent session working on UI modernization, read in this order:
 
-1. Repository `AGENTS.md` and applicable agent instructions
+1. Repository `AGENTS.md` and `docs/DOCUMENTATION_AUTHORITY.md`
 2. `docs/ui-modernization/README.md`
 3. `docs/ui-modernization/CURRENT.md`
 4. `docs/ui-modernization/TRACKER.md`
 5. `docs/ui-modernization/DECISIONS.md`
-6. `MASTER-PLAN.md` only as needed
-7. Relevant audit evidence only as needed
+6. `docs/UI_DESIGN_SYSTEM_V2_MASTER.md` for visual specifications
+7. `MASTER-PLAN.md` only as needed
+8. Relevant audit evidence only as needed
 
 Then run:
 
@@ -45,12 +64,26 @@ git branch --show-current
 git rev-parse HEAD
 ```
 
+If this checkout is `main` and UI modernization is active:
+
+1. `git fetch origin`
+2. Confirm `origin/ui-modernization` exists.
+3. `git switch ui-modernization`
+4. Re-read `CURRENT.md`, `TRACKER.md`, and `DECISIONS.md` from that branch.
+5. Only then select or continue source work.
+
+Do not implement UI modernization directly on `main`; it is the durable bootstrap and current-continuity mirror.
+
 Rules:
 
 - Do not redo tasks whose tracker status is `DONE`.
 - If `CURRENT.md` identifies an active task, inspect existing source and `git diff`, then continue that task.
 - If there is no active task, select the first eligible `READY` task by dependency order, phase order, then priority unless the user explicitly requests another task.
 - Do not put unrelated tasks `IN_PROGRESS` together.
+
+## Source-first UI request interpretation
+
+Before translating a new UI correction into instructions or code: inspect the current component, relevant CSS/selectors, actual responsive breakpoint, and shared consumers/blast radius; then consult the UI Master and compare the request or screenshot to the real implementation. Do not infer scope, selector, breakpoint, ownership, or shared impact from a screenshot alone. Use GitNexus for complex shared components when useful; direct inspection is sufficient for local changes. **DISCOVER → VERIFY → REUSE → MODIFY** remains governing.
 
 ## Explicit user-request rule
 
@@ -116,6 +149,23 @@ N/A
 
 If implementation exists but required verification is incomplete, use `VERIFY`, not `DONE`. Never turn an unavailable check into `PASS`. Keep the known local test-environment limitations distinct from code regressions.
 
+## User visual acceptance gate
+
+For user-visible visual changes:
+
+```text
+implementation
+→ technical/rendered verification
+→ localhost preview
+→ user visual review
+→ final approved polish
+→ final quick regression
+→ commit/push
+→ DONE
+```
+
+During active user visual review, retain `VERIFY`, keep localhost available when practical, and do not commit/push iterative visual revisions unless the user explicitly approves it or interruption safety requires a recorded checkpoint. After explicit approval, run the smallest relevant regression, update tracking, then move `VERIFY` to `DONE`. This gate does not apply mechanically to documentation-only or non-visual work.
+
 ## Interruption recovery
 
 ### Case A — Uncommitted source changes exist
@@ -168,10 +218,25 @@ Implementation, verification evidence, and tracking updates for the same task sh
 
 ## Branch strategy
 
-- Durable tracking foundation: writable fork `main`.
-- UI implementation: long-lived `ui-modernization` branch.
-- Do not merge or open a pull request automatically unless explicitly authorized.
-- Explicit user direction may change this strategy.
+- Canonical repository: `baonguyen-kobe/eiu-medlabs`.
+- Canonical delivery remote and push target: `origin`.
+- `origin/main` is the canonical release/deployment branch.
+- UI implementation and integration continue on the long-lived
+  `ui-modernization` branch.
+- `baonguyen1301/eiu-medlabs@e42b2ed6cbd89bb080a2c74d62f659560207b792`
+  is the frozen historical modernization source only.
+- Do not perform new MedLabs feature delivery in the frozen source repository.
+- Do not merge `ui-modernization` to `main` or deploy production automatically.
+- Explicit current user direction may change this strategy.
+
+## Infrastructure and verification policy
+
+- Local-first verification is authoritative for current UI modernization work.
+- For manual UI verification, use `localhost` port `4000`; if occupied, select the next free port from `4001`, `4002`, `4003`, and onward. Do not change `package.json` merely to enforce a port.
+- Before requesting or creating infrastructure: **DISCOVER → VERIFY → REUSE → CREATE only if needed**.
+- Inspect and reuse existing automated test infrastructure first.
+- Workflow YAML does not require UI modernization to use, change, or trigger GitHub Actions.
+- Do not configure or reuse a self-hosted runner unless separately approved and explicitly required.
 
 ## Key files
 

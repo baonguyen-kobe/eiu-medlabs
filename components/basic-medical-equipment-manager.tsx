@@ -13,12 +13,22 @@ import {
 } from "@/app/basic-medical/equipment/actions";
 import { SearchableCombobox } from "@/components/searchable-combobox";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { TableScrollViewport } from "@/components/table-scroll-viewport";
 import type {
   BasicMedicalConditionLogItem,
   BasicMedicalEquipmentCatalogItem,
   BasicMedicalRoomInventoryItem,
 } from "@/lib/basic-medical-equipment";
 
+const catalogFieldLabels: Record<string, string> = {
+  item_name: "Tên thiết bị và vật tư",
+  commercial_name: "Tên thương mại",
+  item_type: "Loại",
+  country_of_origin: "Nước sản xuất",
+  manufacturer: "Hãng",
+  model: "Model",
+  unit: "Đơn vị tính",
+};
 type Tab = "inventory" | "rooms" | "damaged" | "logs";
 type Room = {
   id: string;
@@ -224,7 +234,10 @@ function InventoryTab({
           onCancel={() => setBulkAction(null)}
           onConfirm={applyBulkAction}
         />
-        <div className="responsive-table equipment-catalog-table-wrap">
+        <TableScrollViewport
+          className="equipment-catalog-table-wrap"
+          label="Danh sách thiết bị Y cơ sở"
+        >
           <table className="data-table basic-medical-catalog-table">
             <thead>
               <tr>
@@ -297,7 +310,7 @@ function InventoryTab({
                       <td key={key}>
                         {editing ? (
                           <input
-                            aria-label={`${key} của ${item.item_name}`}
+                            aria-label={`${catalogFieldLabels[key]} của ${item.item_name}`}
                             value={draft[key] ?? ""}
                             onChange={(event) =>
                               setDrafts((current) => ({
@@ -326,7 +339,7 @@ function InventoryTab({
               })}
             </tbody>
           </table>
-        </div>
+        </TableScrollViewport>
         {!catalog.length ? (
           <p className="panel-empty">
             Không có thiết bị phù hợp với bộ lọc hiện tại.
@@ -422,8 +435,8 @@ function RoomInventoryTab({
             pending={isPending}
           />
         ) : null}
-        <div className="responsive-table">
-          <table className="data-table">
+        <TableScrollViewport label="Thiết bị theo phòng">
+          <table className="data-table basic-medical-room-inventory-table">
             <thead>
               <tr>
                 <th>Phòng</th>
@@ -451,6 +464,7 @@ function RoomInventoryTab({
                   {canManage ? (
                     <td>
                       <button
+                        aria-label={`Sửa số lượng ${item.catalog?.item_name ?? "thiết bị"} tại ${roomLabel(item.room)}`}
                         type="button"
                         className="text-action"
                         onClick={() => setStockAdjustment(item)}
@@ -463,7 +477,7 @@ function RoomInventoryTab({
               ))}
             </tbody>
           </table>
-        </div>
+        </TableScrollViewport>
         {!inventories.length ? (
           <p className="panel-empty">
             Chưa có thiết bị được phân bổ cho phòng phù hợp.
@@ -642,8 +656,8 @@ function DamagedTab({
           {inventories.length} thiết bị hư
         </span>
       </div>
-      <div className="responsive-table">
-        <table className="data-table">
+      <TableScrollViewport label="Thiết bị hư">
+        <table className="data-table basic-medical-damaged-table">
           <thead>
             <tr>
               <th>Tên thiết bị</th>
@@ -681,6 +695,7 @@ function DamagedTab({
                 {canManage ? (
                   <td>
                     <button
+                      aria-label={`Sửa tình trạng ${item.catalog?.item_name ?? "thiết bị"} tại ${roomLabel(item.room)}`}
                       className="button button-warning"
                       type="button"
                       disabled={isPending}
@@ -694,7 +709,7 @@ function DamagedTab({
             ))}
           </tbody>
         </table>
-      </div>
+      </TableScrollViewport>
       {!inventories.length ? (
         <p className="panel-empty">Không có thiết bị đang được báo Hư.</p>
       ) : null}
@@ -813,8 +828,8 @@ function LogsTab({ logs }: { logs: BasicMedicalConditionLogItem[] }) {
       <div className="basic-medical-list-filters">
         <span className="equipment-catalog-count">{logs.length} thay đổi</span>
       </div>
-      <div className="responsive-table">
-        <table className="data-table">
+      <TableScrollViewport label="Lịch sử thay đổi thiết bị">
+        <table className="data-table basic-medical-condition-log-table">
           <thead>
             <tr>
               <th>Thời gian</th>
@@ -848,7 +863,7 @@ function LogsTab({ logs }: { logs: BasicMedicalConditionLogItem[] }) {
             ))}
           </tbody>
         </table>
-      </div>
+      </TableScrollViewport>
       {!logs.length ? (
         <p className="panel-empty">Chưa có lịch sử thay đổi phù hợp.</p>
       ) : null}

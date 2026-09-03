@@ -1,4 +1,6 @@
 import { Dashboard } from "@/components/dashboard";
+import { Plus } from "@/components/icons";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
   addDays,
@@ -65,6 +67,7 @@ export default async function ClassSchedulesPage({
     { data: scopedLecturers },
     { data: rooms },
     { data: personnelAuthority },
+    { data: assignedRoomTypeRows },
   ] = await Promise.all([
     supabase
       .from("profiles")
@@ -115,10 +118,32 @@ export default async function ClassSchedulesPage({
       .eq("is_active", true)
       .order("room_code"),
     supabase.rpc("get_personnel_authority_context"),
+    supabase
+      .from("profile_room_types")
+      .select("room_types!inner(id,code,name,is_active)")
+      .eq("profile_id", claimsData.claims.sub)
+      .eq("room_types.is_active", true),
   ]);
 
   const roles = (roleRows ?? []).map((row) => row.role as Role);
   const roomTypeCodes = (roomTypes ?? []).map(({ code }) => code);
+  const actionRoomTypes = roles.includes("admin")
+    ? (roomTypes ?? [])
+    : (assignedRoomTypeRows ?? []).flatMap((row) => {
+        const roomType = row.room_types as unknown as {
+          id: string;
+          code: string;
+          name: string;
+        } | null;
+        return roomType ? [roomType] : [];
+      });
+  const canImport = roles.some((role) =>
+    ["admin", "staff", "teaching_assistant"].includes(role),
+  );
+  const canCreate =
+    canImport ||
+    (roles.includes("lecturer") &&
+      actionRoomTypes.some(({ id }) => id === NURSING_SKILLS_ROOM_TYPE_ID));
   if (!canUseSkillsWorkspace(roles, roomTypeCodes)) {
     redirect(defaultWorkspacePath(roles, roomTypeCodes));
   }
@@ -255,6 +280,19 @@ export default async function ClassSchedulesPage({
     };
   });
 
+  const skillsActions = canCreate ? (
+    <>
+      {canImport ? (
+        <Link className="button button-secondary" href="/schedule-entry/import">
+          Import lịch Skills lab
+        </Link>
+      ) : null}
+      <Link className="button button-primary" href="/schedule-entry/new">
+        <Plus size={17} /> Tạo lịch
+      </Link>
+    </>
+  ) : undefined;
+
   return (
     <Dashboard
       fullName={
@@ -292,6 +330,7 @@ export default async function ClassSchedulesPage({
         label: `${room.room_code} · ${room.building_code}`,
         roomTypeId: room.room_type_id,
       }))}
+      skillsActions={skillsActions}
     />
   );
 }

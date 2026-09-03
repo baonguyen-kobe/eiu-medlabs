@@ -83,7 +83,7 @@ test("staff shifts week roster uses the shared period calendar structure", () =>
   );
   assert.match(
     shiftEventSource,
-    /<time>[\s\S]*<\/time>[\s\S]*<strong>\{shift\.staffName\}<\/strong>[\s\S]*<small>\{slot === "MORNING" \? "Ca sáng" : "Ca chiều"\}<\/small>/,
+    /<time>[\s\S]*<\/time>[\s\S]*<strong>\{shift\.staffName\}<\/strong>[\s\S]*presentation === "list"[\s\S]*slot === "MORNING"[\s\S]*\? "Ca sáng"[\s\S]*: "Ca chiều"/,
   );
   assert.match(shiftEventSource, /staff-shift-event-actions/);
   assert.match(
@@ -177,13 +177,40 @@ test("staff shift quick-add actions stay subtle and keyboard reachable", () => {
   );
   assert.match(styles, /\.staff-shift-empty-action\s*\{[\s\S]*opacity:\s*0/);
   assert.match(styles, /\.period-cell:focus-within \.staff-shift-empty-action/);
+  assert.match(
+    styles,
+    /\.staff-shift-mobile-list \.staff-shift-empty-action\s*\{[\s\S]*min-height:\s*44px[\s\S]*opacity:\s*0/,
+  );
+  assert.match(
+    styles,
+    /\.staff-shift-mobile-list \.staff-shift-empty-action:focus-visible/,
+  );
   assert.doesNotMatch(
     styles,
     /\.staff-shift-empty-action\s*\{[\s\S]*border:\s*1px dashed/,
   );
+});
+
+test("staff shift mobile roster renders every server-selected day and keeps toolbar navigation", () => {
+  const mobileRosterSource = source.slice(
+    source.indexOf('className="staff-shift-mobile-list structured-list"'),
+    source.indexOf('<div className="calendar-card">'),
+  );
+
+  assert.match(mobileRosterSource, /\{days\.map\(\(date\) => \(/);
+  assert.match(
+    mobileRosterSource,
+    /staffShiftPeriods\.map\(\(\[slot, label\]\)/,
+  );
+  assert.match(mobileRosterSource, /Lịch trực · \{label\}/);
+  assert.match(mobileRosterSource, /renderShiftSlot\(date, slot, "list"\)/);
   assert.match(
     styles,
-    /@media \(max-width: 640px\), \(hover: none\), \(pointer: coarse\)[\s\S]*\.staff-shift-empty-action\s*\{[\s\S]*opacity:\s*1/,
+    /\.staff-shift-mobile-list \+ \.calendar-card > \.period-calendar\s*\{\s*display:\s*none/,
+  );
+  assert.doesNotMatch(
+    styles,
+    /\.staff-shift-mobile-list \+ \.calendar-card\s*\{\s*display:\s*none/,
   );
 });
 

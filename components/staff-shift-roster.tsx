@@ -17,6 +17,7 @@ import {
   updateStaffShiftTimeAction,
 } from "@/app/dashboard/actions";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { useOverlayFocus } from "@/components/use-overlay-focus";
 import {
   Check,
   ChevronDown,
@@ -143,11 +144,13 @@ function generateWeekRows(
 
 /** Per-row Assignee Multi-Select Dropdown for Admin */
 function RowAssigneePicker({
+  ariaLabel,
   assignees,
   selectedIds,
   onChange,
   onApplyToAll,
 }: {
+  ariaLabel: string;
   assignees: Assignee[];
   selectedIds: string[];
   onChange: (ids: string[]) => void;
@@ -202,6 +205,7 @@ function RowAssigneePicker({
         }`}
         aria-haspopup="listbox"
         aria-expanded={open}
+        aria-label={ariaLabel}
       >
         <span className="truncate">{summaryText}</span>
         <ChevronDown size={13} className="text-neutral-400 flex-shrink-0" />
@@ -215,6 +219,7 @@ function RowAssigneePicker({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="input text-xs px-2 py-1 w-full"
+            aria-label={`Tìm nhân sự cho ${ariaLabel}`}
             autoFocus
           />
 
@@ -223,6 +228,7 @@ function RowAssigneePicker({
               type="button"
               onClick={() => onChange(assignees.map((a) => a.id))}
               className="text-primary-700 hover:underline font-medium"
+              aria-label={`Chọn tất cả người trực cho ${ariaLabel}`}
             >
               Chọn tất cả
             </button>
@@ -230,6 +236,7 @@ function RowAssigneePicker({
               type="button"
               onClick={() => onChange([])}
               className="text-neutral-500 hover:underline"
+              aria-label={`Bỏ chọn người trực cho ${ariaLabel}`}
             >
               Bỏ chọn
             </button>
@@ -241,7 +248,7 @@ function RowAssigneePicker({
                   setOpen(false);
                 }}
                 className="text-sky-700 hover:underline font-medium"
-                title="Áp dụng danh sách người trực này cho tất cả các dòng"
+                aria-label={`Áp dụng người trực của ${ariaLabel} cho tất cả các dòng`}
               >
                 Áp dụng cho tất cả
               </button>
@@ -267,6 +274,7 @@ function RowAssigneePicker({
                       }
                     }}
                     className="w-3.5 h-3.5 rounded border-neutral-300 text-primary-600 focus:ring-primary-500"
+                    aria-label={`${person.fullName} — ${ariaLabel}`}
                   />
                   <span className="truncate">{person.fullName}</span>
                 </label>
@@ -286,9 +294,11 @@ function RowAssigneePicker({
 
 function RegistrationTimeControls({
   row,
+  rowLabel,
   onChange,
 }: {
   row: RegistrationTimes & { slotOption: SlotOption };
+  rowLabel: string;
   onChange: (field: keyof RegistrationTimes, value: string) => void;
 }) {
   const renderLine = (
@@ -303,7 +313,7 @@ function RegistrationTimeControls({
         value={row[startField]}
         onChange={(value) => onChange(startField, value)}
         allowedValues={allowedValues}
-        ariaLabel={`Giờ bắt đầu ca ${label?.toLowerCase() ?? "trực"}`}
+        ariaLabel={`Giờ bắt đầu ca ${label?.toLowerCase() ?? "trực"} cho ${rowLabel}`}
         className="staff-shift-time-picker"
       />
       <span aria-hidden="true">–</span>
@@ -311,7 +321,7 @@ function RegistrationTimeControls({
         value={row[endField]}
         onChange={(value) => onChange(endField, value)}
         allowedValues={allowedValues}
-        ariaLabel={`Giờ kết thúc ca ${label?.toLowerCase() ?? "trực"}`}
+        ariaLabel={`Giờ kết thúc ca ${label?.toLowerCase() ?? "trực"} cho ${rowLabel}`}
         className="staff-shift-time-picker"
       />
     </div>
@@ -429,18 +439,25 @@ export function StaffShiftRoster({
     shift: Shift;
     historicalReason: string;
   } | null>(null);
+  const quickDialogRef = useRef<HTMLDivElement>(null);
+  const quickCloseRef = useRef<HTMLButtonElement>(null);
+  const editDialogRef = useRef<HTMLDivElement>(null);
+  const editCloseRef = useRef<HTMLButtonElement>(null);
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        if (quickRegisterModal) setQuickRegisterModal(null);
-        if (editShiftModal) setEditShiftModal(null);
-        if (cancelShiftDialog) setCancelShiftDialog(null);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [quickRegisterModal, editShiftModal, cancelShiftDialog]);
+  useOverlayFocus({
+    open: Boolean(quickRegisterModal?.open),
+    containerRef: quickDialogRef,
+    initialFocusRef: quickCloseRef,
+    pending,
+    onDismiss: () => setQuickRegisterModal(null),
+  });
+  useOverlayFocus({
+    open: Boolean(editShiftModal?.open),
+    containerRef: editDialogRef,
+    initialFocusRef: editCloseRef,
+    pending,
+    onDismiss: () => setEditShiftModal(null),
+  });
 
   // Tab 2: Registration State
   const [regMode, setRegMode] = useState<"week" | "freeform">("week");
@@ -852,7 +869,11 @@ export function StaffShiftRoster({
     [days],
   );
 
-  const renderShiftSlot = (date: string, slot: ShiftSlot) => {
+  const renderShiftSlot = (
+    date: string,
+    slot: ShiftSlot,
+    presentation: "calendar" | "list" = "calendar",
+  ) => {
     const activeShifts = shiftsByDateSlot.get(`${date}:${slot}`) ?? [];
     const isPast = date < todayStr;
     const isUserInSlot = activeShifts.some(
@@ -873,7 +894,13 @@ export function StaffShiftRoster({
                   {shift.start_time.slice(0, 5)}–{shift.end_time.slice(0, 5)}
                 </time>
                 <strong>{shift.staffName}</strong>
-                <small>{slot === "MORNING" ? "Ca sáng" : "Ca chiều"}</small>
+                <small>
+                  {presentation === "list"
+                    ? shift.status
+                    : slot === "MORNING"
+                      ? "Ca sáng"
+                      : "Ca chiều"}
+                </small>
               </div>
               {(isAdmin || isMe) && (
                 <div className="staff-shift-event-actions">
@@ -915,6 +942,8 @@ export function StaffShiftRoster({
           <button
             className="empty-shift-action staff-shift-empty-action"
             type="button"
+            aria-label={`Tạo ca trực ${slot === "MORNING" ? "buổi sáng" : "buổi chiều"} ngày ${formatBusinessDate(date)}`}
+            title="Tạo ca trực"
             onClick={() =>
               setQuickRegisterModal({
                 open: true,
@@ -928,7 +957,7 @@ export function StaffShiftRoster({
               })
             }
           >
-            <Plus size={13} /> {isAdmin ? "Thêm" : "Đăng ký"}
+            <Plus size={13} aria-hidden="true" />
           </button>
         )}
       </div>
@@ -995,7 +1024,34 @@ export function StaffShiftRoster({
 
       {/* TAB 1: LỊCH TRỰC */}
       {tab === "roster" && (
-        <div className="space-y-4">
+        <div className="space-y-4 staff-shift-roster-content">
+          <div
+            className="staff-shift-mobile-list structured-list"
+            aria-label="Danh sách lịch trực"
+          >
+            {days.map((date) => (
+              <article
+                className={`structured-day structured-day-list staff-shift-mobile-day ${date === todayStr ? "is-today" : ""} ${getDayOfWeekLabel(date) === weekdayFullNames[0] ? "is-sunday" : ""}`}
+                key={date}
+              >
+                <header className="structured-day-heading">
+                  <span>{getDayOfWeekLabel(date)}</span>
+                  <strong>{date.slice(-2)}</strong>
+                </header>
+                <div className="day-slots">
+                  {staffShiftPeriods.map(([slot, label]) => (
+                    <div
+                      className="schedule-slot slot-shift staff-shift-mobile-slot"
+                      key={`${date}-${slot}`}
+                    >
+                      <span className="slot-label">Lịch trực · {label}</span>
+                      {renderShiftSlot(date, slot, "list")}
+                    </div>
+                  ))}
+                </div>
+              </article>
+            ))}
+          </div>
           <div className="calendar-card">
             <div className="calendar-toolbar">
               <div className="calendar-title">
@@ -1291,6 +1347,7 @@ export function StaffShiftRoster({
                               {/* Column 2: Người trực */}
                               {isAdmin ? (
                                 <RowAssigneePicker
+                                  ariaLabel={`Chọn người trực cho ${row.dayLabel}`}
                                   assignees={assignees}
                                   selectedIds={row.selectedAssigneeIds}
                                   onChange={(ids) => {
@@ -1325,6 +1382,7 @@ export function StaffShiftRoster({
                                   setWeekRows(next);
                                 }}
                                 className="input text-xs py-1 px-2 font-medium"
+                                aria-label={`Chọn buổi trực cho ${row.dayLabel}`}
                               >
                                 <option value="MORNING">
                                   Sáng (07:30 – 11:30)
@@ -1339,6 +1397,7 @@ export function StaffShiftRoster({
 
                               <RegistrationTimeControls
                                 row={row}
+                                rowLabel={row.dayLabel}
                                 onChange={(field, value) => {
                                   const next = [...weekRows];
                                   next[idx][field] = value;
@@ -1361,6 +1420,7 @@ export function StaffShiftRoster({
                                   )
                                 }
                                 disabled={pending}
+                                aria-label={`Đăng ký ca trực ${row.dayLabel}`}
                                 className="button button-secondary text-xs px-2.5 py-1 flex items-center gap-1 font-semibold text-primary-700 hover:bg-primary-50"
                               >
                                 <Plus size={13} /> Đăng ký ca
@@ -1418,6 +1478,7 @@ export function StaffShiftRoster({
                           <div className="staff-shift-registration-date flex items-center gap-2">
                             <input
                               type="date"
+                              aria-label={`Chọn ngày trực dòng ${idx + 1}`}
                               value={row.date}
                               onChange={(e) => {
                                 const next = [...freeformRows];
@@ -1437,6 +1498,7 @@ export function StaffShiftRoster({
                             {/* Column 2: Người trực */}
                             {isAdmin ? (
                               <RowAssigneePicker
+                                ariaLabel={`Chọn người trực ngày ${formatBusinessDate(row.date)}`}
                                 assignees={assignees}
                                 selectedIds={row.selectedAssigneeIds}
                                 onChange={(ids) => {
@@ -1471,6 +1533,7 @@ export function StaffShiftRoster({
                                 setFreeformRows(next);
                               }}
                               className="input text-xs py-1 px-2 font-medium"
+                              aria-label={`Chọn buổi trực ngày ${formatBusinessDate(row.date)}`}
                             >
                               <option value="MORNING">
                                 Sáng (07:30 – 11:30)
@@ -1485,6 +1548,7 @@ export function StaffShiftRoster({
 
                             <RegistrationTimeControls
                               row={row}
+                              rowLabel={formatBusinessDate(row.date)}
                               onChange={(field, value) => {
                                 const next = [...freeformRows];
                                 next[idx][field] = value;
@@ -1508,6 +1572,7 @@ export function StaffShiftRoster({
                                   },
                                 )
                               }
+                              aria-label={`Đăng ký ca trực ngày ${formatBusinessDate(row.date)}`}
                               disabled={pending}
                               className="button button-secondary text-xs px-2.5 py-1 flex items-center gap-1 font-semibold text-primary-700 hover:bg-primary-50"
                             >
@@ -1517,14 +1582,13 @@ export function StaffShiftRoster({
                             {/* Column 6: Xóa dòng tự chọn */}
                             {freeformRows.length > 1 && (
                               <button
-                                type="button"
+                                aria-label={`Xóa dòng trực ngày ${formatBusinessDate(row.date)}`}
                                 onClick={() =>
                                   setFreeformRows((prev) =>
                                     prev.filter((r) => r.id !== row.id),
                                   )
                                 }
                                 className="button button-danger staff-shift-delete-button text-xs px-2.5 py-1 flex items-center gap-1"
-                                aria-label="Xóa dòng ngày trực này"
                               >
                                 <Trash2 size={14} /> Xóa
                               </button>
@@ -1553,6 +1617,7 @@ export function StaffShiftRoster({
                 </div>
                 {canManageShiftHistory ? (
                   <textarea
+                    aria-label="Lý do điều chỉnh lịch sử"
                     rows={2}
                     placeholder="Nhập lý do điều chỉnh lịch sử (bắt buộc)..."
                     value={regHistoricalReason}
@@ -1602,6 +1667,8 @@ export function StaffShiftRoster({
       {/* DIALOG 1: Quick Register Modal (Accessible canonical dialog) */}
       {quickRegisterModal?.open && (
         <div
+          ref={quickDialogRef}
+          data-overlay-focus-root="true"
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-neutral-950/40 backdrop-blur-xs"
           role="dialog"
           aria-modal="true"
@@ -1624,6 +1691,7 @@ export function StaffShiftRoster({
                 </p>
               </div>
               <button
+                ref={quickCloseRef}
                 type="button"
                 onClick={() => setQuickRegisterModal(null)}
                 className="text-neutral-400 hover:text-neutral-700 p-1"
@@ -1797,6 +1865,8 @@ export function StaffShiftRoster({
       {/* DIALOG 2: Edit Shift Time Modal (Accessible canonical dialog for Admin or Self) */}
       {editShiftModal?.open && (
         <div
+          ref={editDialogRef}
+          data-overlay-focus-root="true"
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-neutral-950/40 backdrop-blur-xs"
           role="dialog"
           aria-modal="true"
@@ -1821,6 +1891,7 @@ export function StaffShiftRoster({
                 </p>
               </div>
               <button
+                ref={editCloseRef}
                 type="button"
                 onClick={() => setEditShiftModal(null)}
                 className="text-neutral-400 hover:text-neutral-700 p-1"
@@ -1961,7 +2032,7 @@ export function StaffShiftRoster({
                     prev ? { ...prev, historicalReason: e.target.value } : null,
                   )
                 }
-                className="input text-xs w-full"
+                className="input staff-shift-cancel-reason text-xs w-full"
                 required
               />
             </div>
@@ -1979,7 +2050,7 @@ export function StaffShiftRoster({
                     prev ? { ...prev, historicalReason: e.target.value } : null,
                   )
                 }
-                className="input text-xs w-full"
+                className="input staff-shift-cancel-reason text-xs w-full"
               />
             </div>
           )}

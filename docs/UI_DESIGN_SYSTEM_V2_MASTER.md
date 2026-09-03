@@ -7,7 +7,7 @@ Canonical path:
 docs/UI_DESIGN_SYSTEM_V2_MASTER.md
 
 Last updated:
-2026-08-16
+2026-08-25
 
 ---
 
@@ -106,6 +106,20 @@ Fallback:
 ```css
 "Be Vietnam Pro", "Segoe UI", system-ui, sans-serif
 ```
+
+### Global typography rule — Be Vietnam Pro only
+
+EIU MedLabs uses Be Vietnam Pro for all user-visible typography.
+No intentional secondary monospace, serif, or alternate UI font is allowed.
+
+This rule applies application-wide:
+
+- Body, headings, page titles, descriptions
+- Table headers, table cells, metadata, badges, status indicators
+- Request codes/IDs, timestamps, dates, room codes, numbers
+- Form controls (buttons, inputs, selects, textareas, placeholders)
+- Modal content, drawer content, calendar UI, print-oriented UI
+- Any element using the `.mono` helper class (which provides tabular numeral alignment and overflow wrapping without changing font family)
 
 ## Brand direction
 
@@ -1258,6 +1272,15 @@ Export PDF = Secondary
 Delete     = Danger
 ```
 
+## Mobile request and item presentation
+
+At widths through 920px, equipment-request summaries use Strategy D: compact
+summary followed by the existing expandable detail. Desktop retains the dense
+table. The item modal uses Strategy C cards on mobile while retaining its full
+desktop table. These are presentation-only adaptations: filters, expanded
+state, authorization, handlers, lifecycle history, and modal focus behavior
+remain shared.
+
 ## Basic Medical equipment session picker
 
 The Basic Medical equipment workspace reuses the Skills equipment registration
@@ -1422,20 +1445,62 @@ Principles:
 
 ---
 
-# 34. LOGIN OVERRIDE
+# 34. AUTHENTICATION / LOGIN FAMILY OVERRIDE — APPROVED
 
-Keep gần production hiện tại.
+Applies to:
 
-Inherit shared:
+```text
+/login
+/forgot-password
+/reset-password
+/change-password
+```
 
-- font
-- input
-- button
-- focus
-- error
-- accessibility
+Classification:
 
-Không redesign login thành unrelated visual family.
+```text
+Authentication Family Master
+with approved page overrides below
+```
+
+## Shared family contract
+
+- Use the approved campus image, corner logo, and form-panel composition.
+- Reuse `AuthPageShell` where implementation reuse is appropriate.
+- Preserve Be Vietnam Pro and the EIU blue/gold/cream identity.
+- Recovery, reset, and forced-change pages belong visually to the `/login` family.
+- Inherit the Global Control, Focus, Button/Status, Responsive, and Accessibility Masters.
+- Preserve auth, business, Supabase, email, recovery, and redirect semantics; this family defines visual and accessibility presentation only.
+
+## Forgot password — approved page override
+
+- The final email field to action-area spacing is `36px`.
+- `Gửi hướng dẫn` and `Quay lại đăng nhập` remain on the same row.
+- The pair has equal-height, aligned geometry with primary/secondary hierarchy preserved.
+- At the approved narrow viewport, neither action may wrap, clip, or create page horizontal overflow.
+- Feedback inside the action area keeps a sensible internal gap without adding a second field-to-action margin.
+
+## Reset password — approved page override
+
+- The final password field to the full-width primary action rhythm is `18px`.
+- Preserve approved full-width field and primary-action geometry.
+
+## Change password — approved page override
+
+- The final password field to the full-width primary action rhythm is `18px`.
+- Preserve approved helper-copy hierarchy, full-width field geometry, and primary action.
+
+## Login mobile/tablet presentation override
+
+Use the existing login presentation breakpoint:
+
+```text
+max-width: 900px
+```
+
+At this presentation, the `/login` composite input wrapper background is `Surface` / white. Desktop preserves the approved existing wrapper background; do not force the mobile white background onto desktop.
+
+The family/page spacing and mobile-wrapper values above are approved Authentication Family / Page Overrides where they intentionally differ from Global spacing defaults.
 
 ---
 
@@ -1859,3 +1924,31 @@ If current local implementation conflicts with this MASTER, **MASTER wins**.
 
 Governance, classification, inheritance, and correction placement are
 canonical in Section 0; do not duplicate them in a page or component section.
+
+## User Review Correction Batch 02A
+
+- The shared authenticated `PageHeader` remains sticky. At narrow widths its
+  grid keeps menu left, title/description in the central column, and the
+  notification bell right; page actions may occupy a subsequent row.
+- Personnel Strategy E retains its existing summary/detail model. On mobile,
+  role and status use paired metadata columns, while drawer cancel/save actions
+  have equal-row geometry.
+- Editable Classes rows retain the shared table geometry and local scrolling;
+  a compact paired time editor is sized for `HH:mm` values, while course code
+  receives the additional column width.
+- Staff Shifts use the existing Skills Lab structured-list language at widths
+  through 920px. Desktop retains the approved accessible quick-create calendar.
+
+## User Review Correction Batch 02B
+
+- Supersedes the Batch 02A Personnel paired-metadata override: Strategy E uses
+  identity, status, and roles in one vertical content column, with the action
+  independently aligned right.
+- Shared header horizontal clipping uses `overflow-x: clip` on shell ancestors
+  so the document remains the sticky vertical scroll context. Mobile title and
+  description remain compact, with description limited visually to two lines.
+- Mobile/tablet Staff Shifts render every URL-selected `days` entry in the
+  existing structured-list calendar language; only the desktop calendar grid
+  is hidden, not its period toolbar.
+- Narrow class pickers place their existing create link before the selector;
+  desktop order and all hrefs remain unchanged.

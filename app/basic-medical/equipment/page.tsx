@@ -164,14 +164,22 @@ export default async function BasicMedicalEquipmentPage({
           />
         </label>
         {activeTab === "inventory" ? (
-          <select name="status" defaultValue={query.status ?? ""}>
+          <select
+            name="status"
+            defaultValue={query.status ?? ""}
+            aria-label="Lọc theo trạng thái"
+          >
             <option value="">Tất cả trạng thái</option>
             <option value="active">Đang sử dụng</option>
             <option value="inactive">Ngừng sử dụng</option>
           </select>
         ) : null}
         {activeTab === "rooms" || activeTab === "damaged" ? (
-          <select name="room" defaultValue={query.room ?? ""}>
+          <select
+            name="room"
+            defaultValue={query.room ?? ""}
+            aria-label="Lọc theo phòng"
+          >
             <option value="">Tất cả phòng</option>
             {(roomResult.data ?? []).map((room) => (
               <option key={room.id} value={room.id}>
@@ -182,7 +190,11 @@ export default async function BasicMedicalEquipmentPage({
         ) : null}
         {activeTab === "logs" ? (
           <>
-            <select name="event" defaultValue={query.event ?? ""}>
+            <select
+              name="event"
+              defaultValue={query.event ?? ""}
+              aria-label="Lọc theo loại thay đổi"
+            >
               <option value="">Tất cả thay đổi</option>
               <option value="damage_report">Báo Hư</option>
               <option value="condition_adjustment">Điều chỉnh Tốt/Hư</option>
@@ -192,6 +204,7 @@ export default async function BasicMedicalEquipmentPage({
               name="actor"
               defaultValue={query.actor}
               placeholder="ID người thực hiện"
+              aria-label="Lọc theo ID người thực hiện"
             />
             <input
               name="from"

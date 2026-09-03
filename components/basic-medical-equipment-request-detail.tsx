@@ -157,7 +157,12 @@ export function BasicMedicalEquipmentRequestDetail({
       </section>
       <section>
         <h3>Thiết bị Y cơ sở</h3>
-        <div className="responsive-table">
+        <div
+          className="responsive-table"
+          role="region"
+          aria-label="Thiết bị Y cơ sở"
+          tabIndex={0}
+        >
           <table className="data-table equipment-detail-table">
             <thead>
               <tr>

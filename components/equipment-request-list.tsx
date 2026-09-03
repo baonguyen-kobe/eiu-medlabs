@@ -38,6 +38,7 @@ import {
 import { equipmentRequestTargetPage } from "@/lib/equipment-calendar-request";
 import { TABLE_PAGE_SIZE, totalPagesFor } from "@/lib/pagination";
 import type { AppRole } from "@/lib/viewer";
+import { useOverlayFocus } from "@/components/use-overlay-focus";
 
 const EARLY_HANDOVER_ADMIN_EMAILS = new Set([
   "admin@campus.local",
@@ -141,6 +142,8 @@ function EquipmentItemsModal({
     message: string;
   } | null>(null);
   const [isAdding, startAdding] = useTransition();
+  const modalRef = useRef<HTMLElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
   const catalogById = useMemo(
     () => new Map(catalog.map((item) => [item.id, item])),
     [catalog],
@@ -197,6 +200,13 @@ function EquipmentItemsModal({
     }));
     setNotice(null);
   }
+
+  useOverlayFocus({
+    open: true,
+    containerRef: modalRef,
+    initialFocusRef: closeRef,
+    onDismiss: onClose,
+  });
 
   function updateDraft(
     skillName: string,
@@ -324,6 +334,8 @@ function EquipmentItemsModal({
         onClick={onClose}
       />
       <section
+        ref={modalRef}
+        data-overlay-focus-root="true"
         className="equipment-modal"
         role="dialog"
         aria-modal="true"
@@ -344,6 +356,7 @@ function EquipmentItemsModal({
           </div>
           <button
             type="button"
+            ref={closeRef}
             className="equipment-modal-close"
             aria-label="Đóng danh sách trang thiết bị"
             onClick={onClose}
@@ -376,7 +389,12 @@ function EquipmentItemsModal({
                     ? `Bài TN-TH #${skillIndex + 1}: ${skillName}`
                     : `Kỹ năng/Bài thực hành #${skillIndex + 1}: ${skillName}`}
                 </h3>
-                <div className="responsive-table">
+                <div
+                  className="responsive-table"
+                  role="region"
+                  aria-label={`Danh sách trang thiết bị cho ${skillName}`}
+                  tabIndex={0}
+                >
                   <table className="data-table equipment-detail-table">
                     <thead>
                       <tr>
@@ -516,6 +534,113 @@ function EquipmentItemsModal({
                     </tbody>
                   </table>
                 </div>
+                <div className="equipment-mobile-item-list">
+                  {items.map((item, index) => {
+                    const catalogItem = catalogForRequest(request, item);
+                    const commercialName =
+                      catalogItem?.commercial_name || catalogItem?.item_name;
+                    return (
+                      <article
+                        className="equipment-mobile-item-card"
+                        key={item.id}
+                      >
+                        <span className="equipment-mobile-item-index">
+                          {index + 1}
+                        </span>
+                        <div className="equipment-mobile-item-content">
+                          <strong>
+                            {commercialName ||
+                              "Danh mục thiết bị không còn khả dụng"}
+                          </strong>
+                          <p>
+                            SL {item.quantity} · {catalogItem?.unit || "—"} ·{" "}
+                            {item.note
+                              ? `Ghi chú: ${item.note}`
+                              : "Không có ghi chú"}
+                          </p>
+                        </div>
+                      </article>
+                    );
+                  })}
+                  {canAddItemsForRequest
+                    ? drafts.map((draft, draftIndex) => {
+                        const selectedDraftCatalog = catalogById.get(
+                          draft.catalogId,
+                        );
+                        return (
+                          <section
+                            className="equipment-mobile-item-draft"
+                            key={draft.key}
+                          >
+                            <strong>
+                              Thêm thiết bị #{items.length + draftIndex + 1}
+                            </strong>
+                            <SearchableCombobox
+                              value={draft.itemName}
+                              options={itemNameOptions}
+                              onChange={(itemName) =>
+                                selectDraftItemName(
+                                  skillName,
+                                  draft.key,
+                                  itemName,
+                                )
+                              }
+                              required
+                              ariaLabel={`Tên thiết bị bổ sung dòng ${draftIndex + 1} cho ${skillName}`}
+                              placeholder="Gõ hoặc chọn tên thiết bị…"
+                            />
+                            <SearchableCombobox
+                              value={draft.catalogId}
+                              options={commercialOptionsFor(draft.itemName)}
+                              onChange={(catalogItemId) =>
+                                selectDraftCommercial(
+                                  skillName,
+                                  draft.key,
+                                  catalogItemId,
+                                )
+                              }
+                              required
+                              ariaLabel={`Tên thương mại bổ sung dòng ${draftIndex + 1} cho ${skillName}`}
+                              placeholder="Gõ hoặc chọn tên thương mại…"
+                            />
+                            <div className="equipment-mobile-item-draft-meta">
+                              <span>
+                                {selectedDraftCatalog?.item_type || "—"}
+                              </span>
+                              <span>{selectedDraftCatalog?.unit || "—"}</span>
+                            </div>
+                            <label>
+                              Số lượng
+                              <input
+                                aria-label={`Số lượng bổ sung dòng ${draftIndex + 1} cho ${skillName}`}
+                                type="number"
+                                min="1"
+                                value={draft.quantity}
+                                onChange={(event) =>
+                                  updateDraft(skillName, draft.key, {
+                                    quantity: Number(event.target.value),
+                                  })
+                                }
+                              />
+                            </label>
+                            <label>
+                              Ghi chú
+                              <input
+                                aria-label={`Ghi chú thiết bị bổ sung dòng ${draftIndex + 1} cho ${skillName}`}
+                                value={draft.note}
+                                onChange={(event) =>
+                                  updateDraft(skillName, draft.key, {
+                                    note: event.target.value,
+                                  })
+                                }
+                                placeholder="Nếu có"
+                              />
+                            </label>
+                          </section>
+                        );
+                      })
+                    : null}
+                </div>
                 {canAddItemsForRequest ? (
                   <div className="equipment-modal-add-actions equipment-modal-add-actions-persistent">
                     <button
@@ -588,15 +713,17 @@ function SignatureModal({
   const drawingRef = useRef(false);
   const [hasInk, setHasInk] = useState(false);
   const isHandover = phase === "handover";
+  const modalRef = useRef<HTMLElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useOverlayFocus({
+    open: true,
+    containerRef: modalRef,
+    initialFocusRef: closeRef,
+    pending,
+    onDismiss: onClose,
+  });
 
   useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !pending) onClose();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-
     const canvas = canvasRef.current;
     if (canvas) {
       const rect = canvas.getBoundingClientRect();
@@ -612,12 +739,7 @@ function SignatureModal({
         context.strokeStyle = "#173f6b";
       }
     }
-
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [onClose, pending]);
+  }, []);
 
   function pointFromEvent(event: ReactPointerEvent<HTMLCanvasElement>) {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -643,6 +765,8 @@ function SignatureModal({
         onClick={() => !pending && onClose()}
       />
       <section
+        ref={modalRef}
+        data-overlay-focus-root="true"
         className="equipment-modal signature-modal"
         role="dialog"
         aria-modal="true"
@@ -663,6 +787,7 @@ function SignatureModal({
           </div>
           <button
             type="button"
+            ref={closeRef}
             className="equipment-modal-close"
             disabled={pending}
             onClick={onClose}
@@ -884,12 +1009,9 @@ export function EquipmentRequestList({
   );
 
   function toggleExpanded(requestId: string) {
-    setExpandedIds((current) => {
-      const next = new Set(current);
-      if (next.has(requestId)) next.delete(requestId);
-      else next.add(requestId);
-      return next;
-    });
+    setExpandedIds((current) =>
+      current.has(requestId) ? new Set() : new Set([requestId]),
+    );
   }
 
   function changeStatus(
@@ -1223,11 +1345,129 @@ export function EquipmentRequestList({
                 (handoverSigned || warehouseHasReturned) &&
                 !returnSigned &&
                 !isCompleted;
+              const statusStack = (
+                <div className="equipment-request-status-stack">
+                  {!isCancelled && lateApprovalStatus === "pending" ? (
+                    <span
+                      className="request-late-approval request-late-approval-pending"
+                      aria-label="Chờ duyệt đăng ký trễ"
+                    >
+                      <span className="late-approval-full">
+                        Chờ duyệt đăng ký trễ
+                      </span>
+                      <span className="late-approval-short" aria-hidden="true">
+                        Chờ duyệt ĐK trễ
+                      </span>
+                    </span>
+                  ) : !isCancelled && lateApprovalStatus === "rejected" ? (
+                    <span
+                      className="request-late-approval request-late-approval-rejected"
+                      aria-label="Đã từ chối đăng ký trễ"
+                    >
+                      <span className="late-approval-full">
+                        Đã từ chối đăng ký trễ
+                      </span>
+                      <span className="late-approval-short" aria-hidden="true">
+                        Đã từ chối ĐK trễ
+                      </span>
+                    </span>
+                  ) : isCompleted ? (
+                    <StatusBadge status="completed" />
+                  ) : warehouseHasReturned && !returnSigned ? (
+                    canSignReturn ? (
+                      <button
+                        type="button"
+                        className="equipment-sign-status-button equipment-sign-return"
+                        disabled={isPending && updatingId === request.id}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setSignatureTarget({
+                            request,
+                            phase: "return",
+                          });
+                        }}
+                      >
+                        Ký xác nhận Đã trả
+                      </button>
+                    ) : (
+                      <>
+                        <StatusBadge status="returned" />
+                        <small className="equipment-confirmation-waiting">
+                          Chờ ký xác nhận Đã trả
+                        </small>
+                      </>
+                    )
+                  ) : warehouseHasHandedOver && !handoverSigned ? (
+                    canSignHandover ? (
+                      <button
+                        type="button"
+                        className="equipment-sign-status-button equipment-sign-handover"
+                        disabled={isPending && updatingId === request.id}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setSignatureTarget({
+                            request,
+                            phase: "handover",
+                          });
+                        }}
+                      >
+                        Ký xác nhận Đã giao
+                      </button>
+                    ) : (
+                      <>
+                        <StatusBadge status="handed_over" />
+                        <small className="equipment-confirmation-waiting">
+                          Chờ ký xác nhận Đã giao
+                        </small>
+                      </>
+                    )
+                  ) : warehouseHasHandedOver && returnSigned ? (
+                    <>
+                      <StatusBadge status="returned" />
+                      <small className="equipment-confirmation-waiting">
+                        Chờ kho xác nhận
+                      </small>
+                    </>
+                  ) : warehouseHasHandedOver && handoverSigned ? (
+                    <>
+                      <StatusBadge status="handed_over" />
+                      {canSignReturn ? (
+                        <button
+                          type="button"
+                          className="equipment-sign-status-button equipment-sign-return"
+                          disabled={isPending && updatingId === request.id}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setSignatureTarget({
+                              request,
+                              phase: "return",
+                            });
+                          }}
+                        >
+                          Ký xác nhận Đã trả
+                        </button>
+                      ) : (
+                        <small className="equipment-confirmation-waiting">
+                          Chờ ký xác nhận Đã trả
+                        </small>
+                      )}
+                    </>
+                  ) : (
+                    <StatusBadge status={warehouseStatus} />
+                  )}
+                  {lateApprovalStatus === "approved" ? (
+                    <small className="request-late-approval-approved">
+                      Đã duyệt đăng ký trễ
+                    </small>
+                  ) : null}
+                </div>
+              );
 
               return (
                 <tbody className="equipment-request-list-item" key={request.id}>
+                  {/* Desktop table row (active > 920px) */}
                   <tr
-                    className="equipment-request-table-row"
+                    className="equipment-request-table-row equipment-request-desktop-row"
                     onClick={() => toggleExpanded(request.id)}
                   >
                     <td className="equipment-request-domain-cell">
@@ -1235,7 +1475,7 @@ export function EquipmentRequestList({
                         {domainLabel(request)}
                       </span>
                     </td>
-                    <td>
+                    <td className="equipment-request-course-cell">
                       <button
                         type="button"
                         className="equipment-request-summary equipment-request-course-button"
@@ -1254,7 +1494,7 @@ export function EquipmentRequestList({
                         {formatScheduleDate(schedule?.schedule_date)}
                       </strong>
                     </td>
-                    <td className="mono">
+                    <td className="equipment-request-time-cell mono">
                       {schedule?.start_time.slice(0, 5)}–
                       {schedule?.end_time.slice(0, 5)}
                     </td>
@@ -1263,110 +1503,12 @@ export function EquipmentRequestList({
                         {room?.room_code}.{room?.building_code}
                       </strong>
                     </td>
-                    <td>{request.equipment_request_items.length}</td>
+                    <td className="equipment-request-count-cell">
+                      <span>{request.equipment_request_items.length}</span>{" "}
+                      <span className="equipment-count-unit">thiết bị</span>
+                    </td>
                     <td className="equipment-request-status-cell">
-                      <div className="equipment-request-status-stack">
-                        {!isCancelled && lateApprovalStatus === "pending" ? (
-                          <span className="request-late-approval request-late-approval-pending">
-                            Chờ duyệt đăng ký trễ
-                          </span>
-                        ) : !isCancelled &&
-                          lateApprovalStatus === "rejected" ? (
-                          <span className="request-late-approval request-late-approval-rejected">
-                            Đã từ chối đăng ký trễ
-                          </span>
-                        ) : isCompleted ? (
-                          <StatusBadge status="completed" />
-                        ) : warehouseHasReturned && !returnSigned ? (
-                          canSignReturn ? (
-                            <button
-                              type="button"
-                              className="equipment-sign-status-button equipment-sign-return"
-                              disabled={isPending && updatingId === request.id}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                setSignatureTarget({
-                                  request,
-                                  phase: "return",
-                                });
-                              }}
-                            >
-                              Ký xác nhận Đã trả
-                            </button>
-                          ) : (
-                            <>
-                              <StatusBadge status="returned" />
-                              <small className="equipment-confirmation-waiting">
-                                Chờ ký xác nhận Đã trả
-                              </small>
-                            </>
-                          )
-                        ) : warehouseHasHandedOver && !handoverSigned ? (
-                          canSignHandover ? (
-                            <button
-                              type="button"
-                              className="equipment-sign-status-button equipment-sign-handover"
-                              disabled={isPending && updatingId === request.id}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                setSignatureTarget({
-                                  request,
-                                  phase: "handover",
-                                });
-                              }}
-                            >
-                              Ký xác nhận Đã giao
-                            </button>
-                          ) : (
-                            <>
-                              <StatusBadge status="handed_over" />
-                              <small className="equipment-confirmation-waiting">
-                                Chờ ký xác nhận Đã giao
-                              </small>
-                            </>
-                          )
-                        ) : warehouseHasHandedOver && returnSigned ? (
-                          <>
-                            <StatusBadge status="returned" />
-                            <small className="equipment-confirmation-waiting">
-                              Chờ kho xác nhận
-                            </small>
-                          </>
-                        ) : warehouseHasHandedOver && handoverSigned ? (
-                          <>
-                            <StatusBadge status="handed_over" />
-                            {canSignReturn ? (
-                              <button
-                                type="button"
-                                className="equipment-sign-status-button equipment-sign-return"
-                                disabled={
-                                  isPending && updatingId === request.id
-                                }
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  setSignatureTarget({
-                                    request,
-                                    phase: "return",
-                                  });
-                                }}
-                              >
-                                Ký xác nhận Đã trả
-                              </button>
-                            ) : (
-                              <small className="equipment-confirmation-waiting">
-                                Chờ ký xác nhận Đã trả
-                              </small>
-                            )}
-                          </>
-                        ) : (
-                          <StatusBadge status={warehouseStatus} />
-                        )}
-                        {lateApprovalStatus === "approved" ? (
-                          <small className="request-late-approval-approved">
-                            Đã duyệt đăng ký trễ
-                          </small>
-                        ) : null}
-                      </div>
+                      {statusStack}
                     </td>
                     <td className="equipment-request-toggle-cell">
                       <button
@@ -1385,6 +1527,79 @@ export function EquipmentRequestList({
                     </td>
                   </tr>
 
+                  {/* Mobile Two-Band Card Row (active <= 920px) */}
+                  <tr className="equipment-request-mobile-row">
+                    <td
+                      colSpan={8}
+                      className="equipment-request-mobile-card-cell"
+                    >
+                      <div className="equipment-request-mobile-card">
+                        {/* Band A: Header Strip */}
+                        <div
+                          className="equipment-request-mobile-header"
+                          aria-hidden="true"
+                        >
+                          <span className="mobile-col-course">Môn học</span>
+                          <span className="mobile-col-date">Ngày</span>
+                          <span className="mobile-col-room">Phòng/Lab</span>
+                          <span className="mobile-col-status">Trạng thái</span>
+                          <span className="mobile-col-chevron"></span>
+                        </div>
+                        {/* Band B: Data Row */}
+                        <div
+                          className="equipment-request-mobile-data"
+                          onClick={() => toggleExpanded(request.id)}
+                        >
+                          <div className="mobile-col-course">
+                            <strong>
+                              {schedule?.course_code_snapshot || "—"}
+                            </strong>
+                            <span
+                              title={
+                                schedule?.course_name_snapshot || undefined
+                              }
+                            >
+                              {schedule?.course_name_snapshot || "—"}
+                            </span>
+                          </div>
+                          <div className="mobile-col-date">
+                            <strong>
+                              {formatScheduleDate(schedule?.schedule_date)}
+                            </strong>
+                            <small className="mobile-time-range">
+                              {schedule?.start_time
+                                ? `${schedule.start_time.slice(0, 5)}–${schedule.end_time.slice(0, 5)}`
+                                : "—"}
+                            </small>
+                          </div>
+                          <div className="mobile-col-room">
+                            <strong>
+                              {room
+                                ? `${room.room_code}.${room.building_code}`
+                                : "—"}
+                            </strong>
+                          </div>
+                          <div className="mobile-col-status">{statusStack}</div>
+                          <div className="mobile-col-chevron">
+                            <button
+                              type="button"
+                              className="equipment-request-chevron"
+                              aria-label={
+                                expanded ? "Thu gọn phiếu" : "Mở chi tiết phiếu"
+                              }
+                              aria-expanded={expanded}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                toggleExpanded(request.id);
+                              }}
+                            >
+                              {expanded ? "⌃" : "⌄"}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
                   {expanded ? (
                     <tr className="equipment-request-detail-row">
                       <td colSpan={8}>
@@ -1477,31 +1692,32 @@ export function EquipmentRequestList({
                                       </button>
                                     ),
                                   )}
+                                  {!isCancelled ? (
+                                    <button
+                                      type="button"
+                                      className="button button-danger equipment-request-delete"
+                                      disabled={isPending}
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        setRequestToDelete(request);
+                                      }}
+                                    >
+                                      <Trash2 size={14} aria-hidden="true" />
+                                      {request.request_domain ===
+                                      "basic_medical"
+                                        ? "Hủy phiếu"
+                                        : "Xóa phiếu"}
+                                    </button>
+                                  ) : null}
                                 </div>
                                 <a
                                   className="button button-secondary equipment-handover-export"
                                   href={`/api/equipment-requests/${request.id}/handover`}
                                   onClick={(event) => event.stopPropagation()}
                                 >
-                                  <Download size={17} aria-hidden="true" />
+                                  <Download size={16} aria-hidden="true" />
                                   Xuất phiếu PDF
                                 </a>
-                                {!isCancelled ? (
-                                  <button
-                                    type="button"
-                                    className="button button-danger equipment-request-delete"
-                                    disabled={isPending}
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      setRequestToDelete(request);
-                                    }}
-                                  >
-                                    <Trash2 size={17} aria-hidden="true" />
-                                    {request.request_domain === "basic_medical"
-                                      ? "Hủy phiếu"
-                                      : "Xóa phiếu"}
-                                  </button>
-                                ) : null}
                               </div>
                               <div className="equipment-confirmation-progress">
                                 <span>
@@ -1546,40 +1762,46 @@ export function EquipmentRequestList({
                               <dd>{request.note || "Không có ghi chú"}</dd>
                             </div>
                             {lateApprovalStatus !== "not_required" ? (
-                              <div className="equipment-note-detail-row">
+                              <div className="equipment-late-detail-row">
                                 <dt>Đăng ký trễ</dt>
                                 <dd>
-                                  <strong>
+                                  <strong className="equipment-late-status-label">
                                     {lateApprovalStatus === "pending"
                                       ? "Chờ duyệt đăng ký trễ"
                                       : lateApprovalStatus === "approved"
                                         ? "Đã duyệt đăng ký trễ"
                                         : "Đã từ chối đăng ký trễ"}
                                   </strong>
-                                  {lateRegistrationReason
-                                    ? ` — ${lateRegistrationReason}`
-                                    : ""}
-                                  {confirmation?.late_review_note
-                                    ? ` — Ghi chú: ${confirmation.late_review_note}`
-                                    : request.late_review_note
-                                      ? ` — Ghi chú: ${request.late_review_note}`
-                                      : ""}
+                                  {lateRegistrationReason ||
+                                  confirmation?.late_review_note ||
+                                  request.late_review_note ? (
+                                    <span className="equipment-late-detail-note">
+                                      {lateRegistrationReason
+                                        ? ` — ${lateRegistrationReason}`
+                                        : ""}
+                                      {confirmation?.late_review_note
+                                        ? ` — Ghi chú: ${confirmation.late_review_note}`
+                                        : request.late_review_note
+                                          ? ` — Ghi chú: ${request.late_review_note}`
+                                          : ""}
+                                    </span>
+                                  ) : null}
                                 </dd>
                               </div>
                             ) : null}
-                            <div>
+                            <div className="equipment-detail-registrant">
                               <dt>Người đăng ký</dt>
                               <dd>{request.profiles?.full_name}</dd>
                             </div>
-                            <div>
+                            <div className="equipment-detail-email">
                               <dt>Email</dt>
                               <dd>{request.email_snapshot}</dd>
                             </div>
-                            <div>
+                            <div className="equipment-detail-phone">
                               <dt>Số điện thoại</dt>
                               <dd>{request.phone_snapshot}</dd>
                             </div>
-                            <div>
+                            <div className="equipment-detail-responsible">
                               <dt>
                                 {request.request_domain === "basic_medical"
                                   ? "Giảng viên giảng dạy/hướng dẫn"
@@ -1587,31 +1809,31 @@ export function EquipmentRequestList({
                               </dt>
                               <dd>{request.responsible?.full_name}</dd>
                             </div>
-                            <div>
+                            <div className="equipment-detail-students">
                               <dt>Số sinh viên</dt>
                               <dd>{schedule?.student_count}</dd>
                             </div>
-                            <div>
+                            <div className="equipment-detail-room">
                               <dt>Phòng/Lab</dt>
                               <dd>
                                 {room?.room_code}.{room?.building_code}
                                 {room?.room_name ? ` — ${room.room_name}` : ""}
                               </dd>
                             </div>
-                            <div>
-                              <dt>Thời gian nhận</dt>
-                              <dd>{formatDateTime(request.receive_at)}</dd>
-                            </div>
-                            <div>
-                              <dt>Thời gian trả</dt>
-                              <dd>{formatDateTime(request.return_at)}</dd>
-                            </div>
-                            <div>
+                            <div className="equipment-detail-created">
                               <dt>Ngày tạo phiếu</dt>
                               <dd>{formatDateTime(request.created_at)}</dd>
                             </div>
+                            <div className="equipment-detail-receive">
+                              <dt>Thời gian nhận</dt>
+                              <dd>{formatDateTime(request.receive_at)}</dd>
+                            </div>
+                            <div className="equipment-detail-return">
+                              <dt>Thời gian trả</dt>
+                              <dd>{formatDateTime(request.return_at)}</dd>
+                            </div>
                             <div className="equipment-list-detail-row">
-                              <dt>Danh sách trang thiết bị</dt>
+                              <dt>Danh sách TTB</dt>
                               <dd>
                                 <button
                                   type="button"

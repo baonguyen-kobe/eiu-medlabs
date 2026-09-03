@@ -35,6 +35,7 @@ import type { AppRole } from "@/lib/viewer";
 import { logout } from "@/app/login/actions";
 import { getNameInitials } from "@/lib/person-name";
 import { PageHeader } from "@/components/patterns/page-header";
+import { useOverlayFocus } from "@/components/use-overlay-focus";
 import { NotificationBell } from "@/components/notification-bell";
 import {
   canCreateBasicMedicalSchedules,
@@ -407,6 +408,7 @@ export function WorkspaceShell({
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const sidebarRef = useRef<HTMLElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const accountMenuRef = useRef<HTMLDivElement>(null);
@@ -448,25 +450,13 @@ export function WorkspaceShell({
     }
   }
 
-  useEffect(() => {
-    if (!sidebarOpen) return;
-
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    closeButtonRef.current?.focus();
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key !== "Escape") return;
-      setSidebarOpen(false);
-      requestAnimationFrame(() => menuButtonRef.current?.focus());
-    }
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [sidebarOpen]);
+  useOverlayFocus({
+    open: sidebarOpen,
+    containerRef: sidebarRef,
+    initialFocusRef: closeButtonRef,
+    returnFocusRef: menuButtonRef,
+    onDismiss: () => setSidebarOpen(false),
+  });
 
   useEffect(() => {
     if (!accountMenuOpen) return;
@@ -495,7 +485,9 @@ export function WorkspaceShell({
   return (
     <div className="app-shell">
       <aside
+        ref={sidebarRef}
         aria-label="Menu chính"
+        data-overlay-focus-root={sidebarOpen ? "true" : undefined}
         aria-modal={sidebarOpen ? "true" : undefined}
         className={`sidebar workspace-sidebar ${sidebarOpen ? "sidebar-open" : ""}`}
         id="workspace-navigation"
@@ -650,12 +642,8 @@ export function WorkspaceShell({
           }
           title={title}
           description={description}
-          actions={
-            <>
-              <NotificationBell />
-              {actions}
-            </>
-          }
+          utility={<NotificationBell />}
+          actions={actions}
         />
         <div className="workspace-content page-container">{children}</div>
       </main>

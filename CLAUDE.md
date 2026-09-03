@@ -1,10 +1,10 @@
 # MedLabs Calendar Claude guide
 
-Read and follow `AGENTS.md`; it is the authoritative repository instruction file.
+Read and follow `AGENTS.md` and `docs/DOCUMENTATION_AUTHORITY.md`. `AGENTS.md` is the authoritative repository instruction file, and `docs/DOCUMENTATION_AUTHORITY.md` defines document precedence.
 
-- Query the existing Graphify graph before codebase exploration or edits.
+- Use codebase navigation tools exactly as specified in `AGENTS.md`: direct code search and inspection for localized work, GitNexus for multi-file architecture/dependency/blast-radius analysis when useful, and Graphify as an optional query tool when a current graph exists.
 - Read `NEXTJS_AGENTS.md` before changing Next.js behavior.
-- Apply the specialized Supabase, React, or UI guidance named in `AGENTS.md` when relevant.
-- Preserve unrelated work and run the checks appropriate to the touched scope.
-
-GitNexus is an optional secondary analysis tool and is not configured in this checkout. Do not require GitNexus commands or resources when they are unavailable, and do not treat previously generated index counts as current repository state.
+- Apply the specialized Supabase, React, UI design system (`docs/UI_DESIGN_SYSTEM_V2_MASTER.md`), or OpenSpec guidance named in `AGENTS.md` when relevant.
+- Follow the UI modernization continuity system under `docs/ui-modernization/` (`CURRENT.md`, `TRACKER.md`, `DECISIONS.md`) for active UI tasks.
+- Preserve unrelated work and run fresh verification checks appropriate to the touched scope before claiming completion.
+- `CLAUDE.md` is a thin entry point and must not introduce competing repository policy or secondary navigation requirements.

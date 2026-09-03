@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { WorkspaceShell } from "@/components/workspace-shell";
@@ -168,7 +169,12 @@ export default async function BasicMedicalConfirmationEvidencePage({
         />
 
         <h2>4. Tình trạng thiết bị</h2>
-        <div className="responsive-table">
+        <div
+          className="responsive-table"
+          role="region"
+          aria-label="Tình trạng thiết bị"
+          tabIndex={0}
+        >
           <table className="data-table basic-medical-condition-table">
             <thead>
               <tr>
@@ -182,23 +188,98 @@ export default async function BasicMedicalConfirmationEvidencePage({
             <tbody>
               {evidence.equipment_checks.length ? (
                 evidence.equipment_checks.map((check) => (
-                  <tr key={check.inventory_id}>
-                    <td>
-                      <strong>{check.item_name_snapshot}</strong>
-                      <br />
-                      <span>{check.commercial_name_snapshot || "—"}</span>
-                    </td>
-                    <td>{check.unit_snapshot}</td>
-                    <td>
-                      {check.good_before}/{check.damaged_before}/
-                      {check.total_before}
-                    </td>
-                    <td>{check.newly_damaged_quantity}</td>
-                    <td>
-                      {check.good_after}/{check.damaged_after}/
-                      {check.total_after}
-                    </td>
-                  </tr>
+                  <Fragment key={check.inventory_id}>
+                    {/* Desktop Table Row (active > 920px) */}
+                    <tr className="condition-desktop-row">
+                      <td>
+                        <strong>{check.item_name_snapshot}</strong>
+                        <br />
+                        <span>{check.commercial_name_snapshot || "—"}</span>
+                      </td>
+                      <td>{check.unit_snapshot}</td>
+                      <td>
+                        {check.good_before}/{check.damaged_before}/
+                        {check.total_before}
+                      </td>
+                      <td>{check.newly_damaged_quantity}</td>
+                      <td>
+                        {check.good_after}/{check.damaged_after}/
+                        {check.total_after}
+                      </td>
+                    </tr>
+
+                    {/* Mobile Evidence Card Row (active <= 920px) */}
+                    <tr className="condition-mobile-row">
+                      <td colSpan={5} className="condition-mobile-cell">
+                        <article className="condition-evidence-card">
+                          <div className="condition-evidence-header">
+                            <div className="condition-evidence-item">
+                              <strong className="condition-device-name">
+                                {check.item_name_snapshot}
+                              </strong>
+                              {check.commercial_name_snapshot ? (
+                                <span className="condition-commercial-name">
+                                  {check.commercial_name_snapshot}
+                                </span>
+                              ) : null}
+                            </div>
+                            <span className="condition-unit-badge">
+                              {check.unit_snapshot}
+                            </span>
+                          </div>
+
+                          <div className="condition-comparison-grid">
+                            <div className="condition-col condition-before">
+                              <span className="condition-col-label">Trước</span>
+                              <span className="condition-counts">
+                                <span className="count-good" title="Tốt">
+                                  {check.good_before}
+                                </span>
+                                <span className="count-sep">/</span>
+                                <span className="count-damaged" title="Hư">
+                                  {check.damaged_before}
+                                </span>
+                                <span className="count-sep">/</span>
+                                <span className="count-total" title="Tổng">
+                                  {check.total_before}
+                                </span>
+                              </span>
+                              <small className="condition-col-legend">
+                                Tốt / Hư / Tổng
+                              </small>
+                            </div>
+                            <div className="condition-col condition-newly-damaged">
+                              <span className="condition-col-label">
+                                Hư mới
+                              </span>
+                              <span className="count-new-damaged">
+                                {check.newly_damaged_quantity}
+                              </span>
+                            </div>
+                            <div className="condition-col condition-after">
+                              <span className="condition-col-label">Sau</span>
+                              <span className="condition-counts">
+                                <span className="count-good" title="Tốt">
+                                  {check.good_after}
+                                </span>
+                                <span className="count-sep">/</span>
+                                <span className="count-damaged" title="Hư">
+                                  {check.damaged_after}
+                                </span>
+                                <span className="count-sep">/</span>
+                                <span className="count-total" title="Tổng">
+                                  {check.total_after}
+                                </span>
+                              </span>
+                              <small className="condition-col-legend">
+                                Tốt / Hư / Tổng
+                              </small>
+                            </div>
+                          </div>
+                        </article>
+                      </td>
+                    </tr>
+                  </Fragment>
                 ))
               ) : (
                 <tr>

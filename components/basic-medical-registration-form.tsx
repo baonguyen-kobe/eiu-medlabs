@@ -442,7 +442,12 @@ export function BasicMedicalRegistrationForm({
             required
           />
         </label>
-        <div className="responsive-table">
+        <div
+          className="responsive-table"
+          role="region"
+          aria-label="Buổi học Y cơ sở"
+          tabIndex={0}
+        >
           <table className="data-table">
             <thead>
               <tr>

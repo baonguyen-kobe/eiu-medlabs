@@ -17,6 +17,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Fragment,
+  type ReactNode,
   useEffect,
   useMemo,
   useRef,
@@ -312,6 +313,7 @@ export function Dashboard({
   canEditBasicMedicalSchedules = false,
   canManageEmailNotifications = false,
   isRootAdministrator = false,
+  skillsActions,
 }: {
   fullName: string;
   roles: Role[];
@@ -332,6 +334,7 @@ export function Dashboard({
   canEditBasicMedicalSchedules?: boolean;
   canManageEmailNotifications?: boolean;
   isRootAdministrator?: boolean;
+  skillsActions?: ReactNode;
 }) {
   const router = useRouter();
   useScheduleRealtime();
@@ -537,26 +540,36 @@ export function Dashboard({
       }
       description={`${calendarKind === "basic_medical" ? "Lịch sử dụng phòng Y cơ sở" : "Lịch học và lịch trực"} · ${periodLabel}`}
       actions={
-        roles.includes("admin") ? (
-          <label className="role-switcher">
-            <ShieldCheck size={16} />
-            <span className="sr-only">Xem theo vai trò</span>
-            <select
-              name="display_role"
-              value={role}
-              onChange={(event) => setRole(event.target.value as Role)}
-            >
-              {selectableRoles.map((item) => (
-                <option value={item} key={item}>
-                  {roleLabels[item]}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null
+        <>
+          {calendarKind === "combined" ? (
+            <div className="skills-calendar-header-actions">
+              {skillsActions}
+            </div>
+          ) : null}
+          {roles.includes("admin") ? (
+            <label className="role-switcher">
+              <ShieldCheck size={16} />
+              <span className="sr-only">Xem theo vai trò</span>
+              <select
+                name="display_role"
+                value={role}
+                onChange={(event) => setRole(event.target.value as Role)}
+              >
+                {selectableRoles.map((item) => (
+                  <option value={item} key={item}>
+                    {roleLabels[item]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+        </>
       }
     >
       <div className="content">
+        {calendarKind === "combined" && skillsActions ? (
+          <div className="skills-calendar-mobile-actions">{skillsActions}</div>
+        ) : null}
         <section
           className={`kpi-grid ${calendarKind === "basic_medical" ? "kpi-grid-three" : ""}`}
           aria-label="Tổng quan"

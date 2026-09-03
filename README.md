@@ -2,6 +2,19 @@
 
 Ứng dụng nội bộ quản lý lịch học, giảng viên nhận lớp và staff tự đăng ký ca trực.
 
+## Tài liệu và authority
+
+Tài liệu trong repository tuân thủ thứ tự ưu tiên và thẩm quyền tại `docs/DOCUMENTATION_AUTHORITY.md`. README này phục vụ hướng dẫn khởi động và phát triển local, không cấu thành bằng chứng trạng thái production trực tiếp.
+
+Các tài liệu chính:
+
+- `AGENTS.md`: Hướng dẫn vận hành, quy tắc kỹ thuật và router của agent.
+- `docs/DOCUMENTATION_AUTHORITY.md`: Phân cấp thẩm quyền tài liệu, vai trò runtime và quy tắc điều hướng code.
+- `docs/RELEASE.md`: Chính sách release, kiểm chứng production và nguyên tắc test theo phạm vi thay đổi.
+- `docs/UI_DESIGN_SYSTEM_V2_MASTER.md`: Thẩm quyền thiết kế giao diện MedLabs chuẩn (typography, màu sắc, layout, components).
+- `docs/ui-modernization/`: Hệ thống theo dõi (`CURRENT.md`, `TRACKER.md`, `DECISIONS.md`) cho quá trình hiện đại hóa giao diện.
+- `NEXTJS_AGENTS.md`: Hướng dẫn tương thích theo phiên bản Next.js đang cài đặt.
+
 ## Yêu cầu
 
 - Node.js 22.13 trở lên
@@ -93,7 +106,7 @@ EMAIL_APPS_SCRIPT_URL=https://script.google.com/macros/s/.../exec
 EMAIL_APPS_SCRIPT_SECRET=...
 ```
 
-Xem hướng dẫn triển khai script tại `docs/APPS_SCRIPT_EMAIL_SETUP.md`.
+Chính sách release và kiểm chứng production được định nghĩa tại `docs/RELEASE.md`; trạng thái production cụ thể phải được xác minh từ deployed SHA, remote migration history và cấu hình runtime thực tế.
 
 ### Personnel reconciliation
 
@@ -150,8 +163,7 @@ Version 1 luôn ghi `null` và không hiển thị.
 - `/classes/open`: xem toàn bộ lớp theo khoảng tối đa 6 tháng; nhận, trả hoặc
   xóa theo vai trò.
 - `/classes/mine`: Giảng viên xem hoặc rút lớp của chính mình.
-- `/staff-shifts`: lịch trực theo tuần/tháng/danh sách (mặc định tuần), ca của tôi và
-  lịch cố định. Staff chỉ tự đăng ký/hủy ca của chính mình.
+- `/staff-shifts`: workspace lịch trực Kỹ năng Điều dưỡng theo tuần/tháng, gồm xem lịch và đăng ký ca trực; quyền đăng ký và quản lý tuân theo role/capability hiện hành.
 - `/schedule-entry/new`: tạo lịch thủ công và sử dụng ngay.
 - `/schedule-entry/import`: import CSV/XLSX tối đa 500 dòng, preview, kiểm tra
   trùng và tải file lỗi.
@@ -160,15 +172,17 @@ Version 1 luôn ghi `null` và không hiển thị.
 - `/admin/courses`: danh mục môn học.
 - `/admin/rooms`: danh mục phòng.
 - `/admin/personnel`: trạng thái tài khoản và nhiều vai trò.
-- `/admin/shift-templates`: mẫu ca trực.
 - `/admin/audit`: nhật ký thay đổi nghiệp vụ.
 
-## Graphify
+## Điều hướng mã nguồn và Graphify
 
-Knowledge graph của mã nguồn nằm trong `graphify-out/`. Graphify được cài tách
-biệt ở workspace để không làm tăng dependency production của ứng dụng.
+Sử dụng công cụ điều hướng nhỏ nhất đủ cho tác vụ theo `AGENTS.md`:
 
-Các giả định và giới hạn Version 1 được ghi tại `docs/ASSUMPTIONS.md`.
+- Đọc và tìm kiếm trực tiếp (`read`, `grep`, `glob`) cho công việc cục bộ.
+- GitNexus (`gitnexus-code-intelligence`) khi cần phân tích kiến trúc, luồng thực thi, dependency hoặc blast radius.
+- Graphify (`graphify-out/`) là công cụ tra cứu tùy chọn khi đồ thị đã được sinh; không bắt buộc trước mọi thao tác.
+
+Các giả định nghiệp vụ và runtime phải được đối chiếu từ source code hiện hành, toàn bộ declarative schemas + lịch sử migration trong `supabase/`, test suites và OpenSpec đang hoạt động.
 
 ## Ghi chú chạy preview trên Windows
 

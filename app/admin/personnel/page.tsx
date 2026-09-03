@@ -65,30 +65,49 @@ export default async function PersonnelPage({
     PersonnelListItem & { total_count: number }
   >;
   const totalItems = Number(rows[0]?.total_count ?? 0);
-  const passwordCapableById = new Map(
-    await Promise.all(
-      rows.map(async (row) => {
-        const { data } = await authAdmin.auth.admin.getUserById(row.id);
-        const providers = new Set([
-          data.user?.app_metadata?.provider,
-          ...(data.user?.app_metadata?.providers ?? []),
-          ...(data.user?.identities ?? []).map((identity) => identity.provider),
-        ]);
-        return [row.id, providers.has("email")] as const;
-      }),
-    ),
-  );
+  const rowIds = rows.map((row) => row.id);
+  const remainingUserIds = new Set(rowIds);
+  const passwordCapableById = new Map<string, boolean>();
+  let authPage = 1;
+
+  while (remainingUserIds.size) {
+    const { data, error } = await authAdmin.auth.admin.listUsers({
+      page: authPage,
+      perPage: 1000,
+    });
+    const users = data?.users ?? [];
+    if (error || !users.length) break;
+
+    for (const user of users) {
+      if (!remainingUserIds.has(user.id)) continue;
+      const providers = new Set([
+        user.app_metadata?.provider,
+        ...(user.app_metadata?.providers ?? []),
+        ...(user.identities ?? []).map((identity) => identity.provider),
+      ]);
+      passwordCapableById.set(user.id, providers.has("email"));
+      remainingUserIds.delete(user.id);
+    }
+
+    if (users.length < 1000) break;
+    authPage += 1;
+  }
+
+  for (const userId of remainingUserIds) {
+    passwordCapableById.set(userId, false);
+  }
+
+  const { data: emailCapabilityRows } = rowIds.length
+    ? await supabase
+        .from("profiles")
+        .select("id,can_manage_email_notifications")
+        .in("id", rowIds)
+    : { data: [] };
   const emailCapabilityById = new Map(
-    await Promise.all(
-      rows.map(async (row) => {
-        const { data } = await authAdmin
-          .from("profiles")
-          .select("can_manage_email_notifications")
-          .eq("id", row.id)
-          .maybeSingle();
-        return [row.id, Boolean(data?.can_manage_email_notifications)] as const;
-      }),
-    ),
+    (emailCapabilityRows ?? []).map((row) => [
+      row.id,
+      Boolean(row.can_manage_email_notifications),
+    ]),
   );
 
   return (

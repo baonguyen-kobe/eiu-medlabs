@@ -10,6 +10,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Clock3 } from "@/components/icons";
+import { getFieldAria } from "@/lib/form-field-aria";
 import {
   DEFAULT_TIME_PICKER_ALLOWED_VALUES,
   TIME_PICKER_HOURS,
@@ -279,11 +280,11 @@ export function TimePicker({
     inputRef.current?.focus();
   }
 
-  const effectiveAriaDescribedBy = isInvalid
-    ? ariaDescribedBy
-      ? `${ariaDescribedBy} ${errorId}`
-      : errorId
-    : ariaDescribedBy;
+  const fieldAria = getFieldAria({
+    describedBy: ariaDescribedBy,
+    errorId: isInvalid ? errorId : undefined,
+    invalid: isInvalid,
+  });
 
   return (
     <div
@@ -314,8 +315,8 @@ export function TimePicker({
           disabled={disabled}
           readOnly={readOnly}
           aria-label={ariaLabel}
-          aria-describedby={effectiveAriaDescribedBy}
-          aria-invalid={isInvalid ? "true" : undefined}
+          aria-describedby={fieldAria["aria-describedby"]}
+          aria-invalid={fieldAria["aria-invalid"]}
           aria-haspopup="dialog"
           className="time-picker-input"
         />

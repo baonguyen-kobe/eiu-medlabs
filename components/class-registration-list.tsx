@@ -550,7 +550,14 @@ export function ClassRegistrationList({
                   : item.course_name_snapshot;
 
               return (
-                <tr key={item.id}>
+                <tr
+                  key={item.id}
+                  className={
+                    canEditDetails
+                      ? "class-registration-mobile-editing"
+                      : undefined
+                  }
+                >
                   <td>
                     {canEditDetails ? (
                       <input
