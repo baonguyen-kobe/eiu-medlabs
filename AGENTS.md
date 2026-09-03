@@ -145,3 +145,16 @@ line endings.
 npx.cmd prettier --check <touched-files>
 npm.cmd run check
 ```
+
+Use GitHub-hosted Actions on `ubuntu-latest` as the primary automated technical
+gate when broader automated validation is required. Local validation remains
+appropriate for fast focused checks, localhost/rendered UI review, and failure
+reproduction; routine full WSL validation and the historical self-hosted runner
+are not the default CI path.
+
+Use `npm.cmd run react-doctor:audit` as an advisory audit after meaningful
+React work. Do not weaken tests, types, lint rules, security controls, or the
+validation scope merely to make checks pass.
+
+See `docs/RELEASE.md` for the durable release and production-verification
+policy.
