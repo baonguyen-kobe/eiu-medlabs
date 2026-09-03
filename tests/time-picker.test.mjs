@@ -371,3 +371,5 @@ test("TimePicker: shared icon positioning and text padding provide clear horizon
     "Compact time pickers have 30px left padding",
   );
 });
+
+// Selective CI routing preflight: no behavioral change.
