@@ -1,5 +1,9 @@
 # MedLabs Calendar agent guide
 
+## Documentation authority
+
+Before planning or executing work, consult `docs/DOCUMENTATION_AUTHORITY.md`. It defines the strict document precedence hierarchy, canonical repository and branch ownership, runtime role and capability contracts, and codebase navigation rules.
+
 ## Codebase navigation and intelligence
 
 Use the smallest sufficient navigation tool for the task:
@@ -47,6 +51,8 @@ For new or substantially modified source files, treat 350 lines as a review sign
 ## Canonical UI/UX authority
 
 For every MedLabs UI/UX implementation or review task, read `docs/UI_DESIGN_SYSTEM_V2_MASTER.md` before modifying UI. After existing business/security requirements, it is the canonical UI authority. Do not recreate or copy the full Master into prompts or new files; when the user approves a UI rule change, update this file first and then implement against it.
+
+`docs/UI_LAYOUT_SPEC.md` and `docs/UI_REVIEW_GUIDE.md` are supplemental references only and cannot override `docs/UI_DESIGN_SYSTEM_V2_MASTER.md` or `docs/ui-modernization/` decisions and tracker state.
 
 ## Source-first UI correction interpretation
 

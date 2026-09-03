@@ -3,16 +3,18 @@ schema: spec-driven
 context: |
   Product: MedLabs Calendar, an internal EIU scheduling system.
   Stack: Next.js 16 App Router, React 19, TypeScript, Supabase, Tailwind CSS.
-  Roles: Admin, Staff, Importer, Lecturer; authorization and room-type scope must be enforced server-side and through RLS where applicable.
-  Code navigation: Graphify is the primary knowledge graph. Read NEXTJS_AGENTS.md for version-matched Next.js behavior.
+  Roles: Admin, Staff, Teaching Assistant, Lecturer, Viewer. Schedule import is a capability (profiles.can_import_schedules) combined with supported role and room-type scope, not an independent primary role. Legacy importer terminology is for historical compatibility only.
+  Authorization: Authorization, role permissions, and room-type scope must be enforced server-side and through RLS/RPC where applicable.
+  Code navigation: Follow the smallest-sufficient-tool policy in AGENTS.md (direct inspection, GitNexus when useful, Graphify optional if current). Read NEXTJS_AGENTS.md for version-matched Next.js behavior.
+  Documentation: Resolve all authority and documentation conflicts via docs/DOCUMENTATION_AUTHORITY.md.
   Delivery: Keep changes surgical, preserve desktop behavior when adding responsive layouts, and verify role-specific user paths.
 
 rules:
   proposal:
-    - State the user-visible outcome, non-goals, affected roles, data migration impact, and rollback considerations.
+    - State the user-visible outcome, non-goals, affected roles, capability/room-type scope, data migration impact, and rollback considerations.
     - Identify authorization, RLS, email-notification, import/export, and responsive-layout impacts when relevant.
   specs:
-    - Write testable requirements with explicit role and room-type scope.
+    - Write testable requirements with explicit role, capability, and room-type scope.
     - Include conflict and failure behavior for scheduling mutations.
   tasks:
     - Order tasks by schema and authorization, server behavior, UI, then verification.
@@ -21,8 +23,9 @@ rules:
 operations:
   apply:
     guidance:
-      - Query Graphify before editing related code and update the graph after changes.
+      - Use the smallest sufficient navigation tool specified in AGENTS.md; Graphify is optional and not mandatory before edits.
       - Preserve unrelated work and avoid speculative refactors.
   archive:
     guidance:
+      - Archive completed changes only after durable contracts, decisions, and schemas are represented in current source, tests, and canonical docs.
       - Record migrations, production configuration, verification results, and known limitations.

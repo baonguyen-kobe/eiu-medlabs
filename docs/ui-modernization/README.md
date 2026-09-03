@@ -4,38 +4,57 @@ This directory is the authoritative, Git-tracked continuity system for the EIU M
 
 The system is agent/model-independent. Any agent that can read the repository can resume by reading:
 
-1. `docs/ui-modernization/README.md`
-2. `docs/ui-modernization/CURRENT.md`
-3. `docs/ui-modernization/TRACKER.md`
-4. `docs/ui-modernization/DECISIONS.md`
+1. `docs/DOCUMENTATION_AUTHORITY.md`
+2. `docs/ui-modernization/README.md`
+3. `docs/ui-modernization/CURRENT.md`
+4. `docs/ui-modernization/TRACKER.md`
+5. `docs/ui-modernization/DECISIONS.md`
 
 Git-tracked project state is authoritative. Continuity must not depend on a ChatGPT account, Codex session, OMP model, GPT-5.6 Sol/Terra, Gemini, terminal lifetime, or chat memory.
 
 ## Source-of-truth hierarchy
 
-Highest to lowest:
+For UI modernization, first apply the authority model in
+`docs/DOCUMENTATION_AUTHORITY.md`.
 
-1. Explicit current user instruction
-2. Repository business/security instructions
-3. `docs/ui-modernization/DECISIONS.md`
-4. `docs/ui-modernization/CURRENT.md`
-5. `docs/ui-modernization/TRACKER.md`
-6. `docs/ui-modernization/MASTER-PLAN.md`
-7. Audit evidence in `docs/ui-modernization/audits/`
+Within the UI-modernization domain, use:
 
-When two sources disagree, follow the higher-authority source. Do not silently rewrite history. Record deliberate changes in `DECISIONS.md` or append them to `WORKLOG.md`.
+1. Explicit current user instruction.
+2. Approved current business/security/product contracts.
+3. Effective current source when determining what the implementation actually
+   does.
+4. `docs/UI_DESIGN_SYSTEM_V2_MASTER.md` for canonical visual/design-system
+   rules.
+5. `docs/ui-modernization/DECISIONS.md` for durable modernization decisions.
+6. `docs/ui-modernization/CURRENT.md` for the active checkpoint.
+7. `docs/ui-modernization/TRACKER.md` for task status and dependencies.
+8. `docs/ui-modernization/MASTER-PLAN.md` for planned sequencing.
+9. Audit evidence in `docs/ui-modernization/audits/` for historical evidence.
+
+`docs/UI_LAYOUT_SPEC.md` and `docs/UI_REVIEW_GUIDE.md` are supplemental
+references only. They cannot override the UI Master, approved current product
+contracts, effective source, or modernization continuity state.
+
+Do not treat an implementation defect as a new design decision merely because
+it exists in source. Conversely, do not claim current implementation behavior
+from documentation alone when the source can be inspected.
+
+Record deliberate modernization decision changes in `DECISIONS.md`.
+Use `WORKLOG.md` for historical execution evidence rather than as an authority
+over current state.
 
 ## Session startup protocol
 
 For any new Codex, Gemini, OMP, Orca, IDE-agent, or other coding-agent session working on UI modernization, read in this order:
 
-1. Repository `AGENTS.md` and applicable agent instructions
+1. Repository `AGENTS.md` and `docs/DOCUMENTATION_AUTHORITY.md`
 2. `docs/ui-modernization/README.md`
 3. `docs/ui-modernization/CURRENT.md`
 4. `docs/ui-modernization/TRACKER.md`
 5. `docs/ui-modernization/DECISIONS.md`
-6. `MASTER-PLAN.md` only as needed
-7. Relevant audit evidence only as needed
+6. `docs/UI_DESIGN_SYSTEM_V2_MASTER.md` for visual specifications
+7. `MASTER-PLAN.md` only as needed
+8. Relevant audit evidence only as needed
 
 Then run:
 

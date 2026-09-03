@@ -2,6 +2,18 @@
 
 Ứng dụng nội bộ quản lý lịch học, giảng viên nhận lớp và staff tự đăng ký ca trực.
 
+## Tài liệu và authority
+
+Tài liệu trong repository tuân thủ thứ tự ưu tiên và thẩm quyền tại `docs/DOCUMENTATION_AUTHORITY.md`. README này phục vụ hướng dẫn khởi động và phát triển local, không cấu thành bằng chứng trạng thái production trực tiếp.
+
+Các tài liệu chính:
+
+- `AGENTS.md`: Hướng dẫn vận hành, quy tắc kỹ thuật và router của agent.
+- `docs/DOCUMENTATION_AUTHORITY.md`: Phân cấp thẩm quyền tài liệu, vai trò runtime và quy tắc điều hướng code.
+- `docs/UI_DESIGN_SYSTEM_V2_MASTER.md`: Thẩm quyền thiết kế giao diện MedLabs chuẩn (typography, màu sắc, layout, components).
+- `docs/ui-modernization/`: Hệ thống theo dõi (`CURRENT.md`, `TRACKER.md`, `DECISIONS.md`) cho quá trình hiện đại hóa giao diện.
+- `NEXTJS_AGENTS.md`: Hướng dẫn tương thích theo phiên bản Next.js đang cài đặt.
+
 ## Yêu cầu
 
 - Node.js 22.13 trở lên
@@ -93,7 +105,7 @@ EMAIL_APPS_SCRIPT_URL=https://script.google.com/macros/s/.../exec
 EMAIL_APPS_SCRIPT_SECRET=...
 ```
 
-Xem hướng dẫn triển khai script tại `docs/APPS_SCRIPT_EMAIL_SETUP.md`.
+Nhánh UI-modernization hiện tại không lưu toàn bộ runbook production cũ; mọi thay đổi cấu hình email production cần được đối chiếu trực tiếp từ source/môi trường thực tế và runbook vận hành được duyệt.
 
 ### Personnel reconciliation
 
@@ -163,12 +175,15 @@ Version 1 luôn ghi `null` và không hiển thị.
 - `/admin/shift-templates`: mẫu ca trực.
 - `/admin/audit`: nhật ký thay đổi nghiệp vụ.
 
-## Graphify
+## Điều hướng mã nguồn và Graphify
 
-Knowledge graph của mã nguồn nằm trong `graphify-out/`. Graphify được cài tách
-biệt ở workspace để không làm tăng dependency production của ứng dụng.
+Sử dụng công cụ điều hướng nhỏ nhất đủ cho tác vụ theo `AGENTS.md`:
 
-Các giả định và giới hạn Version 1 được ghi tại `docs/ASSUMPTIONS.md`.
+- Đọc và tìm kiếm trực tiếp (`read`, `grep`, `glob`) cho công việc cục bộ.
+- GitNexus (`gitnexus-code-intelligence`) khi cần phân tích kiến trúc, luồng thực thi, dependency hoặc blast radius.
+- Graphify (`graphify-out/`) là công cụ tra cứu tùy chọn khi đồ thị đã được sinh; không bắt buộc trước mọi thao tác.
+
+Các giả định nghiệp vụ và runtime phải được đối chiếu từ source code hiện hành, toàn bộ declarative schemas + lịch sử migration trong `supabase/`, test suites và OpenSpec đang hoạt động.
 
 ## Ghi chú chạy preview trên Windows
 
