@@ -96,7 +96,7 @@ For release and production, `docs/RELEASE.md` is authoritative.
 - SHA: `8331f910845103c08d51f6ca1d86ebb7d1f745e3`
 - Upstream path: `skills/supabase`
 - Local path: `.agents/skills/supabase`
-- Adaptations: MedLabs repository-first database writes; MCP is optional and is never auto-configured; no direct remote database scratchpad workflow.
+- Adaptations: MedLabs repository-first database writes; MCP is optional and is never auto-configured; no direct remote database scratchpad workflow; verification delegates to `medlabs-verification-gate`; MCP absence does not block documentation or ordinary source work; independently verified root causes route to `medlabs-implement-contract`.
 
 #### supabase-postgres-best-practices
 

@@ -40,8 +40,18 @@ Do not rely on training data for Supabase features. Function signatures, config.
 
 First, fetch `https://supabase.com/changelog.md` (a lightweight summary index — not a heavy pull), scan for `breaking-change` tags relevant to your task, and follow the linked page for any that apply. Then look up the relevant topic using the documentation access methods below.
 
-**2. Verify your work.**
-After implementing any fix, run a test query to confirm the change works. A fix without verification is incomplete.
+**2. Verify through the MedLabs verification gate.**
+After implementing a MedLabs change, use `medlabs-verification-gate` to select
+the smallest sufficient evidence for the actual blast radius.
+
+Do not require a database query merely because the task involves Supabase.
+
+Run a database query only when it is materially required by the approved
+verification scope and the current task provides an authorized safe database
+access path.
+
+An unavailable MCP or remote database does not make an otherwise verifiable
+repository change incomplete.
 
 **3. Recover from errors, don't loop.**
 If an approach fails after 2-3 attempts, stop and reconsider. Try a different method, check documentation, inspect the error more carefully, and review relevant logs when available. Supabase issues are not always solved by retrying the same command, and the answer is not always in the logs, but logs are often worth checking before proceeding.
@@ -111,7 +121,7 @@ supabase <group> <command> --help  # Flags for a specific command
 
 **Supabase CLI Known gotchas:**
 
-- `supabase db query` requires **CLI v2.79.0+** → use MCP `execute_sql` or `psql` as fallback
+- `supabase db query` requires **CLI v2.79.0+**. In MedLabs, do not substitute MCP `execute_sql` or `psql` for repository-controlled database writes. For an explicitly required read-only diagnostic query, use only an access path that is already available and authorized by the current task.
 - `supabase db advisors` requires **CLI v2.81.3+** → use MCP `get_advisors` as fallback
 - In imperative migration projects, create new hand-authored migration files with `supabase migration new <name>` first. Never invent a migration filename or rely on memory for the expected format. Declarative schema projects generate migrations from `supabase/schemas/`; see "Making and Committing Schema Changes" below.
 
@@ -135,9 +145,11 @@ For ordinary implementation, continue without MCP when it is unavailable.
 
 Before implementing any Supabase feature, find the relevant documentation. Use these methods in priority order:
 
-1. **MCP `search_docs` tool** (preferred — returns relevant snippets directly)
-2. **Fetch docs pages as markdown** — any docs page can be fetched by appending `.md` to the URL path.
-3. **Web search** for Supabase-specific topics when you don't know which page to look at.
+1. **MCP `search_docs` tool when it is already available and authorized for the current task** — use it without creating or changing MCP configuration.
+2. **Fetch official Supabase docs pages as markdown** — any docs page can be fetched by appending `.md` to the URL path.
+3. **Web search** for Supabase-specific topics when you do not know which official page to use.
+
+Missing MCP must not block documentation lookup.
 
 ## Making and Committing Schema Changes
 
@@ -171,7 +183,21 @@ explicit current authorization under `docs/RELEASE.md`.
 
 ## Debugging
 
-When you get an error on a Supabase-related request, for example an error code from the Supabase REST API, Postgres database, or PostgREST, an empty result, getting blocked by RLS unexpectedly, or an error from a Supabase service like Auth, Realtime, Edge Functions, or Storage, you **must** fetch Supabase's [Monitoring and Debugging](https://supabase.com/docs/guides/monitoring-and-debugging.md) documentation before diagnosing or proposing a fix, rather than working from memory. The same docs also cover performance optimizations, such as slow queries and missing indexes.
+If the current user or independent Reviewer has already supplied a verified
+root cause and settled exact implementation contract, follow
+`medlabs-implement-contract`; do not restart diagnosis merely because the issue
+involves Supabase.
+
+When root cause is genuinely unknown and the issue involves Supabase REST,
+Postgres/PostgREST, Auth, Realtime, Edge Functions, Storage, RLS, permissions,
+timeouts, or related platform behavior, consult the current official Supabase
+Monitoring and Debugging documentation before proposing a diagnosis that
+depends on platform behavior.
+
+Use current documentation rather than remembered Supabase behavior.
+
+Do not access production data or logs unless the current task explicitly
+authorizes that diagnostic access.
 
 ## Reference Guides
 
