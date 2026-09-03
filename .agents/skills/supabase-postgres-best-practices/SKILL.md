@@ -12,6 +12,28 @@ metadata:
 
 # Supabase Postgres Best Practices
 
+## MedLabs security boundary
+
+This skill is secondary advisory guidance for MedLabs.
+
+For RLS, grants, authorization, privileged functions, exposed schemas, or other
+Supabase security behavior, load and follow the curated `supabase` skill first.
+
+Approved MedLabs security/business contracts and the effective current
+schema/RLS/grant/function behavior outrank examples in this skill.
+
+Never copy a generic RLS or privilege example into MedLabs without reconciling
+it with the actual access model.
+
+For UPDATE-capable RLS policies, including a `FOR ALL` policy, do not rely on a
+`USING` predicate alone. Preserve the required old-row authorization with
+`USING` and the allowed new-row state with `WITH CHECK`.
+
+Do not apply generic privilege revocations or grants without reviewing the
+current Supabase Data API exposure, effective grants, RLS, and existing
+MedLabs authorization contract.
+
+
 Comprehensive performance optimization guide for Postgres, maintained by Supabase. Contains rules across 8 categories, prioritized by impact to guide automated query optimization and schema design.
 
 ## When to Apply

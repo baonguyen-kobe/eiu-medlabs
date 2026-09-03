@@ -8,6 +8,31 @@ metadata:
 
 # Supabase
 
+## MedLabs repository-first override
+
+These MedLabs rules override any generic workflow later in this upstream skill
+when the two conflict.
+
+- Supabase MCP is an optional external integration. Do not create, modify, or
+  activate `.mcp.json` or any other MCP configuration during ordinary MedLabs
+  implementation unless the current user/Reviewer explicitly authorizes an MCP
+  setup task.
+- Repository schema, forward migrations, RLS/RPC/function definitions, and
+  their tests are the normal database write authority.
+- Do not use MCP `execute_sql`, MCP `apply_migration`, `supabase db query`, or
+  another direct remote-database write as an iterative scratchpad for MedLabs
+  schema, RLS, RPC, function, grant, or trigger changes.
+- For an approved database change, inspect the current declarative schema and
+  effective forward migration chain, modify the approved repository source,
+  add or update the required regression evidence, and use the repository/CI
+  validation path.
+- Production database mutation always requires separate explicit authorization
+  under `docs/RELEASE.md`.
+- If MCP is unavailable, use current official Supabase documentation through
+  another approved documentation path. Missing MCP is not a blocker for normal
+  MedLabs source work.
+
+
 ## Core Principles
 
 **1. Supabase changes frequently — verify against changelog and current docs before implementing.**
@@ -94,19 +119,17 @@ supabase <group> <command> --help  # Flags for a specific command
 
 ## Supabase MCP Server
 
-For setup instructions, server URL, and configuration, see the [MCP setup guide](https://supabase.com/docs/guides/getting-started/mcp).
+Supabase MCP is optional for MedLabs and is not part of ordinary source-work
+prerequisites.
 
-**Troubleshooting connection issues** — follow these steps in order:
+Do not automatically create or modify `.mcp.json`, `.omp/mcp.json`, global OMP
+MCP configuration, OAuth configuration, project linkage, or credentials.
 
-1. **Check if the server is reachable:**
-   `curl -so /dev/null -w "%{http_code}" https://mcp.supabase.com/mcp`
-   A `401` is expected (no token) and means the server is up. Timeout or "connection refused" means it may be down.
+If the current task is explicitly an MCP setup or MCP diagnostic task, consult
+the current official Supabase MCP documentation and follow the separately
+approved MedLabs MCP contract.
 
-2. **Check `.mcp.json` configuration:**
-   Verify the project root has a valid `.mcp.json` with the correct server URL. If missing, create one pointing to `https://mcp.supabase.com/mcp`.
-
-3. **Authenticate the MCP server:**
-   If the server is reachable and `.mcp.json` is correct but tools aren't visible, the user needs to authenticate. The Supabase MCP server uses OAuth 2.1 — tell the user to trigger the auth flow in their agent, complete it in the browser, and reload the session.
+For ordinary implementation, continue without MCP when it is unavailable.
 
 ## Supabase Documentation
 
@@ -118,26 +141,33 @@ Before implementing any Supabase feature, find the relevant documentation. Use t
 
 ## Making and Committing Schema Changes
 
-First decide which schema workflow the project uses.
+MedLabs uses repository-controlled database change artifacts.
 
-### Option A: Declarative schemas
+The current repository declares declarative schema paths under
+`supabase/schemas/`.
 
-Use this when `supabase/schemas/` exists or `config.toml` sets `schema_paths`. Edit the desired schema state in those files, then generate and review the migration. Do not start by hand-writing a migration. See the [Declarative database schemas guide](https://supabase.com/docs/guides/local-development/declarative-database-schemas).
+For any approved schema, RLS, grant, RPC/function, trigger, or related database
+change:
 
-### Option B: Imperative migrations
+1. inspect the relevant current declarative schema;
+2. inspect the effective forward migration chain;
+3. inspect the relevant RLS/grants/functions/tests;
+4. apply the exact approved change to repository-controlled schema/migration
+   artifacts;
+5. add or update the required regression tests;
+6. use the repository's applicable CI/database validation path.
 
-Use this when the project does not use declarative schemas.
+Do not use a remote Supabase database as an iterative scratchpad.
 
-**To make schema changes, use `execute_sql` (MCP) or `supabase db query` (CLI).** These run SQL directly on the database without creating migration history entries, so you can iterate freely and generate a clean migration when ready.
+Do not use MCP `execute_sql`, MCP `apply_migration`, `supabase db query`, or an
+equivalent direct remote write merely to experiment before creating the
+repository change.
 
-Do NOT use `apply_migration` to change a local database schema — it writes a migration history entry on every call, which means you can't iterate, and `supabase db diff` / `supabase db pull` will produce empty or conflicting diffs. If you use it, you'll be stuck with whatever SQL you passed on the first try.
+Do not invent a new migration workflow when the current Reviewer/task contract
+or repository pattern already specifies one.
 
-**When ready to commit** your changes to a migration file:
-
-1. **Run advisors** → `supabase db advisors` (CLI v2.81.3+) or MCP `get_advisors`. Fix any issues.
-2. **Review the Security Checklist above** if your changes involve views, functions, triggers, or storage.
-3. **Generate the migration** → `supabase db pull <descriptive-name> --local --yes`
-4. **Verify** → `supabase migration list --local`
+Production database mutation is a separate release operation and requires
+explicit current authorization under `docs/RELEASE.md`.
 
 ## Debugging
 

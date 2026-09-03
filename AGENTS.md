@@ -93,10 +93,14 @@ Use `.agents/skills/medlabs-implement-contract/SKILL.md` for this workflow.
 ## Specialized guidance
 
 - For Supabase Auth, database, RLS, grants, RPC/functions, migrations, storage,
-  or Supabase client behavior, use the relevant curated Supabase skill.
-  Approved MedLabs contracts and actual effective schema/runtime behavior
-  outrank generic skill examples. Repository schema/migrations remain database
-  change authority.
+  or Supabase client behavior, use the relevant curated Supabase skill. For
+  RLS, grants, authorization, or privileged database behavior, use `supabase`
+  first and treat `supabase-postgres-best-practices` as secondary advisory
+  guidance. Approved MedLabs contracts and actual effective schema/runtime
+  behavior outrank generic skill examples. Repository schema/migrations remain
+  database change authority. Do not auto-configure MCP and do not use a remote
+  Supabase database as an iterative write scratchpad. Production database
+  mutation requires separate explicit authorization under `docs/RELEASE.md`.
 - For React/Next.js implementation or performance work, use
   `vercel-react-best-practices`.
 - Use `vercel-composition-patterns` only when reusable component API or

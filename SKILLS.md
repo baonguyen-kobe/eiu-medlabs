@@ -18,7 +18,8 @@ and `docs/RELEASE.md`.
 | User/Reviewer supplied a verified root cause or settled exact implementation contract | `medlabs-implement-contract` |
 | Root cause is genuinely unknown | `systematic-debugging` |
 | Supabase Auth/client/platform behavior | `supabase` |
-| SQL, PostgreSQL, RLS, grants, RPC/functions, indexes, locks, schema or migration design | `supabase-postgres-best-practices` |
+| SQL/PostgreSQL performance, indexes, locks, schema structure or migration design | `supabase-postgres-best-practices` |
+| RLS, grants, authorization or privileged Supabase database behavior | `supabase` first; `supabase-postgres-best-practices` only as secondary advisory guidance |
 | React/Next.js implementation or performance | `vercel-react-best-practices` |
 | Reusable component API or composition architecture | `vercel-composition-patterns` |
 | Explicit generic UI/UX review | `web-design-guidelines` |
@@ -43,6 +44,10 @@ For Supabase, approved MedLabs business/security contracts and actual effective
 schema/migrations/RLS/RPC behavior outrank generic skill recommendations.
 
 Repository schema and migration files remain the database change authority.
+
+Supabase skills must not automatically configure MCP or use a remote database
+as an iterative write scratchpad. Production database mutation requires a
+separately authorized release operation.
 
 For visual behavior, `docs/UI_DESIGN_SYSTEM_V2_MASTER.md` is the canonical UI
 authority after business/security requirements.
@@ -86,19 +91,21 @@ For release and production, `docs/RELEASE.md` is authoritative.
 
 #### supabase
 
-- Source type: UPSTREAM_PINNED
+- Source type: ADAPTED_FROM_UPSTREAM
 - Upstream: `supabase/agent-skills`
 - SHA: `8331f910845103c08d51f6ca1d86ebb7d1f745e3`
 - Upstream path: `skills/supabase`
 - Local path: `.agents/skills/supabase`
+- Adaptations: MedLabs repository-first database writes; MCP is optional and is never auto-configured; no direct remote database scratchpad workflow.
 
 #### supabase-postgres-best-practices
 
-- Source type: UPSTREAM_PINNED
+- Source type: ADAPTED_FROM_UPSTREAM
 - Upstream: `supabase/agent-skills`
 - SHA: `8331f910845103c08d51f6ca1d86ebb7d1f745e3`
 - Upstream path: `skills/supabase-postgres-best-practices`
 - Local path: `.agents/skills/supabase-postgres-best-practices`
+- Adaptations: Supabase security guidance takes precedence for RLS/grants; UPDATE/FOR ALL policies require appropriate `USING` and `WITH CHECK`; generic privilege examples are advisory only.
 - Advisory only; actual MedLabs contracts/schema/runtime outrank examples.
 
 #### vercel-react-best-practices

@@ -28,7 +28,8 @@ alter table orders enable row level security;
 -- Create policy for users to see only their orders
 create policy orders_user_policy on orders
   for all
-  using (user_id = current_setting('app.current_user_id')::bigint);
+  using (user_id = current_setting('app.current_user_id')::bigint)
+  with check (user_id = current_setting('app.current_user_id')::bigint);
 
 -- Force RLS even for table owners
 alter table orders force row level security;
@@ -44,7 +45,8 @@ Policy for authenticated role:
 create policy orders_user_policy on orders
   for all
   to authenticated
-  using (user_id = auth.uid());
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
 ```
 
 Reference: [Row Level Security](https://supabase.com/docs/guides/database/postgres/row-level-security)
