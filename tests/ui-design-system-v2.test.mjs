@@ -410,15 +410,25 @@ test("UI V2 personnel structure follows the approved table and drawer order", as
     /action === "grant-admin" && requiresDeactivationConfirmation\(\)/,
   );
   const confirmationDialog = await source("components/confirm-dialog.tsx");
-  assert.match(confirmationDialog, /event\.key !== "Tab"/);
-  assert.match(confirmationDialog, /last\.focus\(\)/);
-  assert.match(confirmationDialog, /first\.focus\(\)/);
+  const overlayFocus = await source("components/use-overlay-focus.ts");
+
+  assert.match(
+    confirmationDialog,
+    /import \{ useOverlayFocus \} from "@\/components\/use-overlay-focus";/,
+  );
+  assert.match(confirmationDialog, /useOverlayFocus\(\{/);
+  assert.match(confirmationDialog, /data-overlay-focus-root="true"/);
+
+  assert.match(overlayFocus, /event\.key !== "Tab"/);
+  assert.match(overlayFocus, /const first = focusable\[0\]/);
+  assert.match(overlayFocus, /const last = focusable\[focusable\.length - 1\]/);
+  assert.match(overlayFocus, /\(event\.shiftKey \? last : first\)\.focus\(\)/);
   assert.match(personnel, /getNameInitials\(item\.full_name\)/);
   assert.match(personnel, /className="personnel-name"/);
   assert.doesNotMatch(personnel, /person-avatar initials-avatar/);
   assert.doesNotMatch(personnel, /employee_code\?\.trim\(\)/);
   assert.doesNotMatch(personnel, /item\.id\.slice\(/);
-  assert.match(personnelPage, /select\("can_manage_email_notifications"\)/);
+  assert.match(personnelPage, /select\("id,can_manage_email_notifications"\)/);
   assert.doesNotMatch(personnelPage, /employee_code/);
   assert.match(
     master,
