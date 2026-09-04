@@ -110,7 +110,7 @@ try {
   );
   const prettierResult = spawnSync(
     nodeBin,
-    [prettierBin, "--check", "--ignore-unknown", ...changedFiles],
+    [prettierBin, "--check", "--ignore-unknown", "--", ...changedFiles],
     { stdio: "inherit" },
   );
   if (prettierResult.error) {
@@ -141,7 +141,7 @@ if (jsFiles.length > 0) {
       "../node_modules/eslint/bin/eslint.js",
       "node_modules/eslint/bin/eslint.js",
     );
-    const eslintResult = spawnSync(nodeBin, [eslintBin, ...jsFiles], {
+    const eslintResult = spawnSync(nodeBin, [eslintBin, "--", ...jsFiles], {
       stdio: "inherit",
     });
     if (eslintResult.error) {

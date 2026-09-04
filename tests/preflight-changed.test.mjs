@@ -164,3 +164,62 @@ test("preflight:changed handles renamed paths with spaces, checks formatting, an
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
+
+test("preflight:changed safely handles changed filenames starting with a hyphen using option terminator", () => {
+  const tempDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "medlabs-preflight-test-"),
+  );
+  try {
+    execFileSync("git", ["init", "-b", "main"], {
+      cwd: tempDir,
+      stdio: "pipe",
+    });
+    execFileSync("git", ["config", "user.name", "Test"], {
+      cwd: tempDir,
+      stdio: "pipe",
+    });
+    execFileSync("git", ["config", "user.email", "test@test.com"], {
+      cwd: tempDir,
+      stdio: "pipe",
+    });
+    fs.writeFileSync(path.join(tempDir, "initial.txt"), "hello\n", "utf8");
+    execFileSync("git", ["add", "initial.txt"], {
+      cwd: tempDir,
+      stdio: "pipe",
+    });
+    execFileSync("git", ["commit", "-m", "init"], {
+      cwd: tempDir,
+      stdio: "pipe",
+    });
+
+    fs.mkdirSync(path.join(tempDir, "docs"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tempDir, "docs", "-hyphen-flag.md"),
+      "# Flag File\n",
+      "utf8",
+    );
+    execFileSync("git", ["add", "--", "docs/-hyphen-flag.md"], {
+      cwd: tempDir,
+      stdio: "pipe",
+    });
+
+    const output = execFileSync(nodeBin, [scriptPath, "HEAD"], {
+      cwd: tempDir,
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+
+    assert.match(
+      output,
+      /docs\/-hyphen-flag\.md/,
+      "Must correctly detect hyphen-prefixed file without flag collision",
+    );
+    assert.match(
+      output,
+      /preflight:changed: PASS/,
+      "Must pass formatting check on hyphen-prefixed file",
+    );
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});

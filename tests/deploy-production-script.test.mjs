@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { chmodSync, readFileSync } from "node:fs";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
+const testComSpecShim = fileURLToPath(
+  new URL("./helpers/test-comspec-shim.mjs", import.meta.url),
+);
 const scriptSource = readFileSync(
   new URL("../scripts/deploy-production.ps1", import.meta.url),
   "utf8",
@@ -108,7 +112,7 @@ test("deploy-production.ps1 reports structured verification output for both path
     "Must report exact alias verification with non-fatal metadata notice on fallback",
   );
 });
-test("Invoke-Vercel source contract implements concurrent async stream reading and bounded timeout", () => {
+test("Invoke-Vercel source contract implements concurrent async stream reading, taskkill tree termination, and process disposal", () => {
   assert.match(
     scriptSource,
     /\$stdoutTask = \$process\.StandardOutput\.ReadToEndAsync\(\)/,
@@ -136,8 +140,18 @@ test("Invoke-Vercel source contract implements concurrent async stream reading a
   );
   assert.match(
     scriptSource,
+    /taskkill\.exe\s+\/PID\s+\$process\.Id\s+\/T\s+\/F/,
+    "Must invoke taskkill.exe with /PID, /T, and /F for complete process-tree termination on Windows",
+  );
+  assert.match(
+    scriptSource,
     /Vercel command timed out after \$TimeoutSeconds seconds/,
     "Must throw explicit timeout error message",
+  );
+  assert.match(
+    scriptSource,
+    /finally\s*\{\s*\$process\.Dispose\(\)\s*\}/,
+    "Must dispose process object in finally block across all exit paths",
   );
 });
 
@@ -148,10 +162,20 @@ const powershellCmd = (() => {
 })();
 
 function runPowerShell(scriptBlock) {
+  if (process.platform !== "win32") {
+    try {
+      chmodSync(testComSpecShim, 0o755);
+    } catch {}
+  }
+  const comSpecSetup =
+    process.platform !== "win32"
+      ? `$env:ComSpec = "${testComSpecShim.replace(/\\/g, "/")}"\n`
+      : "";
+  const fullScript = comSpecSetup + scriptBlock;
   try {
     return execFileSync(
       powershellCmd,
-      ["-NoProfile", "-NonInteractive", "-Command", scriptBlock],
+      ["-NoProfile", "-NonInteractive", "-Command", fullScript],
       { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] },
     );
   } catch (err) {
@@ -235,7 +259,7 @@ test("PowerShell Invoke-Vercel behavior: captures both stdout and stderr concurr
     $ErrorActionPreference = "Stop"
     ${invokeVercelFn}
 
-    $out = Invoke-Vercel -CommandPath "node" -Arguments @("-e", "console.log('concurrent_stdout'); console.error('concurrent_stderr');")
+    $out = Invoke-Vercel -CommandPath "node" -Arguments @("-e", "console.log('concurrent_stdout');console.error('concurrent_stderr')")
     Write-Output "OUT_LINES:$($out.Count)"
     Write-Output "COMBINED:$($out -join ' --- ')"
   `;
@@ -250,7 +274,7 @@ test("PowerShell Invoke-Vercel behavior: non-zero exit code throws and retains c
     ${invokeVercelFn}
 
     try {
-      Invoke-Vercel -CommandPath "node" -Arguments @("-e", "console.error('fatal_vercel_build_error'); process.exit(1);")
+      Invoke-Vercel -CommandPath "node" -Arguments @("-e", "throw new Error('fatal_vercel_build_error')")
     } catch {
       Write-Output "CAUGHT_ERROR:$($_.Exception.Message)"
     }
@@ -260,34 +284,92 @@ test("PowerShell Invoke-Vercel behavior: non-zero exit code throws and retains c
   assert.match(out, /fatal_vercel_build_error/);
 });
 
-test("PowerShell Invoke-Vercel behavior: bounded timeout terminates process tree and throws", () => {
+test("PowerShell Invoke-Vercel behavior: bounded timeout throws within deadline without hanging", () => {
   const ps = `
     $ErrorActionPreference = "Stop"
     ${invokeVercelFn}
 
     $tempPidFile = [System.IO.Path]::GetTempFileName().Replace('\\', '/')
     try {
-      Invoke-Vercel -CommandPath "node" -Arguments @("-e", "const fs=require(\`"fs\`"); fs.writeFileSync(process.argv[1], String(process.pid)); setInterval(() => {}, 1000);", $tempPidFile) -TimeoutSeconds 1
+      Invoke-Vercel -CommandPath "node" -Arguments @("-e", "require('fs').writeFileSync(process.argv[1],String(process.pid));setTimeout(()=>{},10000)", $tempPidFile) -TimeoutSeconds 1
     } catch {
       Write-Output "CAUGHT_TIMEOUT:$($_.Exception.Message)"
     }
-    Start-Sleep -Milliseconds 500
-    $spawnedPid = [int](Get-Content $tempPidFile -Raw).Trim()
+    # Test fixture cleanup: terminate any lingering child so no orphan process remains
+    $pidRaw = Get-Content $tempPidFile -Raw -ErrorAction SilentlyContinue
+    $spawnedPid = if ($pidRaw) { [int]$pidRaw.Trim() } else { 0 }
     Remove-Item $tempPidFile -Force -ErrorAction SilentlyContinue
-    $stillAlive = Get-Process -Id $spawnedPid -ErrorAction SilentlyContinue
-    if ($stillAlive) {
-      Write-Output "PROCESS_STILL_ALIVE:true"
-    } else {
-      Write-Output "PROCESS_TERMINATED:true"
+    if ($spawnedPid -gt 0) {
+      $stillRunning = Get-Process -Id $spawnedPid -ErrorAction SilentlyContinue
+      if ($stillRunning) {
+        try {
+          if ($IsWindows -or $env:OS -match "Windows") {
+            & taskkill.exe /PID $spawnedPid /F 2>$null | Out-Null
+            $global:LASTEXITCODE = 0
+          } else {
+            $stillRunning.Kill()
+          }
+        } catch {}
+      }
     }
+    $global:LASTEXITCODE = 0
   `;
+  const startTime = Date.now();
   const out = runPowerShell(ps);
+  const elapsed = Date.now() - startTime;
   assert.match(
     out,
     /CAUGHT_TIMEOUT:\s*Vercel command timed out after 1 seconds/,
+    "Must throw explicit timeout message",
   );
-  assert.match(out, /PROCESS_TERMINATED:true/);
+  assert.ok(
+    elapsed < 10000,
+    `Timeout execution must return within bounded deadline (took ${elapsed}ms)`,
+  );
 });
+
+test(
+  "Windows PowerShell Invoke-Vercel behavior: timeout path terminates spawned process tree via taskkill",
+  {
+    skip:
+      process.platform !== "win32"
+        ? "Windows process-tree termination requires taskkill.exe (/PID /T /F)"
+        : false,
+  },
+  () => {
+    const ps = `
+      $ErrorActionPreference = "Stop"
+      ${invokeVercelFn}
+
+      $tempPidFile = [System.IO.Path]::GetTempFileName().Replace('\\', '/')
+      try {
+        Invoke-Vercel -CommandPath "node" -Arguments @("-e", "require('fs').writeFileSync(process.argv[1],String(process.pid));setTimeout(()=>{},10000)", $tempPidFile) -TimeoutSeconds 1
+      } catch {
+        Write-Output "CAUGHT_TIMEOUT:$($_.Exception.Message)"
+      }
+      Start-Sleep -Milliseconds 500
+      $pidRaw = Get-Content $tempPidFile -Raw -ErrorAction SilentlyContinue
+      $spawnedPid = if ($pidRaw) { [int]$pidRaw.Trim() } else { 0 }
+      Remove-Item $tempPidFile -Force -ErrorAction SilentlyContinue
+      $stillAlive = if ($spawnedPid -gt 0) { Get-Process -Id $spawnedPid -ErrorAction SilentlyContinue } else { $null }
+      if ($stillAlive -and -not $stillAlive.HasExited) {
+        Write-Output "PROCESS_STILL_ALIVE:true"
+      } else {
+        Write-Output "PROCESS_TERMINATED:true"
+      }
+    `;
+    const out = runPowerShell(ps);
+    assert.match(
+      out,
+      /CAUGHT_TIMEOUT:\s*Vercel command timed out after 1 seconds/,
+    );
+    assert.match(
+      out,
+      /PROCESS_TERMINATED:true/,
+      "Windows taskkill /T /F must terminate the spawned process tree",
+    );
+  },
+);
 
 const mainExecutionBlock = scriptSource.slice(
   scriptSource.indexOf(

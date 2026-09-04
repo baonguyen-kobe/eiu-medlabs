@@ -32,35 +32,38 @@ function Invoke-Vercel {
   if (-not $process.Start()) {
     throw "Failed to start Vercel CLI."
   }
+  try {
+    $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+    $stderrTask = $process.StandardError.ReadToEndAsync()
 
-  $stdoutTask = $process.StandardOutput.ReadToEndAsync()
-  $stderrTask = $process.StandardError.ReadToEndAsync()
-
-  $timeoutMs = $TimeoutSeconds * 1000
-  if (-not $process.WaitForExit($timeoutMs)) {
-    try {
-      if (Get-Command taskkill.exe -ErrorAction SilentlyContinue) {
-        & taskkill.exe /PID $process.Id /T /F 2>$null | Out-Null
-      } else {
-        $process.Kill()
+    $timeoutMs = $TimeoutSeconds * 1000
+    if (-not $process.WaitForExit($timeoutMs)) {
+      try {
+        if (Get-Command taskkill.exe -ErrorAction SilentlyContinue) {
+          & taskkill.exe /PID $process.Id /T /F 2>$null | Out-Null
+        } else {
+          $process.Kill()
+        }
+      } catch {
+        try { $process.Kill() } catch {}
       }
-    } catch {
-      try { $process.Kill() } catch {}
+      throw "Vercel command timed out after $TimeoutSeconds seconds: $CommandPath $($Arguments -join ' ')"
     }
-    throw "Vercel command timed out after $TimeoutSeconds seconds: $CommandPath $($Arguments -join ' ')"
-  }
 
-  if (-not [System.Threading.Tasks.Task]::WaitAll(@($stdoutTask, $stderrTask), 5000)) {
-    throw "Vercel command timed out while capturing output streams: $CommandPath $($Arguments -join ' ')"
-  }
-  $standardOutput = $stdoutTask.Result
-  $standardError = $stderrTask.Result
-  $output = @($standardOutput, $standardError) | Where-Object { $_ }
+    if (-not [System.Threading.Tasks.Task]::WaitAll(@($stdoutTask, $stderrTask), 5000)) {
+      throw "Vercel command timed out while capturing output streams: $CommandPath $($Arguments -join ' ')"
+    }
+    $standardOutput = $stdoutTask.Result
+    $standardError = $stderrTask.Result
+    $output = @($standardOutput, $standardError) | Where-Object { $_ }
 
-  if ($process.ExitCode -ne 0) {
-    throw "Vercel command failed: $CommandPath $($Arguments -join ' ')`n$($output -join [Environment]::NewLine)"
+    if ($process.ExitCode -ne 0) {
+      throw "Vercel command failed: $CommandPath $($Arguments -join ' ')`n$($output -join [Environment]::NewLine)"
+    }
+    return $output
+  } finally {
+    $process.Dispose()
   }
-  return $output
 }
 
 function Assert-VersionEndpoint {
