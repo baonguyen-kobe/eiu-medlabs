@@ -49,10 +49,7 @@ test("Skills-only historical bypass is identical in migration and schema", () =>
       updateGuardStart,
     );
     assert.match(contentValidator, unchangedSkillsCondition);
-    assert.match(
-      source,
-      /ROOT_ADMIN_OPERATIONAL_ASSIGNMENT_FORBIDDEN/,
-    );
+    assert.match(source, /ROOT_ADMIN_OPERATIONAL_ASSIGNMENT_FORBIDDEN/);
     assert.match(
       source,
       /and new\.responsible_lecturer_id is distinct from old\.responsible_lecturer_id\s+and not exists \(/,

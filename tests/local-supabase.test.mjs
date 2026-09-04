@@ -2174,7 +2174,6 @@ test("người đăng ký được điều chỉnh nội dung nhưng không đư
     .eq("id", catalogItemId);
 });
 
-
 test("TA preserves historical Skills responsible lecturer but cannot assign a new ineligible lecturer", async () => {
   const service = serviceClient();
   const admin = await signIn("admin@campus.local", "LocalAdmin123!");
@@ -2355,7 +2354,10 @@ test("TA preserves historical Skills responsible lecturer but cannot assign a ne
         ],
       },
     );
-    assert.equal(ineligibleError?.message, "Giảng viên phụ trách không hợp lệ.");
+    assert.equal(
+      ineligibleError?.message,
+      "Giảng viên phụ trách không hợp lệ.",
+    );
 
     const { data: principalRow, error: principalReadError } = await service
       .from("system_security_principals")
