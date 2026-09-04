@@ -2193,7 +2193,6 @@ test("TA preserves historical Skills responsible lecturer but cannot assign a ne
   const catalogItemId = crypto.randomUUID();
   const requestId = crypto.randomUUID();
   let originalRootAdminId = null;
-  let historicalAdminRoleAdded = false;
   let rootWasReassigned = false;
 
   try {
@@ -2373,7 +2372,6 @@ test("TA preserves historical Skills responsible lecturer but cannot assign a ne
         created_by: admin.user.id,
       });
     assert.ifError(addHistoricalAdminError);
-    historicalAdminRoleAdded = true;
 
     const { error: setRootError } = await service
       .from("system_security_principals")
@@ -2417,16 +2415,6 @@ test("TA preserves historical Skills responsible lecturer but cannot assign a ne
 
       assert.ifError(restoreRootError);
       rootWasReassigned = false;
-    }
-    if (historicalAdminRoleAdded) {
-      const { error: removeHistoricalAdminError } = await service
-        .from("user_roles")
-        .delete()
-        .eq("user_id", historicalLecturer.id)
-        .eq("role", "admin");
-
-      assert.ifError(removeHistoricalAdminError);
-      historicalAdminRoleAdded = false;
     }
     await service
       .from("equipment_request_items")
