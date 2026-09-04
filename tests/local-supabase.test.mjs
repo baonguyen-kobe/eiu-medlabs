@@ -2272,21 +2272,11 @@ test("TA preserves historical Skills responsible lecturer but cannot assign a ne
       });
     assert.ifError(itemError);
 
-    const basicMedicalRoomTypeId = "40000000-0000-0000-0000-000000000002";
-    await configurePersonnelFixture(
-      admin,
-      service,
-      historicalLecturer.id,
-      ["lecturer"],
-      [basicMedicalRoomTypeId],
-    );
-    await configurePersonnelFixture(
-      admin,
-      service,
-      freshIneligibleLecturer.id,
-      ["lecturer"],
-      [basicMedicalRoomTypeId],
-    );
+    const { error: removeScopeError } = await admin.supabase
+      .from("profile_room_types")
+      .delete()
+      .in("profile_id", [historicalLecturer.id, freshIneligibleLecturer.id]);
+    assert.ifError(removeScopeError);
 
     const { data: scopedLecturers, error: scopedError } = await ta.supabase.rpc(
       "list_scoped_lecturers",
