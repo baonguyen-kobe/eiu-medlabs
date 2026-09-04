@@ -442,7 +442,7 @@ export async function updateEquipmentRequest(
     supabase
       .from("equipment_requests")
       .select(
-        "id,class_schedule_id,registrant_id,status,semester,receive_at,late_approval_status,late_registration_reason",
+        "id,class_schedule_id,registrant_id,responsible_lecturer_id,status,semester,receive_at,late_approval_status,late_registration_reason",
       )
       .eq("id", requestId)
       .maybeSingle(),
@@ -500,7 +500,10 @@ export async function updateEquipmentRequest(
   const eligibleLecturerIds = new Set(
     ((eligibleLecturers ?? []) as Array<{ id: string }>).map(({ id }) => id),
   );
+  const preservesResponsibleLecturer =
+    responsibleId === request.responsible_lecturer_id;
   if (
+    !preservesResponsibleLecturer &&
     responsibleId !== request.registrant_id &&
     !eligibleLecturerIds.has(responsibleId)
   ) {
