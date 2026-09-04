@@ -33,11 +33,21 @@ test("updateEquipmentRequest preserves its existing historical responsible lectu
 test("Skills-only historical bypass is identical in migration and schema", () => {
   for (const file of sqlFiles) {
     const source = readFileSync(new URL(file, import.meta.url), "utf8");
-    const contentValidator = source.slice(
-      source.indexOf("create or replace function private.validate_equipment_request_content()"),
-      source.indexOf("create or replace function private.guard_equipment_request_update()"),
+    const contentValidatorStart = source.indexOf(
+      "create or replace function private.validate_equipment_request_content()",
+    );
+    const updateGuardStart = source.indexOf(
+      "create or replace function private.guard_equipment_request_update()",
     );
 
+    assert.notEqual(contentValidatorStart, -1);
+    assert.notEqual(updateGuardStart, -1);
+    assert.ok(updateGuardStart > contentValidatorStart);
+
+    const contentValidator = source.slice(
+      contentValidatorStart,
+      updateGuardStart,
+    );
     assert.match(contentValidator, unchangedSkillsCondition);
     assert.match(
       source,

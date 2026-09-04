@@ -2417,20 +2417,36 @@ test("TA preserves historical Skills responsible lecturer but cannot assign a ne
       assert.ifError(restoreRootError);
       rootWasReassigned = false;
     }
-    await service
+    const { error: deleteItemsError } = await service
       .from("equipment_request_items")
       .delete()
       .eq("request_id", requestId);
-    await service.from("equipment_requests").delete().eq("id", requestId);
-    await service.from("class_schedules").delete().eq("id", scheduleId);
-    await admin.supabase
+    assert.ifError(deleteItemsError);
+
+    const { error: deleteRequestError } = await service
+      .from("equipment_requests")
+      .delete()
+      .eq("id", requestId);
+    assert.ifError(deleteRequestError);
+
+    const { error: deleteScheduleError } = await service
+      .from("class_schedules")
+      .delete()
+      .eq("id", scheduleId);
+    assert.ifError(deleteScheduleError);
+
+    const { error: deleteCatalogError } = await admin.supabase
       .from("equipment_catalog")
       .delete()
       .eq("id", catalogItemId);
-    await Promise.all([
+    assert.ifError(deleteCatalogError);
+
+    const [historicalDelete, freshIneligibleDelete] = await Promise.all([
       service.auth.admin.deleteUser(historicalLecturer.id),
       service.auth.admin.deleteUser(freshIneligibleLecturer.id),
     ]);
+    assert.ifError(historicalDelete.error);
+    assert.ifError(freshIneligibleDelete.error);
   }
 });
 
