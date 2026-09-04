@@ -12,6 +12,7 @@
     "start": "next start",
     "format": "prettier --write --ignore-unknown .",
     "format:check": "prettier --check --ignore-unknown .",
+    "preflight:changed": "node scripts/preflight-changed.mjs",
     "lint": "eslint . --ignore-pattern .next",
     "typecheck": "tsc --noEmit",
     "test": "node --test --test-concurrency=1 tests/*.test.mjs",
