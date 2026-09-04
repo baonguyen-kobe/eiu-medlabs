@@ -2174,6 +2174,284 @@ test("người đăng ký được điều chỉnh nội dung nhưng không đư
     .eq("id", catalogItemId);
 });
 
+test("TA preserves historical Skills responsible lecturer but cannot assign a new ineligible lecturer", async () => {
+  const service = serviceClient();
+  const admin = await signIn("admin@campus.local", "LocalAdmin123!");
+  const ta = await signIn("trogiang@campus.local", "LocalAssistant123!");
+
+  const historicalLecturer = await createPersonnelFixture(
+    service,
+    "Historical Lecturer",
+  );
+  const freshIneligibleLecturer = await createPersonnelFixture(
+    service,
+    "Fresh Ineligible Lecturer",
+  );
+
+  const skillsRoomTypeId = "40000000-0000-0000-0000-000000000001";
+  const scheduleId = crypto.randomUUID();
+  const catalogItemId = crypto.randomUUID();
+  const requestId = crypto.randomUUID();
+  let originalRootAdminId = null;
+  let rootWasReassigned = false;
+
+  try {
+    await configurePersonnelFixture(
+      admin,
+      service,
+      historicalLecturer.id,
+      ["lecturer"],
+      [skillsRoomTypeId],
+    );
+    await configurePersonnelFixture(
+      admin,
+      service,
+      freshIneligibleLecturer.id,
+      ["lecturer"],
+      [skillsRoomTypeId],
+    );
+
+    const { error: scheduleError } = await service
+      .from("class_schedules")
+      .insert({
+        id: scheduleId,
+        course_id: "10000000-0000-0000-0000-000000000001",
+        course_code_snapshot: "NUR 101",
+        course_name_snapshot: "Kỹ năng điều dưỡng",
+        room_id: "20000000-0000-0000-0000-000000000001",
+        schedule_date: "2036-04-10",
+        start_time: "08:00",
+        end_time: "11:00",
+        source: "manual",
+        schedule_status: "published",
+        student_count: 25,
+        semester: "HK1",
+        created_by: ta.user.id,
+        published_by: admin.user.id,
+        published_at: new Date().toISOString(),
+        lecturer_id: historicalLecturer.id,
+      });
+    assert.ifError(scheduleError);
+
+    const { error: catalogError } = await admin.supabase
+      .from("equipment_catalog")
+      .insert({
+        id: catalogItemId,
+        item_name: `Thiết bị lịch sử ${catalogItemId}`,
+        commercial_name: `Thiết bị lịch sử ${catalogItemId}`,
+        unit: "Bộ",
+      });
+    assert.ifError(catalogError);
+
+    const { error: requestError } = await service
+      .from("equipment_requests")
+      .insert({
+        id: requestId,
+        class_schedule_id: scheduleId,
+        semester: "HK1",
+        registrant_id: ta.user.id,
+        responsible_lecturer_id: historicalLecturer.id,
+        phone_snapshot: "0901234567",
+        email_snapshot: "trogiang@campus.local",
+        receive_at: "2036-04-10T02:00:00.000Z",
+        return_at: "2036-04-10T04:00:00.000Z",
+        status: "new",
+        created_by: ta.user.id,
+        note: "Ghi chú ban đầu",
+      });
+    assert.ifError(requestError);
+
+    const { error: itemError } = await service
+      .from("equipment_request_items")
+      .insert({
+        request_id: requestId,
+        skill_name: "Kỹ năng thực hành",
+        catalog_item_id: catalogItemId,
+        quantity: 1,
+      });
+    assert.ifError(itemError);
+
+    const basicMedicalRoomTypeId = "40000000-0000-0000-0000-000000000002";
+    await configurePersonnelFixture(
+      admin,
+      service,
+      historicalLecturer.id,
+      ["lecturer"],
+      [basicMedicalRoomTypeId],
+    );
+    await configurePersonnelFixture(
+      admin,
+      service,
+      freshIneligibleLecturer.id,
+      ["lecturer"],
+      [basicMedicalRoomTypeId],
+    );
+
+    const { data: scopedLecturers, error: scopedError } = await ta.supabase.rpc(
+      "list_scoped_lecturers",
+      { target_room_type_id: skillsRoomTypeId },
+    );
+    assert.ifError(scopedError);
+    assert.equal(
+      (scopedLecturers ?? []).some((l) => l.id === historicalLecturer.id),
+      false,
+    );
+    assert.equal(
+      (scopedLecturers ?? []).some((l) => l.id === freshIneligibleLecturer.id),
+      false,
+    );
+
+    const { data: updatedId, error: updateError } = await ta.supabase.rpc(
+      "update_equipment_request_content",
+      {
+        target_request_id: requestId,
+        target_class_schedule_id: scheduleId,
+        target_semester: "HK1",
+        target_responsible_lecturer_id: historicalLecturer.id,
+        target_receive_at: "2036-04-10T02:00:00.000Z",
+        target_return_at: "2036-04-10T04:00:00.000Z",
+        target_note: "Ghi chú đã cập nhật bảo lưu giảng viên cũ",
+        target_late_registration_reason: null,
+        target_items: [
+          {
+            skill_name: "Kỹ năng thực hành cập nhật",
+            catalog_item_id: catalogItemId,
+            quantity: 2,
+            note: "Đã cập nhật số lượng",
+          },
+        ],
+      },
+    );
+    assert.ifError(updateError);
+    assert.equal(updatedId, requestId);
+
+    const { data: verifiedRow, error: verifyError } = await admin.supabase
+      .from("equipment_requests")
+      .select("id,responsible_lecturer_id,note")
+      .eq("id", requestId)
+      .single();
+    assert.ifError(verifyError);
+    assert.equal(verifiedRow.responsible_lecturer_id, historicalLecturer.id);
+    assert.equal(verifiedRow.note, "Ghi chú đã cập nhật bảo lưu giảng viên cũ");
+
+    const { error: ineligibleError } = await ta.supabase.rpc(
+      "update_equipment_request_content",
+      {
+        target_request_id: requestId,
+        target_class_schedule_id: scheduleId,
+        target_semester: "HK1",
+        target_responsible_lecturer_id: freshIneligibleLecturer.id,
+        target_receive_at: "2036-04-10T02:00:00.000Z",
+        target_return_at: "2036-04-10T04:00:00.000Z",
+        target_note: "Cố tình gán giảng viên không đủ điều kiện mới",
+        target_late_registration_reason: null,
+        target_items: [
+          {
+            skill_name: "Kỹ năng",
+            catalog_item_id: catalogItemId,
+            quantity: 2,
+          },
+        ],
+      },
+    );
+    assert.equal(
+      ineligibleError?.message,
+      "Giảng viên phụ trách không hợp lệ.",
+    );
+
+    const { data: principalRow, error: principalReadError } = await service
+      .from("system_security_principals")
+      .select("root_admin_id")
+      .eq("singleton", true)
+      .single();
+    assert.ifError(principalReadError);
+    originalRootAdminId = principalRow.root_admin_id;
+
+    const { error: addHistoricalAdminError } = await service
+      .from("user_roles")
+      .insert({
+        user_id: historicalLecturer.id,
+        role: "admin",
+        created_by: admin.user.id,
+      });
+    assert.ifError(addHistoricalAdminError);
+
+    const { error: setRootError } = await service
+      .from("system_security_principals")
+      .update({ root_admin_id: historicalLecturer.id })
+      .eq("singleton", true);
+    assert.ifError(setRootError);
+    rootWasReassigned = true;
+
+    const { error: rootPreserveError } = await ta.supabase.rpc(
+      "update_equipment_request_content",
+      {
+        target_request_id: requestId,
+        target_class_schedule_id: scheduleId,
+        target_semester: "HK1",
+        target_responsible_lecturer_id: historicalLecturer.id,
+        target_receive_at: "2036-04-10T02:00:00.000Z",
+        target_return_at: "2036-04-10T04:00:00.000Z",
+        target_note: "Cố tình bảo lưu giảng viên nay đã là Root",
+        target_late_registration_reason: null,
+        target_items: [
+          {
+            skill_name: "Kỹ năng",
+            catalog_item_id: catalogItemId,
+            quantity: 2,
+          },
+        ],
+      },
+    );
+    assert.ok(rootPreserveError);
+    assert.equal(rootPreserveError.code, "42501");
+    assert.match(
+      rootPreserveError.message ?? "",
+      /ROOT_ADMIN_OPERATIONAL_ASSIGNMENT_FORBIDDEN/,
+    );
+  } finally {
+    if (rootWasReassigned && originalRootAdminId) {
+      const { error: restoreRootError } = await service
+        .from("system_security_principals")
+        .update({ root_admin_id: originalRootAdminId })
+        .eq("singleton", true);
+
+      assert.ifError(restoreRootError);
+      rootWasReassigned = false;
+    }
+    const { error: deleteItemsError } = await service
+      .from("equipment_request_items")
+      .delete()
+      .eq("request_id", requestId);
+    assert.ifError(deleteItemsError);
+
+    const { error: deleteRequestError } = await service
+      .from("equipment_requests")
+      .delete()
+      .eq("id", requestId);
+    assert.ifError(deleteRequestError);
+
+    const { error: deleteScheduleError } = await service
+      .from("class_schedules")
+      .delete()
+      .eq("id", scheduleId);
+    assert.ifError(deleteScheduleError);
+
+    const { error: deleteCatalogError } = await admin.supabase
+      .from("equipment_catalog")
+      .delete()
+      .eq("id", catalogItemId);
+    assert.ifError(deleteCatalogError);
+
+    const [historicalDelete, freshIneligibleDelete] = await Promise.all([
+      service.auth.admin.deleteUser(historicalLecturer.id),
+      service.auth.admin.deleteUser(freshIneligibleLecturer.id),
+    ]);
+    assert.ifError(historicalDelete.error);
+    assert.ifError(freshIneligibleDelete.error);
+  }
+});
+
 test("mỗi dòng import hợp lệ tạo lịch và bản ghi kiểm tra trong một RPC", async () => {
   const admin = await signIn("admin@campus.local", "LocalAdmin123!");
   const importer = await signIn("importer@campus.local", "LocalImporter123!");
