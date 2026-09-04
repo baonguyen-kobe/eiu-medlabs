@@ -108,6 +108,38 @@ test("deploy-production.ps1 reports structured verification output for both path
     "Must report exact alias verification with non-fatal metadata notice on fallback",
   );
 });
+test("Invoke-Vercel source contract implements concurrent async stream reading and bounded timeout", () => {
+  assert.match(
+    scriptSource,
+    /\$stdoutTask = \$process\.StandardOutput\.ReadToEndAsync\(\)/,
+    "Must read stdout asynchronously to avoid deadlock",
+  );
+  assert.match(
+    scriptSource,
+    /\$stderrTask = \$process\.StandardError\.ReadToEndAsync\(\)/,
+    "Must read stderr asynchronously to avoid deadlock",
+  );
+  assert.match(
+    scriptSource,
+    /if \(-not \[System\.Threading\.Tasks\.Task\]::WaitAll\(@\(\$stdoutTask, \$stderrTask\), 5000\)\)/,
+    "Must guard output task completion with bounded WaitAll to prevent hanging on .Result",
+  );
+  assert.match(
+    scriptSource,
+    /\$timeoutMs = \$TimeoutSeconds \* 1000/,
+    "Must compute timeout in milliseconds",
+  );
+  assert.match(
+    scriptSource,
+    /\$process\.WaitForExit\(\$timeoutMs\)/,
+    "Must enforce bounded process timeout",
+  );
+  assert.match(
+    scriptSource,
+    /Vercel command timed out after \$TimeoutSeconds seconds/,
+    "Must throw explicit timeout error message",
+  );
+});
 
 const powershellCmd = (() => {
   if (process.env.POWERSHELL_BIN) return process.env.POWERSHELL_BIN;
@@ -193,6 +225,69 @@ const versionEndpointFn = scriptSource.slice(
   scriptSource.indexOf("function Assert-VersionEndpoint {"),
   scriptSource.indexOf("$repositoryRoot = Split-Path"),
 );
+const invokeVercelFn = scriptSource.slice(
+  scriptSource.indexOf("function Invoke-Vercel {"),
+  scriptSource.indexOf("function Assert-VersionEndpoint {"),
+);
+
+test("PowerShell Invoke-Vercel behavior: captures both stdout and stderr concurrently", () => {
+  const ps = `
+    $ErrorActionPreference = "Stop"
+    ${invokeVercelFn}
+
+    $out = Invoke-Vercel -CommandPath "node" -Arguments @("-e", "console.log('concurrent_stdout'); console.error('concurrent_stderr');")
+    Write-Output "OUT_LINES:$($out.Count)"
+    Write-Output "COMBINED:$($out -join ' --- ')"
+  `;
+  const out = runPowerShell(ps);
+  assert.match(out, /concurrent_stdout/);
+  assert.match(out, /concurrent_stderr/);
+});
+
+test("PowerShell Invoke-Vercel behavior: non-zero exit code throws and retains captured output", () => {
+  const ps = `
+    $ErrorActionPreference = "Stop"
+    ${invokeVercelFn}
+
+    try {
+      Invoke-Vercel -CommandPath "node" -Arguments @("-e", "console.error('fatal_vercel_build_error'); process.exit(1);")
+    } catch {
+      Write-Output "CAUGHT_ERROR:$($_.Exception.Message)"
+    }
+  `;
+  const out = runPowerShell(ps);
+  assert.match(out, /Vercel command failed/);
+  assert.match(out, /fatal_vercel_build_error/);
+});
+
+test("PowerShell Invoke-Vercel behavior: bounded timeout terminates process tree and throws", () => {
+  const ps = `
+    $ErrorActionPreference = "Stop"
+    ${invokeVercelFn}
+
+    $tempPidFile = [System.IO.Path]::GetTempFileName().Replace('\\', '/')
+    try {
+      Invoke-Vercel -CommandPath "node" -Arguments @("-e", "const fs=require(\`"fs\`"); fs.writeFileSync(process.argv[1], String(process.pid)); setInterval(() => {}, 1000);", $tempPidFile) -TimeoutSeconds 1
+    } catch {
+      Write-Output "CAUGHT_TIMEOUT:$($_.Exception.Message)"
+    }
+    Start-Sleep -Milliseconds 500
+    $spawnedPid = [int](Get-Content $tempPidFile -Raw).Trim()
+    Remove-Item $tempPidFile -Force -ErrorAction SilentlyContinue
+    $stillAlive = Get-Process -Id $spawnedPid -ErrorAction SilentlyContinue
+    if ($stillAlive) {
+      Write-Output "PROCESS_STILL_ALIVE:true"
+    } else {
+      Write-Output "PROCESS_TERMINATED:true"
+    }
+  `;
+  const out = runPowerShell(ps);
+  assert.match(
+    out,
+    /CAUGHT_TIMEOUT:\s*Vercel command timed out after 1 seconds/,
+  );
+  assert.match(out, /PROCESS_TERMINATED:true/);
+});
 
 const mainExecutionBlock = scriptSource.slice(
   scriptSource.indexOf(

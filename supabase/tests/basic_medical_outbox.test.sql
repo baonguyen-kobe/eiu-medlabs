@@ -102,6 +102,7 @@ do $$
 declare
   v_reg_id uuid;
   v_ctx record;
+  v_today date := (clock_timestamp() at time zone 'Asia/Ho_Chi_Minh')::date;
 begin
   select * into v_ctx from _test_context;
 
@@ -109,8 +110,8 @@ begin
     null,
     '2026-2027',
     'HK1',
-    '2026-09-01'::date,
-    '2026-09-10'::date,
+    v_today + 10,
+    v_today + 20,
     v_ctx.course_id,
     v_ctx.room_id,
     30,
@@ -118,7 +119,7 @@ begin
     'Ghi chú tạo mới',
     jsonb_build_array(
       jsonb_build_object(
-        'schedule_date', '2026-09-02',
+        'schedule_date', (v_today + 12)::text,
         'start_time', '08:00',
         'end_time', '11:00',
         'lesson_title', 'Bài 1: Khám tổng quát',
@@ -194,6 +195,7 @@ select set_config('request.jwt.claims', json_build_object('sub', (select admin_i
 do $$
 declare
   v_ctx record;
+  v_today date := (clock_timestamp() at time zone 'Asia/Ho_Chi_Minh')::date;
 begin
   select * into v_ctx from _test_context;
 
@@ -201,8 +203,8 @@ begin
     v_ctx.registration_id,
     '2026-2027',
     'HK1',
-    '2026-09-01'::date,
-    '2026-09-12'::date,
+    v_today + 10,
+    v_today + 25,
     v_ctx.course_id,
     v_ctx.room_id,
     35,
@@ -210,7 +212,7 @@ begin
     'Ghi chú đã điều chỉnh',
     jsonb_build_array(
       jsonb_build_object(
-        'schedule_date', '2026-09-03',
+        'schedule_date', (v_today + 14)::text,
         'start_time', '09:00',
         'end_time', '12:00',
         'lesson_title', 'Bài 1: Khám tổng quát (Đã đổi ngày)',
@@ -251,14 +253,15 @@ select set_config('request.jwt.claims', json_build_object('sub', (select admin_i
 do $$
 declare
   v_ctx record;
+  v_today date := (clock_timestamp() at time zone 'Asia/Ho_Chi_Minh')::date;
 begin
   select * into v_ctx from _test_context;
   perform public.save_basic_medical_registration(
     v_ctx.registration_id,
     '2026-2027',
     'HK1',
-    '2026-09-01'::date,
-    '2026-09-12'::date,
+    v_today + 10,
+    v_today + 25,
     v_ctx.course_id,
     v_ctx.room_id,
     40,
@@ -266,7 +269,7 @@ begin
     'Điều chỉnh lần 2',
     jsonb_build_array(
       jsonb_build_object(
-        'schedule_date', '2026-09-03',
+        'schedule_date', (v_today + 14)::text,
         'start_time', '09:00',
         'end_time', '12:00',
         'lesson_title', 'Bài 1: Khám tổng quát (Đã đổi ngày)',
@@ -556,6 +559,7 @@ select set_config('role', 'postgres', true);
 do $$
 declare
   v_ctx record;
+  v_today date := (clock_timestamp() at time zone 'Asia/Ho_Chi_Minh')::date;
 begin
   select * into v_ctx from _test_context;
   update public.email_delivery_settings set delivery_mode = 'off';
@@ -567,8 +571,8 @@ begin
     null,
     '2026-2027',
     'HK1',
-    '2026-09-01'::date,
-    '2026-09-10'::date,
+    v_today + 30,
+    v_today + 40,
     v_ctx.course_id,
     v_ctx.room_id,
     20,
@@ -576,7 +580,7 @@ begin
     'Off mode test',
     jsonb_build_array(
       jsonb_build_object(
-        'schedule_date', '2026-09-05',
+        'schedule_date', (v_today + 35)::text,
         'start_time', '08:00',
         'end_time', '10:00',
         'lesson_title', 'Bài Off mode',
