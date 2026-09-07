@@ -173,12 +173,13 @@ test("PR mode runs only the required browser gates and builds once", () => {
   assert.equal(packageJson.scripts["test:e2e:critical"], undefined);
 });
 
-test("Full E2E is scheduled or manual and reuses the isolated CI workflow", () => {
+test("Full E2E is manual-only and reuses the isolated CI workflow", () => {
   const ciWorkflow = readWorkflow("ci.yml");
   const fullWorkflow = readWorkflow("full-e2e.yml");
 
-  assert.match(fullWorkflow, /^on:\n  workflow_dispatch:\n  schedule:/m);
-  assert.match(fullWorkflow, /cron: "0 18 \* \* \*"/);
+  assert.match(fullWorkflow, /^on:\n  workflow_dispatch:\s*$/m);
+  assert.doesNotMatch(fullWorkflow, /^  schedule:/m);
+  assert.doesNotMatch(fullWorkflow, /cron:/);
   assert.doesNotMatch(fullWorkflow, /^  pull_request:/m);
   assert.doesNotMatch(fullWorkflow, /^  push:/m);
   assert.match(
