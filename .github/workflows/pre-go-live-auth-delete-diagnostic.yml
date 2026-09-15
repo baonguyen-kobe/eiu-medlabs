@@ -226,15 +226,8 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
           set -euo pipefail
-          readonly window_start='2026-08-16T09:43:30Z'
-          readonly window_end='2026-08-16T09:45:00Z'
-          readonly logs_endpoint="https://api.supabase.com/v1/projects/$PROJECT_REF/analytics/endpoints/logs"
-          readonly auth_sql="select timestamp, severity_text, event_message from logs where source = 'auth_logs' and timestamp >= toDateTime('$window_start') and timestamp <= toDateTime('$window_end') order by timestamp asc limit 50"
-          readonly postgres_sql="select timestamp, severity_text, event_message, log_attributes['parsed.sql_state_code'] as sql_state_code, log_attributes['parsed.user_name'] as parsed_user_name from logs where source = 'postgres_logs' and timestamp >= toDateTime('$window_start') and timestamp <= toDateTime('$window_end') and (severity_text in ('ERROR', 'FATAL', 'PANIC') or lower(event_message) like '%supabase_auth_admin%') order by timestamp asc limit 50"
-          auth_status="$(curl --silent --request GET --output "$RUNNER_TEMP/auth-logs.json" --write-out '%{http_code}' --get "$logs_endpoint" --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" --data-urlencode "sql=$auth_sql" || true)"
-          postgres_status="$(curl --silent --request GET --output "$RUNNER_TEMP/postgres-logs.json" --write-out '%{http_code}' --get "$logs_endpoint" --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" --data-urlencode "sql=$postgres_sql" || true)"
-          AUTH_STATUS="$auth_status" POSTGRES_STATUS="$postgres_status" RUNNER_TEMP="$RUNNER_TEMP" node <<'NODE'
-          import { existsSync, readFileSync } from 'node:fs';
+          PROJECT_REF="$PROJECT_REF" RUNNER_TEMP="$RUNNER_TEMP" node <<'NODE'
+          import { writeFileSync } from 'node:fs';
           import { join } from 'node:path';
 
           const redact = (value) => String(value ?? 'UNAVAILABLE')
@@ -246,23 +239,62 @@ jobs:
             .replace(/\b(?:user[ _-]?id|user_id)\s*[:=]\s*[^\s,;]+/gi, 'user_id=[REDACTED_USER_ID]')
             .replace(/[\r\n\t]+/g, ' ')
             .slice(0, 300);
-          const rowsFrom = (path) => {
-            if (!existsSync(path)) return [];
-            try {
-              const parsed = JSON.parse(readFileSync(path, 'utf8'));
-              if (Array.isArray(parsed)) return parsed;
-              for (const key of ['data', 'rows', 'result']) if (Array.isArray(parsed?.[key])) return parsed[key];
-            } catch {
-              return [];
-            }
-            return [];
+          const projectRef = 'bwhiivfhezoozrzvchmm';
+          if (process.env.PROJECT_REF !== projectRef) throw new Error('AUTH_DELETE_DIAGNOSTIC_TARGET_UNPROVEN');
+          const accessToken = process.env.SUPABASE_ACCESS_TOKEN;
+          if (!accessToken) throw new Error('AUTH_DELETE_DIAGNOSTIC_ACCESS_TOKEN_UNAVAILABLE');
+          const windowStart = '2026-08-16T09:43:30Z';
+          const windowEnd = '2026-08-16T09:45:00Z';
+          const logsEndpoint = `https://api.supabase.com/v1/projects/${projectRef}/analytics/endpoints/logs.all.otel`;
+          const authSql = "select timestamp, severity_text, event_message from logs where source = 'auth_logs' order by timestamp asc limit 50";
+          const postgresSql = "select timestamp, severity_text, event_message, log_attributes['parsed.sql_state_code'] as sql_state_code, log_attributes['parsed.user_name'] as parsed_user_name from logs where source = 'postgres_logs' and (severity_text in ('ERROR', 'FATAL', 'PANIC') or lower(event_message) like '%supabase_auth_admin%') order by timestamp asc limit 50";
+          const errorDetails = (payload) => {
+            const error = payload?.error;
+            const nested = typeof error === 'object' && error !== null
+              ? error.error ?? error.details ?? error.cause
+              : undefined;
+            return {
+              code: redact(error?.code ?? error?.name ?? nested?.code ?? nested?.name),
+              message: redact(error?.message ?? nested?.message ?? error),
+            };
           };
-          const authRows = process.env.AUTH_STATUS === '200'
-            ? rowsFrom(join(process.env.RUNNER_TEMP, 'auth-logs.json'))
-            : [];
-          const postgresRows = process.env.POSTGRES_STATUS === '200'
-            ? rowsFrom(join(process.env.RUNNER_TEMP, 'postgres-logs.json'))
-            : [];
+          const queryLogs = async (source, sql, responseFile) => {
+            const response = await fetch(logsEndpoint, {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                sql,
+                iso_timestamp_start: windowStart,
+                iso_timestamp_end: windowEnd,
+              }),
+            });
+            const rawBody = await response.text();
+            writeFileSync(join(process.env.RUNNER_TEMP, responseFile), rawBody, 'utf8');
+            if (!response.ok) {
+              console.log(`LOG_TRANSPORT_DIAGNOSTIC source=${source}; http_status=${redact(response.status)}; status_text=${redact(response.statusText)}`);
+              throw new Error('LOG_ANALYTICS_TRANSPORT_FAILED');
+            }
+            let payload;
+            try {
+              payload = JSON.parse(rawBody);
+            } catch {
+              throw new Error('LOG_ANALYTICS_RESPONSE_SHAPE_INVALID');
+            }
+            if (payload?.error) {
+              const { code, message } = errorDetails(payload);
+              console.log(`LOG_ANALYTICS_ERROR_DIAGNOSTIC source=${source}; code=${code}; message=${message}`);
+              throw new Error('LOG_ANALYTICS_ERROR_OBJECT');
+            }
+            if (!Array.isArray(payload?.result)) {
+              throw new Error('LOG_ANALYTICS_RESPONSE_SHAPE_INVALID');
+            }
+            return { status: response.status, result: payload.result };
+          };
+          const { status: authStatus, result: authRows } = await queryLogs('auth_logs', authSql, 'auth-logs.json');
+          const { status: postgresStatus, result: postgresRows } = await queryLogs('postgres_logs', postgresSql, 'postgres-logs.json');
           const firstAuth = authRows[0] ?? {};
           const firstPostgres = postgresRows[0] ?? {};
           const authEvidence = redact(firstAuth.event_message);
@@ -274,7 +306,7 @@ jobs:
             if (/permission denied|not authorized|forbidden/i.test(text)) return 'PERMISSION_DENIED';
             return 'UNAVAILABLE';
           };
-          console.log(`AUTH_LOG_DIAGNOSTIC http_status=${redact(process.env.AUTH_STATUS)}; event_count=${authRows.length}; message=${authEvidence}`);
-          console.log(`POSTGRES_LOG_DIAGNOSTIC http_status=${redact(process.env.POSTGRES_STATUS)}; event_count=${postgresRows.length}; sql_state=${sqlState}; message=${postgresEvidence}`);
+          console.log(`AUTH_LOG_DIAGNOSTIC http_status=${redact(authStatus)}; event_count=${authRows.length}; message=${authEvidence}`);
+          console.log(`POSTGRES_LOG_DIAGNOSTIC http_status=${redact(postgresStatus)}; event_count=${postgresRows.length}; sql_state=${sqlState}; message=${postgresEvidence}`);
           console.log(`LOG_ROOT_CAUSE_DETAIL=${classify(`${authEvidence} ${postgresEvidence}`)}`);
           NODE
