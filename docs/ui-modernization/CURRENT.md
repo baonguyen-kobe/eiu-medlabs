@@ -34,15 +34,23 @@ Equipment Request workflow + responsive UI proposal review.
 
 **Status:** VERIFY / USER REVIEW
 
-Durable handoff:
+Required durable handoff documents:
 
-`docs/ui-modernization/EQUIPMENT_REQUEST_WORKFLOW_HANDOFF.md`
+- `docs/ui-modernization/EQUIPMENT_REQUEST_WORKFLOW_HANDOFF.md`
+- `docs/ui-modernization/EQUIPMENT_REQUEST_APPROVED_FIGMA_BASELINE.md`
 
-This handoff is required reading before any new equipment-request UI/workflow implementation. It records the accepted business flow, terminology, signature rules, `Trả thiếu` recovery model, Figma SOURCE/PROPOSAL references, and the final responsive polish direction.
+These documents are required reading before any new equipment-request UI/workflow implementation. The workflow handoff records the accepted business flow, terminology, signature rules, `Trả thiếu` recovery model, and responsive polish direction. The approved-baseline document records which Figma artifacts are already explicitly accepted versus still under review.
 
 ## Current Equipment UI review state
 
-Desktop `PROPOSAL v2` direction is substantially accepted.
+The business owner has explicitly approved the full workflow design chain beginning with `REFERENCE · Existing equipment modal` and continuing through the `EDITABLE · ...` workflow frames for preparation, adjustment, approval, handover, return, `Trả thiếu`, completion, and abandoning recovery.
+
+The business owner has also explicitly approved the two desktop page designs:
+
+- `PROPOSAL v2 · Admin/Staff · Phiếu thiết bị`
+- `PROPOSAL v2 · User/TA · Phiếu thiết bị của tôi`
+
+Treat the **current live state of those two Figma frames** as the approved desktop visual baseline. `SOURCE · ...` frames remain comparison references only.
 
 Responsive proposal frames exist for iPad 1024 and Phone 390 for both Admin/Staff and User/TA. One final alignment/polish pass is approved before the responsive proposal is treated as the implementation baseline.
 
@@ -55,7 +63,7 @@ Key polish items are recorded in section 14 of `EQUIPMENT_REQUEST_WORKFLOW_HANDO
 - align `Bàn giao` / `Trả thiết bị` confirmation grids;
 - move Admin request-level `Ghi chú` into the same supporting-card stack used across responsive layouts.
 
-Do not implement this redesign in source until the proposal receives user visual acceptance unless the user explicitly asks to start implementation earlier.
+Do not implement this redesign in source until the responsive proposal receives user visual acceptance unless the user explicitly asks to start implementation earlier. The approved workflow chain and desktop `PROPOSAL v2` direction must not be re-opened or replaced by older source layouts without new explicit user direction.
 
 ## Recently completed
 
@@ -112,7 +120,7 @@ A new agent should:
 1. Read `README.md`.
 2. Read `docs/DOCUMENTATION_AUTHORITY.md`.
 3. Read this file.
-4. If the task concerns equipment requests, read `docs/ui-modernization/EQUIPMENT_REQUEST_WORKFLOW_HANDOFF.md` in full.
+4. If the task concerns equipment requests, read both `docs/ui-modernization/EQUIPMENT_REQUEST_WORKFLOW_HANDOFF.md` and `docs/ui-modernization/EQUIPMENT_REQUEST_APPROVED_FIGMA_BASELINE.md` in full.
 5. Read `TRACKER.md` and `DECISIONS.md`.
 6. Inspect Git status, branch, commit, and diff.
 7. For visual work, inspect current Figma frames rather than assuming the handoff's frame contents have not been manually edited.
