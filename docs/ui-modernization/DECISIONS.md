@@ -243,3 +243,17 @@ select a narrower lane.
 CI runtime. V1 therefore removes that cost only for changes where database and
 application runtime behavior are demonstrably unchanged, while preserving the
 existing broad gate for source and infrastructure changes.
+
+## DEC-UI-021 — Equipment request workflow and responsive redesign handoff
+
+**Status:** ACCEPTED
+
+The current accepted equipment-request product/workflow/UI direction is recorded in:
+
+`docs/ui-modernization/EQUIPMENT_REQUEST_WORKFLOW_HANDOFF.md`
+
+That document records the approved quantity terminology, adjustment/approval semantics, handover/return/recovery lifecycle, signature rules, `Trả thiếu` behavior, equipment-table rules, request-detail scrollable-card behavior, Figma SOURCE/PROPOSAL references, and the approved final responsive polish direction.
+
+Future agents must read that handoff before changing the equipment-request workflow or translating the approved Figma proposal into source.
+
+The handoff does not prove current runtime/production behavior. Effective source/schema/migrations/RLS/RPC/tests still determine current implementation truth, and production state still requires independent verification.
